@@ -2,3 +2,85 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css";
 @import "nativewind/theme";
+
+/* Inline families override NativeWind's platform defaults and resolve the face
+ * selected by font-thin through font-black on the same element.
+ */
+@theme inline {
+  --font-heading: var(--codaloud-heading-face, "Fraunces_400Regular");
+  --font-mono: var(--codaloud-mono-face, "JetBrainsMono_400Regular");
+  --font-sans: var(--codaloud-sans-face, "Outfit_400Regular");
+}
+
+/* The selected files already contain their weight. Keep fontWeight at 400 for
+ * these families to avoid synthesized bold; other fonts retain Tailwind weights.
+ */
+@utility font-heading {
+  --codaloud-font-weight: 400;
+}
+
+@utility font-sans {
+  --codaloud-font-weight: 400;
+}
+
+@utility font-mono {
+  --codaloud-font-weight: 400;
+}
+
+/* Weight utilities choose all three faces so family and weight classes compose,
+ * including Tailwind state and responsive variants, regardless of class order.
+ */
+@utility font-thin {
+  --codaloud-heading-face: "Fraunces_100Thin";
+  --codaloud-sans-face: "Outfit_100Thin";
+  --codaloud-mono-face: "JetBrainsMono_100Thin";
+}
+
+@utility font-extralight {
+  --codaloud-heading-face: "Fraunces_200ExtraLight";
+  --codaloud-sans-face: "Outfit_200ExtraLight";
+  --codaloud-mono-face: "JetBrainsMono_200ExtraLight";
+}
+
+@utility font-light {
+  --codaloud-heading-face: "Fraunces_300Light";
+  --codaloud-sans-face: "Outfit_300Light";
+  --codaloud-mono-face: "JetBrainsMono_300Light";
+}
+
+@utility font-normal {
+  --codaloud-heading-face: "Fraunces_400Regular";
+  --codaloud-sans-face: "Outfit_400Regular";
+  --codaloud-mono-face: "JetBrainsMono_400Regular";
+}
+
+@utility font-medium {
+  --codaloud-heading-face: "Fraunces_500Medium";
+  --codaloud-sans-face: "Outfit_500Medium";
+  --codaloud-mono-face: "JetBrainsMono_500Medium";
+}
+
+@utility font-semibold {
+  --codaloud-heading-face: "Fraunces_600SemiBold";
+  --codaloud-sans-face: "Outfit_600SemiBold";
+  --codaloud-mono-face: "JetBrainsMono_600SemiBold";
+}
+
+@utility font-bold {
+  --codaloud-heading-face: "Fraunces_700Bold";
+  --codaloud-sans-face: "Outfit_700Bold";
+  --codaloud-mono-face: "JetBrainsMono_700Bold";
+}
+
+@utility font-extrabold {
+  --codaloud-heading-face: "Fraunces_800ExtraBold";
+  --codaloud-sans-face: "Outfit_800ExtraBold";
+  --codaloud-mono-face: "JetBrainsMono_800ExtraBold";
+}
+
+@utility font-black {
+  --codaloud-heading-face: "Fraunces_900Black";
+  --codaloud-sans-face: "Outfit_900Black";
+  /* JetBrains Mono stops at 800, so use its heaviest available face. */
+  --codaloud-mono-face: "JetBrainsMono_800ExtraBold";
+}

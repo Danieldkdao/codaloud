@@ -10,6 +10,12 @@
 - Add comments where you need to explain why something is done a certain way, especially if it is not obvious. Avoid comments that simply restate what the code does and do not add comments excessively. Use comments to explain the reasoning behind decisions, trade-offs, and any non-obvious implementation details.
 - If you have ran the application to test it, make sure to stop the application before returning your response. Do not leave the application running in the background while you are responding. Note that this only applies if YOU ran the application to test it, if the user ran it and you just used that instance, you do not need to stop it.
 - Before you create a new helper or implement some reusable logic, check if it already exists in the codebase. If it does, reuse it instead of creating a new one. If it doesn't exist, create a new helper or utility function and place it in the appropriate shared folder.
+- For table enums, export them from a `shared.ts` file in the root of the `db` folder. For each enum, you should export three things.
+1. An array of all the enum values, for example `export const projectStatuses = ['draft', 'published', 'archived'] as const;`
+2. A type that represents the enum values, for example `export type ProjectStatus = (typeof ProjectStatusValues)[number];`
+3. The enum itself using PgEnum, for example `export const projectStatusEnum = pgEnum('project_statuses', projectStatuses);`
+Note the naming conventions for each.
+
 
 ## Expo HAS CHANGED
 
@@ -22,6 +28,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 - Never use `leading-*` or `tracking-*` class names anywhere in the codebase, including variant-prefixed and arbitrary-value forms. Keep the default line height and letter spacing provided by the typography styles.
 - Use semantic colors from the theme in `src/global.css` for all UI colors, including icons and inline styles (for example, `text-foreground`, `text-muted-foreground`, and `bg-primary`). Never use Tailwind palette colors, arbitrary color utilities, or hardcoded color values in application components unless an external requirement makes it unavoidable; document the reason for that exception. Define color values centrally in the theme.
 - Always name files with kebab-case, for example `my-component.tsx`.
+- Always name database tables with PascalCase and end with `Table`, for example `ProjectTable` The file name for this would be `project.ts` (singular version of the table subject) and the name of the table in the database would be `projects` (plural version of the table subject).
 
 ## Folder structure
 

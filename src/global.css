@@ -4,6 +4,7 @@
 @import "nativewind/theme";
 
 :root {
+  --navigation-shadow: rgb(27 45 35 / 0.14);
   --background: oklch(0.9643 0.0111 89.7224);
   --foreground: oklch(0.2836 0.0144 157.9253);
   --card: oklch(0.9967 0.0054 95.0974);
@@ -41,6 +42,7 @@
 /* Follow the system appearance on native and web. */
 @media (prefers-color-scheme: dark) {
   :root {
+    --navigation-shadow: rgb(0 0 0 / 0.3);
     --background: oklch(0.2836 0.0144 157.9253);
     --foreground: oklch(0.9643 0.0111 89.7224);
     --card: oklch(0.3163 0.0193 157.1933);

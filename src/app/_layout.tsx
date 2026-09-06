@@ -43,6 +43,10 @@ const RootLayout = () => {
     >
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(main)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="new-project"
+          options={{ presentation: "modal" }}
+        />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />

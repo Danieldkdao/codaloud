@@ -18,7 +18,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 - Always use arrow functions when possible, including for React components and callbacks.
 - Use `text-base` or larger Tailwind classes for text. Use smaller text only when absolutely necessary to fit the layout. Apply the equivalent minimum size when styling without Tailwind.
-- Always name files with snake-case, for example `my-component.tsx`.
+- Always name files with kebab-case, for example `my-component.tsx`.
 
 ## Folder structure
 

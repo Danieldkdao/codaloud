@@ -1,5 +1,6 @@
 import "../global.css";
 
+import { AppWrapper } from "@/components/app-wrapper";
 import { fontAssets } from "@/lib/fonts";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -27,6 +28,11 @@ const RootLayout = () => {
 
   return (
     <Stack
+      screenLayout={({ children, options }) => (
+        <AppWrapper headerShown={options.headerShown !== false}>
+          {children}
+        </AppWrapper>
+      )}
       screenOptions={{
         headerTitleStyle: {
           fontFamily: "Fraunces_400Regular",

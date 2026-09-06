@@ -3,6 +3,114 @@
 @import "tailwindcss/utilities.css";
 @import "nativewind/theme";
 
+:root {
+  --background: oklch(0.9643 0.0111 89.7224);
+  --foreground: oklch(0.2836 0.0144 157.9253);
+  --card: oklch(0.9967 0.0054 95.0974);
+  --card-foreground: oklch(0.2836 0.0144 157.9253);
+  --popover: oklch(0.9967 0.0054 95.0974);
+  --popover-foreground: oklch(0.2836 0.0144 157.9253);
+  --primary: oklch(0.4314 0.0674 167.9810);
+  --primary-foreground: oklch(0.9967 0.0054 95.0974);
+  --secondary: oklch(0.9188 0.0221 138.9773);
+  --secondary-foreground: oklch(0.4314 0.0674 167.9810);
+  --muted: oklch(0.9643 0.0111 89.7224);
+  --muted-foreground: oklch(0.4372 0.0190 153.9631);
+  --accent: oklch(0.6202 0.1013 39.3859);
+  --accent-foreground: oklch(0.9967 0.0054 95.0974);
+  --destructive: oklch(0.6202 0.1013 39.3859);
+  --destructive-foreground: oklch(0.9967 0.0054 95.0974);
+  --border: oklch(0.9188 0.0221 138.9773);
+  --input: oklch(0.9188 0.0221 138.9773);
+  --ring: oklch(0.4314 0.0674 167.9810);
+  --chart-1: oklch(0.4314 0.0674 167.9810);
+  --chart-2: oklch(0.6202 0.1013 39.3859);
+  --chart-3: oklch(0.9188 0.0221 138.9773);
+  --chart-4: oklch(0.9643 0.0111 89.7224);
+  --chart-5: oklch(0.2836 0.0144 157.9253);
+  --sidebar: oklch(0.9643 0.0111 89.7224);
+  --sidebar-foreground: oklch(0.2836 0.0144 157.9253);
+  --sidebar-primary: oklch(0.4314 0.0674 167.9810);
+  --sidebar-primary-foreground: oklch(0.9967 0.0054 95.0974);
+  --sidebar-accent: oklch(0.9188 0.0221 138.9773);
+  --sidebar-accent-foreground: oklch(0.4314 0.0674 167.9810);
+  --sidebar-border: oklch(0.9188 0.0221 138.9773);
+  --sidebar-ring: oklch(0.4314 0.0674 167.9810);
+}
+
+/* Follow the system appearance on native and web. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.2836 0.0144 157.9253);
+    --foreground: oklch(0.9643 0.0111 89.7224);
+    --card: oklch(0.3163 0.0193 157.1933);
+    --card-foreground: oklch(0.9643 0.0111 89.7224);
+    --popover: oklch(0.3163 0.0193 157.1933);
+    --popover-foreground: oklch(0.9643 0.0111 89.7224);
+    --primary: oklch(0.4314 0.0674 167.9810);
+    --primary-foreground: oklch(0.9967 0.0054 95.0974);
+    --secondary: oklch(0.3590 0.0249 158.5332);
+    --secondary-foreground: oklch(0.9188 0.0221 138.9773);
+    --muted: oklch(0.3590 0.0249 158.5332);
+    --muted-foreground: oklch(0.7234 0.0124 153.5825);
+    --accent: oklch(0.6202 0.1013 39.3859);
+    --accent-foreground: oklch(0.9967 0.0054 95.0974);
+    --destructive: oklch(0.6954 0.1323 36.8753);
+    --destructive-foreground: oklch(0.9967 0.0054 95.0974);
+    --border: oklch(0.3590 0.0249 158.5332);
+    --input: oklch(0.3590 0.0249 158.5332);
+    --ring: oklch(0.4314 0.0674 167.9810);
+    --chart-1: oklch(0.4314 0.0674 167.9810);
+    --chart-2: oklch(0.6202 0.1013 39.3859);
+    --chart-3: oklch(0.9188 0.0221 138.9773);
+    --chart-4: oklch(0.9643 0.0111 89.7224);
+    --chart-5: oklch(0.9967 0.0054 95.0974);
+    --sidebar: oklch(0.2560 0.0125 160.3536);
+    --sidebar-foreground: oklch(0.9643 0.0111 89.7224);
+    --sidebar-primary: oklch(0.4314 0.0674 167.9810);
+    --sidebar-primary-foreground: oklch(0.9967 0.0054 95.0974);
+    --sidebar-accent: oklch(0.3590 0.0249 158.5332);
+    --sidebar-accent-foreground: oklch(0.9188 0.0221 138.9773);
+    --sidebar-border: oklch(0.3590 0.0249 158.5332);
+    --sidebar-ring: oklch(0.4314 0.0674 167.9810);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
 /* Inline families override NativeWind's platform defaults and resolve the face
  * selected by font-thin through font-black on the same element.
  */

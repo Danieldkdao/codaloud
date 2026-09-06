@@ -24,9 +24,11 @@ import { Outfit_600SemiBold } from "@expo-google-fonts/outfit/600SemiBold";
 import { Outfit_700Bold } from "@expo-google-fonts/outfit/700Bold";
 import { Outfit_800ExtraBold } from "@expo-google-fonts/outfit/800ExtraBold";
 import { Outfit_900Black } from "@expo-google-fonts/outfit/900Black";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 // Static upright weights, bundled locally and loaded together before the app renders.
 export const fontAssets = {
+  ...FontAwesome.font,
   Fraunces_100Thin,
   Fraunces_200ExtraLight,
   Fraunces_300Light,

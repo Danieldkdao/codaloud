@@ -17,13 +17,14 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 - Always use arrow functions when possible, including for React components and callbacks.
 - Use `text-base` or larger Tailwind classes for text. Use smaller text only when absolutely necessary to fit the layout. Apply the equivalent minimum size when styling without Tailwind.
+- Always name files with snake-case, for example `my-component.tsx`.
 
 ## Folder structure
 
 Organize application code under `src/`:
 
 - `app/`: Expo Router screens, routes, and layouts.
-- `libs/`: Shared types, constants, helpers, utilities, authentication setup, and other global code.
+- `lib/`: Shared types, constants, helpers, utilities, authentication setup, and other global code.
 - `features/`: Resource-specific code, organized by resource, such as `projects/` and `drafts/`. Keep each resource's mutations, actions, fetch functions, and related logic together here.
 - `db/`: Database setup, schema, migrations, and other database infrastructure.
 - `data/env/`: Type-safe environment variables using T3 Env Core (`@t3-oss/env-core`), with server variables in `server.ts` and client variables in `client.ts`.

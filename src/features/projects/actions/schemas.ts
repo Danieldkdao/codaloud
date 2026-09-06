@@ -10,10 +10,18 @@ export const createProjectSchema = z.strictObject({
 
 export type CreateProjectSchema = z.infer<typeof createProjectSchema>;
 
-export const createProjectFormSchema = createProjectSchema.extend({
-  source: z.enum(["new", "github"], {
-    error: "Choose how to start your project.",
-  }),
-});
+export const createProjectFormSchema = z.discriminatedUnion(
+  "source",
+  [
+    createProjectSchema.extend({ source: z.literal("new") }),
+    createProjectSchema.extend({
+      source: z.literal("github"),
+      repositoryId: z
+        .string({ error: "Select a GitHub repository." })
+        .regex(/^[1-9]\d*$/, "Select a GitHub repository."),
+    }),
+  ],
+  { error: "Choose how to start your project." },
+);
 
 export type CreateProjectFormSchema = z.infer<typeof createProjectFormSchema>;

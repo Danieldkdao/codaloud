@@ -12,7 +12,7 @@ import {
   createProjectFormSchema,
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
-import { GitHubRepositoriesList } from "@/services/github/components/github-repositories-list";
+import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
 
 const projectSources = [
   {
@@ -136,26 +136,50 @@ export const ProjectForm = () => {
       />
 
       {source === "github" && (
-        <View className="min-h-0 shrink gap-3">
-          {!isConnected && (
-            <PText
-              accessibilityLiveRegion="polite"
-              className="text-muted-foreground"
-            >
-              {isChecking
-                ? "Checking GitHub connection…"
-                : isConnected
-                  ? "You are connected."
-                  : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
-            </PText>
+        <Controller
+          control={control}
+          name="repositoryId"
+          defaultValue=""
+          shouldUnregister
+          render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
+            <View className="min-h-0 shrink gap-3">
+              {!isConnected && (
+                <PText
+                  accessibilityLiveRegion="polite"
+                  className="text-muted-foreground"
+                >
+                  {isChecking
+                    ? "Checking GitHub connection…"
+                    : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
+                </PText>
+              )}
+              {isConnected && !isChecking && (
+                <GitHubRepositoriesSelectList
+                  selectedRepositoryId={value || null}
+                  onValueChange={(repositoryId) => {
+                    onChange(repositoryId ?? "");
+                    onBlur();
+                  }}
+                  className={error ? "border-destructive" : undefined}
+                />
+              )}
+              {!isConnected && !isChecking && (
+                <Button onPress={handleConnect} loading={isPending}>
+                  Click here to connect
+                </Button>
+              )}
+              {error && (
+                <PText
+                  selectable
+                  accessibilityRole="alert"
+                  className="text-destructive"
+                >
+                  {error.message}
+                </PText>
+              )}
+            </View>
           )}
-          {isConnected && !isChecking && <GitHubRepositoriesList />}
-          {!isConnected && !isChecking && (
-            <Button onPress={handleConnect} loading={isPending}>
-              Click here to connect
-            </Button>
-          )}
-        </View>
+        />
       )}
 
       <Button size="lg" onPress={() => void handleSubmit(onSubmit)()}>

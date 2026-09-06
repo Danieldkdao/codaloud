@@ -1,6 +1,6 @@
 import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
-import { HeadingText } from "@/components/ui/text";
+import { ProjectForm } from "@/features/projects/components/project-form";
 import { useThemeColor } from "@/hooks/use-theme";
 import { Stack, useRouter } from "expo-router";
 
@@ -24,10 +24,8 @@ const NewProjectScreen = () => {
           ),
         }}
       />
-      <AppWrapper headerShown contentContainerStyle={{ justifyContent: "center" }}>
-        <HeadingText accessibilityRole="header" className="text-center text-3xl text-foreground">
-          New project
-        </HeadingText>
+      <AppWrapper headerShown>
+        <ProjectForm />
       </AppWrapper>
     </>
   );

@@ -1,6 +1,7 @@
 import "../global.css";
 
 import { authClient } from "@/lib/auth/auth-client";
+import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
 import { fontAssets } from "@/lib/fonts";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -45,7 +46,14 @@ const RootLayout = () => {
         <Stack.Screen name="(main)" options={{ headerShown: false }} />
         <Stack.Screen
           name="new-project"
-          options={{ presentation: "modal" }}
+          options={{
+            ...MODAL_SCREEN_OPTIONS,
+            presentation: "formSheet",
+            sheetAllowedDetents: [0.65, 1],
+            sheetInitialDetentIndex: 0,
+            sheetGrabberVisible: true,
+            sheetExpandsWhenScrolledToEdge: true,
+          }}
         />
       </Stack.Protected>
       <Stack.Protected guard={!session}>

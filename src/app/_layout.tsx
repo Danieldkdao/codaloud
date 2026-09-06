@@ -50,6 +50,7 @@ const RootLayout = () => {
       >
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(main)" options={{ headerShown: false }} />
+          <Stack.Screen name="projects/[projectId]" options={{ title: "Project" }} />
           <Stack.Screen
             name="new-project"
             options={{

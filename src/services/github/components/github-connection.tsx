@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
-import { useGitHubConnected } from "@/features/accounts/hooks/use-github-connected";
+import { useGitHubConnected } from "../hooks/use-github-connected";
 import { View } from "react-native";
 
 type GitHubConnectionProps = {
@@ -15,7 +15,10 @@ export const GitHubConnection = ({
 
   return (
     <View className="gap-4">
-      <HeadingText accessibilityRole="header" className="text-xl text-foreground">
+      <HeadingText
+        accessibilityRole="header"
+        className="text-xl text-foreground"
+      >
         GitHub repositories
       </HeadingText>
       <PText className="text-muted-foreground">

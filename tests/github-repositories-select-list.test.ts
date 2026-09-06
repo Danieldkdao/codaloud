@@ -15,36 +15,74 @@ const mocks = vi.hoisted(() => ({
   source: "github",
   fetchNextPage: vi.fn(),
   refetch: vi.fn(),
+  createProject: vi.fn(),
+  alert: vi.fn(),
+  replace: vi.fn(),
 }));
 
+vi.mock("@/features/projects/actions/actions", () => ({
+  createProjectAction: mocks.createProject,
+}));
 vi.mock("@/services/github/hooks/use-github-repositories", () => ({
   useGitHubRepositories: () => mocks.query,
 }));
-vi.mock("@/lib/utils", () => ({ cn: (...values: Parameters<typeof clsx>) => twMerge(clsx(...values)) }));
+vi.mock("@/lib/utils", () => ({
+  cn: (...values: Parameters<typeof clsx>) => twMerge(clsx(...values)),
+  alert: mocks.alert,
+}));
 vi.mock("react-native", () => ({
   View: "div",
-  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, className }: any) =>
-    createElement("button", {
-      type: "button",
-      onClick: onPress,
-      "aria-label": accessibilityLabel,
-      "aria-pressed": accessibilityState?.selected,
-      className,
-    }, children),
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+    accessibilityState,
+    className,
+  }: any) =>
+    createElement(
+      "button",
+      {
+        type: "button",
+        onClick: onPress,
+        "aria-label": accessibilityLabel,
+        "aria-pressed": accessibilityState?.selected,
+        className,
+      },
+      children,
+    ),
   ScrollView: "section",
   ActivityIndicator: "progress",
   Platform: { select: (options: { default: string }) => options.default },
   FlatList: (props: any) => {
     mocks.listProps = props;
-    return createElement("section", { className: props.className },
-      props.data.length ? props.data.map((item: any) => createElement("div", { key: item.id }, props.renderItem({ item }))) : props.ListEmptyComponent,
+    return createElement(
+      "section",
+      { className: props.className },
+      props.data.length
+        ? props.data.map((item: any) =>
+            createElement("div", { key: item.id }, props.renderItem({ item })),
+          )
+        : props.ListEmptyComponent,
       props.ListFooterComponent,
     );
   },
 }));
 vi.mock("@/components/ui/text", () => ({
-  PText: ({ children, className, accessibilityLiveRegion, accessibilityRole }: any) =>
-    createElement("span", { className, "aria-live": accessibilityLiveRegion, role: accessibilityRole }, children),
+  PText: ({
+    children,
+    className,
+    accessibilityLiveRegion,
+    accessibilityRole,
+  }: any) =>
+    createElement(
+      "span",
+      {
+        className,
+        "aria-live": accessibilityLiveRegion,
+        role: accessibilityRole,
+      },
+      children,
+    ),
 }));
 vi.mock("@/components/ui/icon", () => ({
   Icon: ({ name, className, accessibilityLabel }: any) =>
@@ -53,8 +91,11 @@ vi.mock("@/components/ui/icon", () => ({
 vi.mock("@/components/ui/input", () => ({
   Input: ({ value, onChangeText, placeholder, className }: any) =>
     createElement("input", {
-      value, placeholder, className,
-      onChange: (event: { target: { value: string } }) => onChangeText?.(event.target.value),
+      value,
+      placeholder,
+      className,
+      onChange: (event: { target: { value: string } }) =>
+        onChangeText?.(event.target.value),
     }),
 }));
 vi.mock("@/components/ui/radio-item", () => ({
@@ -62,12 +103,29 @@ vi.mock("@/components/ui/radio-item", () => ({
     createElement("button", { onClick: () => onValueChange(value) }, title),
 }));
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, onPress }: { children: ReactNode; onPress?: () => void }) =>
-    createElement("button", { onClick: onPress }, children),
+  Button: ({
+    children,
+    onPress,
+    disabled,
+    loading,
+  }: {
+    children: ReactNode;
+    onPress?: () => void;
+    disabled?: boolean;
+    loading?: boolean;
+  }) => createElement("button", { onClick: onPress, disabled, "aria-busy": loading }, children),
 }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ source: mocks.source, name: "My project" }) }));
-vi.mock("@/features/accounts/hooks/use-github-connected", () => ({
-  useGitHubConnected: () => ({ isConnected: mocks.connected, isChecking: mocks.checking, isPending: false, handleConnect: vi.fn() }),
+vi.mock("expo-router", () => ({
+  useLocalSearchParams: () => ({ source: mocks.source, name: "My project" }),
+  useRouter: () => ({ replace: mocks.replace }),
+}));
+vi.mock("@/services/github/hooks/use-github-connected", () => ({
+  useGitHubConnected: () => ({
+    isConnected: mocks.connected,
+    isChecking: mocks.checking,
+    isPending: false,
+    handleConnect: vi.fn(),
+  }),
 }));
 
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
@@ -78,18 +136,48 @@ beforeEach(() => {
   mocks.checking = false;
   mocks.source = "github";
   mocks.listProps = {};
+  mocks.createProject.mockReset();
+  mocks.createProject.mockResolvedValue({ error: true, message: "Please try again." });
   mocks.query = {
-    data: { pages: [[{ id: 1, fullName: "owner/private-repo", description: "A repository description", private: true }], [{ id: 2, fullName: "owner/public-repo", description: null, private: false }]] },
-    isPending: false, isFetching: false, isFetchingNextPage: false,
-    isFetchNextPageError: false, error: null, hasNextPage: true,
-    fetchNextPage: mocks.fetchNextPage, refetch: mocks.refetch,
+    data: {
+      pages: [
+        [
+          {
+            id: 1,
+            fullName: "owner/private-repo",
+            description: "A repository description",
+            private: true,
+          },
+        ],
+        [
+          {
+            id: 2,
+            fullName: "owner/public-repo",
+            description: null,
+            private: false,
+          },
+        ],
+      ],
+    },
+    isPending: false,
+    isFetching: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+    error: null,
+    hasNextPage: true,
+    fetchNextPage: mocks.fetchNextPage,
+    refetch: mocks.refetch,
   };
 });
 
 const SelectListHarness = ({ className }: { className?: string }) => {
-  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<
+    string | null
+  >(null);
   return createElement(GitHubRepositoriesSelectList, {
-    className, selectedRepositoryId, onValueChange: setSelectedRepositoryId,
+    className,
+    selectedRepositoryId,
+    onValueChange: setSelectedRepositoryId,
   });
 };
 
@@ -112,7 +200,9 @@ describe("GitHub repositories list", () => {
   it("renders a search field above the repositories", () => {
     const html = renderList();
     expect(html).toContain('placeholder="Search repositories"');
-    expect(html.indexOf('placeholder="Search repositories"')).toBeLessThan(html.indexOf("owner/private-repo"));
+    expect(html.indexOf('placeholder="Search repositories"')).toBeLessThan(
+      html.indexOf("owner/private-repo"),
+    );
   });
 
   it("loads another page on reaching the end", () => {
@@ -121,7 +211,11 @@ describe("GitHub repositories list", () => {
     expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
   });
 
-  it.each([{ isFetching: true }, { hasNextPage: false }, { error: new Error("Failed") }])("does not automatically load more when blocked by %o", (state) => {
+  it.each([
+    { isFetching: true },
+    { hasNextPage: false },
+    { error: new Error("Failed") },
+  ])("does not automatically load more when blocked by %o", (state) => {
     Object.assign(mocks.query, state);
     renderList();
     mocks.listProps.onEndReached();
@@ -131,12 +225,19 @@ describe("GitHub repositories list", () => {
   it("shows initial loading and empty states", () => {
     Object.assign(mocks.query, { data: undefined, isPending: true });
     expect(renderList()).toContain("Loading repositories");
-    Object.assign(mocks.query, { data: { pages: [[]] }, isPending: false, hasNextPage: false });
+    Object.assign(mocks.query, {
+      data: { pages: [[]] },
+      isPending: false,
+      hasNextPage: false,
+    });
     expect(renderList()).toContain("No repositories found");
   });
 
   it("keeps loaded repositories visible when a later page fails", () => {
-    Object.assign(mocks.query, { error: new Error("Unable to load more repositories."), isFetchNextPageError: true });
+    Object.assign(mocks.query, {
+      error: new Error("Unable to load more repositories."),
+      isFetchNextPageError: true,
+    });
     const html = renderList();
     expect(html).toContain("owner/private-repo");
     expect(html).toContain("Unable to load more repositories.");
@@ -144,7 +245,9 @@ describe("GitHub repositories list", () => {
   });
 
   it("allows the default maximum height to be overridden", () => {
-    const html = renderToStaticMarkup(createElement(SelectListHarness, { className: "max-h-96" }));
+    const html = renderToStaticMarkup(
+      createElement(SelectListHarness, { className: "max-h-96" }),
+    );
     expect(html).toContain("max-h-96");
     expect(html).not.toContain("max-h-80");
   });
@@ -154,11 +257,14 @@ describe("GitHub repositories list", () => {
     ["github", false, false, false],
     ["github", true, true, false],
     ["new", true, false, false],
-  ])("gates repositories for source=%s, connected=%s, checking=%s", (source, connected, checking, visible) => {
-    Object.assign(mocks, { source, connected, checking });
-    const html = renderToStaticMarkup(createElement(ProjectForm));
-    expect(html.includes("owner/private-repo")).toBe(visible);
-  });
+  ])(
+    "gates repositories for source=%s, connected=%s, checking=%s",
+    (source, connected, checking, visible) => {
+      Object.assign(mocks, { source, connected, checking });
+      const html = renderToStaticMarkup(createElement(ProjectForm));
+      expect(html.includes("owner/private-repo")).toBe(visible);
+    },
+  );
 });
 
 let root: Root | undefined;
@@ -172,48 +278,61 @@ describe("repository selection", () => {
   it.each([
     ["1", "owner/private-repo", "owner/public-repo"],
     ["2", "owner/public-repo", "owner/private-repo"],
-  ])("collapses around repository %s and reopens when pressed again", (id, name, otherName) => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    const container = document.createElement("div");
-    root = createRoot(container);
-    Object.assign(mocks.query, {
-      error: new Error("Unable to load more repositories."),
-      isFetchNextPageError: true,
-    });
-    act(() => root!.render(createElement(SelectListHarness, { className: "max-h-96" })));
-
-    const pressRepository = (repositoryName: string) => {
-      const button = Array.from(container.querySelectorAll("button")).find(
-        (button) => button.textContent?.includes(repositoryName),
+  ])(
+    "collapses around repository %s and reopens when pressed again",
+    (id, name, otherName) => {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const container = document.createElement("div");
+      root = createRoot(container);
+      Object.assign(mocks.query, {
+        error: new Error("Unable to load more repositories."),
+        isFetchNextPageError: true,
+      });
+      act(() =>
+        root!.render(
+          createElement(SelectListHarness, { className: "max-h-96" }),
+        ),
       );
-      expect(button).toBeDefined();
-      act(() => button!.click());
-    };
 
-    expect(container.textContent).toContain("Selected repository ID: null");
-    pressRepository(name);
+      const pressRepository = (repositoryName: string) => {
+        const button = Array.from(container.querySelectorAll("button")).find(
+          (button) => button.textContent?.includes(repositoryName),
+        );
+        expect(button).toBeDefined();
+        act(() => button!.click());
+      };
 
-    expect(container.textContent).toContain(`Selected repository ID: ${id}`);
-    expect(container.textContent).toContain(name);
-    expect(container.textContent).not.toContain(otherName);
-    expect(container.querySelector('input[placeholder="Search repositories"]')).toBeNull();
-    expect(container.textContent).not.toContain("Try again");
-    expect(container.querySelector('[aria-pressed="true"]')).not.toBeNull();
-    expect(container.querySelector(".min-h-24")).toBeNull();
+      expect(container.textContent).toContain("Selected repository ID: null");
+      pressRepository(name);
 
-    pressRepository(name);
+      expect(container.textContent).toContain(`Selected repository ID: ${id}`);
+      expect(container.textContent).toContain(name);
+      expect(container.textContent).not.toContain(otherName);
+      expect(
+        container.querySelector('input[placeholder="Search repositories"]'),
+      ).toBeNull();
+      expect(container.textContent).not.toContain("Try again");
+      expect(container.querySelector('[aria-pressed="true"]')).not.toBeNull();
+      expect(container.querySelector(".min-h-24")).toBeNull();
 
-    expect(container.textContent).toContain("Selected repository ID: null");
-    expect(container.textContent).toContain(otherName);
-    expect(container.querySelector('input[placeholder="Search repositories"]')).not.toBeNull();
-    expect(container.textContent).toContain("Try again");
-    expect(container.querySelector(".max-h-96")).not.toBeNull();
-    expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
+      pressRepository(name);
 
-    pressRepository(otherName);
-    expect(container.textContent).not.toContain(name);
-    expect(container.textContent).toContain(`Selected repository ID: ${id === "1" ? "2" : "1"}`);
-  });
+      expect(container.textContent).toContain("Selected repository ID: null");
+      expect(container.textContent).toContain(otherName);
+      expect(
+        container.querySelector('input[placeholder="Search repositories"]'),
+      ).not.toBeNull();
+      expect(container.textContent).toContain("Try again");
+      expect(container.querySelector(".max-h-96")).not.toBeNull();
+      expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
+
+      pressRepository(otherName);
+      expect(container.textContent).not.toContain(name);
+      expect(container.textContent).toContain(
+        `Selected repository ID: ${id === "1" ? "2" : "1"}`,
+      );
+    },
+  );
 });
 
 describe("project form repository validation", () => {
@@ -235,35 +354,48 @@ describe("project form repository validation", () => {
 
   it("requires a selection, clears the error after selecting, and validates clearing it", async () => {
     mocks.connected = true;
-    const submitted = vi.spyOn(console, "log").mockImplementation(() => {});
+    const submitted = mocks.createProject;
     const container = mountForm();
     await press(container, "Create project");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Select a GitHub repository.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Select a GitHub repository.",
+    );
     expect(submitted).not.toHaveBeenCalled();
 
     await press(container, "owner/private-repo");
     expect(container.querySelector('[role="alert"]')).toBeNull();
     await press(container, "Create project");
-    expect(submitted).toHaveBeenLastCalledWith({ name: "My project", source: "github", repositoryId: "1" });
+    expect(submitted).toHaveBeenLastCalledWith({
+      name: "My project",
+      source: "github",
+      repositoryId: "1",
+    });
 
     await press(container, "owner/private-repo");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Select a GitHub repository.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Select a GitHub repository.",
+    );
     await press(container, "Create project");
     expect(submitted).toHaveBeenCalledTimes(1);
   });
 
   it("removes the selection and its error when switching to a new project", async () => {
     mocks.connected = true;
-    const submitted = vi.spyOn(console, "log").mockImplementation(() => {});
+    const submitted = mocks.createProject;
     const container = mountForm();
     await press(container, "owner/private-repo");
     await press(container, "New project");
     await press(container, "Create project");
-    expect(submitted).toHaveBeenLastCalledWith({ name: "My project", source: "new" });
+    expect(submitted).toHaveBeenLastCalledWith({
+      name: "My project",
+      source: "new",
+    });
 
     await press(container, "Import from GitHub");
     await press(container, "Create project");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Select a GitHub repository.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Select a GitHub repository.",
+    );
     await press(container, "New project");
     expect(container.querySelector('[role="alert"]')).toBeNull();
     await press(container, "Create project");
@@ -274,6 +406,49 @@ describe("project form repository validation", () => {
     const container = mountForm();
     await press(container, "Create project");
     expect(container.textContent).toContain("Click here to connect");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Select a GitHub repository.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Select a GitHub repository.",
+    );
+  });
+
+  it("disables submission while creating and redirects to the returned project after the success alert", async () => {
+    mocks.source = "new";
+    let resolveCreation!: (result: { error: false; message: string; projectId: string }) => void;
+    mocks.createProject.mockReturnValue(new Promise((resolve) => { resolveCreation = resolve; }));
+    const container = mountForm();
+    await press(container, "Create project");
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Create project",
+    )!;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    await press(container, "Create project");
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({ name: "My project", source: "new" });
+    expect(mocks.alert).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+
+    await act(async () => resolveCreation({ error: false, message: "Project created successfully.", projectId: "new-project-id" }));
+    expect(mocks.alert).toHaveBeenCalledWith("Success: Project created successfully.");
+    expect(mocks.replace).toHaveBeenCalledWith({
+      pathname: "/projects/[projectId]", params: { projectId: "new-project-id" },
+    });
+    expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(mocks.replace.mock.invocationCallOrder[0]);
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("shows an error without navigating and allows a retry", async () => {
+    mocks.source = "new";
+    const container = mountForm();
+    await press(container, "Create project");
+    expect(mocks.alert).toHaveBeenCalledWith("Error: Please try again.");
+    expect(mocks.replace).not.toHaveBeenCalled();
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Create project",
+    )!;
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-busy")).toBe("false");
+    await press(container, "Create project");
+    expect(mocks.createProject).toHaveBeenCalledTimes(2);
   });
 });

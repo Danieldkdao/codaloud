@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { View } from "react-native";
 
@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadioItem } from "@/components/ui/radio-item";
 import { PText } from "@/components/ui/text";
-import { useGitHubConnected } from "@/features/accounts/hooks/use-github-connected";
+import { createProjectAction } from "@/features/projects/actions/actions";
+import { alert } from "@/lib/utils";
+import { useGitHubConnected } from "@/services/github/hooks/use-github-connected";
 import {
   createProjectFormSchema,
   type CreateProjectFormSchema,
@@ -30,11 +32,12 @@ const projectSources = [
 ] as const;
 
 export const ProjectForm = () => {
+  const router = useRouter();
   const { source: initialSource, name: initialName } = useLocalSearchParams<{
     source?: string;
     name?: string;
   }>();
-  const { control, handleSubmit } = useForm<CreateProjectFormSchema>({
+  const { control, handleSubmit, formState: { isSubmitting } } = useForm<CreateProjectFormSchema>({
     resolver: zodResolver(createProjectFormSchema),
     defaultValues: {
       name: typeof initialName === "string" ? initialName : "",
@@ -47,8 +50,19 @@ export const ProjectForm = () => {
       `/new-project?${new URLSearchParams({ source: "github", name })}`,
     );
 
-  const onSubmit = (data: CreateProjectFormSchema) => {
-    console.log(data);
+  const onSubmit = async (data: CreateProjectFormSchema) => {
+    const createdProject = await createProjectAction(data);
+
+    if (createdProject.error) {
+      alert(`Error: ${createdProject.message}`);
+      return;
+    }
+
+    alert(`Success: ${createdProject.message}`);
+    router.replace({
+      pathname: "/projects/[projectId]",
+      params: { projectId: createdProject.projectId },
+    });
   };
 
   return (
@@ -79,7 +93,9 @@ export const ProjectForm = () => {
               invalid={!!error}
               autoCapitalize="sentences"
               returnKeyType="done"
-              onSubmitEditing={() => void handleSubmit(onSubmit)()}
+              onSubmitEditing={() => {
+                if (!isSubmitting) void handleSubmit(onSubmit)();
+              }}
             />
             {error && (
               <PText
@@ -141,7 +157,10 @@ export const ProjectForm = () => {
           name="repositoryId"
           defaultValue=""
           shouldUnregister
-          render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
+          render={({
+            field: { onChange, onBlur, value },
+            fieldState: { error },
+          }) => (
             <View className="min-h-0 shrink gap-3">
               {!isConnected && (
                 <PText
@@ -182,7 +201,12 @@ export const ProjectForm = () => {
         />
       )}
 
-      <Button size="lg" onPress={() => void handleSubmit(onSubmit)()}>
+      <Button
+        size="lg"
+        disabled={isSubmitting}
+        loading={isSubmitting}
+        onPress={() => void handleSubmit(onSubmit)()}
+      >
         Create project
       </Button>
     </View>

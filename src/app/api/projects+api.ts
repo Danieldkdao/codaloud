@@ -46,6 +46,8 @@ export const POST = async (request: Request) => {
     const insertedProject = await insertProjectDB({
       name: result.data.name,
       userId,
+      githubRepositoryId:
+        result.data.source === "github" ? result.data.repositoryId : null,
     });
 
     return apiResponse(

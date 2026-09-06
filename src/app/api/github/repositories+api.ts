@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/helpers";
 import { paginationSchema } from "@/lib/schemas";
 import type { ApiResponse } from "@/lib/types";
 import { apiResponse } from "@/lib/utils";
-import { listGitHubRepositories } from "@/services/github/repositories";
+import { listGitHubRepositories } from "@/services/github/server/repositories";
 import { APIError } from "better-auth/api";
 import { RequestError } from "octokit";
 
@@ -45,13 +45,19 @@ export const GET = async (request: Request) => {
     }
 
     // Account selection comes from the session, never a client-supplied ID.
-    const accounts = await auth.api.listUserAccounts({ headers: request.headers });
+    const accounts = await auth.api.listUserAccounts({
+      headers: request.headers,
+    });
     const githubAccount = accounts.find(
-      (account) => account.providerId === "github" && account.scopes.includes("repo"),
+      (account) =>
+        account.providerId === "github" && account.scopes.includes("repo"),
     );
     if (!githubAccount) {
       return repositoryResponse(
-        { error: true, message: "Connect GitHub and grant repository access first." },
+        {
+          error: true,
+          message: "Connect GitHub and grant repository access first.",
+        },
         403,
       );
     }
@@ -87,7 +93,10 @@ export const GET = async (request: Request) => {
       }
       if (error.body?.code === "FAILED_TO_GET_ACCESS_TOKEN") {
         return repositoryResponse(
-          { error: true, message: "Reconnect GitHub to view your repositories." },
+          {
+            error: true,
+            message: "Reconnect GitHub to view your repositories.",
+          },
           403,
         );
       }
@@ -102,13 +111,19 @@ export const GET = async (request: Request) => {
             headers?.["retry-after"] !== undefined));
       if (isRateLimited) {
         return repositoryResponse(
-          { error: true, message: "GitHub is limiting requests. Please try again later." },
+          {
+            error: true,
+            message: "GitHub is limiting requests. Please try again later.",
+          },
           429,
         );
       }
       if (error.status === 401) {
         return repositoryResponse(
-          { error: true, message: "Reconnect GitHub to view your repositories." },
+          {
+            error: true,
+            message: "Reconnect GitHub to view your repositories.",
+          },
           403,
         );
       }
@@ -116,7 +131,8 @@ export const GET = async (request: Request) => {
         return repositoryResponse(
           {
             error: true,
-            message: "GitHub denied access. Check your repository permissions and organization access.",
+            message:
+              "GitHub denied access. Check your repository permissions and organization access.",
           },
           403,
         );
@@ -125,7 +141,10 @@ export const GET = async (request: Request) => {
 
     // GitHub errors can contain authenticated request details; don't expose them.
     return repositoryResponse(
-      { error: true, message: "Unable to load GitHub repositories. Please try again." },
+      {
+        error: true,
+        message: "Unable to load GitHub repositories. Please try again.",
+      },
       502,
     );
   }

@@ -38,6 +38,9 @@ export const ProjectTable = pgTable(
   ],
 );
 
+export type ProjectSelectData = typeof ProjectTable.$inferSelect;
+export type ProjectInsertData = typeof ProjectTable.$inferInsert;
+
 export const projectRelations = relations(ProjectTable, ({ one }) => ({
   user: one(user, {
     fields: [ProjectTable.userId],

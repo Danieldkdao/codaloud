@@ -15,6 +15,9 @@
 2. A type that represents the enum values, for example `export type ProjectStatus = (typeof ProjectStatusValues)[number];`
 3. The enum itself using PgEnum, for example `export const projectStatusEnum = pgEnum('project_statuses', projectStatuses);`
 Note the naming conventions for each.
+- Generally, put all types in the `lib/types.ts` file, unless they are specific to a feature or resource, in which case they should be defined in that feature's folder. For example, types related to projects should be defined in `features/projects/types.ts`. Similarly, put all shared constants in the `lib/constants.ts` file, unless they are specific to a feature or resource, in which case they should be defined in that feature's folder. For example, constants related to projects should be defined in `features/projects/constants.ts`. Do not create your own files in the lib folder that have both types, constants, and functions related to some resource or functionality because that gets messy and hard to maintain. Keep the lib folder for shared types, constants, and functions that are used across the application.
+- For all tables, make sure to export all relations defined along with two types. A select type and an insert type. For example, for the `projects` table, you should export `ProjectSelectData` and `ProjectInsertData` from the `ProjectTable.$inferSelect` and `ProjectTable.$inferInsert` respectively.
+- Export each Zod schema's inferred type from the same file, using the schema variable's name in PascalCase with the `Schema` suffix. For example, `createProjectSchema` exports `type CreateProjectSchema = z.infer<typeof createProjectSchema>`.
 
 
 ## Expo HAS CHANGED
@@ -28,6 +31,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 - Never use `leading-*` or `tracking-*` class names anywhere in the codebase, including variant-prefixed and arbitrary-value forms. Keep the default line height and letter spacing provided by the typography styles.
 - Use semantic colors from the theme in `src/global.css` for all UI colors, including icons and inline styles (for example, `text-foreground`, `text-muted-foreground`, and `bg-primary`). Never use Tailwind palette colors, arbitrary color utilities, or hardcoded color values in application components unless an external requirement makes it unavoidable; document the reason for that exception. Define color values centrally in the theme.
 - Always name files with kebab-case, for example `my-component.tsx`.
+- Name variables holding database query or mutation results after the operation or lookup purpose and the resource: `insertedProject`, `updatedProject`, `deletedProject`, or `existingProject` for an existence lookup. Apply this convention to results from database helper functions too, and use plural resource names for collections, such as `insertedProjects`.
 - Always name database tables with PascalCase and end with `Table`, for example `ProjectTable` The file name for this would be `project.ts` (singular version of the table subject) and the name of the table in the database would be `projects` (plural version of the table subject).
 
 ## Folder structure

@@ -12,6 +12,7 @@ import {
   createProjectFormSchema,
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
+import { GitHubRepositoriesList } from "@/services/github/components/github-repositories-list";
 
 const projectSources = [
   {
@@ -51,7 +52,7 @@ export const ProjectForm = () => {
   };
 
   return (
-    <View className="w-full max-w-xl gap-4 self-center">
+    <View collapsable={false} className="w-full max-w-xl gap-4 self-center">
       <Controller
         control={control}
         name="name"
@@ -135,17 +136,20 @@ export const ProjectForm = () => {
       />
 
       {source === "github" && (
-        <View className="gap-3">
-          <PText
-            accessibilityLiveRegion="polite"
-            className="text-muted-foreground"
-          >
-            {isChecking
-              ? "Checking GitHub connection…"
-              : isConnected
-                ? "You are connected."
-                : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
-          </PText>
+        <View className="min-h-0 shrink gap-3">
+          {!isConnected && (
+            <PText
+              accessibilityLiveRegion="polite"
+              className="text-muted-foreground"
+            >
+              {isChecking
+                ? "Checking GitHub connection…"
+                : isConnected
+                  ? "You are connected."
+                  : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
+            </PText>
+          )}
+          {isConnected && !isChecking && <GitHubRepositoriesList />}
           {!isConnected && !isChecking && (
             <Button onPress={handleConnect} loading={isPending}>
               Click here to connect

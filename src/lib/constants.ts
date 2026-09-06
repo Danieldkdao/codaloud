@@ -8,3 +8,6 @@ export const MODAL_SCREEN_OPTIONS = {
     fontSize: 22,
   },
 } as const;
+
+export const DEFAULT_PAGE = 1;
+export const PAGE_SIZE = 20;

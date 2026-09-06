@@ -1,8 +1,10 @@
 import "../global.css";
 
+import { QueryProvider } from "@/components/query-provider";
 import { authClient } from "@/lib/auth/auth-client";
 import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
 import { fontAssets } from "@/lib/fonts";
+import { subscribeToQueryLifecycle } from "@/lib/query-lifecycle";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -13,6 +15,8 @@ SplashScreen.preventAutoHideAsync();
 const RootLayout = () => {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const { data: session, isPending: isSessionPending } = authClient.useSession();
+
+  useEffect(subscribeToQueryLifecycle, []);
 
   useEffect(() => {
     if (fontError) {
@@ -29,37 +33,40 @@ const RootLayout = () => {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerTitleStyle: {
-          fontFamily: "Fraunces_400Regular",
-          fontWeight: "400",
-        },
-        headerLargeTitleStyle: {
-          fontFamily: "Fraunces_400Regular",
-          fontWeight: "400",
-        },
-        headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
-      }}
-    >
-      <Stack.Protected guard={!!session}>
-        <Stack.Screen name="(main)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="new-project"
-          options={{
-            ...MODAL_SCREEN_OPTIONS,
-            presentation: "formSheet",
-            sheetAllowedDetents: [0.65, 1],
-            sheetInitialDetentIndex: 0,
-            sheetGrabberVisible: true,
-            sheetExpandsWhenScrolledToEdge: true,
-          }}
-        />
-      </Stack.Protected>
-      <Stack.Protected guard={!session}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      </Stack.Protected>
-    </Stack>
+    // Remount the cache on sign-out or account changes before rendering new screens.
+    <QueryProvider key={session?.user.id ?? "anonymous"}>
+      <Stack
+        screenOptions={{
+          headerTitleStyle: {
+            fontFamily: "Fraunces_400Regular",
+            fontWeight: "400",
+          },
+          headerLargeTitleStyle: {
+            fontFamily: "Fraunces_400Regular",
+            fontWeight: "400",
+          },
+          headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
+        }}
+      >
+        <Stack.Protected guard={!!session}>
+          <Stack.Screen name="(main)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="new-project"
+            options={{
+              ...MODAL_SCREEN_OPTIONS,
+              presentation: "formSheet",
+              sheetAllowedDetents: "fitToContents",
+              sheetInitialDetentIndex: 0,
+              sheetGrabberVisible: true,
+              sheetExpandsWhenScrolledToEdge: false,
+            }}
+          />
+        </Stack.Protected>
+        <Stack.Protected guard={!session}>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        </Stack.Protected>
+      </Stack>
+    </QueryProvider>
   );
 };
 

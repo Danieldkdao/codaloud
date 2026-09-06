@@ -9,6 +9,7 @@
 - Separate components and modules by responsibility. Keep files focused and use a clear, consistent folder structure that groups related code and makes it easy to find.
 - Add comments where you need to explain why something is done a certain way, especially if it is not obvious. Avoid comments that simply restate what the code does and do not add comments excessively. Use comments to explain the reasoning behind decisions, trade-offs, and any non-obvious implementation details.
 - If you have ran the application to test it, make sure to stop the application before returning your response. Do not leave the application running in the background while you are responding. Note that this only applies if YOU ran the application to test it, if the user ran it and you just used that instance, you do not need to stop it.
+- Before you create a new helper or implement some reusable logic, check if it already exists in the codebase. If it does, reuse it instead of creating a new one. If it doesn't exist, create a new helper or utility function and place it in the appropriate shared folder.
 
 ## Expo HAS CHANGED
 

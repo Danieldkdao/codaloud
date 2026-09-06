@@ -2,6 +2,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { Children, type ComponentPropsWithRef } from "react";
 import { Pressable, Text } from "react-native";
 
+import { LoadingSwap } from "@/components/loading-swap";
 import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
@@ -58,45 +59,68 @@ export type ButtonProps = ComponentPropsWithRef<typeof Pressable> &
   VariantProps<typeof buttonVariants> & {
     /** Styles the automatic Text wrappers around string and number children. */
     textClassName?: string;
+    /** Styles the content row, including spacing between icons and text. */
+    contentClassName?: string;
+    loading?: boolean;
   };
 
 export const Button = ({
   className,
   textClassName,
+  contentClassName,
   variant = "default",
   size = "default",
   disabled,
+  loading = false,
   accessibilityState,
   children,
   ...props
 }: ButtonProps) => {
-  const isDisabled = disabled ?? accessibilityState?.disabled ?? false;
+  const isDisabled = loading || (disabled ?? accessibilityState?.disabled ?? false);
 
   return (
     <Pressable
       accessibilityRole="button"
       {...props}
       disabled={isDisabled}
-      accessibilityState={{ ...accessibilityState, disabled: isDisabled }}
+      accessibilityState={{
+        ...accessibilityState,
+        disabled: isDisabled,
+        busy: loading || accessibilityState?.busy,
+      }}
       className={cn(buttonVariants({ variant, size, className }))}
     >
-      {(state) =>
-        Children.map(
-          typeof children === "function" ? children(state) : children,
-          (child) =>
-            typeof child === "string" || typeof child === "number" ? (
-              <Text
-                className={cn(
-                  buttonTextVariants({ variant, className: textClassName }),
-                )}
-              >
-                {child}
-              </Text>
-            ) : (
-              child
-            ),
-        )
-      }
+      {(state) => (
+        <LoadingSwap
+          isLoading={loading}
+          className={cn(
+            "gap-2",
+            size === "xs" && "gap-1",
+            size === "sm" && "gap-1.5",
+            contentClassName,
+          )}
+          indicatorClassName={buttonTextVariants({
+            variant,
+            className: textClassName,
+          })}
+        >
+          {Children.map(
+            typeof children === "function" ? children(state) : children,
+            (child) =>
+              typeof child === "string" || typeof child === "number" ? (
+                <Text
+                  className={cn(
+                    buttonTextVariants({ variant, className: textClassName }),
+                  )}
+                >
+                  {child}
+                </Text>
+              ) : (
+                child
+              ),
+          )}
+        </LoadingSwap>
+      )}
     </Pressable>
   );
 };

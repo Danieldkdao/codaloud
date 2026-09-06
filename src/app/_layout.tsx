@@ -1,5 +1,6 @@
 import "../global.css";
 
+import { authClient } from "@/lib/auth/auth-client";
 import { fontAssets } from "@/lib/fonts";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -10,18 +11,19 @@ SplashScreen.preventAutoHideAsync();
 
 const RootLayout = () => {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
 
   useEffect(() => {
     if (fontError) {
       console.error("Unable to load custom fonts", fontError);
     }
 
-    if (fontsLoaded || fontError) {
+    if ((fontsLoaded || fontError) && !isSessionPending) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, isSessionPending]);
 
-  if (!fontsLoaded && !fontError) {
+  if ((!fontsLoaded && !fontError) || isSessionPending) {
     return null;
   }
 
@@ -39,7 +41,12 @@ const RootLayout = () => {
         headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
       }}
     >
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Protected guard={!!session}>
+        <Stack.Screen name="(main)" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!session}>
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      </Stack.Protected>
     </Stack>
   );
 };

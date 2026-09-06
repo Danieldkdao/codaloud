@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { OAuthButton } from "@/components/auth/oath-button";
 import { Icon } from "@/components/ui/icon";
 import { Image } from "@/components/ui/image";
 import { HeadingText, PText } from "@/components/ui/text";
@@ -37,9 +37,11 @@ const Index = () => {
           </View>
         </View>
         <View className="shrink-0 gap-3">
-          <Button
+          <OAuthButton
+            provider="github"
             size="lg"
-            className="min-h-14 gap-3"
+            className="min-h-14"
+            contentClassName="gap-3"
             accessibilityLabel="Continue with GitHub"
           >
             <Icon
@@ -49,11 +51,13 @@ const Index = () => {
               accessible={false}
             />
             Continue with GitHub
-          </Button>
-          <Button
+          </OAuthButton>
+          <OAuthButton
+            provider="apple"
             variant="outline"
             size="lg"
-            className="min-h-14 gap-3"
+            className="min-h-14"
+            contentClassName="gap-3"
             accessibilityLabel="Continue with Apple"
           >
             <Icon
@@ -63,7 +67,7 @@ const Index = () => {
               accessible={false}
             />
             Continue with Apple
-          </Button>
+          </OAuthButton>
         </View>
       </View>
     </>

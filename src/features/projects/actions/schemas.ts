@@ -30,7 +30,7 @@ export const createProjectFormSchema = createProjectSchema;
 export type CreateProjectFormSchema = z.infer<typeof createProjectFormSchema>;
 
 export const createProjectResponseSchema = z.discriminatedUnion("error", [
-  z.object({ error: z.literal(true), message: z.string().trim().min(1) }),
+  z.object({ error: z.literal(true), message: z.string().trim().min(1), code: z.string().optional() }),
   z.object({
     error: z.literal(false),
     message: z.string().trim().min(1),

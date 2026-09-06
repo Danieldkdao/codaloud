@@ -418,3 +418,27 @@ describe("repository search", () => {
     expect(network).not.toHaveBeenCalled();
   });
 });
+
+
+describe("repository authentication error contract", () => {
+  it.each([
+    { status: 401, headers: {}, code: "GITHUB_RECONNECT_REQUIRED" },
+    { status: 403, headers: {}, code: undefined },
+    { status: 403, headers: { "x-ratelimit-remaining": "0" }, code: undefined },
+  ])("distinguishes credential rejection from permission and rate-limit failures: %j", async ({ status, headers, code }) => {
+    network.mockImplementation(async () => Response.json({ message: "upstream failure" }, { status, headers: headers as Record<string, string> }));
+    const response = await GET(request());
+    expect((await response.json()).code).toBe(code);
+  });
+});
+
+
+it("preserves the reconnect code through the real repository action and route", async () => {
+  network.mockImplementation(async (url, options) => {
+    if (String(url).startsWith("/api/github/repositories")) {
+      return GET(new Request(`https://codaloud.test${url}`, options));
+    }
+    return Response.json({ message: "Bad credentials" }, { status: 401 });
+  });
+  await expect(readGitHubRepositories()).rejects.toMatchObject({ status: 403, code: "GITHUB_RECONNECT_REQUIRED" });
+});

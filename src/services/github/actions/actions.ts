@@ -45,7 +45,7 @@ export const readGitHubRepositories = async ({
   if (!response.ok || result?.error) {
     throw Object.assign(
       new Error(result?.message || "Unable to load GitHub repositories."),
-      { status: response.status },
+      { status: response.status, code: result?.error ? result.code : undefined },
     );
   }
   if (!result || !Array.isArray(result.data)) {

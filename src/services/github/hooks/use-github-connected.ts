@@ -2,14 +2,17 @@ import { authClient } from "@/lib/auth/auth-client";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useState, useTransition } from "react";
 import { Platform } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const useGitHubConnected = (callbackURL = "/account") => {
+  const queryClient = useQueryClient();
   const { error: callbackError } = useLocalSearchParams<{ error?: string }>();
   const authorizationFailed = Boolean(callbackError);
   const [isConnected, setIsConnected] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState("Checking GitHub permissions…");
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const refreshConnection = useCallback(
     async (signal?: AbortSignal, attempted = false) => {
@@ -33,6 +36,7 @@ export const useGitHubConnected = (callbackURL = "/account") => {
               ? "Repository permission wasn’t granted. You can try again."
               : "GitHub repository access is not connected.",
         );
+        return hasRepositoryAccess;
       } catch {
         if (!signal?.aborted) {
           setIsConnected(false);
@@ -54,6 +58,7 @@ export const useGitHubConnected = (callbackURL = "/account") => {
   );
 
   const handleConnect = useCallback(() => {
+    setConnectionError(null);
     startTransition(async () => {
       setStatus("Waiting for GitHub authorization…");
       try {
@@ -66,18 +71,23 @@ export const useGitHubConnected = (callbackURL = "/account") => {
         if (error) throw new Error("Unable to connect GitHub.");
 
         // Web reloads at the callback; native resolves after the browser closes.
-        if (Platform.OS !== "web") await refreshConnection(undefined, true);
+        if (Platform.OS !== "web" && await refreshConnection(undefined, true)) {
+          // Discard old-account data and rejected queries before loading with the new token.
+          await queryClient.resetQueries({ queryKey: ["github", "repositories"] });
+        }
       } catch {
         setStatus("Unable to connect GitHub. Please try again.");
+        setConnectionError("Unable to connect GitHub. Please try again.");
       }
     });
-  }, [callbackURL, refreshConnection, startTransition]);
+  }, [callbackURL, queryClient, refreshConnection, startTransition]);
 
   return {
     isConnected,
     isPending,
     isChecking,
     status,
+    connectionError,
     handleConnect,
     refreshConnection,
   };

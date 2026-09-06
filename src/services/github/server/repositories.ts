@@ -4,6 +4,32 @@ import type {
 } from "@/features/projects/types";
 import { Octokit } from "octokit";
 import { DEFAULT_PAGE, PAGE_SIZE } from "@/lib/constants";
+import { GitHubAccessError } from "./access";
+
+const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
+  new Octokit({
+    auth: accessToken,
+    request: { signal, timeout: 15_000 },
+    // Let the caller handle rate limits instead of keeping an API request waiting.
+    throttle: { enabled: false },
+    retry: { enabled: false },
+  });
+
+export const verifyGitHubRepositoryAccess = async (
+  accessToken: string,
+  repositoryId: string,
+  signal?: AbortSignal,
+) => {
+  const octokit = createGitHubClient(accessToken, signal);
+  // GitHub's ID lookup survives renames and avoids scanning every picker page.
+  // This REST endpoint is supported by GitHub but absent from Octokit's generated types.
+  const { data: repository } = await octokit.request("GET /repositories/{repository_id}", {
+    repository_id: repositoryId,
+  });
+  if (String(repository?.id) !== repositoryId || repository?.permissions?.pull !== true) {
+    throw new GitHubAccessError("You do not have access to import this GitHub repository.");
+  }
+};
 
 export const listGitHubRepositories = async (
   accessToken: string,
@@ -14,13 +40,7 @@ export const listGitHubRepositories = async (
     search = "",
   }: GitHubRepositoryPagination = {},
 ): Promise<GitHubRepository[]> => {
-  const octokit = new Octokit({
-    auth: accessToken,
-    request: { signal, timeout: 15_000 },
-    // Let the caller handle rate limits instead of keeping an API request waiting.
-    throttle: { enabled: false },
-    retry: { enabled: false },
-  });
+  const octokit = createGitHubClient(accessToken, signal);
 
   const options = {
     visibility: "all",

@@ -129,3 +129,11 @@ describe("createProjectAction", () => {
     expectTypeOf<Extract<Result, { error: true }>>().toMatchObjectType<{ error: true; message: string }>();
   });
 });
+
+
+it("preserves the reconnect-required response when credentials expire during submission", async () => {
+  network.mockResolvedValue(Response.json({ error: true, message: "Reconnect GitHub to access your repositories.", code: "GITHUB_RECONNECT_REQUIRED" }, { status: 403 }));
+  expect(await createProjectAction({ name: "Import", source: "github", repositoryId: "123" })).toEqual({
+    error: true, message: "Reconnect GitHub to access your repositories.", code: "GITHUB_RECONNECT_REQUIRED",
+  });
+});

@@ -13,12 +13,18 @@ export type GitHubRepositoriesSelectListProps = {
   className?: string;
   selectedRepositoryId: string | null;
   onValueChange: (repositoryId: string | null) => void;
+  onReconnect?: () => void;
+  isReconnecting?: boolean;
+  reconnectError?: string | null;
 };
 
 export const GitHubRepositoriesSelectList = ({
   className,
   selectedRepositoryId,
   onValueChange,
+  onReconnect,
+  isReconnecting = false,
+  reconnectError,
 }: GitHubRepositoriesSelectListProps) => {
   const [search, setSearch] = useState("");
   const {
@@ -37,6 +43,7 @@ export const GitHubRepositoriesSelectList = ({
   const selectedRepository = repositories.find(
     (repository) => String(repository.id) === selectedRepositoryId,
   );
+  const needsReconnect = error && "code" in error && error.code === "GITHUB_RECONNECT_REQUIRED";
 
   const loadMore = () => {
     if (hasNextPage && !isFetching && !error) {
@@ -62,7 +69,24 @@ export const GitHubRepositoriesSelectList = ({
           selectedRepository && "h-auto min-h-0 shrink-0",
         )}
       >
-        {selectedRepository ? (
+        {needsReconnect && onReconnect ? (
+          <View className="gap-3 p-4">
+            <PText accessibilityRole="alert" className="text-destructive">
+              {reconnectError ?? error.message}
+            </PText>
+            <Button
+              variant="outline"
+              disabled={isReconnecting}
+              loading={isReconnecting}
+              onPress={() => {
+                onValueChange(null);
+                onReconnect();
+              }}
+            >
+              Reconnect GitHub
+            </Button>
+          </View>
+        ) : selectedRepository ? (
           <GitHubRepositorySelectItem
             repository={selectedRepository}
             selected

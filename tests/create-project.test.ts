@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { APIError } from "better-auth/api";
 import { POST } from "@/app/api/projects+api";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
+  listUserAccounts: vi.fn(),
+  getAccessToken: vi.fn(),
   insert: vi.fn(),
   values: vi.fn(),
   returning: vi.fn(),
 }));
 
+vi.mock("@/lib/auth/auth", () => ({
+  auth: { api: { listUserAccounts: mocks.listUserAccounts, getAccessToken: mocks.getAccessToken } },
+}));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
@@ -24,7 +30,14 @@ const request = (payload: unknown, contentType = "application/json") => new Requ
   },
 );
 
+const network = vi.fn<typeof fetch>();
+
 beforeEach(() => {
+  mocks.listUserAccounts.mockResolvedValue([{ id: "linked-account", providerId: "github", scopes: ["repo"] }]);
+  mocks.getAccessToken.mockResolvedValue({ accessToken: "test-token" });
+  network.mockReset();
+  network.mockImplementation(async () => Response.json({ id: 123456789, permissions: { pull: true } }));
+  vi.stubGlobal("fetch", network);
   mocks.getCurrentUser.mockResolvedValue({ userId: "current-user" });
   mocks.insert.mockReturnValue({ values: mocks.values });
   mocks.values.mockImplementation((data: ProjectInsertData) => {
@@ -90,5 +103,83 @@ describe("project creation route and insert flow", () => {
     const response = await POST(request({ name: "My project", source: "new" }, "text/plain"));
     expect(response.status).toBe(415);
     expect(mocks.insert).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("GitHub import access validation", () => {
+  const importRequest = () => request({ name: "Import", source: "github", repositoryId: "123456789" });
+
+  it.each([
+    { accounts: [] },
+    { accounts: [{ id: "github-account", providerId: "github", scopes: ["read:user"] }] },
+    { accounts: [{ id: "google-account", providerId: "google", scopes: ["repo"] }] },
+  ])("rejects imports without a linked GitHub repository grant: $accounts", async ({ accounts }) => {
+    mocks.listUserAccounts.mockResolvedValue(accounts);
+    const response = await POST(importRequest());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: true, code: "GITHUB_RECONNECT_REQUIRED" });
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.getAccessToken).not.toHaveBeenCalled();
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it("checks the selected repository using credentials from the current session before inserting", async () => {
+    const req = importRequest();
+    expect((await POST(req)).status).toBe(201);
+    expect(mocks.getAccessToken).toHaveBeenCalledWith({ body: { accountId: "linked-account" }, headers: req.headers });
+    const [url, options] = network.mock.calls[0];
+    expect(String(url)).toBe("https://api.github.com/repositories/123456789");
+    expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
+    expect(options?.signal).toBe(req.signal);
+    expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.insert.mock.invocationCallOrder[0]);
+  });
+
+  it.each([
+    { id: 123456789, permissions: { pull: false } },
+    { id: 123456789 },
+    { id: 999, permissions: { pull: true } },
+  ])("rejects an inaccessible or mismatched repository: %j", async (repository) => {
+    network.mockImplementation(async () => Response.json(repository));
+    expect((await POST(importRequest())).status).toBe(403);
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { upstream: 401, expected: 403, code: "GITHUB_RECONNECT_REQUIRED", headers: {} },
+    { upstream: 403, expected: 403, code: undefined, headers: {} },
+    { upstream: 404, expected: 403, code: undefined, headers: {} },
+    { upstream: 403, expected: 429, code: undefined, headers: { "x-ratelimit-remaining": "0" } },
+    { upstream: 429, expected: 429, code: undefined, headers: {} },
+    { upstream: 500, expected: 502, code: undefined, headers: {} },
+  ])("does not insert when GitHub returns $upstream", async ({ upstream, expected, code, headers }) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    network.mockImplementation(async () => Response.json({ message: "private upstream details" }, { status: upstream, headers: headers as Record<string, string> }));
+    const response = await POST(importRequest());
+    const body = await response.json();
+    expect(response.status).toBe(expected);
+    expect(body.code).toBe(code);
+    expect(JSON.stringify(body)).not.toMatch(/test-token|private upstream/);
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/test-token|private upstream/);
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(network).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects missing or unrefreshable tokens without contacting GitHub", async () => {
+    mocks.getAccessToken.mockResolvedValueOnce({ accessToken: "" });
+    expect((await POST(importRequest())).status).toBe(403);
+    mocks.getAccessToken.mockRejectedValueOnce(new APIError("BAD_REQUEST", { code: "FAILED_TO_GET_ACCESS_TOKEN", message: "private upstream details" }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it("does not require GitHub for a new project", async () => {
+    mocks.listUserAccounts.mockResolvedValue([]);
+    expect((await POST(request({ name: "New", source: "new" }))).status).toBe(201);
+    expect(mocks.listUserAccounts).not.toHaveBeenCalled();
+    expect(network).not.toHaveBeenCalled();
   });
 });

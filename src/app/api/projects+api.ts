@@ -2,6 +2,8 @@ import { createProjectSchema } from "@/features/projects/actions/schemas";
 import { insertProjectDB } from "@/features/projects/server/projects";
 import { apiResponse } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
+import { getGitHubAccessToken, getGitHubErrorResponse } from "@/services/github/server/access";
+import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
 
 export const POST = async (request: Request) => {
   try {
@@ -40,6 +42,16 @@ export const POST = async (request: Request) => {
         },
         400,
       );
+    }
+
+    if (result.data.source === "github") {
+      try {
+        const accessToken = await getGitHubAccessToken(request.headers);
+        await verifyGitHubRepositoryAccess(accessToken, result.data.repositoryId, request.signal);
+      } catch (error) {
+        const { body, status } = getGitHubErrorResponse(error);
+        return apiResponse(body, status);
+      }
     }
 
     // Users may only create their own projects; ownership comes from the session.

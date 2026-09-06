@@ -61,7 +61,7 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
     }
 
     if (result.data.error) {
-      return { error: true as const, message: result.data.message };
+      return result.data;
     }
 
     if (!response.ok) {

@@ -1,4 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { View } from "react-native";
@@ -32,6 +33,7 @@ const projectSources = [
 ] as const;
 
 export const ProjectForm = () => {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const { source: initialSource, name: initialName } = useLocalSearchParams<{
     source?: string;
@@ -45,7 +47,7 @@ export const ProjectForm = () => {
     },
   });
   const [source, name] = useWatch({ control, name: ["source", "name"] });
-  const { isConnected, isPending, isChecking, handleConnect } =
+  const { isConnected, isPending, isChecking, handleConnect, connectionError } =
     useGitHubConnected(
       `/new-project?${new URLSearchParams({ source: "github", name })}`,
     );
@@ -54,6 +56,10 @@ export const ProjectForm = () => {
     const createdProject = await createProjectAction(data);
 
     if (createdProject.error) {
+      if (createdProject.code === "GITHUB_RECONNECT_REQUIRED") {
+        // A token may expire after selection. Refresh the picker so it offers reconnection.
+        void queryClient.invalidateQueries({ queryKey: ["github", "repositories"] });
+      }
       alert(`Error: ${createdProject.message}`);
       return;
     }
@@ -174,6 +180,9 @@ export const ProjectForm = () => {
               )}
               {isConnected && !isChecking && (
                 <GitHubRepositoriesSelectList
+                  onReconnect={handleConnect}
+                  isReconnecting={isPending}
+                  reconnectError={connectionError}
                   selectedRepositoryId={value || null}
                   onValueChange={(repositoryId) => {
                     onChange(repositoryId ?? "");

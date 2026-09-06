@@ -18,8 +18,14 @@ const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
   alert: vi.fn(),
   replace: vi.fn(),
+  handleConnect: vi.fn(),
+  invalidateQueries: vi.fn(),
+  reconnectPending: false,
 }));
 
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
+}));
 vi.mock("@/features/projects/actions/actions", () => ({
   createProjectAction: mocks.createProject,
 }));
@@ -123,8 +129,8 @@ vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({
     isConnected: mocks.connected,
     isChecking: mocks.checking,
-    isPending: false,
-    handleConnect: vi.fn(),
+    isPending: mocks.reconnectPending,
+    handleConnect: mocks.handleConnect,
   }),
 }));
 
@@ -133,6 +139,7 @@ import { ProjectForm } from "@/features/projects/components/project-form";
 
 beforeEach(() => {
   mocks.connected = false;
+  mocks.reconnectPending = false;
   mocks.checking = false;
   mocks.source = "github";
   mocks.listProps = {};
@@ -451,4 +458,74 @@ describe("project form repository validation", () => {
     await press(container, "Create project");
     expect(mocks.createProject).toHaveBeenCalledTimes(2);
   });
+});
+
+
+describe("project form GitHub reconnection", () => {
+  const mount = () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    root = createRoot(container);
+    act(() => root!.render(createElement(ProjectForm)));
+    return container;
+  };
+
+  it.each([false, true])("offers reconnection for a rejected token even with cached repositories (later page: %s)", async (laterPage) => {
+    mocks.connected = true;
+    Object.assign(mocks.query, {
+      error: Object.assign(new Error("Reconnect GitHub to access your repositories."), { status: 403, code: "GITHUB_RECONNECT_REQUIRED" }),
+      isFetchNextPageError: laterPage,
+    });
+    const container = mount();
+    const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
+    expect(reconnect).toBeDefined();
+    expect(container.textContent).not.toContain("Try again");
+    await act(async () => reconnect!.click());
+    expect(mocks.handleConnect).toHaveBeenCalledOnce();
+    expect(mocks.refetch).not.toHaveBeenCalled();
+  });
+
+  it("still shows reconnection when a previously selected repository loses access", async () => {
+    mocks.connected = true;
+    const container = mount();
+    await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("owner/private-repo"))!.click());
+    Object.assign(mocks.query, { error: Object.assign(new Error("Reconnect GitHub"), { code: "GITHUB_RECONNECT_REQUIRED", status: 403 }) });
+    act(() => root!.render(createElement(ProjectForm)));
+    const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
+    expect(reconnect).toBeDefined();
+    await act(async () => reconnect!.click());
+    expect(container.textContent).toContain("Selected repository ID: null");
+    expect(mocks.handleConnect).toHaveBeenCalledOnce();
+  });
+
+  it.each([403, 429, 502])("keeps ordinary retry for non-authentication error %s", (status) => {
+    mocks.connected = true;
+    Object.assign(mocks.query, { error: Object.assign(new Error("Request failed"), { status }) });
+    const container = mount();
+    expect(container.textContent).toContain("Try again");
+    expect(container.textContent).not.toContain("Reconnect GitHub");
+  });
+
+  it("disables reconnect while authorization is in progress", () => {
+    mocks.connected = true;
+    mocks.reconnectPending = true;
+    Object.assign(mocks.query, { error: Object.assign(new Error("Reconnect GitHub"), { code: "GITHUB_RECONNECT_REQUIRED" }) });
+    const container = mount();
+    const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
+    expect(reconnect?.disabled).toBe(true);
+  });
+});
+
+
+it("refreshes repository authorization when the import itself requires reconnection", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.connected = true;
+  mocks.createProject.mockResolvedValue({ error: true, code: "GITHUB_RECONNECT_REQUIRED", message: "Reconnect GitHub" });
+  const container = document.createElement("div");
+  root = createRoot(container);
+  act(() => root!.render(createElement(ProjectForm)));
+  await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("owner/private-repo"))!.click());
+  await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Create project")!.click());
+  expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["github", "repositories"] });
+  expect(mocks.replace).not.toHaveBeenCalled();
 });

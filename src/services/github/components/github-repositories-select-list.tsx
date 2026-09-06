@@ -43,7 +43,8 @@ export const GitHubRepositoriesSelectList = ({
   const selectedRepository = repositories.find(
     (repository) => String(repository.id) === selectedRepositoryId,
   );
-  const needsReconnect = error && "code" in error && error.code === "GITHUB_RECONNECT_REQUIRED";
+  const needsReconnect =
+    error && "code" in error && error.code === "GITHUB_RECONNECT_REQUIRED";
 
   const loadMore = () => {
     if (hasNextPage && !isFetching && !error) {
@@ -61,112 +62,117 @@ export const GitHubRepositoriesSelectList = ({
   };
 
   return (
-    <>
-      <View
-        className={cn(
-          "max-h-80 min-h-24 shrink overflow-hidden rounded-xl border border-border bg-card",
-          className,
-          selectedRepository && "h-auto min-h-0 shrink-0",
-        )}
-      >
-        {needsReconnect && onReconnect ? (
-          <View className="gap-3 p-4">
-            <PText accessibilityRole="alert" className="text-destructive">
-              {reconnectError ?? error.message}
-            </PText>
-            <Button
-              variant="outline"
-              disabled={isReconnecting}
-              loading={isReconnecting}
-              onPress={() => {
-                onValueChange(null);
-                onReconnect();
-              }}
-            >
-              Reconnect GitHub
-            </Button>
+    <View
+      className={cn(
+        "max-h-80 min-h-24 shrink overflow-hidden rounded-xl border border-border bg-card",
+        className,
+        selectedRepository && "h-auto min-h-0 shrink-0",
+      )}
+    >
+      {needsReconnect && onReconnect ? (
+        <View className="gap-3 p-4">
+          <PText accessibilityRole="alert" className="text-destructive">
+            {reconnectError ?? error.message}
+          </PText>
+          <Button
+            variant="outline"
+            disabled={isReconnecting}
+            loading={isReconnecting}
+            onPress={() => {
+              onValueChange(null);
+              onReconnect();
+            }}
+          >
+            Reconnect GitHub
+          </Button>
+        </View>
+      ) : selectedRepository ? (
+        <GitHubRepositorySelectItem
+          repository={selectedRepository}
+          selected
+          onPress={() => onValueChange(null)}
+        />
+      ) : (
+        <>
+          <View className="p-3">
+            <SearchInput
+              initialSearch={search}
+              onValueChange={setSearch}
+              placeholder="Search repositories"
+            />
           </View>
-        ) : selectedRepository ? (
-          <GitHubRepositorySelectItem
-            repository={selectedRepository}
-            selected
-            onPress={() => onValueChange(null)}
-          />
-        ) : (
-          <>
-            <View className="p-3">
-              <SearchInput
-                initialSearch={search}
-                onValueChange={setSearch}
-                placeholder="Search repositories"
+          <FlatList<GitHubRepository>
+            key={search.trim().toLowerCase()}
+            className="min-h-24 shrink overflow-hidden"
+            accessibilityLabel="GitHub repositories"
+            data={repositories}
+            keyExtractor={(repository) => String(repository.id)}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            renderItem={({ item }) => (
+              <GitHubRepositorySelectItem
+                repository={item}
+                onPress={() => onValueChange(String(item.id))}
               />
-            </View>
-            <FlatList<GitHubRepository>
-              key={search.trim().toLowerCase()}
-              className="min-h-24 shrink overflow-hidden"
-              accessibilityLabel="GitHub repositories"
-              data={repositories}
-              keyExtractor={(repository) => String(repository.id)}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              onEndReached={loadMore}
-              onEndReachedThreshold={0.5}
-              renderItem={({ item }) => (
-                <GitHubRepositorySelectItem
-                  repository={item}
-                  onPress={() => onValueChange(String(item.id))}
-                />
-              )}
-              ItemSeparatorComponent={() => <View className="h-px bg-border" />}
-              ListEmptyComponent={
-                !error && fetchStatus !== "paused" ? (
-                  <View className="items-center gap-2 p-4">
-                    {isPending && <ActivityIndicator className="text-foreground" />}
-                    <PText
-                      accessibilityLiveRegion="polite"
-                      className="text-muted-foreground"
-                    >
-                      {isPending ? "Loading repositories…" : search.trim() ? "No matching repositories found." : "No repositories found."}
-                    </PText>
-                  </View>
-                ) : null
-              }
-              ListFooterComponent={
-                error ? (
-                  <View className="gap-3 p-4">
-                    <PText accessibilityRole="alert" className="text-destructive">
-                      {error.message}
-                    </PText>
-                    <Button variant="outline" onPress={retry} loading={isFetching}>
-                      Try again
-                    </Button>
-                  </View>
-                ) : fetchStatus === "paused" ? (
+            )}
+            ItemSeparatorComponent={() => <View className="h-px bg-border" />}
+            ListEmptyComponent={
+              !error && fetchStatus !== "paused" ? (
+                <View className="items-center gap-2 p-4">
+                  {isPending && (
+                    <ActivityIndicator className="text-foreground" />
+                  )}
                   <PText
                     accessibilityLiveRegion="polite"
-                    className="p-4 text-muted-foreground"
+                    className="text-muted-foreground"
                   >
-                    Waiting for a connection…
+                    {isPending
+                      ? "Loading repositories…"
+                      : search.trim()
+                        ? "No matching repositories found."
+                        : "No repositories found."}
                   </PText>
-                ) : isFetchingNextPage ? (
-                  <View className="flex-row items-center justify-center gap-2 p-4">
-                    <ActivityIndicator className="text-foreground" />
-                    <PText
-                      accessibilityLiveRegion="polite"
-                      className="text-muted-foreground"
-                    >
-                      Loading more repositories…
-                    </PText>
-                  </View>
-                ) : null
-              }
-            />
-          </>
-        )}
-      </View>
-      <PText accessibilityLiveRegion="polite" className="text-muted-foreground">
-        Selected repository ID: {selectedRepositoryId ?? "null"}
-      </PText>
-    </>
+                </View>
+              ) : null
+            }
+            ListFooterComponent={
+              error ? (
+                <View className="gap-3 p-4">
+                  <PText accessibilityRole="alert" className="text-destructive">
+                    {error.message}
+                  </PText>
+                  <Button
+                    variant="outline"
+                    onPress={retry}
+                    loading={isFetching}
+                  >
+                    Try again
+                  </Button>
+                </View>
+              ) : fetchStatus === "paused" ? (
+                <PText
+                  accessibilityLiveRegion="polite"
+                  className="p-4 text-muted-foreground"
+                >
+                  Waiting for a connection…
+                </PText>
+              ) : isFetchingNextPage ? (
+                <View className="flex-row items-center justify-center gap-2 p-4">
+                  <ActivityIndicator className="text-foreground" />
+                  <PText
+                    accessibilityLiveRegion="polite"
+                    className="text-muted-foreground"
+                  >
+                    Loading more repositories…
+                  </PText>
+                </View>
+              ) : null
+            }
+          />
+        </>
+      )}
+    </View>
   );
 };

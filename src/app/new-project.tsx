@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/button";
 import { ProjectForm } from "@/features/projects/components/project-form";
 import { useThemeColor } from "@/hooks/use-theme";
 import { Stack, useRouter } from "expo-router";
+import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const NewProjectScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const background = useThemeColor("background");
   const foreground = useThemeColor("foreground");
 
@@ -27,17 +29,14 @@ const NewProjectScreen = () => {
           ),
         }}
       />
-      {/* Content-sized sheets need a wrapper that does not fill the screen. */}
+      {/* Keep the fitted sheet compact, but give overflowing content a bounded scroll viewport. */}
       <AppWrapper
-        scrollable={false}
         className="flex-none"
-        // iOS adds the header and bottom safe area to the fitted sheet height.
-        // Keep top padding for the overlay header, but count its height only once.
-        style={
-          process.env.EXPO_OS === "ios"
-            ? { paddingBottom: 24, marginBottom: -insets.top }
-            : undefined
-        }
+        headerShown
+        nestedScrollEnabled
+        keyboardDismissMode="on-drag"
+        style={{ maxHeight: height - insets.top - insets.bottom }}
+        contentContainerStyle={{ flexGrow: 0 }}
       >
         <ProjectForm />
       </AppWrapper>

@@ -1,23 +1,14 @@
-import { Pool } from "@neondatabase/serverless";
-import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import { serverEnv } from "../data/env/server";
 import * as schema from "./schema";
+import ws from "ws";
 
-export type Db = NeonDatabase<typeof schema>;
-export type DbTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+neonConfig.webSocketConstructor = ws;
 
-// Call once per API request and await all database work inside the callback.
-export const dbAction = async <T>(
-  callback: (database: Db) => Promise<T>,
-): Promise<T> => {
-  const pool = new Pool({
-    connectionString: serverEnv.DATABASE_URL,
-  });
+const pool = new Pool({ connectionString: serverEnv.DATABASE_URL });
+export const db = drizzle(pool, { schema });
 
-  try {
-    const database = drizzle({ client: pool, schema });
-    return await callback(database);
-  } finally {
-    await pool.end();
-  }
-};
+export type DbTransaction = Parameters<
+  Parameters<(typeof db)["transaction"]>[0]
+>[0];

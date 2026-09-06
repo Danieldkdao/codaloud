@@ -8,3 +8,6 @@ minimumReleaseAgeExclude:
   - expo-modules-jsi@57.0.8
   - expo-router@57.0.19
   - expo@57.0.20
+
+allowBuilds:
+  esbuild: false

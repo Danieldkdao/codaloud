@@ -41,4 +41,6 @@ example
 # generated native folders
 /ios
 /android
-.pnpm-store
+.pnpm-store/
+.env
+.env.local

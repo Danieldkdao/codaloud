@@ -62,6 +62,17 @@ const RootLayout = () => {
               sheetExpandsWhenScrolledToEdge: false,
             }}
           />
+          <Stack.Screen
+            name="edit-project"
+            options={{
+              ...MODAL_SCREEN_OPTIONS,
+              presentation: "formSheet",
+              sheetAllowedDetents: "fitToContents",
+              sheetInitialDetentIndex: 0,
+              sheetGrabberVisible: true,
+              sheetExpandsWhenScrolledToEdge: false,
+            }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />

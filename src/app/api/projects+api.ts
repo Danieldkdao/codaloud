@@ -1,11 +1,15 @@
-import { db } from "@/db/db";
-import { ProjectTable } from "@/db/schemas/project";
-import { eq } from "drizzle-orm";
 import { createProjectSchema } from "@/features/projects/actions/schemas";
-import { insertProjectDB } from "@/features/projects/server/projects";
+import { projectParamsSchema } from "@/features/projects/lib/project-params";
+import {
+  insertProjectDB,
+  readUserProjectsDb,
+} from "@/features/projects/server/projects";
 import { apiResponse } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
-import { getGitHubAccessToken, getGitHubErrorResponse } from "@/services/github/server/access";
+import {
+  getGitHubAccessToken,
+  getGitHubErrorResponse,
+} from "@/services/github/server/access";
 import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
 
 export const GET = async (request: Request) => {
@@ -14,15 +18,31 @@ export const GET = async (request: Request) => {
 
     if (!userId) {
       return apiResponse(
-        { error: true, message: "You must be signed in to view your projects." },
+        {
+          error: true,
+          message: "You must be signed in to view your projects.",
+        },
         401,
       );
     }
 
-    const userProjects = await db
-      .select()
-      .from(ProjectTable)
-      .where(eq(ProjectTable.userId, userId));
+    const { searchParams } = new URL(request.url);
+    const result = projectParamsSchema.safeParse(
+      Object.fromEntries(searchParams),
+    );
+
+    if (!result.success) {
+      return apiResponse(
+        {
+          error: true,
+          message:
+            result.error.issues[0]?.message ?? "Invalid project parameters.",
+        },
+        400,
+      );
+    }
+
+    const userProjects = await readUserProjectsDb(userId, result.data);
 
     const response = apiResponse({
       error: false,
@@ -83,7 +103,11 @@ export const POST = async (request: Request) => {
     if (result.data.source === "github") {
       try {
         const accessToken = await getGitHubAccessToken(request.headers);
-        await verifyGitHubRepositoryAccess(accessToken, result.data.repositoryId, request.signal);
+        await verifyGitHubRepositoryAccess(
+          accessToken,
+          result.data.repositoryId,
+          request.signal,
+        );
       } catch (error) {
         const { body, status } = getGitHubErrorResponse(error);
         return apiResponse(body, status);

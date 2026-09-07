@@ -5,9 +5,42 @@ import {
   createProjectResponseSchema,
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
-import { authClient } from "@/lib/auth/auth-client";
+import {
+  projectParamsSchema,
+  type ProjectParamsSchema,
+} from "@/features/projects/lib/project-params";
+import type { ProjectResponseData } from "@/features/projects/lib/types";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { fetchBase } from "@/lib/utils";
+import type { ApiResponse } from "@/lib/types";
+import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
+
+export const readUserProjectsAction = async (
+  params: Partial<ProjectParamsSchema> = {},
+  signal?: AbortSignal,
+): Promise<ProjectResponseData[] | null> => {
+  try {
+    const validatedParams = projectParamsSchema.safeParse(params);
+    if (!validatedParams.success) return null;
+
+    const query = createSearchParams(validatedParams.data);
+    const headers = await createRequestHeaders();
+
+    const response = await fetchBase(`/api/projects?${query}`, {
+      method: "GET",
+      headers,
+      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      signal,
+    });
+    if (!response.ok) return null;
+
+    const result: ApiResponse<ProjectResponseData[]> = await response.json();
+    if (result?.error !== false || !Array.isArray(result.data)) return null;
+
+    return result.data;
+  } catch {
+    return null;
+  }
+};
 
 export const createProjectAction = async (unsafeData: CreateProjectFormSchema) => {
   try {
@@ -35,14 +68,9 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
       };
     }
 
-    const headers = new Headers({
-      Accept: "application/json",
+    const headers = await createRequestHeaders({
       "Content-Type": "application/json",
     });
-    if (Platform.OS !== "web") {
-      const cookie = await authClient.getCookie();
-      if (cookie) headers.set("Cookie", cookie);
-    }
 
     const response = await fetchBase("/api/projects", {
       method: "POST",

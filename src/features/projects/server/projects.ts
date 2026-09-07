@@ -2,6 +2,7 @@ import { and, asc, desc, eq, getTableColumns, gt, ilike, lt, or, sql } from "dri
 
 import { db, type DbTransaction as DBTransaction } from "@/db/db";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
+import type { UpdateProjectSchema } from "@/features/projects/actions/schemas";
 import {
   projectParamsSchema,
   readProjectCursor,
@@ -78,4 +79,18 @@ export const insertProjectDB = async (
     .returning();
 
   return insertedProject;
+};
+
+export const updateUserProjectDb = async (
+  userId: string,
+  projectId: string,
+  data: UpdateProjectSchema,
+) => {
+  const [updatedProject] = await db
+    .update(ProjectTable)
+    .set(data)
+    .where(and(eq(ProjectTable.id, projectId), eq(ProjectTable.userId, userId)))
+    .returning();
+
+  return updatedProject;
 };

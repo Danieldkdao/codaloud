@@ -64,6 +64,13 @@ export const createProjectSchema = z.discriminatedUnion(
 
 export type CreateProjectSchema = z.infer<typeof createProjectSchema>;
 
+export const updateProjectSchema = z.strictObject(projectFields).partial().refine(
+  (data) => Object.values(data).some((value) => value !== undefined),
+  "Provide at least one field to update.",
+);
+
+export type UpdateProjectSchema = z.infer<typeof updateProjectSchema>;
+
 export const createProjectFormSchema = createProjectSchema;
 
 export type CreateProjectFormSchema = z.infer<typeof createProjectFormSchema>;

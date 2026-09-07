@@ -4,6 +4,7 @@ import { twMerge } from "tailwind-merge";
 import { ApiResponse } from "./types";
 import { getBaseURL } from "./auth/utils";
 import { FetchRequestInit } from "expo/fetch";
+import z from "zod";
 
 export const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
@@ -39,7 +40,9 @@ export const createSearchParams = (
       .map(([key, value]) => [key, String(value)]),
   );
 
-export const createRequestHeaders = async (init?: HeadersInit): Promise<Headers> => {
+export const createRequestHeaders = async (
+  init?: HeadersInit,
+): Promise<Headers> => {
   const headers = new Headers(init);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
@@ -51,4 +54,15 @@ export const createRequestHeaders = async (init?: HeadersInit): Promise<Headers>
   }
 
   return headers;
+};
+
+export const getContentType = (headers: Headers): string | undefined =>
+  headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+
+export const isValidIds = (ids: string | string[]) => {
+  const idSchema = z.uuid();
+  if (Array.isArray(ids)) {
+    return ids.every((id) => idSchema.safeParse(id).success);
+  }
+  return idSchema.safeParse(ids).success;
 };

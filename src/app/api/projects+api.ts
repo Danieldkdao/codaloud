@@ -4,7 +4,7 @@ import {
   insertProjectDB,
   readUserProjectsDb,
 } from "@/features/projects/server/projects";
-import { apiResponse } from "@/lib/utils";
+import { apiResponse, getContentType } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import {
   getGitHubAccessToken,
@@ -72,11 +72,7 @@ export const POST = async (request: Request) => {
       );
     }
 
-    const contentType = request.headers
-      .get("content-type")
-      ?.split(";")[0]
-      .trim()
-      .toLowerCase();
+    const contentType = getContentType(request.headers);
 
     // Requiring JSON also prevents cross-site form posts using session cookies.
     if (contentType !== "application/json") {

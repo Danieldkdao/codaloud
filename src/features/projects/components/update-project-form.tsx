@@ -26,7 +26,7 @@ export const UpdateProjectForm = ({ projectId, defaultValues }: UpdateProjectFor
   const router = useRouter();
   const isMounted = useRef(true);
   const submissionInFlight = useRef(false);
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<UpdateProjectSchema>({
+  const { control, handleSubmit, formState: { isDirty, isSubmitting } } = useForm<UpdateProjectSchema>({
     resolver: zodResolver(updateProjectSchema),
     defaultValues: {
       ...defaultValues,
@@ -56,7 +56,7 @@ export const UpdateProjectForm = ({ projectId, defaultValues }: UpdateProjectFor
 
   const submitForm = async () => {
     // Button and keyboard events can arrive before isSubmitting rerenders.
-    if (submissionInFlight.current) return;
+    if (!isDirty || submissionInFlight.current) return;
     submissionInFlight.current = true;
     try {
       await handleSubmit(onSubmit)();
@@ -121,7 +121,7 @@ export const UpdateProjectForm = ({ projectId, defaultValues }: UpdateProjectFor
         <View className="shrink-0">
           <Button
             size="lg"
-            disabled={isSubmitting}
+            disabled={!isDirty || isSubmitting}
             loading={isSubmitting}
             onPress={() => void submitForm()}
           >

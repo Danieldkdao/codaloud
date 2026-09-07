@@ -12,6 +12,8 @@ export const useProject = (projectId: string) => {
   return useQuery({
     queryKey: ["projects", "detail", userId, projectId],
     enabled: Boolean(userId),
+    // Read failures lose their HTTP status; let the user retry instead of retrying 4xx responses.
+    retry: false,
     queryFn: async ({ signal }) => {
       if (!userId) throw new Error("You must be signed in to view a project.");
 

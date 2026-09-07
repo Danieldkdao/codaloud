@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readProjectAction } from "@/features/projects/actions/actions";
 import { useProject } from "@/features/projects/hooks/use-project";
 import type { ProjectResponseData } from "@/features/projects/types";
+import { createQueryClient } from "@/lib/query-client";
 
 const session = vi.hoisted(() => ({
   data: { user: { id: "user-one" } } as { user: { id: string } } | null,
@@ -42,7 +43,12 @@ const render = async (projectId = project.id) => {
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client = createQueryClient();
+  // Keep the production retry policy; shorten only the delay for these tests.
+  client.setDefaultOptions({
+    ...client.getDefaultOptions(),
+    queries: { ...client.getDefaultOptions().queries, retryDelay: 0 },
+  });
   root = createRoot(document.createElement("div"));
   session.data = { user: { id: "user-one" } };
   session.isPending = false;
@@ -92,13 +98,23 @@ describe("useProject", () => {
     expect(read).toHaveBeenCalledTimes(3);
   });
 
-  it("turns null into a query error and supports retrying", async () => {
-    read.mockResolvedValueOnce(null);
+  it("fails once on a statusless read failure and supports a manual retry", async () => {
+    read.mockResolvedValue(null);
     await render();
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(client.getQueryState(["projects", "detail", "user-one", project.id])?.status).toBe("error");
+      });
+    });
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
     expect(current.isError).toBe(true);
+    expect(current.isFetching).toBe(false);
     expect(current.error?.message).toBe("Unable to load project. Please try again.");
+    read.mockResolvedValue(project);
     await act(async () => { await current.refetch(); });
     await flush();
+    expect(read).toHaveBeenCalledTimes(2);
     expect(current.data).toEqual(project);
     expect(current.isSuccess).toBe(true);
   });

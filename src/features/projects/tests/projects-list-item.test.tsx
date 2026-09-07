@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ProjectsListItem } from "@/features/projects/components/projects-list-item";
 import type { ProjectResponseData } from "@/features/projects/types";
-import type { PressableProps } from "react-native";
+import type { PressableProps, ViewProps } from "react-native";
 import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import type { ConfirmActionOptions } from "@/lib/types";
 
@@ -37,18 +37,20 @@ vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
   },
 }));
 vi.mock("react-native", () => {
-  const Wrapper = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
+  const Wrapper = ({ children, accessibilityLabel, accessibilityRole, accessibilityState, pointerEvents }: ViewProps) =>
+    createElement("div", { "aria-label": accessibilityLabel, role: accessibilityRole, "aria-busy": accessibilityState?.busy, "data-pointer-events": pointerEvents }, children);
   return {
     View: Wrapper,
+    ActivityIndicator: () => createElement("progress"),
     Pressable: (props: PressableProps) => {
       mocks.card = props;
-      return createElement("button", { onClick: () => props.onPress?.({} as never), "data-project-card": true }, props.children as ReactNode);
+      return createElement("button", { onClick: () => props.onPress?.({} as never), "data-project-card": true, disabled: props.disabled }, props.children as ReactNode);
     },
   };
 });
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress?: () => void; accessibilityLabel?: string }) =>
-    createElement("button", { onClick: onPress, "aria-label": accessibilityLabel }, children),
+  Button: ({ children, onPress, accessibilityLabel, disabled }: { children?: ReactNode; onPress?: () => void; accessibilityLabel?: string; disabled?: boolean }) =>
+    createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }, children),
 }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/components/ui/text", () => {
@@ -167,4 +169,67 @@ it("offers Update and Delete to screen readers without requiring a swipe", () =>
   act(() => mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "delete" } } as never));
   expect(mocks.confirm).toHaveBeenCalledOnce();
   expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+
+it("blocks the whole card only after confirmation and stays busy through the list refresh", async () => {
+  let resolveDeletion!: (value: { error: false; message: string; projectId: string }) => void;
+  let resolveRefresh!: (value: never[]) => void;
+  mocks.remove.mockImplementation(() => new Promise((resolve) => { resolveDeletion = resolve; }));
+  loadList.mockImplementation(() => new Promise((resolve) => { resolveRefresh = resolve; }));
+  const staleAccessibilityAction = mocks.card.onAccessibilityAction;
+  openConfirmation();
+  expect(container.querySelector("progress")).toBeNull();
+  expect(mocks.card.disabled).not.toBe(true);
+
+  const options = mocks.confirm.mock.calls[0][2] as ConfirmActionOptions;
+  let pending: ReturnType<ConfirmActionOptions["onConfirmPress"]>;
+  act(() => { pending = options.onConfirmPress(); });
+  expect(container.querySelector('[aria-label="Deleting My project"]')?.getAttribute("aria-busy")).toBe("true");
+  expect(container.querySelector("progress")).not.toBeNull();
+  expect(container.textContent).toContain(project.name);
+  expect(container.querySelector('[data-pointer-events="none"]')).not.toBeNull();
+  expect(mocks.swipe.enabled).toBe(false);
+  expect(mocks.card.disabled).toBe(true);
+  expect(mocks.card.accessibilityState).toMatchObject({ disabled: true, busy: true });
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Update My project"]')!.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Delete My project"]')!.disabled).toBe(true);
+  act(() => {
+    container.querySelector<HTMLButtonElement>("[data-project-card]")!.click();
+    container.querySelector<HTMLButtonElement>('[aria-label="Update My project"]')!.click();
+    container.querySelector<HTMLButtonElement>('[aria-label="Delete My project"]')!.click();
+    staleAccessibilityAction?.({ nativeEvent: { actionName: "update" } } as never);
+    staleAccessibilityAction?.({ nativeEvent: { actionName: "delete" } } as never);
+    void options.onConfirmPress();
+  });
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.confirm).toHaveBeenCalledOnce();
+  expect(mocks.remove).toHaveBeenCalledOnce();
+
+  await act(async () => {
+    resolveDeletion({ error: false, message: "Deleted", projectId: project.id });
+  });
+  expect(loadList).toHaveBeenCalledOnce();
+  expect(container.querySelector("progress")).not.toBeNull();
+  expect(mocks.card.disabled).toBe(true);
+  await act(async () => { resolveRefresh([]); await pending; });
+  expect(container.querySelector("progress")).toBeNull();
+  expect(client.getQueryData(listKey)).toEqual([]);
+});
+
+it.each(["response", "exception"])("restores the card after a deletion %s failure", async (failure) => {
+  if (failure === "response") mocks.remove.mockResolvedValueOnce({ error: true, message: "Deletion failed" });
+  else mocks.remove.mockRejectedValueOnce(new Error("Connection failed"));
+  openConfirmation();
+  await confirm();
+  expect(mocks.alert).toHaveBeenCalledOnce();
+  expect(container.querySelector("progress")).toBeNull();
+  expect(mocks.card.disabled).toBe(false);
+  expect(mocks.swipe.enabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Delete My project"]')!.disabled).toBe(false);
+  expect(client.getQueryData(listKey)).toEqual([project]);
+  openConfirmation();
+  await confirm();
+  expect(mocks.remove).toHaveBeenCalledTimes(2);
+  expect(loadList).toHaveBeenCalledOnce();
 });

@@ -76,6 +76,26 @@ afterEach(() => {
   client.clear();
 });
 
+it("enables saving only while the form differs from its initial values", async () => {
+  expect(container.querySelector("button")!.disabled).toBe(true);
+  await submit();
+  expect(mocks.update).not.toHaveBeenCalled();
+  await rename("New name");
+  expect(container.querySelector("button")!.disabled).toBe(false);
+  await rename("Old name");
+  expect(container.querySelector("button")!.disabled).toBe(true);
+  await submit();
+  expect(mocks.update).not.toHaveBeenCalled();
+});
+
+it("ignores keyboard submission when the form has no changes", async () => {
+  await act(async () => {
+    container.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(mocks.back).not.toHaveBeenCalled();
+});
+
 it("submits the edited name, refreshes project views and closes the sheet", async () => {
   await rename(" New name ");
   await submit();
@@ -114,6 +134,7 @@ it("keeps the draft and cache on failure, alerts, and allows retry", async () =>
 it("waits for saving and prevents duplicate button and keyboard submissions", async () => {
   let resolve!: (result: { error: false; message: string; projectId: string }) => void;
   mocks.update.mockImplementation(() => new Promise((done) => { resolve = done; }));
+  await rename("New name");
   await act(async () => {
     container.querySelector("button")!.click();
     container.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -129,6 +150,7 @@ it("waits for saving and prevents duplicate button and keyboard submissions", as
 
 it("closes after saving even while refreshing the list is pending", async () => {
   loadList.mockImplementation(() => new Promise(() => {}));
+  await rename("New name");
   await submit();
   expect(loadList).toHaveBeenCalledOnce();
   expect(mocks.back).toHaveBeenCalledOnce();
@@ -137,6 +159,7 @@ it("closes after saving even while refreshing the list is pending", async () => 
 it("does not navigate again if the sheet was dismissed during saving", async () => {
   let resolve!: (result: { error: false; message: string; projectId: string }) => void;
   mocks.update.mockImplementation(() => new Promise((done) => { resolve = done; }));
+  await rename("New name");
   await submit();
   await act(async () => root.render(null));
   await act(async () => resolve({ error: false, message: "Updated", projectId }));

@@ -74,6 +74,19 @@ describe("resumable repository search", () => {
     expect(result.repositories.map(({ id }) => id)).toEqual([1, 2]);
   });
 
+  it.each(["acme", "acme/weather", "me/wea", "  ACME/WEATHER  "])(
+    "matches the displayed owner and repository name for %j",
+    async (search) => {
+      const load = loader([[
+        { ...repository(1, "weather"), fullName: "Acme/weather" },
+        { ...repository(2, "weather"), fullName: "AnotherOrg/weather" },
+      ]]);
+      const result = await paginateGitHubRepositories(load, { search });
+      expect(result.repositories.map(({ id }) => id)).toEqual([1]);
+      expect(result.nextCursor).toBeNull();
+    },
+  );
+
   it("uses one upstream page and its has-next flag for unfiltered browsing", async () => {
     const load = loader([[repository(1)], [repository(2)]]);
     const first = await paginateGitHubRepositories(load, { pageSize: 2 });

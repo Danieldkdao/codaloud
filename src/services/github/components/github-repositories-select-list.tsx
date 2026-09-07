@@ -117,7 +117,7 @@ export const GitHubRepositoriesSelectList = ({
             data={repositories}
             keyExtractor={(repository) => String(repository.id)}
             keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
+            keyboardDismissMode="on-drag"
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
             renderItem={({ item }) => (

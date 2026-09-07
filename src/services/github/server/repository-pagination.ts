@@ -28,6 +28,7 @@ export const paginateGitHubRepositories = async (
       if (
         normalizedSearch &&
         !repository.name.toLowerCase().includes(normalizedSearch) &&
+        !repository.fullName.toLowerCase().includes(normalizedSearch) &&
         !repository.description?.toLowerCase().includes(normalizedSearch)
       ) {
         continue;

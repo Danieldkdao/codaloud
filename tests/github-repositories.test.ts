@@ -327,6 +327,33 @@ describe("readGitHubRepositories", () => {
 });
 
 describe("repository search", () => {
+  it("matches full names through the action and API while continuing across GitHub pages", async () => {
+    const scannedPages: number[] = [];
+    const search = "  ACME/REPO-  ";
+    network.mockImplementation(async (url, options) => {
+      if (String(url).startsWith("/api/github/repositories")) {
+        return GET(new Request(`https://codaloud.test${url}`, options));
+      }
+      const page = Number(new URL(String(url)).searchParams.get("page"));
+      scannedPages.push(page);
+      return Response.json([
+        githubRepository(page * 2 - 1),
+        { ...githubRepository(page * 2), full_name: `Acme/repo-${page * 2}` },
+      ], {
+        headers: page === 1
+          ? { link: '<https://api.github.com/user/repos?page=2>; rel="next"' }
+          : {},
+      });
+    });
+    const first = await readGitHubRepositories({ search, pageSize: 1 });
+    expect(first.repositories.map(({ fullName }) => fullName)).toEqual(["Acme/repo-2"]);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = await readGitHubRepositories({ search, pageSize: 1, cursor: first.nextCursor });
+    expect(second.repositories.map(({ fullName }) => fullName)).toEqual(["Acme/repo-4"]);
+    expect(second.nextCursor).toBeNull();
+    expect(scannedPages).toEqual([1, 2]);
+  });
+
   it("passes encoded search through the action and route, matching names and descriptions before pagination", async () => {
     network.mockImplementation(async (url, options) => {
       if (String(url).startsWith("/api/github/repositories")) {

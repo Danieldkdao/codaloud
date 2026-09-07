@@ -56,20 +56,29 @@ vi.mock("react-native", () => ({
       },
       children,
     ),
-  ScrollView: "section",
+  ScrollView: ({ children }: any) =>
+    createElement("section", { "data-native-scroll-view": true }, children),
+  useWindowDimensions: () => ({ width: 390, height: 700 }),
+  KeyboardAvoidingView: ({ children }: any) => createElement("div", null, children),
   ActivityIndicator: "progress",
   Platform: { select: (options: { default: string }) => options.default },
   FlatList: (props: any) => {
     mocks.listProps = props;
-    return createElement(
-      "section",
-      { className: props.className },
+    const children = createElement(
+      "div",
+      null,
+      props.ListHeaderComponent,
       props.data.length
         ? props.data.map((item: any) =>
             createElement("div", { key: item.id }, props.renderItem({ item })),
           )
         : props.ListEmptyComponent,
       props.ListFooterComponent,
+    );
+    return createElement(
+      "section",
+      { className: props.className, "data-native-flat-list": true },
+      props.renderScrollComponent ? props.renderScrollComponent({ children }) : children,
     );
   },
 }));
@@ -122,9 +131,14 @@ vi.mock("@/components/ui/button", () => ({
   }) => createElement("button", { onClick: onPress, disabled, "aria-busy": loading }, children),
 }));
 vi.mock("expo-router", () => ({
+  Stack: { Screen: () => null },
   useLocalSearchParams: () => ({ source: mocks.source, name: "My project" }),
   useRouter: () => ({ replace: mocks.replace }),
 }));
+vi.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
+}));
+vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "theme-color" }));
 vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({
     isConnected: mocks.connected,
@@ -136,6 +150,7 @@ vi.mock("@/services/github/hooks/use-github-connected", () => ({
 
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
 import { ProjectForm } from "@/features/projects/components/project-form";
+import NewProjectScreen from "@/app/new-project";
 
 beforeEach(() => {
   mocks.connected = false;
@@ -189,6 +204,68 @@ const SelectListHarness = ({ className }: { className?: string }) => {
 };
 
 const renderList = () => renderToStaticMarkup(createElement(SelectListHarness));
+
+describe("new-project screen scrolling", () => {
+  it("keeps the virtualized repository list outside plain scroll views", () => {
+    mocks.connected = true;
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(createElement(NewProjectScreen));
+    const list = container.querySelector("[data-native-flat-list]");
+    expect(list).not.toBeNull();
+    expect(list!.closest("[data-native-scroll-view]")).toBeNull();
+    expect(container.querySelectorAll("[data-native-scroll-view]")).toHaveLength(1);
+    expect(list!.textContent).not.toContain("Project name");
+    expect(list!.textContent).toContain("owner/private-repo");
+    expect(list!.textContent).not.toContain("Create project");
+  });
+
+  it.each([["new", false], ["github", false]])(
+    "keeps the form scrollable without a repository list for source=%s, connected=%s",
+    (source, connected) => {
+      Object.assign(mocks, { source, connected });
+      const container = document.createElement("div");
+      container.innerHTML = renderToStaticMarkup(createElement(NewProjectScreen));
+      expect(container.querySelector("[data-native-scroll-view]")?.textContent).toContain("Project name");
+      const submit = Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent === "Create project")!;
+      expect(submit.closest("[data-native-scroll-view]")).toBeNull();
+      expect(container.querySelector("[data-native-flat-list]")).toBeNull();
+    },
+  );
+
+  it("keeps the form fields mounted and stops pagination when a repository is selected", () => {
+    mocks.connected = true;
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    root = createRoot(container);
+    act(() => root!.render(createElement(NewProjectScreen)));
+    const nameInput = container.querySelector('input[placeholder="My project"]');
+    const repositoryButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("owner/private-repo"))!;
+    act(() => repositoryButton.click());
+    expect(container.querySelector('input[placeholder="My project"]')).toBe(nameInput);
+    expect((nameInput as HTMLInputElement).value).toBe("My project");
+    expect(container.textContent).toContain("Create project");
+    expect(container.querySelector('[placeholder="Search repositories"]')).toBeNull();
+    expect(container.querySelector("[data-native-flat-list]")).toBeNull();
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it.each([20, 500])("keeps submission outside the bounded picker with %s repositories", (count) => {
+    mocks.connected = true;
+    mocks.query.data = { pages: [{ repositories: Array.from({ length: count }, (_, index) => ({
+      id: index + 1, fullName: `owner/repo-${index}`, description: null, private: false,
+    })), nextCursor: "more" }] };
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(createElement(NewProjectScreen));
+    const submit = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Create project")!;
+    expect(submit.closest("[data-native-flat-list]")).toBeNull();
+    expect(submit.closest("[data-native-scroll-view]")).toBeNull();
+    expect(container.querySelector("[data-native-flat-list]")?.closest(".max-h-80")).not.toBeNull();
+    expect(mocks.listProps.data).toHaveLength(count);
+  });
+});
 
 describe("GitHub repositories list", () => {
   it("renders repositories from every loaded page with visibility and optional descriptions", () => {

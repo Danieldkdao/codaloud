@@ -2,8 +2,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Controller, useForm, useWatch } from "react-hook-form";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 
+import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadioItem } from "@/components/ui/radio-item";
@@ -71,7 +72,7 @@ export const ProjectForm = () => {
     });
   };
 
-  return (
+  const fields = (
     <View collapsable={false} className="w-full max-w-xl gap-4 self-center">
       <Controller
         control={control}
@@ -156,68 +157,78 @@ export const ProjectForm = () => {
           </View>
         )}
       />
-
-      {source === "github" && (
-        <Controller
-          control={control}
-          name="repositoryId"
-          defaultValue=""
-          shouldUnregister
-          render={({
-            field: { onChange, onBlur, value },
-            fieldState: { error },
-          }) => (
-            <View className="min-h-0 shrink gap-3">
-              {!isConnected && (
-                <PText
-                  accessibilityLiveRegion="polite"
-                  className="text-muted-foreground"
-                >
-                  {isChecking
-                    ? "Checking GitHub connection…"
-                    : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
-                </PText>
-              )}
-              {isConnected && !isChecking && (
-                <GitHubRepositoriesSelectList
-                  onReconnect={handleConnect}
-                  isReconnecting={isPending}
-                  reconnectError={connectionError}
-                  selectedRepositoryId={value || null}
-                  onValueChange={(repositoryId) => {
-                    onChange(repositoryId ?? "");
-                    onBlur();
-                  }}
-                  className={error ? "border-destructive" : undefined}
-                />
-              )}
-              {!isConnected && !isChecking && (
-                <Button onPress={handleConnect} loading={isPending}>
-                  Click here to connect
-                </Button>
-              )}
-              {error && (
-                <PText
-                  selectable
-                  accessibilityRole="alert"
-                  className="text-destructive"
-                >
-                  {error.message}
-                </PText>
-              )}
-            </View>
-          )}
-        />
-      )}
-
-      <Button
-        size="lg"
-        disabled={isSubmitting}
-        loading={isSubmitting}
-        onPress={() => void handleSubmit(onSubmit)()}
-      >
-        Create project
-      </Button>
     </View>
+  );
+
+  return (
+    <AppWrapper scrollable={false} headerShown className="flex-none shrink">
+      <View className="w-full max-w-xl shrink gap-4 self-center">
+        {/* These scroll surfaces are siblings so the picker keeps its own viewport. */}
+        <ScrollView
+          className="shrink"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentInsetAdjustmentBehavior="never"
+        >
+          {fields}
+        </ScrollView>
+        {source === "github" && (
+          <Controller
+            control={control}
+            name="repositoryId"
+            defaultValue=""
+            shouldUnregister
+            render={({
+              field: { onChange, onBlur, value },
+              fieldState: { error },
+            }) => (
+              <View className="min-h-0 shrink gap-3">
+                {isConnected && !isChecking ? (
+                  <GitHubRepositoriesSelectList
+                    onReconnect={handleConnect}
+                    isReconnecting={isPending}
+                    reconnectError={connectionError}
+                    selectedRepositoryId={value || null}
+                    onValueChange={(repositoryId) => {
+                      onChange(repositoryId ?? "");
+                      onBlur();
+                    }}
+                    className={error ? "border-destructive" : undefined}
+                  />
+                ) : (
+                  <View className="gap-3">
+                    <PText accessibilityLiveRegion="polite" className="text-muted-foreground">
+                      {isChecking
+                        ? "Checking GitHub connection…"
+                        : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
+                    </PText>
+                    {!isChecking && (
+                      <Button onPress={handleConnect} loading={isPending}>
+                        Click here to connect
+                      </Button>
+                    )}
+                  </View>
+                )}
+                {error && (
+                  <PText selectable accessibilityRole="alert" className="text-destructive">
+                    {error.message}
+                  </PText>
+                )}
+              </View>
+            )}
+          />
+        )}
+        <View className="shrink-0">
+          <Button
+            size="lg"
+            disabled={isSubmitting}
+            loading={isSubmitting}
+            onPress={() => void handleSubmit(onSubmit)()}
+          >
+            Create project
+          </Button>
+        </View>
+      </View>
+    </AppWrapper>
   );
 };

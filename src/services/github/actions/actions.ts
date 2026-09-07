@@ -2,10 +2,9 @@ import type {
   GitHubRepositoryPage,
   ReadGitHubRepositoriesOptions,
 } from "@/services/github/types";
-import { authClient } from "@/lib/auth/auth-client";
 import { PAGE_SIZE } from "@/lib/constants";
 import type { ApiResponse } from "@/lib/types";
-import { fetchBase } from "@/lib/utils";
+import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
 import { gitHubRepositoryPageSchema } from "@/services/github/schemas";
 import { Platform } from "react-native";
 
@@ -15,17 +14,13 @@ export const readGitHubRepositories = async ({
   cursor,
   pageSize = PAGE_SIZE,
 }: ReadGitHubRepositoriesOptions = {}): Promise<GitHubRepositoryPage> => {
-  const headers = new Headers({ Accept: "application/json" });
-  if (Platform.OS !== "web") {
-    const cookie = await authClient.getCookie();
-    if (cookie) headers.set("Cookie", cookie);
-  }
+  const headers = await createRequestHeaders();
 
-  const query = new URLSearchParams({
-    pageSize: String(pageSize),
+  const query = createSearchParams({
+    pageSize,
+    cursor,
+    search: search || undefined,
   });
-  if (cursor != null) query.set("cursor", cursor);
-  if (search) query.set("search", search);
   const response = await fetchBase(`/api/github/repositories?${query}`, {
     method: "GET",
     headers,

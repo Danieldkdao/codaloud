@@ -3,11 +3,51 @@ import { Platform } from "react-native";
 import {
   createProjectFormSchema,
   createProjectResponseSchema,
+  readProjectsResponseSchema,
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
-import { authClient } from "@/lib/auth/auth-client";
+import {
+  projectParamsSchema,
+  type ProjectParamsSchema,
+} from "@/features/projects/lib/project-params";
+import type { ProjectPageData } from "@/features/projects/types";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { fetchBase } from "@/lib/utils";
+import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
+
+export const readUserProjectsAction = async (
+  params: Partial<ProjectParamsSchema> = {},
+  signal?: AbortSignal,
+): Promise<ProjectPageData | null> => {
+  try {
+    const validatedParams = projectParamsSchema.safeParse(params);
+    if (!validatedParams.success) return null;
+
+    const query = createSearchParams(validatedParams.data);
+    const headers = await createRequestHeaders();
+
+    const response = await fetchBase(`/api/projects?${query}`, {
+      method: "GET",
+      headers,
+      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      signal,
+    });
+    if (!response.ok) return null;
+
+    const payload: unknown = await response.json();
+    const result = readProjectsResponseSchema.safeParse(payload);
+    if (!result.success) return null;
+
+    const { nextCursor } = result.data.data;
+    if (nextCursor !== null && (
+      nextCursor === validatedParams.data.cursor ||
+      !projectParamsSchema.safeParse({ ...validatedParams.data, cursor: nextCursor }).success
+    )) return null;
+
+    return result.data.data;
+  } catch {
+    return null;
+  }
+};
 
 export const createProjectAction = async (unsafeData: CreateProjectFormSchema) => {
   try {
@@ -35,14 +75,9 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
       };
     }
 
-    const headers = new Headers({
-      Accept: "application/json",
+    const headers = await createRequestHeaders({
       "Content-Type": "application/json",
     });
-    if (Platform.OS !== "web") {
-      const cookie = await authClient.getCookie();
-      if (cookie) headers.set("Cookie", cookie);
-    }
 
     const response = await fetchBase("/api/projects", {
       method: "POST",

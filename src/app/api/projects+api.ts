@@ -1,9 +1,65 @@
 import { createProjectSchema } from "@/features/projects/actions/schemas";
-import { insertProjectDB } from "@/features/projects/server/projects";
+import { projectParamsSchema } from "@/features/projects/lib/project-params";
+import {
+  insertProjectDB,
+  readUserProjectsDb,
+} from "@/features/projects/server/projects";
 import { apiResponse } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
-import { getGitHubAccessToken, getGitHubErrorResponse } from "@/services/github/server/access";
+import {
+  getGitHubAccessToken,
+  getGitHubErrorResponse,
+} from "@/services/github/server/access";
 import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
+
+export const GET = async (request: Request) => {
+  try {
+    const { userId } = await getCurrentUser(request.headers);
+
+    if (!userId) {
+      return apiResponse(
+        {
+          error: true,
+          message: "You must be signed in to view your projects.",
+        },
+        401,
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const result = projectParamsSchema.safeParse(
+      Object.fromEntries(searchParams),
+    );
+
+    if (!result.success) {
+      return apiResponse(
+        {
+          error: true,
+          message:
+            result.error.issues[0]?.message ?? "Invalid project parameters.",
+        },
+        400,
+      );
+    }
+
+    const userProjects = await readUserProjectsDb(userId, result.data);
+
+    const response = apiResponse({
+      error: false,
+      message: "Projects loaded successfully.",
+      data: userProjects,
+    });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  } catch (error) {
+    console.error("Failed to load projects:", error);
+
+    return apiResponse(
+      { error: true, message: "Unable to load projects. Please try again." },
+      500,
+    );
+  }
+};
 
 export const POST = async (request: Request) => {
   try {
@@ -47,7 +103,11 @@ export const POST = async (request: Request) => {
     if (result.data.source === "github") {
       try {
         const accessToken = await getGitHubAccessToken(request.headers);
-        await verifyGitHubRepositoryAccess(accessToken, result.data.repositoryId, request.signal);
+        await verifyGitHubRepositoryAccess(
+          accessToken,
+          result.data.repositoryId,
+          request.signal,
+        );
       } catch (error) {
         const { body, status } = getGitHubErrorResponse(error);
         return apiResponse(body, status);

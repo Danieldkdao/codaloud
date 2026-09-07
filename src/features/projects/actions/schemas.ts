@@ -1,5 +1,44 @@
 import { z } from "zod";
 
+import { projectSetupStatuses } from "@/db/shared";
+import { projectCursorTokenSchema } from "@/features/projects/lib/project-params";
+import type { ProjectPageData, ProjectResponseData } from "@/features/projects/types";
+
+// Validate the JSON representation, including timestamps serialized by the API.
+export const projectResponseSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  name: z.string().min(1),
+  sandboxId: z.string().nullable(),
+  setupStatus: z.enum(projectSetupStatuses),
+  setupError: z.string().nullable(),
+  githubRepositoryId: z.string().nullable(),
+  lastOpenedFilePath: z.string().nullable(),
+  lastOpenedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+}) satisfies z.ZodType<ProjectResponseData>;
+
+export type ProjectResponseSchema = z.infer<typeof projectResponseSchema>;
+
+export const projectPageSchema = z.object({
+  projects: z.array(projectResponseSchema),
+  nextCursor: projectCursorTokenSchema.nullable(),
+}).refine(
+  (page) => page.nextCursor === null || page.projects.length > 0,
+  "An empty project page cannot have a continuation cursor.",
+) satisfies z.ZodType<ProjectPageData>;
+
+export type ProjectPageSchema = z.infer<typeof projectPageSchema>;
+
+export const readProjectsResponseSchema = z.object({
+  error: z.literal(false),
+  message: z.string(),
+  data: projectPageSchema,
+});
+
+export type ReadProjectsResponseSchema = z.infer<typeof readProjectsResponseSchema>;
+
 const projectFields = {
   name: z
     .string({ error: "Project name must be a string." })

@@ -1,5 +1,15 @@
 # Agent working principles
 
+## Required filenames — check before creating files and before finishing
+
+- Use lowercase kebab-case for every authored filename, including components, hooks, utilities, tests, scripts, and documentation. Separate words with hyphens: `project-filters.tsx`, `use-projects-filters.ts`, and `project-filters.test.tsx`.
+- Keep React component and type names in PascalCase inside the file. A component named `ProjectFilters` belongs in `project-filters.tsx`. Treat component-style names in requests, including `ProjectFilters.tsx`, as referring to the component and normalize the filename to kebab-case under this project convention.
+- Before creating or renaming a file, check its proposed path against this rule. Preserve platform and test suffixes, such as `native-select.web.tsx` and `project-filters.test.tsx`.
+- Preserve filenames required by tools or frameworks, such as `AGENTS.md`, `CLAUDE.md`, Expo Router's `_layout.tsx`, and route parameter syntax. Preserve tool-generated filenames. These exceptions do not apply to ordinary component files.
+- Before reporting completion, inspect every added or renamed file, including untracked files. Correct any filename that violates this rule, update imports and references, and verify that no stale paths remain. Filename verification is part of completing every file-changing task.
+
+## Working process
+
 - Work like a practical, efficient senior engineer. Think through each task in steps and choose the simplest implementation that meets the requirements.
 - Before implementing any new feature, always research the latest official documentation for the technologies involved, even when familiar with them. Make sure to also research the best practices, guidelines, and compatability information before continuing. Verify guidance against the versions used by this project. This research is required for every new feature, without exception.
 - If you are going to implement tests to test the feature you are going to build, implement the tests first, before implementing the feature itself. Then test and continue from there.
@@ -19,6 +29,9 @@ Note the naming conventions for each.
 - Generally, put all types in the `lib/types.ts` file, unless they are specific to a feature or resource, in which case they should be defined in that feature's folder or belong to a certain component. For example, types related to projects should be defined in `features/projects/types.ts`. On the other hand, types related to components like prop types and types related to those should live in the same file as the component. Similarly, put all shared constants in the `lib/constants.ts` file, unless they are specific to a feature or resource, in which case they should be defined in that feature's folder. Same component rule for constants and functions as the types. For example, constants related to projects should be defined in `features/projects/constants.ts`. Do not create your own files in the lib folder that have both types, constants, and functions related to some resource or functionality because that gets messy and hard to maintain. Keep the lib folder for shared types, constants, and functions that are used across the application.
 - For all tables, make sure to export all relations defined along with two types. A select type and an insert type. For example, for the `projects` table, you should export `ProjectSelectData` and `ProjectInsertData` from the `ProjectTable.$inferSelect` and `ProjectTable.$inferInsert` respectively.
 - Export each Zod schema's inferred type from the same file, using the schema variable's name in PascalCase with the `Schema` suffix. For example, `createProjectSchema` exports `type CreateProjectSchema = z.infer<typeof createProjectSchema>`.
+- For every Zod enum, define and export its values as a named `as const` array, export a union type derived with `(typeof values)[number]`, and pass the array to `z.enum()`. Reuse existing arrays when available so schemas and UI options share one source of truth.
+- Read actions return the requested data on success, including empty collections, and `null` on validation, request, or response failure. Catch errors and return `null`; keep error response objects in API routes.
+- Keep TanStack Query configuration and logic directly inside the resource's hook, including query keys, query functions, and pagination. Extract query-options files or a `queries/` folder only when the user explicitly requests it.
 - Once you have finished implementing a feature or making some changes to the codebase, always give the user a clear summary of all files by file name that you created/updated/deleted.
 
 
@@ -29,10 +42,10 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 ## Project conventions
 
 - Always use arrow functions when possible, including for React components and callbacks.
+- Always format values through named formatter functions; never use object lookup maps for labels, styles, or other presentation formatting. Use an exhaustive `switch` for enum values. A formatter may return an object of related presentation fields, such as `{ label, className, textClassName }`. Keep resource-specific formatters in that feature's `lib/formatters.ts` and call them from components.
 - Use `text-base` or larger Tailwind classes for text. Use smaller text only when absolutely necessary to fit the layout. Apply the equivalent minimum size when styling without Tailwind.
 - Never use `leading-*` or `tracking-*` class names anywhere in the codebase, including variant-prefixed and arbitrary-value forms. Keep the default line height and letter spacing provided by the typography styles.
 - Use semantic colors from the theme in `src/global.css` for all UI colors, including icons and inline styles (for example, `text-foreground`, `text-muted-foreground`, and `bg-primary`). Never use Tailwind palette colors, arbitrary color utilities, or hardcoded color values in application components unless an external requirement makes it unavoidable; document the reason for that exception. Define color values centrally in the theme.
-- Always name files with kebab-case, for example `my-component.tsx`.
 - Name variables holding database query or mutation results after the operation or lookup purpose and the resource: `insertedProject`, `updatedProject`, `deletedProject`, or `existingProject` for an existence lookup. Apply this convention to results from database helper functions too, and use plural resource names for collections, such as `insertedProjects`.
 - Always name database tables with PascalCase and end with `Table`, for example `ProjectTable` The file name for this would be `project.ts` (singular version of the table subject) and the name of the table in the database would be `projects` (plural version of the table subject).
 

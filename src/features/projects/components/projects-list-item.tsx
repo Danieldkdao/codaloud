@@ -42,6 +42,7 @@ const setupStatuses = {
 
 export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   const status = setupStatuses[project.setupStatus];
+  const sourceLabel = project.githubRepositoryId ? "GitHub import" : null;
   const updatedAt = new Date(project.updatedAt);
   const updatedLabel = Number.isNaN(updatedAt.getTime())
     ? "Update date unavailable"
@@ -61,11 +62,18 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
     >
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel={`${project.name}, ${status.label}, ${updatedLabel}`}
+        accessibilityLabel={[
+          project.name,
+          sourceLabel,
+          status.label,
+          updatedLabel,
+        ]
+          .filter(Boolean)
+          .join(", ")}
         accessibilityHint="Open project"
         className="gap-4 rounded-2xl border border-border bg-card p-4 active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <View className="flex-row items-center gap-3">
+        <View className="flex-row items-start gap-3">
           <View className="size-12 items-center justify-center rounded-xl bg-secondary">
             {project.githubRepositoryId ? (
               <Icon
@@ -92,9 +100,22 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
             >
               {project.name}
             </HeadingText>
-            <PText className="text-muted-foreground text-lg font-medium">
+            <PText className="text-muted-foreground text-lg">
               {updatedLabel}
             </PText>
+            {!sourceLabel && (
+              <View className="items-center flex-row gap-2">
+                <Icon
+                  family="Feather"
+                  name="corner-down-right"
+                  className="text-muted-foreground"
+                  size={16}
+                />
+                <PText className="text-lg text-muted-foreground">
+                  {sourceLabel || "GitHub import"}
+                </PText>
+              </View>
+            )}
           </View>
           <View className={cn("rounded-full px-3 py-1", status.className)}>
             <PText className={status.textClassName}>{status.label}</PText>

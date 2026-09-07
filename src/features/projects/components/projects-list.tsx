@@ -11,10 +11,11 @@ import { cn } from "@/lib/utils";
 
 type ProjectsListProps = {
   filters?: Partial<ProjectParamsSchema>;
+  onClearSearch?: () => void;
   className?: string;
 };
 
-export const ProjectsList = ({ filters, className }: ProjectsListProps) => {
+export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsListProps) => {
   const {
     data,
     isPending,
@@ -38,6 +39,7 @@ export const ProjectsList = ({ filters, className }: ProjectsListProps) => {
     });
   }, [data]);
   const isPaused = fetchStatus === "paused";
+  const hasSearch = Boolean(filters?.search?.trim());
 
   const loadMore = () => {
     if (hasNextPage && !isFetching && !error && !isPaused) {
@@ -61,6 +63,7 @@ export const ProjectsList = ({ filters, className }: ProjectsListProps) => {
       renderItem={({ item }) => <ProjectsListItem project={item} />}
       contentContainerStyle={{ flexGrow: 1, paddingVertical: 12, gap: 12 }}
       contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
       onEndReached={loadMore}
       onEndReachedThreshold={0.5}
       onRefresh={refresh}
@@ -92,11 +95,18 @@ export const ProjectsList = ({ filters, className }: ProjectsListProps) => {
                   accessible={false}
                 />
                 <HeadingText className="text-center text-2xl">
-                  No projects yet
+                  {hasSearch ? "No matching projects" : "No projects yet"}
                 </HeadingText>
                 <PText className="text-center text-muted-foreground">
-                  Your projects will appear here once you create one.
+                  {hasSearch
+                    ? "Try a different search or clear it to see all your projects."
+                    : "Your projects will appear here once you create one."}
                 </PText>
+                {hasSearch && onClearSearch && (
+                  <Button variant="outline" onPress={onClearSearch}>
+                    Clear search
+                  </Button>
+                )}
               </>
             )}
           </View>

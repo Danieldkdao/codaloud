@@ -3,6 +3,7 @@ import {
   act,
   cloneElement,
   createElement,
+  type ComponentProps,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -10,6 +11,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FlatListProps } from "react-native";
 import { ProjectsList } from "@/features/projects/components/projects-list";
+import ProjectsScreen from "@/app/(main)/index";
+import type { ProjectFiltersProps } from "@/features/projects/components/project-filters";
 import type { ProjectResponseData } from "@/features/projects/types";
 
 const mocks = vi.hoisted(() => ({
@@ -21,6 +24,16 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/features/projects/hooks/use-projects", () => ({
   useProjects: mocks.useProjects,
+}));
+vi.mock("@/components/app-wrapper", () => ({
+  AppWrapper: ({ children }: { children: ReactNode }) => children,
+}));
+vi.mock("@/features/projects/components/project-filters", () => ({
+  ProjectFilters: ({ filters, setFilters }: ProjectFiltersProps) => createElement(
+    "button",
+    { onClick: () => setFilters({ search: "missing", sortBy: "name", sortOrder: "asc", page: 2 }) },
+    `Search: ${filters.search}`,
+  ),
 }));
 vi.mock("@/lib/utils", () => ({
   cn: (...values: unknown[]) => values.filter(Boolean).join(" "),
@@ -123,7 +136,8 @@ const project = (
 });
 let root: Root;
 let container: HTMLDivElement;
-const render = () => act(() => root.render(createElement(ProjectsList)));
+const render = (props: ComponentProps<typeof ProjectsList> = {}) =>
+  act(() => root.render(createElement(ProjectsList, props)));
 const reachEnd = () =>
   act(() => mocks.listProps.onEndReached?.({ distanceFromEnd: 0 }));
 
@@ -177,6 +191,41 @@ describe("ProjectsList", () => {
     render();
     expect(container.textContent).toContain(label);
     expect(container.textContent).toContain("GitHub import");
+    expect(container.querySelector("a")?.getAttribute("aria-label")).toContain("GitHub import");
+  });
+
+  it("does not label projects without a repository as GitHub imports", () => {
+    render();
+    expect(container.textContent).not.toContain("GitHub import");
+    expect(container.querySelector("a")?.getAttribute("aria-label")).not.toContain("GitHub import");
+  });
+
+  it("clears an unmatched search through the screen while preserving sorting", () => {
+    mocks.useProjects.mockImplementation((filters) => ({
+      ...mocks.query,
+      data: { pages: [filters.search ? [] : [project("one")]] },
+    }));
+    act(() => root.render(createElement(ProjectsScreen)));
+    act(() => container.querySelector("button")?.click());
+    expect(container.textContent).toContain("No matching projects");
+    expect(container.textContent).not.toContain("No projects yet");
+    const clearButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Clear search");
+    expect(clearButton).toBeDefined();
+    act(() => clearButton?.click());
+    expect(mocks.useProjects).toHaveBeenLastCalledWith(expect.objectContaining({
+      search: "", page: 1, sortBy: "name", sortOrder: "asc",
+    }));
+    expect(container.querySelector("button")?.textContent).toBe("Search: ");
+    expect(container.textContent).toContain("Project one");
+    expect(container.textContent).not.toContain("No matching projects");
+  });
+
+  it("treats whitespace-only search as an unfiltered empty list", () => {
+    mocks.query.data = { pages: [[]] };
+    render({ filters: { search: "   " } });
+    expect(container.textContent).toContain("No projects yet");
+    expect(container.textContent).not.toContain("Clear search");
   });
 
   it("loads the next page at the end", () => {

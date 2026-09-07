@@ -23,7 +23,6 @@ export const useProjects = (filters: Partial<ProjectParamsSchema> = {}) => {
       if (!userId) throw new Error("You must be signed in to view your projects.");
 
       const userProjects = await readUserProjectsAction({ ...params, page: pageParam }, signal);
-      signal.throwIfAborted();
 
       // Read actions return null on failure; queries must reject to expose an error.
       if (userProjects === null) throw new Error("Unable to load projects. Please try again.");

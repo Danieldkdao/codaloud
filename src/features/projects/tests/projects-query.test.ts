@@ -62,6 +62,17 @@ afterEach(() => {
 });
 
 describe("useProjects", () => {
+  it("loads projects when the runtime signal has no throwIfAborted method", async () => {
+    read.mockImplementation(async (_params, signal) => {
+      // React Native's abort-controller polyfill lacks this newer browser API.
+      Object.defineProperty(signal, "throwIfAborted", { value: undefined });
+      return page(["a"]);
+    });
+    await render();
+    expect(current.error).toBeNull();
+    expect(current.data?.pages).toEqual([page(["a"])]);
+  });
+
   it("increments page numbers and stops after a partial page", async () => {
     read.mockResolvedValueOnce(page(["a", "b"])).mockResolvedValueOnce(page(["c"]));
     await render();
@@ -153,5 +164,7 @@ describe("useProjects", () => {
     expect(requestSignal?.aborted).toBe(false);
     await run(() => client.cancelQueries({ queryKey: ["projects"] }));
     expect(requestSignal?.aborted).toBe(true);
+    expect(current.data).toBeUndefined();
+    expect(current.error).toBeNull();
   });
 });

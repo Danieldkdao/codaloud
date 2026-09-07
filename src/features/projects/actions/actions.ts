@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import {
   createProjectFormSchema,
   createProjectResponseSchema,
+  readProjectResponseSchema,
   readProjectsResponseSchema,
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
@@ -10,9 +11,36 @@ import {
   projectParamsSchema,
   type ProjectParamsSchema,
 } from "@/features/projects/lib/project-params";
-import type { ProjectPageData } from "@/features/projects/types";
+import type { ProjectPageData, ProjectResponseData } from "@/features/projects/types";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
+import { createRequestHeaders, createSearchParams, fetchBase, isValidIds } from "@/lib/utils";
+
+export const readProjectAction = async (
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectResponseData | null> => {
+  try {
+    if (!isValidIds(projectId)) return null;
+
+    const headers = await createRequestHeaders();
+    const response = await fetchBase(`/api/projects/${projectId}`, {
+      method: "GET",
+      headers,
+      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      signal,
+    });
+    if (!response.ok) return null;
+
+    const payload: unknown = await response.json();
+    const result = readProjectResponseSchema.safeParse(payload);
+    if (!result.success) return null;
+    if (result.data.data.id.toLowerCase() !== projectId.toLowerCase()) return null;
+
+    return result.data.data;
+  } catch {
+    return null;
+  }
+};
 
 export const readUserProjectsAction = async (
   params: Partial<ProjectParamsSchema> = {},

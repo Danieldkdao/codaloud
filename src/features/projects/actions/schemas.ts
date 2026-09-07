@@ -21,6 +21,14 @@ export const projectResponseSchema = z.object({
 
 export type ProjectResponseSchema = z.infer<typeof projectResponseSchema>;
 
+export const readProjectResponseSchema = z.object({
+  error: z.literal(false),
+  message: z.string(),
+  data: projectResponseSchema,
+});
+
+export type ReadProjectResponseSchema = z.infer<typeof readProjectResponseSchema>;
+
 export const projectPageSchema = z.object({
   projects: z.array(projectResponseSchema),
   nextCursor: projectCursorTokenSchema.nullable(),

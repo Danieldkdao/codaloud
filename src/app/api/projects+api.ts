@@ -1,9 +1,45 @@
+import { db } from "@/db/db";
+import { ProjectTable } from "@/db/schemas/project";
+import { eq } from "drizzle-orm";
 import { createProjectSchema } from "@/features/projects/actions/schemas";
 import { insertProjectDB } from "@/features/projects/server/projects";
 import { apiResponse } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { getGitHubAccessToken, getGitHubErrorResponse } from "@/services/github/server/access";
 import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
+
+export const GET = async (request: Request) => {
+  try {
+    const { userId } = await getCurrentUser(request.headers);
+
+    if (!userId) {
+      return apiResponse(
+        { error: true, message: "You must be signed in to view your projects." },
+        401,
+      );
+    }
+
+    const userProjects = await db
+      .select()
+      .from(ProjectTable)
+      .where(eq(ProjectTable.userId, userId));
+
+    const response = apiResponse({
+      error: false,
+      message: "Projects loaded successfully.",
+      data: userProjects,
+    });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  } catch (error) {
+    console.error("Failed to load projects:", error);
+
+    return apiResponse(
+      { error: true, message: "Unable to load projects. Please try again." },
+      500,
+    );
+  }
+};
 
 export const POST = async (request: Request) => {
   try {

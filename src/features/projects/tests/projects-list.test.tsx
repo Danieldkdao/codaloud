@@ -31,7 +31,7 @@ vi.mock("@/components/app-wrapper", () => ({
 vi.mock("@/features/projects/components/project-filters", () => ({
   ProjectFilters: ({ filters, setFilters }: ProjectFiltersProps) => createElement(
     "button",
-    { onClick: () => setFilters({ search: "missing", sortBy: "name", sortOrder: "asc", page: 2 }) },
+    { onClick: () => setFilters({ search: "missing", sortBy: "name", sortOrder: "asc" }) },
     `Search: ${filters.search}`,
   ),
 }));
@@ -134,6 +134,7 @@ const project = (
   createdAt: "2026-09-01T12:00:00.000Z",
   updatedAt: "2026-09-07T12:00:00.000Z",
 });
+const page = (projects: ProjectResponseData[]) => ({ projects, nextCursor: null });
 let root: Root;
 let container: HTMLDivElement;
 const render = (props: ComponentProps<typeof ProjectsList> = {}) =>
@@ -148,7 +149,7 @@ beforeEach(() => {
   mocks.fetchNextPage.mockResolvedValue({});
   mocks.refetch.mockResolvedValue({});
   mocks.query = {
-    data: { pages: [[project("one")]], pageParams: [1] },
+    data: { pages: [page([project("one")])], pageParams: [null] },
     isPending: false,
     isFetching: false,
     isRefetching: false,
@@ -167,7 +168,7 @@ afterEach(() => act(() => root.unmount()));
 describe("ProjectsList", () => {
   it("renders linked projects from every page and deduplicates overlapping pages", () => {
     mocks.query.data = {
-      pages: [[project("one")], [project("one"), project("two")]],
+      pages: [page([project("one")]), page([project("one"), project("two")])],
     };
     render();
     expect(container.querySelectorAll("a")).toHaveLength(2);
@@ -186,7 +187,7 @@ describe("ProjectsList", () => {
     ["failed", "Setup failed"],
   ] as const)("shows the correct label for %s projects", (status, label) => {
     mocks.query.data = {
-      pages: [[{ ...project("one", status), githubRepositoryId: "123" }]],
+      pages: [page([{ ...project("one", status), githubRepositoryId: "123" }])],
     };
     render();
     expect(container.textContent).toContain(label);
@@ -203,7 +204,7 @@ describe("ProjectsList", () => {
   it("clears an unmatched search through the screen while preserving sorting", () => {
     mocks.useProjects.mockImplementation((filters) => ({
       ...mocks.query,
-      data: { pages: [filters.search ? [] : [project("one")]] },
+      data: { pages: [page(filters.search ? [] : [project("one")])] },
     }));
     act(() => root.render(createElement(ProjectsScreen)));
     act(() => container.querySelector("button")?.click());
@@ -214,7 +215,7 @@ describe("ProjectsList", () => {
     expect(clearButton).toBeDefined();
     act(() => clearButton?.click());
     expect(mocks.useProjects).toHaveBeenLastCalledWith(expect.objectContaining({
-      search: "", page: 1, sortBy: "name", sortOrder: "asc",
+      search: "", sortBy: "name", sortOrder: "asc",
     }));
     expect(container.querySelector("button")?.textContent).toBe("Search: ");
     expect(container.textContent).toContain("Project one");
@@ -222,7 +223,7 @@ describe("ProjectsList", () => {
   });
 
   it("treats whitespace-only search as an unfiltered empty list", () => {
-    mocks.query.data = { pages: [[]] };
+    mocks.query.data = { pages: [page([])] };
     render({ filters: { search: "   " } });
     expect(container.textContent).toContain("No projects yet");
     expect(container.textContent).not.toContain("Clear search");
@@ -256,7 +257,7 @@ describe("ProjectsList", () => {
     expect(container.textContent).toContain("Loading projects");
     expect(container.textContent).not.toContain("No projects yet");
     Object.assign(mocks.query, {
-      data: { pages: [[]] },
+      data: { pages: [page([])] },
       isPending: false,
       fetchStatus: "idle",
     });

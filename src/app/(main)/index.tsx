@@ -5,7 +5,6 @@ import { HeadingText } from "@/components/ui/text";
 import { ProjectFilters } from "@/features/projects/components/project-filters";
 import { ProjectsList } from "@/features/projects/components/projects-list";
 import { useProjectsFilters } from "@/features/projects/hooks/use-projects-filters";
-import { DEFAULT_PAGE } from "@/lib/constants";
 
 const ProjectsScreen = () => {
   const { filters, updateFilters } = useProjectsFilters();
@@ -23,7 +22,7 @@ const ProjectsScreen = () => {
           <ProjectFilters filters={filters} setFilters={updateFilters} />
           <ProjectsList
             filters={filters}
-            onClearSearch={() => updateFilters({ search: "", page: DEFAULT_PAGE })}
+            onClearSearch={() => updateFilters({ search: "" })}
             className="min-h-0"
           />
         </View>

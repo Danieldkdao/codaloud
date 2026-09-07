@@ -1,181 +1,197 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PGlite } from "@electric-sql/pglite";
 
 import { GET } from "@/app/api/projects+api";
-import { projectParamsSchema } from "@/features/projects/lib/project-params";
+import { projectParamsSchema, type ProjectParamsSchema } from "@/features/projects/lib/project-params";
 import { readUserProjectsDb } from "@/features/projects/server/projects";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
-  execute: vi.fn(),
+  logQuery: vi.fn(),
+  pg: undefined as unknown as PGlite,
 }));
-
 vi.mock("@/db/db", async () => {
-  const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { db: drizzle(mocks.execute) };
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { drizzle } = await import("drizzle-orm/pglite");
+  mocks.pg = await PGlite.create();
+  return { db: drizzle(mocks.pg, { logger: { logQuery: mocks.logQuery } }) };
 });
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
-vi.mock("react-native", () => ({
-  Platform: { OS: "web" },
-  Alert: { alert: vi.fn() },
-}));
-vi.mock("@/services/github/server/access", () => ({
-  getGitHubAccessToken: vi.fn(),
-  getGitHubErrorResponse: vi.fn(),
-}));
-vi.mock("@/services/github/server/repositories", () => ({
-  verifyGitHubRepositoryAccess: vi.fn(),
-}));
+vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
+vi.mock("@/services/github/server/access", () => ({ getGitHubAccessToken: vi.fn(), getGitHubErrorResponse: vi.fn() }));
+vi.mock("@/services/github/server/repositories", () => ({ verifyGitHubRepositoryAccess: vi.fn() }));
 
+const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
+const owner = id(100);
 const request = (params: Record<string, string> = {}) =>
-  new Request(
-    `https://codaloud.test/api/projects?${new URLSearchParams(params)}`,
-  );
+  new Request(`https://codaloud.test/api/projects?${new URLSearchParams(params)}`);
+const insert = (value: number, name: string, timestamp: string, userId = owner) =>
+  mocks.pg.query(`insert into projects (id, user_id, name, created_at, updated_at)
+    values ($1, $2, $3, $4, $4)`, [id(value), userId, name, timestamp]);
 
-beforeEach(() => {
-  mocks.getCurrentUser.mockResolvedValue({ userId: "current-user" });
-  mocks.execute.mockResolvedValue({ rows: [] });
+beforeAll(async () => {
+  await mocks.pg.exec(`create table projects (
+    id uuid primary key, user_id uuid not null, name text not null,
+    sandbox_id text, setup_status text not null default 'pending', setup_error text,
+    github_repository_id text, last_opened_file_path text, last_opened_at timestamptz,
+    created_at timestamptz not null, updated_at timestamptz not null
+  )`);
+});
+afterAll(async () => { await mocks.pg.close(); });
+beforeEach(async () => {
+  await mocks.pg.exec("truncate projects");
+  mocks.getCurrentUser.mockResolvedValue({ userId: owner });
+  mocks.logQuery.mockClear();
 });
 
-describe("project list params and route", () => {
-  it("reads a user's projects with omitted options", async () => {
-    expect(await readUserProjectsDb("current-user")).toEqual([]);
-    expect(mocks.execute.mock.calls[0][1]).toEqual(["current-user", 20]);
-    expect(mocks.execute.mock.calls[0][0]).toContain(
-      'order by "projects"."updated_at" desc, "projects"."id" asc',
-    );
+const seed = async () => {
+  await insert(1, "Beta", "2026-09-07T12:00:00.123001Z");
+  await insert(2, "Beta", "2026-09-07T12:00:00.123001Z");
+  await insert(3, "Alpha", "2026-09-07T12:00:00.123002Z");
+  await insert(4, "Zulu", "2026-09-07T12:00:00.123999Z");
+  await insert(5, "Alpha", "2026-09-07T12:00:00.124001Z");
+  await insert(6, "Other owner", "2026-09-07T12:00:00.124001Z", id(200));
+};
+
+const collect = async (filters: Partial<ProjectParamsSchema>) => {
+  const ids: string[] = [];
+  let cursor: string | null = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const page = await readUserProjectsDb(owner, { ...filters, cursor });
+    ids.push(...page.projects.map((project) => project.id));
+    cursor = page.nextCursor;
+    if (cursor === null) return ids;
+  }
+  throw new Error("Pagination did not terminate");
+};
+
+describe("project cursor pagination", () => {
+  it("defaults to the first page without a numeric offset", async () => {
+    expect(projectParamsSchema.parse({})).toEqual({ search: "", sortBy: "updatedAt", sortOrder: "desc", pageSize: 20 });
+    expect(projectParamsSchema.parse({ pageSize: "5" }).pageSize).toBe(5);
+    expect(await readUserProjectsDb(owner)).toEqual({ projects: [], nextCursor: null });
+    const [sql, params] = mocks.logQuery.mock.calls[0];
+    expect(sql).not.toContain("offset");
+    expect(params).toEqual([owner, 21]);
   });
 
-  it("applies defaults to partial options for direct database reads", async () => {
-    await readUserProjectsDb("current-user", {
-      search: "  My project  ",
-      page: 2,
-    });
-    expect(mocks.execute.mock.calls[0][1]).toEqual([
-      "current-user",
-      "%My project%",
-      20,
-      20,
-    ]);
+  it.each([
+    ["name", "asc", [3, 5, 1, 2, 4]],
+    ["name", "desc", [4, 1, 2, 3, 5]],
+    ["createdAt", "asc", [1, 2, 3, 4, 5]],
+    ["createdAt", "desc", [5, 4, 3, 1, 2]],
+    ["updatedAt", "asc", [1, 2, 3, 4, 5]],
+    ["updatedAt", "desc", [5, 4, 3, 1, 2]],
+  ] as const)("traverses %s %s including ties and sub-millisecond timestamps", async (sortBy, sortOrder, expected) => {
+    await seed();
+    expect(await collect({ sortBy, sortOrder, pageSize: 1 })).toEqual(expected.map(id));
+    expect(await collect({ sortBy, sortOrder, pageSize: 2 })).toEqual(expected.map(id));
   });
 
-  it("validates direct database read options before querying", async () => {
-    await expect(
-      readUserProjectsDb("current-user", { pageSize: 101 }),
-    ).rejects.toThrow();
-    expect(mocks.execute).not.toHaveBeenCalled();
+  it("ends on a full final page without an extra empty request", async () => {
+    await insert(1, "One", "2026-09-07T12:00:00Z");
+    await insert(2, "Two", "2026-09-07T12:00:00Z");
+    const page = await readUserProjectsDb(owner, { pageSize: 2 });
+    expect(page.projects).toHaveLength(2);
+    expect(page.nextCursor).toBeNull();
+    expect(page.projects[0]).not.toHaveProperty("cursorValue");
   });
 
-  it("shares pagination defaults and parses URL numbers", () => {
-    expect(projectParamsSchema.parse({})).toEqual({
-      search: "",
-      sortBy: "updatedAt",
-      sortOrder: "desc",
-      page: 1,
-      pageSize: 20,
-    });
-    expect(
-      projectParamsSchema.parse({ page: "3", pageSize: "5" }),
-    ).toMatchObject({
-      page: 3,
-      pageSize: 5,
-    });
+  it("keeps the boundary timestamp at database precision", async () => {
+    await seed();
+    const first = await readUserProjectsDb(owner, { pageSize: 2 });
+    expect(JSON.parse(first.nextCursor!).value).toBe("2026-09-07T12:00:00.123999Z");
+  });
+
+  it.each(["delete", "update"])("continues after the boundary project is changed by %s", async (change) => {
+    await seed();
+    const first = await readUserProjectsDb(owner, { pageSize: 2 });
+    if (change === "delete") {
+      await mocks.pg.query("delete from projects where id = $1", [id(4)]);
+    } else {
+      await mocks.pg.query("update projects set updated_at = '2026-09-08T12:00:00Z' where id = $1", [id(4)]);
+    }
+    const second = await readUserProjectsDb(owner, { pageSize: 2, cursor: first.nextCursor });
+    expect(second.projects.map((project) => project.id)).toEqual([id(3), id(1)]);
+  });
+
+  it("does not shift the next page after inserts and deletes before the boundary", async () => {
+    await seed();
+    const first = await readUserProjectsDb(owner, { pageSize: 2 });
+    await mocks.pg.query("delete from projects where id = $1", [id(5)]);
+    await insert(7, "New", "2026-09-08T12:00:00Z");
+    await insert(8, "Newer", "2026-09-09T12:00:00Z");
+    const second = await readUserProjectsDb(owner, { pageSize: 2, cursor: first.nextCursor });
+    expect(second.projects.map((project) => project.id)).toEqual([id(3), id(1)]);
+  });
+
+  it("keeps literal search and ownership restrictions on every page", async () => {
+    await insert(1, "50%_\\done α", "2026-09-07T12:00:00Z");
+    await insert(2, "50%_\\done β", "2026-09-07T12:00:00Z");
+    await insert(3, "50xx done", "2026-09-07T12:00:00Z");
+    await insert(4, "50%_\\done γ", "2026-09-07T12:00:00Z", id(200));
+    expect(await collect({ search: "  50%_\\done  ", sortBy: "name", sortOrder: "asc", pageSize: 1 })).toEqual([id(1), id(2)]);
+  });
+
+  it("rejects cursors reused with a different search or sort before querying", async () => {
+    await seed();
+    const first = await readUserProjectsDb(owner, { pageSize: 1 });
+    const changedFilters: Record<string, string>[] = [{ search: "other" }, { sortBy: "name" }, { sortOrder: "asc" }];
+    for (const filters of changedFilters) {
+      mocks.logQuery.mockClear();
+      const response = await GET(request({ ...filters, cursor: first.nextCursor! }));
+      expect(response.status).toBe(400);
+      expect(mocks.logQuery).not.toHaveBeenCalled();
+    }
+  });
+
+  it("returns a bounded, private API page and accepts its continuation", async () => {
+    await seed();
+    const response = await GET(request({ pageSize: "2" }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    const first = await response.json();
+    expect(first.data.projects.map((project: { id: string }) => project.id)).toEqual([id(5), id(4)]);
+    expect(first.data.projects[0].updatedAt).toEqual(expect.any(String));
+    const next = await GET(request({ pageSize: "2", cursor: first.data.nextCursor }));
+    expect((await next.json()).data.projects.map((project: { id: string }) => project.id)).toEqual([id(3), id(1)]);
   });
 
   it("authenticates before validating or querying", async () => {
     mocks.getCurrentUser.mockResolvedValue({ userId: null });
-    const req = request({ page: "invalid" });
-    const response = await GET(req);
+    const req = request({ cursor: "invalid" });
+    expect((await GET(req)).status).toBe(401);
     expect(mocks.getCurrentUser).toHaveBeenCalledWith(req.headers);
-    expect(response.status).toBe(401);
-    expect(await response.json()).toMatchObject({ error: true });
-    expect(mocks.execute).not.toHaveBeenCalled();
-  });
-
-  it("uses a bounded, user-owned, deterministic default page", async () => {
-    const response = await GET(request());
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      error: false,
-      message: "Projects loaded successfully.",
-      data: [],
-    });
-    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
-    const [sql, params] = mocks.execute.mock.calls[0];
-    expect(sql).toContain('"projects"."user_id" = $1');
-    expect(sql).toContain(
-      'order by "projects"."updated_at" desc, "projects"."id" asc',
-    );
-    expect(sql).toContain("limit $2");
-    expect(params).toEqual(["current-user", 20]);
-  });
-
-  it("combines literal name search with ownership and page offset", async () => {
-    const response = await GET(
-      request({ search: "  50%_\\done  ", page: "3", pageSize: "5" }),
-    );
-    expect(response.status).toBe(200);
-    const [sql, params] = mocks.execute.mock.calls[0];
-    expect(sql).toContain(
-      'where ("projects"."user_id" = $1 and "projects"."name" ilike $2)',
-    );
-    expect(sql).toContain("limit $3 offset $4");
-    expect(params).toEqual(["current-user", "%50\\%\\_\\\\done%", 5, 10]);
-  });
-
-  it.each([
-    ["name", "name", "asc"],
-    ["name", "name", "desc"],
-    ["createdAt", "created_at", "asc"],
-    ["createdAt", "created_at", "desc"],
-    ["updatedAt", "updated_at", "asc"],
-    ["updatedAt", "updated_at", "desc"],
-  ])("supports sorting by %s %s %s", async (sortBy, column, sortOrder) => {
-    expect((await GET(request({ sortBy, sortOrder }))).status).toBe(200);
-    expect(mocks.execute.mock.calls[0][0]).toContain(
-      `order by "projects"."${column}" ${sortOrder}, "projects"."id" asc`,
-    );
+    expect(mocks.logQuery).not.toHaveBeenCalled();
   });
 
   it.each<Record<string, string>>([
-    { page: "0" },
-    { page: "-1" },
-    { page: "1.5" },
-    { page: "abc" },
-    { pageSize: "0" },
-    { pageSize: "101" },
-    { pageSize: "1.5" },
-    { pageSize: "" },
-    { page: String(Number.MAX_SAFE_INTEGER), pageSize: "100" },
-    { search: "x".repeat(201) },
-    { sortBy: "userId" },
-    { sortOrder: "desc; select 1" },
-    { userId: "another-user" },
+    { page: "1" }, { page: "2" }, { pageSize: "0" }, { pageSize: "101" },
+    { pageSize: "1.5" }, { pageSize: "" }, { search: "x".repeat(201) },
+    { sortBy: "userId" }, { sortOrder: "desc; select 1" }, { userId: id(200) },
+    { cursor: "" }, { cursor: "not-json" }, { cursor: "{}" }, { cursor: "null" },
+    { cursor: "x".repeat(4097) },
+    ...[
+      { version: 2 }, { id: "not-a-uuid" }, { value: "invalid timestamp" }, { unexpected: true },
+    ].map((fields) => ({ cursor: JSON.stringify({ version: 1, id: id(1), value: "2026-09-07T12:00:00Z", search: "", sortBy: "updatedAt", sortOrder: "desc", ...fields }) })),
   ])("rejects invalid params before querying: %j", async (params) => {
     const response = await GET(request(params));
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: true,
-      message: expect.any(String),
-    });
-    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({ error: true, message: expect.any(String) });
+    expect(mocks.logQuery).not.toHaveBeenCalled();
   });
 
-  it("returns an empty array for a page beyond the results", async () => {
-    const response = await GET(request({ page: "100", pageSize: "10" }));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ error: false, data: [] });
-    expect(mocks.execute.mock.calls[0][1]).toEqual(["current-user", 10, 990]);
+  it("validates direct database options before querying", async () => {
+    await expect(readUserProjectsDb(owner, { cursor: "invalid" })).rejects.toThrow();
+    expect(mocks.logQuery).not.toHaveBeenCalled();
   });
 
   it("keeps database errors out of the response", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.execute.mockRejectedValue(new Error("private database details"));
+    vi.spyOn(mocks.pg, "query").mockRejectedValueOnce(new Error("private database details"));
     const response = await GET(request());
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: true,
-      message: "Unable to load projects. Please try again.",
-    });
+    expect(await response.json()).toEqual({ error: true, message: "Unable to load projects. Please try again." });
   });
 });

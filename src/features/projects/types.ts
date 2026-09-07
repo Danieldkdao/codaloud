@@ -9,3 +9,8 @@ export type ProjectResponseData = Omit<
   updatedAt: string;
   lastOpenedAt: string | null;
 };
+
+export type ProjectPageData = {
+  projects: ProjectResponseData[];
+  nextCursor: string | null;
+};

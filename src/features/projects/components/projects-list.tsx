@@ -30,9 +30,9 @@ export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsList
     refetch,
   } = useProjects(filters);
   const projects = useMemo(() => {
-    // Offset pages can overlap when projects are updated between requests.
+    // A previously loaded project can still move past the cursor after an update.
     const seen = new Set<string>();
-    return (data?.pages.flat() ?? []).filter((project) => {
+    return (data?.pages.flatMap((page) => page.projects) ?? []).filter((project) => {
       if (seen.has(project.id)) return false;
       seen.add(project.id);
       return true;

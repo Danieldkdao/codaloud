@@ -21,11 +21,14 @@ const projects = [{
   createdAt: "2026-09-07T12:00:00.000Z", updatedAt: "2026-09-07T12:00:00.000Z",
 }];
 
+const projectPage = { projects, nextCursor: null };
+const cursor = JSON.stringify({ version: 1, id: "00000000-0000-4000-8000-000000000001", value: "Previous", search: "My & project", sortBy: "name", sortOrder: "desc" });
+
 beforeEach(() => {
   mocks.platform.OS = "web";
   mocks.getCookie.mockResolvedValue("session=mobile");
   network.mockReset();
-  network.mockImplementation(async () => Response.json({ error: false, message: "Loaded", data: projects }));
+  network.mockImplementation(async () => Response.json({ error: false, message: "Loaded", data: projectPage }));
   vi.stubGlobal("fetch", network);
 });
 
@@ -37,21 +40,22 @@ describe("readUserProjectsAction", () => {
   });
 
   it("returns data and sends normalized filters with pagination", async () => {
-    expect(await readUserProjectsAction({ search: "  My & project  ", page: 2, sortBy: "name" })).toEqual(projects);
+    expect(await readUserProjectsAction({ search: "  My & project  ", cursor, sortBy: "name" })).toEqual(projectPage);
     const [path, options] = network.mock.calls[0];
     const url = new URL(String(path), "https://codaloud.test");
     expect(url.pathname).toBe("/api/projects");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      search: "My & project", page: "2", pageSize: "20", sortBy: "name", sortOrder: "desc",
+      search: "My & project", cursor, pageSize: "20", sortBy: "name", sortOrder: "desc",
     });
     expect(options?.method).toBe("GET");
   });
 
   it("uses defaults when params are omitted and preserves empty results", async () => {
-    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: [] }));
-    expect(await readUserProjectsAction()).toEqual([]);
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: { projects: [], nextCursor: null } }));
+    expect(await readUserProjectsAction()).toEqual({ projects: [], nextCursor: null });
     const url = new URL(String(network.mock.calls[0][0]), "https://codaloud.test");
-    expect(url.searchParams.get("page")).toBe("1");
+    expect(url.searchParams.has("page")).toBe(false);
+    expect(url.searchParams.has("cursor")).toBe(false);
     expect(url.searchParams.get("pageSize")).toBe("20");
   });
 
@@ -70,15 +74,39 @@ describe("readUserProjectsAction", () => {
   });
 
   it.each([400, 401, 403, 500])("returns null for HTTP %s even with a success body", async (status) => {
-    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: projects }, { status }));
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: projectPage }, { status }));
     expect(await readUserProjectsAction()).toBeNull();
   });
 
   it.each([
     null, {}, { error: true, message: "Failed" }, { error: false },
-    { error: false, data: null }, { error: false, data: {} }, { data: projects },
+    { error: false, data: null }, { error: false, data: {} }, { data: projectPage },
   ])("returns null for an error or unusable response: %j", async (body) => {
     network.mockResolvedValue(Response.json(body));
+    expect(await readUserProjectsAction()).toBeNull();
+  });
+
+  it.each([
+    { projects }, { projects, nextCursor: 3 }, { projects, nextCursor: "invalid" },
+    { projects: [], nextCursor: cursor },
+  ])("rejects invalid page metadata: %j", async (data) => {
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data }));
+    expect(await readUserProjectsAction()).toBeNull();
+  });
+
+  it("returns the validated server cursor", async () => {
+    const data = { projects, nextCursor: cursor };
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data }));
+    expect(await readUserProjectsAction({ search: "My & project", sortBy: "name" })).toEqual(data);
+  });
+
+  it("rejects a repeated cursor instead of allowing endless pagination", async () => {
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: { projects, nextCursor: cursor } }));
+    expect(await readUserProjectsAction({ cursor, search: "My & project", sortBy: "name" })).toBeNull();
+  });
+
+  it("rejects a response cursor for different filters", async () => {
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: { projects, nextCursor: cursor } }));
     expect(await readUserProjectsAction()).toBeNull();
   });
 
@@ -104,7 +132,7 @@ describe("readUserProjectsAction", () => {
     { ...projects[0], updatedAt: "invalid date" },
   ])("rejects the whole page when any project is malformed: %j", async (invalidProject) => {
     network.mockResolvedValue(Response.json({
-      error: false, message: "Loaded", data: [...projects, invalidProject],
+      error: false, message: "Loaded", data: { projects: [...projects, invalidProject], nextCursor: null },
     }));
     expect(await readUserProjectsAction()).toBeNull();
   });
@@ -115,8 +143,8 @@ describe("readUserProjectsAction", () => {
       githubRepositoryId: "123", lastOpenedFilePath: "src/index.ts",
       lastOpenedAt: "2026-09-07T12:00:00.000Z",
     }];
-    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data }));
-    expect(await readUserProjectsAction()).toEqual(data);
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data: { projects: data, nextCursor: null } }));
+    expect(await readUserProjectsAction()).toEqual({ projects: data, nextCursor: null });
   });
 
   it.each(["request", "cookie"])("returns null when %s throws", async (stage) => {

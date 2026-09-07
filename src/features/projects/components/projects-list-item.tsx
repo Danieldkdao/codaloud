@@ -86,7 +86,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
             ) : (
               <Icon
                 family="Feather"
-                name="folder"
+                name="code"
                 size={24}
                 className="text-secondary-foreground"
                 accessible={false}
@@ -103,7 +103,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
             <PText className="text-muted-foreground text-lg">
               {updatedLabel}
             </PText>
-            {!sourceLabel && (
+            {sourceLabel && (
               <View className="items-center flex-row gap-2">
                 <Icon
                   family="Feather"
@@ -112,7 +112,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                   size={16}
                 />
                 <PText className="text-lg text-muted-foreground">
-                  {sourceLabel || "GitHub import"}
+                  {sourceLabel}
                 </PText>
               </View>
             )}

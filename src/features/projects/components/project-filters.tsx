@@ -13,7 +13,6 @@ import {
   projectSortOrders,
   type ProjectParamsSchema,
 } from "@/features/projects/lib/project-params";
-import { DEFAULT_PAGE } from "@/lib/constants";
 
 export type ProjectFiltersProps = {
   filters: ProjectParamsSchema;
@@ -24,7 +23,7 @@ export type ProjectFiltersProps = {
 export const ProjectFilters = ({ filters, setFilters }: ProjectFiltersProps) => {
   const updateSearch = useCallback((search: string) => {
     // Send only changed fields so a debounced search preserves newer sort choices.
-    setFilters({ search, page: DEFAULT_PAGE });
+    setFilters({ search });
   }, [setFilters]);
 
   return (
@@ -45,7 +44,7 @@ export const ProjectFilters = ({ filters, setFilters }: ProjectFiltersProps) => 
             options: projectSortFields.map((value) => ({
               value,
               label: formatProjectSortField(value),
-              onSelect: () => setFilters({ sortBy: value, page: DEFAULT_PAGE }),
+              onSelect: () => setFilters({ sortBy: value }),
             })),
           },
           {
@@ -54,7 +53,7 @@ export const ProjectFilters = ({ filters, setFilters }: ProjectFiltersProps) => 
             options: projectSortOrders.map((value) => ({
               value,
               label: formatProjectSortOrder(value),
-              onSelect: () => setFilters({ sortOrder: value, page: DEFAULT_PAGE }),
+              onSelect: () => setFilters({ sortOrder: value }),
             })),
           },
         ]}

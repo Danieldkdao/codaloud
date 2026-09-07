@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 import { projectSetupStatuses } from "@/db/shared";
-import type { ProjectResponseData } from "@/features/projects/types";
+import { projectCursorTokenSchema } from "@/features/projects/lib/project-params";
+import type { ProjectPageData, ProjectResponseData } from "@/features/projects/types";
 
 // Validate the JSON representation, including timestamps serialized by the API.
 export const projectResponseSchema = z.object({
@@ -20,10 +21,20 @@ export const projectResponseSchema = z.object({
 
 export type ProjectResponseSchema = z.infer<typeof projectResponseSchema>;
 
+export const projectPageSchema = z.object({
+  projects: z.array(projectResponseSchema),
+  nextCursor: projectCursorTokenSchema.nullable(),
+}).refine(
+  (page) => page.nextCursor === null || page.projects.length > 0,
+  "An empty project page cannot have a continuation cursor.",
+) satisfies z.ZodType<ProjectPageData>;
+
+export type ProjectPageSchema = z.infer<typeof projectPageSchema>;
+
 export const readProjectsResponseSchema = z.object({
   error: z.literal(false),
   message: z.string(),
-  data: z.array(projectResponseSchema),
+  data: projectPageSchema,
 });
 
 export type ReadProjectsResponseSchema = z.infer<typeof readProjectsResponseSchema>;

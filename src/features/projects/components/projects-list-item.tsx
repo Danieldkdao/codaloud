@@ -3,6 +3,7 @@ import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
+import { formatProjectSetupStatus } from "@/features/projects/lib/formatters";
 import type { ProjectResponseData } from "@/features/projects/types";
 import { cn } from "@/lib/utils";
 
@@ -10,38 +11,8 @@ type ProjectsListItemProps = {
   project: ProjectResponseData;
 };
 
-const setupStatuses = {
-  pending: {
-    label: "Queued",
-    className: "bg-muted",
-    textClassName: "text-muted-foreground",
-  },
-  running: {
-    label: "Setting up",
-    className: "bg-secondary",
-    textClassName: "text-secondary-foreground",
-  },
-  ready: {
-    label: "Ready",
-    className: "bg-secondary",
-    textClassName: "text-secondary-foreground",
-  },
-  failed: {
-    label: "Setup failed",
-    className: "bg-destructive/10",
-    textClassName: "text-destructive",
-  },
-} satisfies Record<
-  ProjectResponseData["setupStatus"],
-  {
-    label: string;
-    className: string;
-    textClassName: string;
-  }
->;
-
 export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
-  const status = setupStatuses[project.setupStatus];
+  const status = formatProjectSetupStatus(project.setupStatus);
   const sourceLabel = project.githubRepositoryId ? "GitHub import" : null;
   const updatedAt = new Date(project.updatedAt);
   const updatedLabel = Number.isNaN(updatedAt.getTime())

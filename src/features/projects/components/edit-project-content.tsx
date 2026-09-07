@@ -17,7 +17,7 @@ export const EditProjectContent = ({ projectId }: EditProjectContentProps) => {
 
   // Keep the mounted form and its draft when cached data refreshes.
   if (data) {
-    return <UpdateProjectForm defaultValues={{ name: data.name }} />;
+    return <UpdateProjectForm projectId={projectId} defaultValues={{ name: data.name }} />;
   }
 
   return (

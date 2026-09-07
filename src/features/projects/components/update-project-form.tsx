@@ -1,4 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 
@@ -6,17 +9,24 @@ import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
+import { updateProjectAction } from "@/features/projects/actions/actions";
 import {
   updateProjectSchema,
   type UpdateProjectSchema,
 } from "@/features/projects/actions/schemas";
+import { alert } from "@/lib/utils";
 
 type UpdateProjectFormProps = {
+  projectId: string;
   defaultValues: UpdateProjectSchema;
 };
 
-export const UpdateProjectForm = ({ defaultValues }: UpdateProjectFormProps) => {
-  const { control, trigger } = useForm<UpdateProjectSchema>({
+export const UpdateProjectForm = ({ projectId, defaultValues }: UpdateProjectFormProps) => {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const isMounted = useRef(true);
+  const submissionInFlight = useRef(false);
+  const { control, handleSubmit, formState: { isSubmitting } } = useForm<UpdateProjectSchema>({
     resolver: zodResolver(updateProjectSchema),
     defaultValues: {
       ...defaultValues,
@@ -25,9 +35,36 @@ export const UpdateProjectForm = ({ defaultValues }: UpdateProjectFormProps) => 
     mode: "onTouched",
   });
 
-  // UI preview only: validate the fields without saving any changes.
-  const validateForm = () => {
-    void trigger();
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const onSubmit = async (data: UpdateProjectSchema) => {
+    const updatedProject = await updateProjectAction(projectId, data);
+
+    if (updatedProject.error) {
+      if (isMounted.current) alert(`Error: ${updatedProject.message}`);
+      return;
+    }
+
+    // Refresh active lists/details and mark inactive project queries stale.
+    void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    // The user may have dismissed the sheet while the request was in flight.
+    if (isMounted.current) router.back();
+  };
+
+  const submitForm = async () => {
+    // Button and keyboard events can arrive before isSubmitting rerenders.
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
+    try {
+      await handleSubmit(onSubmit)();
+    } catch {
+      if (isMounted.current) alert("Error: Unable to update project. Please try again.");
+    } finally {
+      submissionInFlight.current = false;
+    }
   };
 
   return (
@@ -63,9 +100,10 @@ export const UpdateProjectForm = ({ defaultValues }: UpdateProjectFormProps) => 
                   accessibilityLabelledBy="update-project-name-label"
                   accessibilityHint={error?.message}
                   invalid={!!error}
+                  editable={!isSubmitting}
                   autoCapitalize="sentences"
                   returnKeyType="done"
-                  onSubmitEditing={validateForm}
+                  onSubmitEditing={() => void submitForm()}
                 />
                 {error && (
                   <PText
@@ -81,7 +119,12 @@ export const UpdateProjectForm = ({ defaultValues }: UpdateProjectFormProps) => 
           />
         </ScrollView>
         <View className="shrink-0">
-          <Button size="lg" onPress={validateForm}>
+          <Button
+            size="lg"
+            disabled={isSubmitting}
+            loading={isSubmitting}
+            onPress={() => void submitForm()}
+          >
             Save changes
           </Button>
         </View>

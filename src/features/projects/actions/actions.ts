@@ -5,7 +5,10 @@ import {
   createProjectResponseSchema,
   readProjectResponseSchema,
   readProjectsResponseSchema,
+  updateProjectResponseSchema,
+  updateProjectSchema,
   type CreateProjectFormSchema,
+  type UpdateProjectSchema,
 } from "@/features/projects/actions/schemas";
 import {
   projectParamsSchema,
@@ -143,6 +146,100 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
     return {
       error: true as const,
       message: "Unable to create project. Please try again.",
+    };
+  }
+};
+
+export const updateProjectAction = async (
+  projectId: string,
+  unsafeData: UpdateProjectSchema,
+) => {
+  try {
+    const { userId, error: sessionError } = await getCurrentUserClient();
+
+    if (sessionError) {
+      return {
+        error: true as const,
+        message: "Unable to verify your session. Please try again.",
+      };
+    }
+
+    if (!userId) {
+      return {
+        error: true as const,
+        message: "You must be signed in to update a project.",
+      };
+    }
+
+    if (!isValidIds(userId)) {
+      return {
+        error: true as const,
+        message: "Unable to verify your session. Please try again.",
+      };
+    }
+
+    if (!isValidIds(projectId)) {
+      return { error: true as const, message: "Invalid project ID." };
+    }
+
+    const validatedData = updateProjectSchema.safeParse(unsafeData);
+    if (!validatedData.success) {
+      return {
+        error: true as const,
+        message: validatedData.error.issues[0]?.message ?? "Invalid project data.",
+      };
+    }
+
+    const headers = await createRequestHeaders({
+      "Content-Type": "application/json",
+    });
+    const response = await fetchBase(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers,
+      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      body: JSON.stringify(validatedData.data),
+    });
+
+    const payload: unknown = await response.json();
+    const result = updateProjectResponseSchema.safeParse(payload);
+    if (!result.success) {
+      return {
+        error: true as const,
+        message: "The server returned an invalid project response.",
+      };
+    }
+
+    if (result.data.error) {
+      return result.data;
+    }
+
+    if (!response.ok) {
+      return {
+        error: true as const,
+        message: "Unable to update project. Please try again.",
+      };
+    }
+
+    const updatedProject = result.data.data;
+    if (
+      updatedProject.id.toLowerCase() !== projectId.toLowerCase() ||
+      updatedProject.userId.toLowerCase() !== userId.toLowerCase()
+    ) {
+      return {
+        error: true as const,
+        message: "The server returned an invalid project response.",
+      };
+    }
+
+    return {
+      error: false as const,
+      message: result.data.message,
+      projectId: updatedProject.id,
+    };
+  } catch {
+    return {
+      error: true as const,
+      message: "Unable to update project. Please try again.",
     };
   }
 };

@@ -1,8 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { ProjectForm } from "@/features/projects/components/project-form";
+import { CreateProjectForm } from "@/features/projects/components/create-project-form";
 import { useThemeColor } from "@/hooks/use-theme";
 import { Stack, useRouter } from "expo-router";
-import { KeyboardAvoidingView, Platform, useWindowDimensions, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const NewProjectScreen = () => {
@@ -22,7 +27,11 @@ const NewProjectScreen = () => {
           headerTintColor: foreground,
           headerShadowVisible: false,
           headerRight: () => (
-            <Button variant="ghost" onPress={() => router.back()} accessibilityLabel="Close new project">
+            <Button
+              variant="ghost"
+              onPress={() => router.back()}
+              accessibilityLabel="Close new project"
+            >
               Done
             </Button>
           ),
@@ -45,7 +54,7 @@ const NewProjectScreen = () => {
         {/* Native sheets resize the first descendant ScrollView to the entire sheet.
             End that lookup here: our sibling scroll areas are sized by the form. */}
         <View collapsable={false} pointerEvents="none" />
-        <ProjectForm />
+        <CreateProjectForm />
       </KeyboardAvoidingView>
     </>
   );

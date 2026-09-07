@@ -44,8 +44,8 @@ vi.mock("@/features/projects/hooks/use-project", () => ({
   useProject: (id: string) => { state.useProject(id); return state.query; },
 }));
 vi.mock("@/features/projects/components/update-project-form", () => ({
-  UpdateProjectForm: ({ defaultValues }: { defaultValues: { name?: string } }) => {
-    state.formProps(defaultValues);
+  UpdateProjectForm: ({ projectId, defaultValues }: { projectId: string; defaultValues: { name?: string } }) => {
+    state.formProps({ projectId, defaultValues });
     const [initialName] = useState(defaultValues.name);
     return createElement("input", { defaultValue: initialName });
   },
@@ -80,7 +80,7 @@ it("loads the requested project before showing the form", () => {
   state.query.isPending = false;
   render();
   expect(container.querySelector("input")?.value).toBe("My project");
-  expect(state.formProps).toHaveBeenLastCalledWith({ name: "My project" });
+  expect(state.formProps).toHaveBeenLastCalledWith({ projectId: "project-one", defaultValues: { name: "My project" } });
   expect(container.querySelector('[role="progressbar"]')).toBeNull();
 });
 

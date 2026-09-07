@@ -33,14 +33,18 @@ const projectSources = [
   },
 ] as const;
 
-export const ProjectForm = () => {
+export const CreateProjectForm = () => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { source: initialSource, name: initialName } = useLocalSearchParams<{
     source?: string;
     name?: string;
   }>();
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<CreateProjectFormSchema>({
+  const {
+    control,
+    handleSubmit,
+    formState: { isSubmitting },
+  } = useForm<CreateProjectFormSchema>({
     resolver: zodResolver(createProjectFormSchema),
     defaultValues: {
       name: typeof initialName === "string" ? initialName : "",
@@ -59,14 +63,15 @@ export const ProjectForm = () => {
     if (createdProject.error) {
       if (createdProject.code === "GITHUB_RECONNECT_REQUIRED") {
         // A token may expire after selection. Refresh the picker so it offers reconnection.
-        void queryClient.invalidateQueries({ queryKey: ["github", "repositories"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["github", "repositories"],
+        });
       }
       alert(`Error: ${createdProject.message}`);
       return;
     }
 
     void queryClient.invalidateQueries({ queryKey: ["projects"] });
-    alert(`Success: ${createdProject.message}`);
     router.replace({
       pathname: "/projects/[projectId]",
       params: { projectId: createdProject.projectId },
@@ -198,7 +203,10 @@ export const ProjectForm = () => {
                   />
                 ) : (
                   <View className="gap-3">
-                    <PText accessibilityLiveRegion="polite" className="text-muted-foreground">
+                    <PText
+                      accessibilityLiveRegion="polite"
+                      className="text-muted-foreground"
+                    >
                       {isChecking
                         ? "Checking GitHub connection…"
                         : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
@@ -211,7 +219,11 @@ export const ProjectForm = () => {
                   </View>
                 )}
                 {error && (
-                  <PText selectable accessibilityRole="alert" className="text-destructive">
+                  <PText
+                    selectable
+                    accessibilityRole="alert"
+                    className="text-destructive"
+                  >
                     {error.message}
                   </PText>
                 )}

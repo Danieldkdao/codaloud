@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
@@ -12,6 +12,7 @@ type ProjectsListItemProps = {
 };
 
 export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
+  const router = useRouter();
   const status = formatProjectSetupStatus(project.setupStatus);
   const sourceLabel = project.githubRepositoryId ? "GitHub import" : null;
   const updatedAt = new Date(project.updatedAt);
@@ -95,9 +96,18 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
           </View>
         </Pressable>
       </Link.Trigger>
-      {/* Preview only: menu actions intentionally have no handlers yet. */}
       <Link.Menu>
-        <Link.MenuAction icon="square.and.pencil">Edit project</Link.MenuAction>
+        <Link.MenuAction
+          icon="square.and.pencil"
+          onPress={() =>
+            router.push({
+              pathname: "/edit-project",
+              params: { projectId: project.id },
+            })
+          }
+        >
+          Edit project
+        </Link.MenuAction>
         <Link.MenuAction icon="trash" destructive>
           Delete project
         </Link.MenuAction>

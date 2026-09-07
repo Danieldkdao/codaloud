@@ -1,17 +1,20 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "expo-router";
 import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
+import { deleteProjectAction } from "@/features/projects/actions/actions";
 import { formatProjectSetupStatus } from "@/features/projects/lib/formatters";
 import type { ProjectResponseData } from "@/features/projects/types";
-import { cn } from "@/lib/utils";
+import { alert, cn, confirmAction } from "@/lib/utils";
 
 type ProjectsListItemProps = {
   project: ProjectResponseData;
 };
 
 export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const status = formatProjectSetupStatus(project.setupStatus);
   const sourceLabel = project.githubRepositoryId ? "GitHub import" : null;
@@ -23,6 +26,26 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
         day: "numeric",
         year: "numeric",
       })}`;
+
+  const deleteProject = () => {
+    confirmAction(
+      "Delete project?",
+      `Are you sure you want to delete "${project.name}"? This action cannot be undone.`,
+      {
+        actionText: "Delete",
+        onConfirmPress: async () => {
+          const deletedProject = await deleteProjectAction(project.id);
+
+          if (deletedProject.error) {
+            alert(`Error: ${deletedProject.message}`);
+            return;
+          }
+
+          void queryClient.invalidateQueries({ queryKey: ["projects"] });
+        },
+      },
+    );
+  };
 
   return (
     <Link
@@ -108,7 +131,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
         >
           Edit project
         </Link.MenuAction>
-        <Link.MenuAction icon="trash" destructive>
+        <Link.MenuAction icon="trash" destructive onPress={deleteProject}>
           Delete project
         </Link.MenuAction>
       </Link.Menu>

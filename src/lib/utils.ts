@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { Alert, Platform } from "react-native";
 import { twMerge } from "tailwind-merge";
-import { ApiResponse } from "./types";
+import type { ApiResponse, ConfirmActionOptions } from "./types";
 import { getBaseURL } from "./auth/utils";
 import { FetchRequestInit } from "expo/fetch";
 import z from "zod";
@@ -19,6 +19,23 @@ export const alert = (message: string) => {
   } else {
     Alert.alert(message);
   }
+};
+
+export const confirmAction = (
+  title: string,
+  description: string,
+  { cancelText = "Cancel", actionText, onConfirmPress }: ConfirmActionOptions,
+) => {
+  if (Platform.OS === "web") {
+    // Browser confirmation dialogs use the browser's own button labels.
+    if (window.confirm(`${title}\n\n${description}`)) onConfirmPress();
+    return;
+  }
+
+  Alert.alert(title, description, [
+    { text: cancelText, style: "cancel" },
+    { text: actionText, style: "destructive", onPress: onConfirmPress },
+  ]);
 };
 
 export const apiResponse = <T = never>(

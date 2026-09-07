@@ -100,3 +100,10 @@ export const updateProjectResponseSchema = z.discriminatedUnion("error", [
 ]);
 
 export type UpdateProjectResponseSchema = z.infer<typeof updateProjectResponseSchema>;
+
+export const deleteProjectResponseSchema = z.discriminatedUnion("error", [
+  z.object({ error: z.literal(true), message: z.string().trim().min(1), code: z.string().optional() }),
+  readProjectResponseSchema.extend({ message: z.string().trim().min(1) }),
+]);
+
+export type DeleteProjectResponseSchema = z.infer<typeof deleteProjectResponseSchema>;

@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/features/projects/hooks/use-projects", () => ({
   useProjects: mocks.useProjects,
 }));
+vi.mock("@/features/projects/actions/actions", () => ({ deleteProjectAction: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock("@/components/app-wrapper", () => ({
   AppWrapper: ({ children }: { children: ReactNode }) => children,
 }));
@@ -97,6 +99,7 @@ vi.mock("expo-router", () => {
       { href: `/projects/${encodeURIComponent(href.params.projectId)}` },
     );
   return {
+    useRouter: () => ({ push: vi.fn() }),
     Link: Object.assign(Link, {
       Trigger: ({ children, href }: {
         children: ReactElement<{ href?: string }>;

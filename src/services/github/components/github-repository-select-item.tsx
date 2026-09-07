@@ -2,7 +2,7 @@ import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
-import type { GitHubRepository } from "@/features/projects/types";
+import type { GitHubRepository } from "@/services/github/types";
 
 export type GitHubRepositorySelectItemProps = {
   repository: GitHubRepository;

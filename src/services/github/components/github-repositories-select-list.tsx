@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, View } from "react-native";
 
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
-import type { GitHubRepository } from "@/features/projects/types";
+import type { GitHubRepository } from "@/services/github/types";
 import { cn } from "@/lib/utils";
 import { GitHubRepositorySelectItem } from "@/services/github/components/github-repository-select-item";
 import { useGitHubRepositories } from "@/services/github/hooks/use-github-repositories";
@@ -39,7 +39,16 @@ export const GitHubRepositoriesSelectList = ({
     fetchNextPage,
     refetch,
   } = useGitHubRepositories({ search });
-  const repositories = data?.pages.flat() ?? [];
+  const repositories = useMemo(() => {
+    // GitHub's updated sort can move a repository across pages between requests.
+    const unique = new Map<number, GitHubRepository>();
+    for (const page of data?.pages ?? []) {
+      for (const repository of page.repositories) {
+        if (!unique.has(repository.id)) unique.set(repository.id, repository);
+      }
+    }
+    return Array.from(unique.values());
+  }, [data?.pages]);
   const selectedRepository = repositories.find(
     (repository) => String(repository.id) === selectedRepositoryId,
   );
@@ -47,7 +56,7 @@ export const GitHubRepositoriesSelectList = ({
     error && "code" in error && error.code === "GITHUB_RECONNECT_REQUIRED";
 
   const loadMore = () => {
-    if (hasNextPage && !isFetching && !error) {
+    if (hasNextPage && !isFetching && !error && fetchStatus !== "paused") {
       void fetchNextPage({ cancelRefetch: false });
     }
   };
@@ -130,9 +139,11 @@ export const GitHubRepositoriesSelectList = ({
                   >
                     {isPending
                       ? "Loading repositories…"
-                      : search.trim()
-                        ? "No matching repositories found."
-                        : "No repositories found."}
+                      : hasNextPage
+                        ? "No matches yet. Continue searching."
+                        : search.trim()
+                          ? "No matching repositories found."
+                          : "No repositories found."}
                   </PText>
                 </View>
               ) : null
@@ -167,6 +178,18 @@ export const GitHubRepositoriesSelectList = ({
                   >
                     Loading more repositories…
                   </PText>
+                </View>
+              ) : hasNextPage ? (
+                <View className="p-3">
+                  <Button
+                    variant="outline"
+                    onPress={loadMore}
+                    disabled={isFetching}
+                  >
+                    {repositories.length
+                      ? "Load more repositories"
+                      : "Continue searching"}
+                  </Button>
                 </View>
               ) : null
             }

@@ -148,22 +148,22 @@ beforeEach(() => {
   mocks.query = {
     data: {
       pages: [
-        [
+        { repositories: [
           {
             id: 1,
             fullName: "owner/private-repo",
             description: "A repository description",
             private: true,
           },
-        ],
-        [
+        ], nextCursor: "second" },
+        { repositories: [
           {
             id: 2,
             fullName: "owner/public-repo",
             description: null,
             private: false,
           },
-        ],
+        ], nextCursor: "third" },
       ],
     },
     isPending: false,
@@ -233,7 +233,7 @@ describe("GitHub repositories list", () => {
     Object.assign(mocks.query, { data: undefined, isPending: true });
     expect(renderList()).toContain("Loading repositories");
     Object.assign(mocks.query, {
-      data: { pages: [[]] },
+      data: { pages: [{ repositories: [], nextCursor: null }] },
       isPending: false,
       hasNextPage: false,
     });
@@ -309,10 +309,10 @@ describe("repository selection", () => {
         act(() => button!.click());
       };
 
-      expect(container.textContent).toContain("Selected repository ID: null");
+      expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
       pressRepository(name);
 
-      expect(container.textContent).toContain(`Selected repository ID: ${id}`);
+      expect(container.querySelector('[aria-pressed="true"]')?.textContent).toContain(name);
       expect(container.textContent).toContain(name);
       expect(container.textContent).not.toContain(otherName);
       expect(
@@ -324,7 +324,7 @@ describe("repository selection", () => {
 
       pressRepository(name);
 
-      expect(container.textContent).toContain("Selected repository ID: null");
+      expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
       expect(container.textContent).toContain(otherName);
       expect(
         container.querySelector('input[placeholder="Search repositories"]'),
@@ -335,9 +335,7 @@ describe("repository selection", () => {
 
       pressRepository(otherName);
       expect(container.textContent).not.toContain(name);
-      expect(container.textContent).toContain(
-        `Selected repository ID: ${id === "1" ? "2" : "1"}`,
-      );
+      expect(container.querySelector('[aria-pressed="true"]')?.textContent).toContain(otherName);
     },
   );
 });
@@ -494,7 +492,7 @@ describe("project form GitHub reconnection", () => {
     const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
     expect(reconnect).toBeDefined();
     await act(async () => reconnect!.click());
-    expect(container.textContent).toContain("Selected repository ID: null");
+    expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
     expect(mocks.handleConnect).toHaveBeenCalledOnce();
   });
 
@@ -528,4 +526,31 @@ it("refreshes repository authorization when the import itself requires reconnect
   await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Create project")!.click());
   expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["github", "repositories"] });
   expect(mocks.replace).not.toHaveBeenCalled();
+});
+
+
+it("offers a manual continuation when an empty search batch has more pages", () => {
+  Object.assign(mocks.query, { data: { pages: [{ repositories: [], nextCursor: "more" }] }, hasNextPage: true });
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  root = createRoot(container);
+  act(() => root!.render(createElement(SelectListHarness)));
+  expect(container.textContent).not.toContain("No repositories found");
+  const more = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Continue searching");
+  expect(more).toBeDefined();
+  act(() => more!.click());
+  expect(mocks.fetchNextPage).toHaveBeenCalledExactlyOnceWith({ cancelRefetch: false });
+});
+
+it("deduplicates repositories if GitHub's sort order shifts between pages", () => {
+  const data = mocks.query.data as { pages: { repositories: { id: number }[]; nextCursor: string }[] };
+  data.pages[1].repositories.unshift(data.pages[0].repositories[0]);
+  renderList();
+  expect(mocks.listProps.data.map((repository: { id: number }) => repository.id)).toEqual([1, 2]);
+});
+
+it("removes the load-more control only when the cursor is exhausted", () => {
+  expect(renderList()).toContain("Load more repositories");
+  Object.assign(mocks.query, { hasNextPage: false });
+  expect(renderList()).not.toContain("Load more repositories");
 });

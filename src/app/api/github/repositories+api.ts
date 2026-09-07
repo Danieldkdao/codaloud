@@ -1,13 +1,14 @@
-import type { GitHubRepository } from "@/features/projects/types";
+import type { GitHubRepositoryPage } from "@/services/github/types";
 import { getCurrentUser } from "@/lib/auth/helpers";
-import { paginationSchema } from "@/lib/schemas";
+import { gitHubRepositoryRequestSchema } from "@/services/github/schemas";
+import { GitHubRepositoryCursorError } from "@/services/github/server/repository-cursor";
 import type { ApiResponse } from "@/lib/types";
 import { apiResponse } from "@/lib/utils";
-import { listGitHubRepositories } from "@/services/github/server/repositories";
+import { listGitHubRepositoryPage } from "@/services/github/server/repositories";
 import { getGitHubAccessToken, getGitHubErrorResponse } from "@/services/github/server/access";
 
 const repositoryResponse = (
-  body: ApiResponse<GitHubRepository[]>,
+  body: ApiResponse<GitHubRepositoryPage>,
   status = 200,
 ) => {
   const response = apiResponse(body, status);
@@ -27,9 +28,15 @@ export const GET = async (request: Request) => {
     }
 
     const { searchParams } = new URL(request.url);
-    const pagination = paginationSchema.safeParse({
+    if (searchParams.has("page")) {
+      return repositoryResponse(
+        { error: true, message: "Use a repository cursor instead of a page number." },
+        400,
+      );
+    }
+    const pagination = gitHubRepositoryRequestSchema.safeParse({
       search: searchParams.get("search") ?? undefined,
-      page: searchParams.get("page") ?? undefined,
+      cursor: searchParams.get("cursor") ?? undefined,
       pageSize: searchParams.get("pageSize") ?? undefined,
     });
     if (!pagination.success) {
@@ -44,7 +51,7 @@ export const GET = async (request: Request) => {
 
     const accessToken = await getGitHubAccessToken(request.headers);
 
-    const repositories = await listGitHubRepositories(
+    const repositories = await listGitHubRepositoryPage(
       accessToken,
       request.signal,
       pagination.data,
@@ -55,6 +62,12 @@ export const GET = async (request: Request) => {
       data: repositories,
     });
   } catch (error) {
+    if (error instanceof GitHubRepositoryCursorError) {
+      return repositoryResponse(
+        { error: true, message: error.message },
+        error.status,
+      );
+    }
     const { body, status } = getGitHubErrorResponse(error);
     return repositoryResponse(body, status);
   }

@@ -1,7 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "expo-router";
+import { useRef, useState } from "react";
 import { Pressable, View } from "react-native";
+import Swipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
@@ -14,6 +19,8 @@ type ProjectsListItemProps = {
 };
 
 export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
+  const swipeable = useRef<SwipeableMethods>(null);
+  const [actionsVisible, setActionsVisible] = useState(false);
   const queryClient = useQueryClient();
   const router = useRouter();
   const status = formatProjectSetupStatus(project.setupStatus);
@@ -27,7 +34,16 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
         year: "numeric",
       })}`;
 
+  const updateProject = () => {
+    swipeable.current?.close();
+    router.push({
+      pathname: "/edit-project",
+      params: { projectId: project.id },
+    });
+  };
+
   const deleteProject = () => {
+    swipeable.current?.close();
     confirmAction(
       "Delete project?",
       `Are you sure you want to delete "${project.name}"? This action cannot be undone.`,
@@ -48,14 +64,61 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   };
 
   return (
-    <Link
-      href={{
-        pathname: "/projects/[projectId]",
-        params: { projectId: project.id },
-      }}
-      asChild
+    <Swipeable
+      ref={swipeable}
+      friction={2}
+      rightThreshold={48}
+      overshootLeft={false}
+      overshootRight={false}
+      containerStyle={{ borderRadius: 16 }}
+      onSwipeableWillOpen={() => setActionsVisible(true)}
+      onSwipeableWillClose={() => setActionsVisible(false)}
+      renderRightActions={() => (
+        <View
+          className="h-full flex-row items-stretch gap-2 pl-2"
+          accessibilityElementsHidden={!actionsVisible}
+          importantForAccessibility={
+            actionsVisible ? "auto" : "no-hide-descendants"
+          }
+        >
+          <Button
+            variant="outline"
+            className="h-full min-h-0 aspect-square shrink-0 rounded-2xl p-0"
+            accessibilityLabel={`Update ${project.name}`}
+            onPress={updateProject}
+          >
+            <Icon
+              family="Feather"
+              name="edit-2"
+              size={22}
+              className="text-foreground"
+              accessible={false}
+            />
+          </Button>
+          <Button
+            variant="destructive"
+            className="h-full min-h-0 aspect-square shrink-0 rounded-2xl p-0"
+            accessibilityLabel={`Delete ${project.name}`}
+            onPress={deleteProject}
+          >
+            <Icon
+              family="Feather"
+              name="trash-2"
+              size={22}
+              className="text-destructive"
+              accessible={false}
+            />
+          </Button>
+        </View>
+      )}
     >
-      <Link.Trigger>
+      <Link
+        href={{
+          pathname: "/projects/[projectId]",
+          params: { projectId: project.id },
+        }}
+        asChild
+      >
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={[
@@ -66,7 +129,15 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
           ]
             .filter(Boolean)
             .join(", ")}
-          accessibilityHint="Open project"
+          accessibilityHint="Open project. Swipe left for Update and Delete."
+          accessibilityActions={[
+            { name: "update", label: "Update project" },
+            { name: "delete", label: "Delete project" },
+          ]}
+          onAccessibilityAction={({ nativeEvent }) => {
+            if (nativeEvent.actionName === "update") updateProject();
+            if (nativeEvent.actionName === "delete") deleteProject();
+          }}
           className="gap-4 rounded-2xl border border-border bg-card p-4 active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <View className="flex-row items-start gap-3">
@@ -118,23 +189,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
             </View>
           </View>
         </Pressable>
-      </Link.Trigger>
-      <Link.Menu>
-        <Link.MenuAction
-          icon="square.and.pencil"
-          onPress={() =>
-            router.push({
-              pathname: "/edit-project",
-              params: { projectId: project.id },
-            })
-          }
-        >
-          Edit project
-        </Link.MenuAction>
-        <Link.MenuAction icon="trash" destructive onPress={deleteProject}>
-          Delete project
-        </Link.MenuAction>
-      </Link.Menu>
-    </Link>
+      </Link>
+    </Swipeable>
   );
 };

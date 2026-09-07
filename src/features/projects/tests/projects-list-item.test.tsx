@@ -1,31 +1,55 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ReactNode } from "react";
+import { act, cloneElement, createElement, useImperativeHandle, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ProjectsListItem } from "@/features/projects/components/projects-list-item";
 import type { ProjectResponseData } from "@/features/projects/types";
+import type { PressableProps } from "react-native";
+import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import type { ConfirmActionOptions } from "@/lib/types";
 
-const mocks = vi.hoisted(() => ({ remove: vi.fn(), confirm: vi.fn(), alert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ remove: vi.fn(), confirm: vi.fn(), alert: vi.fn(), push: vi.fn(), close: vi.fn(), swipe: {} as SwipeableProps, card: {} as PressableProps }));
 vi.mock("@/features/projects/actions/actions", () => ({ deleteProjectAction: mocks.remove }));
 vi.mock("@/lib/utils", () => ({ cn: () => "", confirmAction: mocks.confirm, alert: mocks.alert }));
-vi.mock("expo-router", () => {
-  const Wrapper = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
-  return {
-    useRouter: () => ({ push: vi.fn() }),
-    Link: Object.assign(Wrapper, {
-      Trigger: Wrapper, Menu: Wrapper,
-      MenuAction: ({ children, onPress, disabled }: { children?: ReactNode; onPress?: () => void; disabled?: boolean }) =>
-        createElement("button", { onClick: onPress, disabled }, children),
-    }),
-  };
-});
+vi.mock("expo-router", () => ({
+  useRouter: () => ({ push: mocks.push }),
+  Link: Object.assign(
+    ({ children, href }: { children: ReactElement<PressableProps> | ReactElement<PressableProps>[]; href: unknown }) => {
+      const elements = Array.isArray(children) ? children : [children];
+      return createElement("div", null, cloneElement(elements[0], { onPress: () => mocks.push(href) }), ...elements.slice(1));
+    },
+    {
+      Trigger: ({ children, onPress }: { children: ReactElement<PressableProps>; onPress?: PressableProps["onPress"] }) => cloneElement(children, { onPress }),
+      Menu: ({ children }: { children?: ReactNode }) => children,
+      MenuAction: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => createElement("button", { onClick: onPress }, children),
+    },
+  ),
+}));
+// Exercise the row's action wiring; native gesture recognition is owned by RNGH.
+vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  default: (props: SwipeableProps) => {
+    mocks.swipe = props;
+    useImperativeHandle(props.ref, () => ({ close: mocks.close, openLeft: vi.fn(), openRight: vi.fn(), reset: vi.fn() }));
+    return createElement("div", null, props.children,
+      props.renderRightActions?.({ value: 1 } as never, { value: -200 } as never, { close: mocks.close } as never));
+  },
+}));
 vi.mock("react-native", () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
-  return { View: Wrapper, Pressable: Wrapper };
+  return {
+    View: Wrapper,
+    Pressable: (props: PressableProps) => {
+      mocks.card = props;
+      return createElement("button", { onClick: () => props.onPress?.({} as never), "data-project-card": true }, props.children as ReactNode);
+    },
+  };
 });
+vi.mock("@/components/ui/button", () => ({
+  Button: ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress?: () => void; accessibilityLabel?: string }) =>
+    createElement("button", { onClick: onPress, "aria-label": accessibilityLabel }, children),
+}));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/components/ui/text", () => {
   const Text = ({ children }: { children?: ReactNode }) => createElement("span", null, children);
@@ -47,7 +71,7 @@ let container: HTMLDivElement;
 let unsubscribe: () => void;
 const loadList = vi.fn();
 const openConfirmation = () => act(() => {
-  Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Delete project")!.click();
+  container.querySelector<HTMLButtonElement>('[aria-label="Delete My project"]')!.click();
 });
 const confirm = async () => {
   const options = mocks.confirm.mock.calls[0][2] as ConfirmActionOptions;
@@ -97,4 +121,50 @@ it("alerts on failure, preserves the cache, and allows another attempt", async (
   await confirm();
   expect(mocks.remove).toHaveBeenCalledTimes(2);
   expect(loadList).toHaveBeenCalledOnce();
+});
+
+
+it("reveals Update and Delete without navigating or deleting on swipe", () => {
+  expect(container.querySelector('[aria-label="Update My project"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Delete My project"]')).not.toBeNull();
+  act(() => {
+    mocks.swipe.onSwipeableWillOpen?.("left" as never);
+    mocks.swipe.onSwipeableOpen?.("left" as never);
+  });
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.confirm).not.toHaveBeenCalled();
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it("closes the row and opens the selected project's update form", () => {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Update My project"]')!.click());
+  expect(mocks.close).toHaveBeenCalledOnce();
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith({ pathname: "/edit-project", params: { projectId: project.id } });
+  expect(mocks.confirm).not.toHaveBeenCalled();
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it("still opens a project when its card is tapped", () => {
+  act(() => container.querySelector<HTMLButtonElement>("[data-project-card]")!.click());
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]", params: { projectId: project.id } });
+});
+
+it("closes the row on Delete and leaves the project intact if confirmation is dismissed", () => {
+  openConfirmation();
+  expect(mocks.close).toHaveBeenCalledOnce();
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(client.getQueryData(listKey)).toEqual([project]);
+});
+
+it("offers Update and Delete to screen readers without requiring a swipe", () => {
+  expect(mocks.card.accessibilityActions).toEqual(expect.arrayContaining([
+    { name: "update", label: "Update project" },
+    { name: "delete", label: "Delete project" },
+  ]));
+  act(() => mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "update" } } as never));
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith({ pathname: "/edit-project", params: { projectId: project.id } });
+  act(() => mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "delete" } } as never));
+  expect(mocks.confirm).toHaveBeenCalledOnce();
+  expect(mocks.remove).not.toHaveBeenCalled();
 });

@@ -92,7 +92,8 @@ export const INPUT_TYPE_DEFAULTS: Record<InputType, TextInputProps> = {
 };
 
 export const inputVariants = cva(
-  "min-w-0 rounded-lg border border-input px-3 py-2 text-base font-sans text-foreground placeholder:text-muted-foreground selection:text-ring focus:border-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring",
+  // Keep the focus outline inside the border so form scroll views cannot clip it.
+  "min-w-0 rounded-lg border border-input px-3 py-2 text-base font-sans text-foreground placeholder:text-muted-foreground selection:text-ring focus:border-ring focus:outline-2 focus:outline-offset-[-2px] focus:outline-ring",
   {
     variants: {
       variant: {

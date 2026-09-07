@@ -86,6 +86,9 @@ vi.mock("react-native", () => ({
     );
   },
 }));
+vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  default: ({ children }: { children?: ReactNode }) => children,
+}));
 vi.mock("expo-router", () => {
   const Link = ({
     children,

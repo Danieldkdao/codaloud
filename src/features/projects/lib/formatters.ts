@@ -1,8 +1,35 @@
 import type { ProjectSetupStatus } from "@/db/shared";
+import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type {
   ProjectSortField,
   ProjectSortOrder,
 } from "@/features/projects/lib/project-params";
+
+export const formatProjectSource = (source: CreateProjectSchema["source"]): {
+  value: CreateProjectSchema["source"];
+  icon: "box" | "github";
+  title: string;
+  description: string;
+} => {
+  switch (source) {
+    case "new":
+      return {
+        value: source,
+        icon: "box",
+        title: "New project",
+        description: "Start from scratch in an empty cloud sandbox.",
+      };
+    case "github":
+      return {
+        value: source,
+        icon: "github",
+        title: "Import from GitHub",
+        description: "Start with an existing GitHub repository.",
+      };
+    default:
+      throw new Error(`Unsupported project source: ${source satisfies never}`);
+  }
+};
 
 export const formatProjectSetupStatus = (status: ProjectSetupStatus): {
   label: string;

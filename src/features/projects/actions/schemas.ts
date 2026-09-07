@@ -21,6 +21,14 @@ export const projectResponseSchema = z.object({
 
 export type ProjectResponseSchema = z.infer<typeof projectResponseSchema>;
 
+export const readProjectResponseSchema = z.object({
+  error: z.literal(false),
+  message: z.string(),
+  data: projectResponseSchema,
+});
+
+export type ReadProjectResponseSchema = z.infer<typeof readProjectResponseSchema>;
+
 export const projectPageSchema = z.object({
   projects: z.array(projectResponseSchema),
   nextCursor: projectCursorTokenSchema.nullable(),
@@ -64,6 +72,13 @@ export const createProjectSchema = z.discriminatedUnion(
 
 export type CreateProjectSchema = z.infer<typeof createProjectSchema>;
 
+export const updateProjectSchema = z.strictObject(projectFields).partial().refine(
+  (data) => Object.values(data).some((value) => value !== undefined),
+  "Provide at least one field to update.",
+);
+
+export type UpdateProjectSchema = z.infer<typeof updateProjectSchema>;
+
 export const createProjectFormSchema = createProjectSchema;
 
 export type CreateProjectFormSchema = z.infer<typeof createProjectFormSchema>;
@@ -78,3 +93,17 @@ export const createProjectResponseSchema = z.discriminatedUnion("error", [
 ]);
 
 export type CreateProjectResponseSchema = z.infer<typeof createProjectResponseSchema>;
+
+export const updateProjectResponseSchema = z.discriminatedUnion("error", [
+  z.object({ error: z.literal(true), message: z.string().trim().min(1), code: z.string().optional() }),
+  readProjectResponseSchema.extend({ message: z.string().trim().min(1) }),
+]);
+
+export type UpdateProjectResponseSchema = z.infer<typeof updateProjectResponseSchema>;
+
+export const deleteProjectResponseSchema = z.discriminatedUnion("error", [
+  z.object({ error: z.literal(true), message: z.string().trim().min(1), code: z.string().optional() }),
+  readProjectResponseSchema.extend({ message: z.string().trim().min(1) }),
+]);
+
+export type DeleteProjectResponseSchema = z.infer<typeof deleteProjectResponseSchema>;

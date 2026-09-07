@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {
   act,
+  Children,
   cloneElement,
   createElement,
   type ComponentProps,
@@ -25,6 +26,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/features/projects/hooks/use-projects", () => ({
   useProjects: mocks.useProjects,
 }));
+vi.mock("@/features/projects/actions/actions", () => ({ deleteProjectAction: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 vi.mock("@/components/app-wrapper", () => ({
   AppWrapper: ({ children }: { children: ReactNode }) => children,
 }));
@@ -83,18 +86,33 @@ vi.mock("react-native", () => ({
     );
   },
 }));
-vi.mock("expo-router", () => ({
-  Link: ({
+vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  default: ({ children }: { children?: ReactNode }) => children,
+}));
+vi.mock("expo-router", () => {
+  const Link = ({
     children,
     href,
   }: {
-    children: ReactElement<{ href?: string }>;
+    children: ReactNode;
     href: { params: { projectId: string } };
   }) =>
-    cloneElement(children, {
-      href: `/projects/${encodeURIComponent(href.params.projectId)}`,
+    cloneElement(
+      Children.toArray(children)[0] as ReactElement<{ href?: string }>,
+      { href: `/projects/${encodeURIComponent(href.params.projectId)}` },
+    );
+  return {
+    useRouter: () => ({ push: vi.fn() }),
+    Link: Object.assign(Link, {
+      Trigger: ({ children, href }: {
+        children: ReactElement<{ href?: string }>;
+        href?: string;
+      }) => cloneElement(children, { href }),
+      Menu: () => null,
+      MenuAction: () => null,
     }),
-}));
+  };
+});
 vi.mock("@/components/ui/text", () => {
   const Text = ({
     children,

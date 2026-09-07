@@ -59,7 +59,8 @@ vi.mock("react-native", () => ({
   ScrollView: ({ children }: any) =>
     createElement("section", { "data-native-scroll-view": true }, children),
   useWindowDimensions: () => ({ width: 390, height: 700 }),
-  KeyboardAvoidingView: ({ children }: any) => createElement("div", null, children),
+  KeyboardAvoidingView: ({ children }: any) =>
+    createElement("div", null, children),
   ActivityIndicator: "progress",
   Platform: { select: (options: { default: string }) => options.default },
   FlatList: (props: any) => {
@@ -78,7 +79,9 @@ vi.mock("react-native", () => ({
     return createElement(
       "section",
       { className: props.className, "data-native-flat-list": true },
-      props.renderScrollComponent ? props.renderScrollComponent({ children }) : children,
+      props.renderScrollComponent
+        ? props.renderScrollComponent({ children })
+        : children,
     );
   },
 }));
@@ -128,7 +131,12 @@ vi.mock("@/components/ui/button", () => ({
     onPress?: () => void;
     disabled?: boolean;
     loading?: boolean;
-  }) => createElement("button", { onClick: onPress, disabled, "aria-busy": loading }, children),
+  }) =>
+    createElement(
+      "button",
+      { onClick: onPress, disabled, "aria-busy": loading },
+      children,
+    ),
 }));
 vi.mock("expo-router", () => ({
   Stack: { Screen: () => null },
@@ -149,7 +157,7 @@ vi.mock("@/services/github/hooks/use-github-connected", () => ({
 }));
 
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
-import { ProjectForm } from "@/features/projects/components/project-form";
+import { CreateProjectForm } from "@/features/projects/components/create-project-form";
 import NewProjectScreen from "@/app/new-project";
 
 beforeEach(() => {
@@ -159,26 +167,35 @@ beforeEach(() => {
   mocks.source = "github";
   mocks.listProps = {};
   mocks.createProject.mockReset();
-  mocks.createProject.mockResolvedValue({ error: true, message: "Please try again." });
+  mocks.createProject.mockResolvedValue({
+    error: true,
+    message: "Please try again.",
+  });
   mocks.query = {
     data: {
       pages: [
-        { repositories: [
-          {
-            id: 1,
-            fullName: "owner/private-repo",
-            description: "A repository description",
-            private: true,
-          },
-        ], nextCursor: "second" },
-        { repositories: [
-          {
-            id: 2,
-            fullName: "owner/public-repo",
-            description: null,
-            private: false,
-          },
-        ], nextCursor: "third" },
+        {
+          repositories: [
+            {
+              id: 1,
+              fullName: "owner/private-repo",
+              description: "A repository description",
+              private: true,
+            },
+          ],
+          nextCursor: "second",
+        },
+        {
+          repositories: [
+            {
+              id: 2,
+              fullName: "owner/public-repo",
+              description: null,
+              private: false,
+            },
+          ],
+          nextCursor: "third",
+        },
       ],
     },
     isPending: false,
@@ -213,21 +230,31 @@ describe("new-project screen scrolling", () => {
     const list = container.querySelector("[data-native-flat-list]");
     expect(list).not.toBeNull();
     expect(list!.closest("[data-native-scroll-view]")).toBeNull();
-    expect(container.querySelectorAll("[data-native-scroll-view]")).toHaveLength(1);
+    expect(
+      container.querySelectorAll("[data-native-scroll-view]"),
+    ).toHaveLength(1);
     expect(list!.textContent).not.toContain("Project name");
     expect(list!.textContent).toContain("owner/private-repo");
     expect(list!.textContent).not.toContain("Create project");
   });
 
-  it.each([["new", false], ["github", false]])(
+  it.each([
+    ["new", false],
+    ["github", false],
+  ])(
     "keeps the form scrollable without a repository list for source=%s, connected=%s",
     (source, connected) => {
       Object.assign(mocks, { source, connected });
       const container = document.createElement("div");
-      container.innerHTML = renderToStaticMarkup(createElement(NewProjectScreen));
-      expect(container.querySelector("[data-native-scroll-view]")?.textContent).toContain("Project name");
-      const submit = Array.from(container.querySelectorAll("button"))
-        .find((button) => button.textContent === "Create project")!;
+      container.innerHTML = renderToStaticMarkup(
+        createElement(NewProjectScreen),
+      );
+      expect(
+        container.querySelector("[data-native-scroll-view]")?.textContent,
+      ).toContain("Project name");
+      const submit = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Create project",
+      )!;
       expect(submit.closest("[data-native-scroll-view]")).toBeNull();
       expect(container.querySelector("[data-native-flat-list]")).toBeNull();
     },
@@ -239,32 +266,59 @@ describe("new-project screen scrolling", () => {
     const container = document.createElement("div");
     root = createRoot(container);
     act(() => root!.render(createElement(NewProjectScreen)));
-    const nameInput = container.querySelector('input[placeholder="My project"]');
-    const repositoryButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("owner/private-repo"))!;
+    const nameInput = container.querySelector(
+      'input[placeholder="My project"]',
+    );
+    const repositoryButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("owner/private-repo"))!;
     act(() => repositoryButton.click());
-    expect(container.querySelector('input[placeholder="My project"]')).toBe(nameInput);
+    expect(container.querySelector('input[placeholder="My project"]')).toBe(
+      nameInput,
+    );
     expect((nameInput as HTMLInputElement).value).toBe("My project");
     expect(container.textContent).toContain("Create project");
-    expect(container.querySelector('[placeholder="Search repositories"]')).toBeNull();
+    expect(
+      container.querySelector('[placeholder="Search repositories"]'),
+    ).toBeNull();
     expect(container.querySelector("[data-native-flat-list]")).toBeNull();
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
   });
 
-  it.each([20, 500])("keeps submission outside the bounded picker with %s repositories", (count) => {
-    mocks.connected = true;
-    mocks.query.data = { pages: [{ repositories: Array.from({ length: count }, (_, index) => ({
-      id: index + 1, fullName: `owner/repo-${index}`, description: null, private: false,
-    })), nextCursor: "more" }] };
-    const container = document.createElement("div");
-    container.innerHTML = renderToStaticMarkup(createElement(NewProjectScreen));
-    const submit = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent === "Create project")!;
-    expect(submit.closest("[data-native-flat-list]")).toBeNull();
-    expect(submit.closest("[data-native-scroll-view]")).toBeNull();
-    expect(container.querySelector("[data-native-flat-list]")?.closest(".max-h-80")).not.toBeNull();
-    expect(mocks.listProps.data).toHaveLength(count);
-  });
+  it.each([20, 500])(
+    "keeps submission outside the bounded picker with %s repositories",
+    (count) => {
+      mocks.connected = true;
+      mocks.query.data = {
+        pages: [
+          {
+            repositories: Array.from({ length: count }, (_, index) => ({
+              id: index + 1,
+              fullName: `owner/repo-${index}`,
+              description: null,
+              private: false,
+            })),
+            nextCursor: "more",
+          },
+        ],
+      };
+      const container = document.createElement("div");
+      container.innerHTML = renderToStaticMarkup(
+        createElement(NewProjectScreen),
+      );
+      const submit = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Create project",
+      )!;
+      expect(submit.closest("[data-native-flat-list]")).toBeNull();
+      expect(submit.closest("[data-native-scroll-view]")).toBeNull();
+      expect(
+        container
+          .querySelector("[data-native-flat-list]")
+          ?.closest(".max-h-80"),
+      ).not.toBeNull();
+      expect(mocks.listProps.data).toHaveLength(count);
+    },
+  );
 });
 
 describe("GitHub repositories list", () => {
@@ -345,7 +399,7 @@ describe("GitHub repositories list", () => {
     "gates repositories for source=%s, connected=%s, checking=%s",
     (source, connected, checking, visible) => {
       Object.assign(mocks, { source, connected, checking });
-      const html = renderToStaticMarkup(createElement(ProjectForm));
+      const html = renderToStaticMarkup(createElement(CreateProjectForm));
       expect(html.includes("owner/private-repo")).toBe(visible);
     },
   );
@@ -389,7 +443,9 @@ describe("repository selection", () => {
       expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
       pressRepository(name);
 
-      expect(container.querySelector('[aria-pressed="true"]')?.textContent).toContain(name);
+      expect(
+        container.querySelector('[aria-pressed="true"]')?.textContent,
+      ).toContain(name);
       expect(container.textContent).toContain(name);
       expect(container.textContent).not.toContain(otherName);
       expect(
@@ -412,7 +468,9 @@ describe("repository selection", () => {
 
       pressRepository(otherName);
       expect(container.textContent).not.toContain(name);
-      expect(container.querySelector('[aria-pressed="true"]')?.textContent).toContain(otherName);
+      expect(
+        container.querySelector('[aria-pressed="true"]')?.textContent,
+      ).toContain(otherName);
     },
   );
 });
@@ -422,7 +480,7 @@ describe("project form repository validation", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     root = createRoot(container);
-    act(() => root!.render(createElement(ProjectForm)));
+    act(() => root!.render(createElement(CreateProjectForm)));
     return container;
   };
 
@@ -495,8 +553,16 @@ describe("project form repository validation", () => {
 
   it("disables submission while creating and redirects to the returned project after the success alert", async () => {
     mocks.source = "new";
-    let resolveCreation!: (result: { error: false; message: string; projectId: string }) => void;
-    mocks.createProject.mockReturnValue(new Promise((resolve) => { resolveCreation = resolve; }));
+    let resolveCreation!: (result: {
+      error: false;
+      message: string;
+      projectId: string;
+    }) => void;
+    mocks.createProject.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreation = resolve;
+      }),
+    );
     const container = mountForm();
     await press(container, "Create project");
     const button = Array.from(container.querySelectorAll("button")).find(
@@ -505,16 +571,30 @@ describe("project form repository validation", () => {
     expect(button.disabled).toBe(true);
     expect(button.getAttribute("aria-busy")).toBe("true");
     await press(container, "Create project");
-    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({ name: "My project", source: "new" });
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({
+      name: "My project",
+      source: "new",
+    });
     expect(mocks.alert).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalled();
 
-    await act(async () => resolveCreation({ error: false, message: "Project created successfully.", projectId: "new-project-id" }));
-    expect(mocks.alert).toHaveBeenCalledWith("Success: Project created successfully.");
+    await act(async () =>
+      resolveCreation({
+        error: false,
+        message: "Project created successfully.",
+        projectId: "new-project-id",
+      }),
+    );
+    expect(mocks.alert).toHaveBeenCalledWith(
+      "Success: Project created successfully.",
+    );
     expect(mocks.replace).toHaveBeenCalledWith({
-      pathname: "/projects/[projectId]", params: { projectId: "new-project-id" },
+      pathname: "/projects/[projectId]",
+      params: { projectId: "new-project-id" },
     });
-    expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(mocks.replace.mock.invocationCallOrder[0]);
+    expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.replace.mock.invocationCallOrder[0],
+    );
     expect(button.disabled).toBe(false);
     expect(button.getAttribute("aria-busy")).toBe("false");
   });
@@ -535,95 +615,147 @@ describe("project form repository validation", () => {
   });
 });
 
-
 describe("project form GitHub reconnection", () => {
   const mount = () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     root = createRoot(container);
-    act(() => root!.render(createElement(ProjectForm)));
+    act(() => root!.render(createElement(CreateProjectForm)));
     return container;
   };
 
-  it.each([false, true])("offers reconnection for a rejected token even with cached repositories (later page: %s)", async (laterPage) => {
-    mocks.connected = true;
-    Object.assign(mocks.query, {
-      error: Object.assign(new Error("Reconnect GitHub to access your repositories."), { status: 403, code: "GITHUB_RECONNECT_REQUIRED" }),
-      isFetchNextPageError: laterPage,
-    });
-    const container = mount();
-    const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
-    expect(reconnect).toBeDefined();
-    expect(container.textContent).not.toContain("Try again");
-    await act(async () => reconnect!.click());
-    expect(mocks.handleConnect).toHaveBeenCalledOnce();
-    expect(mocks.refetch).not.toHaveBeenCalled();
-  });
+  it.each([false, true])(
+    "offers reconnection for a rejected token even with cached repositories (later page: %s)",
+    async (laterPage) => {
+      mocks.connected = true;
+      Object.assign(mocks.query, {
+        error: Object.assign(
+          new Error("Reconnect GitHub to access your repositories."),
+          { status: 403, code: "GITHUB_RECONNECT_REQUIRED" },
+        ),
+        isFetchNextPageError: laterPage,
+      });
+      const container = mount();
+      const reconnect = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Reconnect GitHub",
+      );
+      expect(reconnect).toBeDefined();
+      expect(container.textContent).not.toContain("Try again");
+      await act(async () => reconnect!.click());
+      expect(mocks.handleConnect).toHaveBeenCalledOnce();
+      expect(mocks.refetch).not.toHaveBeenCalled();
+    },
+  );
 
   it("still shows reconnection when a previously selected repository loses access", async () => {
     mocks.connected = true;
     const container = mount();
-    await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("owner/private-repo"))!.click());
-    Object.assign(mocks.query, { error: Object.assign(new Error("Reconnect GitHub"), { code: "GITHUB_RECONNECT_REQUIRED", status: 403 }) });
-    act(() => root!.render(createElement(ProjectForm)));
-    const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
+    await act(async () =>
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("owner/private-repo"))!
+        .click(),
+    );
+    Object.assign(mocks.query, {
+      error: Object.assign(new Error("Reconnect GitHub"), {
+        code: "GITHUB_RECONNECT_REQUIRED",
+        status: 403,
+      }),
+    });
+    act(() => root!.render(createElement(CreateProjectForm)));
+    const reconnect = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Reconnect GitHub",
+    );
     expect(reconnect).toBeDefined();
     await act(async () => reconnect!.click());
     expect(container.querySelector('[aria-pressed="true"]')).toBeNull();
     expect(mocks.handleConnect).toHaveBeenCalledOnce();
   });
 
-  it.each([403, 429, 502])("keeps ordinary retry for non-authentication error %s", (status) => {
-    mocks.connected = true;
-    Object.assign(mocks.query, { error: Object.assign(new Error("Request failed"), { status }) });
-    const container = mount();
-    expect(container.textContent).toContain("Try again");
-    expect(container.textContent).not.toContain("Reconnect GitHub");
-  });
+  it.each([403, 429, 502])(
+    "keeps ordinary retry for non-authentication error %s",
+    (status) => {
+      mocks.connected = true;
+      Object.assign(mocks.query, {
+        error: Object.assign(new Error("Request failed"), { status }),
+      });
+      const container = mount();
+      expect(container.textContent).toContain("Try again");
+      expect(container.textContent).not.toContain("Reconnect GitHub");
+    },
+  );
 
   it("disables reconnect while authorization is in progress", () => {
     mocks.connected = true;
     mocks.reconnectPending = true;
-    Object.assign(mocks.query, { error: Object.assign(new Error("Reconnect GitHub"), { code: "GITHUB_RECONNECT_REQUIRED" }) });
+    Object.assign(mocks.query, {
+      error: Object.assign(new Error("Reconnect GitHub"), {
+        code: "GITHUB_RECONNECT_REQUIRED",
+      }),
+    });
     const container = mount();
-    const reconnect = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Reconnect GitHub");
+    const reconnect = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Reconnect GitHub",
+    );
     expect(reconnect?.disabled).toBe(true);
   });
 });
 
-
 it("refreshes repository authorization when the import itself requires reconnection", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.connected = true;
-  mocks.createProject.mockResolvedValue({ error: true, code: "GITHUB_RECONNECT_REQUIRED", message: "Reconnect GitHub" });
+  mocks.createProject.mockResolvedValue({
+    error: true,
+    code: "GITHUB_RECONNECT_REQUIRED",
+    message: "Reconnect GitHub",
+  });
   const container = document.createElement("div");
   root = createRoot(container);
-  act(() => root!.render(createElement(ProjectForm)));
-  await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("owner/private-repo"))!.click());
-  await act(async () => Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Create project")!.click());
-  expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["github", "repositories"] });
+  act(() => root!.render(createElement(CreateProjectForm)));
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("owner/private-repo"))!
+      .click(),
+  );
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Create project")!
+      .click(),
+  );
+  expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+    queryKey: ["github", "repositories"],
+  });
   expect(mocks.replace).not.toHaveBeenCalled();
 });
 
-
 it("offers a manual continuation when an empty search batch has more pages", () => {
-  Object.assign(mocks.query, { data: { pages: [{ repositories: [], nextCursor: "more" }] }, hasNextPage: true });
+  Object.assign(mocks.query, {
+    data: { pages: [{ repositories: [], nextCursor: "more" }] },
+    hasNextPage: true,
+  });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   root = createRoot(container);
   act(() => root!.render(createElement(SelectListHarness)));
   expect(container.textContent).not.toContain("No repositories found");
-  const more = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Continue searching");
+  const more = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Continue searching",
+  );
   expect(more).toBeDefined();
   act(() => more!.click());
-  expect(mocks.fetchNextPage).toHaveBeenCalledExactlyOnceWith({ cancelRefetch: false });
+  expect(mocks.fetchNextPage).toHaveBeenCalledExactlyOnceWith({
+    cancelRefetch: false,
+  });
 });
 
 it("deduplicates repositories if GitHub's sort order shifts between pages", () => {
-  const data = mocks.query.data as { pages: { repositories: { id: number }[]; nextCursor: string }[] };
+  const data = mocks.query.data as {
+    pages: { repositories: { id: number }[]; nextCursor: string }[];
+  };
   data.pages[1].repositories.unshift(data.pages[0].repositories[0]);
   renderList();
-  expect(mocks.listProps.data.map((repository: { id: number }) => repository.id)).toEqual([1, 2]);
+  expect(
+    mocks.listProps.data.map((repository: { id: number }) => repository.id),
+  ).toEqual([1, 2]);
 });
 
 it("removes the load-more control only when the cursor is exhausted", () => {

@@ -1,9 +1,10 @@
 import { clsx, type ClassValue } from "clsx";
 import { Alert, Platform } from "react-native";
 import { twMerge } from "tailwind-merge";
-import { ApiResponse } from "./types";
+import type { ApiResponse, ConfirmActionOptions } from "./types";
 import { getBaseURL } from "./auth/utils";
 import { FetchRequestInit } from "expo/fetch";
+import z from "zod";
 
 export const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
@@ -18,6 +19,23 @@ export const alert = (message: string) => {
   } else {
     Alert.alert(message);
   }
+};
+
+export const confirmAction = (
+  title: string,
+  description: string,
+  { cancelText = "Cancel", actionText, onConfirmPress }: ConfirmActionOptions,
+) => {
+  if (Platform.OS === "web") {
+    // Browser confirmation dialogs use the browser's own button labels.
+    if (window.confirm(`${title}\n\n${description}`)) onConfirmPress();
+    return;
+  }
+
+  Alert.alert(title, description, [
+    { text: cancelText, style: "cancel" },
+    { text: actionText, style: "destructive", onPress: onConfirmPress },
+  ]);
 };
 
 export const apiResponse = <T = never>(
@@ -39,7 +57,9 @@ export const createSearchParams = (
       .map(([key, value]) => [key, String(value)]),
   );
 
-export const createRequestHeaders = async (init?: HeadersInit): Promise<Headers> => {
+export const createRequestHeaders = async (
+  init?: HeadersInit,
+): Promise<Headers> => {
   const headers = new Headers(init);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
@@ -51,4 +71,15 @@ export const createRequestHeaders = async (init?: HeadersInit): Promise<Headers>
   }
 
   return headers;
+};
+
+export const getContentType = (headers: Headers): string | undefined =>
+  headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+
+export const isValidIds = (ids: string | string[]) => {
+  const idSchema = z.uuid();
+  if (Array.isArray(ids)) {
+    return ids.every((id) => idSchema.safeParse(id).success);
+  }
+  return idSchema.safeParse(ids).success;
 };

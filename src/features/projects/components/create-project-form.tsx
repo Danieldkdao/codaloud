@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { RadioItem } from "@/components/ui/radio-item";
 import { PText } from "@/components/ui/text";
 import { createProjectAction } from "@/features/projects/actions/actions";
+import { formatProjectSource } from "@/features/projects/lib/formatters";
 import { alert } from "@/lib/utils";
 import { useGitHubConnected } from "@/services/github/hooks/use-github-connected";
 import {
@@ -18,29 +19,20 @@ import {
 } from "@/features/projects/actions/schemas";
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
 
-const projectSources = [
-  {
-    value: "new",
-    icon: "box",
-    title: "New project",
-    description: "Start from scratch in an empty cloud sandbox.",
-  },
-  {
-    value: "github",
-    icon: "github",
-    title: "Import from GitHub",
-    description: "Start with an existing GitHub repository.",
-  },
-] as const;
+const projectSources = ["new", "github"] as const satisfies readonly CreateProjectFormSchema["source"][];
 
-export const ProjectForm = () => {
+export const CreateProjectForm = () => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { source: initialSource, name: initialName } = useLocalSearchParams<{
     source?: string;
     name?: string;
   }>();
-  const { control, handleSubmit, formState: { isSubmitting } } = useForm<CreateProjectFormSchema>({
+  const {
+    control,
+    handleSubmit,
+    formState: { isSubmitting },
+  } = useForm<CreateProjectFormSchema>({
     resolver: zodResolver(createProjectFormSchema),
     defaultValues: {
       name: typeof initialName === "string" ? initialName : "",
@@ -59,14 +51,15 @@ export const ProjectForm = () => {
     if (createdProject.error) {
       if (createdProject.code === "GITHUB_RECONNECT_REQUIRED") {
         // A token may expire after selection. Refresh the picker so it offers reconnection.
-        void queryClient.invalidateQueries({ queryKey: ["github", "repositories"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["github", "repositories"],
+        });
       }
       alert(`Error: ${createdProject.message}`);
       return;
     }
 
     void queryClient.invalidateQueries({ queryKey: ["projects"] });
-    alert(`Success: ${createdProject.message}`);
     router.replace({
       pathname: "/projects/[projectId]",
       params: { projectId: createdProject.projectId },
@@ -133,18 +126,22 @@ export const ProjectForm = () => {
               accessibilityLabel="Project source"
               className="gap-3"
             >
-              {projectSources.map((source) => (
-                <RadioItem
-                  key={source.value}
-                  value={source.value}
-                  selectedValue={value}
-                  onValueChange={onChange}
-                  onBlur={onBlur}
-                  title={source.title}
-                  description={source.description}
-                  icon={{ family: "Feather", name: source.icon }}
-                />
-              ))}
+              {projectSources.map((source) => {
+                const option = formatProjectSource(source);
+
+                return (
+                  <RadioItem
+                    key={option.value}
+                    value={option.value}
+                    selectedValue={value}
+                    onValueChange={onChange}
+                    onBlur={onBlur}
+                    title={option.title}
+                    description={option.description}
+                    icon={{ family: "Feather", name: option.icon }}
+                  />
+                );
+              })}
             </View>
             {error && (
               <PText
@@ -198,7 +195,10 @@ export const ProjectForm = () => {
                   />
                 ) : (
                   <View className="gap-3">
-                    <PText accessibilityLiveRegion="polite" className="text-muted-foreground">
+                    <PText
+                      accessibilityLiveRegion="polite"
+                      className="text-muted-foreground"
+                    >
                       {isChecking
                         ? "Checking GitHub connection…"
                         : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}
@@ -211,7 +211,11 @@ export const ProjectForm = () => {
                   </View>
                 )}
                 {error && (
-                  <PText selectable accessibilityRole="alert" className="text-destructive">
+                  <PText
+                    selectable
+                    accessibilityRole="alert"
+                    className="text-destructive"
+                  >
                     {error.message}
                   </PText>
                 )}

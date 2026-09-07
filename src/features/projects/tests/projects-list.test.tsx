@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {
   act,
+  Children,
   cloneElement,
   createElement,
   type ComponentProps,
@@ -83,18 +84,29 @@ vi.mock("react-native", () => ({
     );
   },
 }));
-vi.mock("expo-router", () => ({
-  Link: ({
+vi.mock("expo-router", () => {
+  const Link = ({
     children,
     href,
   }: {
-    children: ReactElement<{ href?: string }>;
+    children: ReactNode;
     href: { params: { projectId: string } };
   }) =>
-    cloneElement(children, {
-      href: `/projects/${encodeURIComponent(href.params.projectId)}`,
+    cloneElement(
+      Children.toArray(children)[0] as ReactElement<{ href?: string }>,
+      { href: `/projects/${encodeURIComponent(href.params.projectId)}` },
+    );
+  return {
+    Link: Object.assign(Link, {
+      Trigger: ({ children, href }: {
+        children: ReactElement<{ href?: string }>;
+        href?: string;
+      }) => cloneElement(children, { href }),
+      Menu: () => null,
+      MenuAction: () => null,
     }),
-}));
+  };
+});
 vi.mock("@/components/ui/text", () => {
   const Text = ({
     children,

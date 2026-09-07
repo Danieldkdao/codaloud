@@ -1,7 +1,54 @@
 import { updateProjectSchema } from "@/features/projects/actions/schemas";
-import { updateUserProjectDb } from "@/features/projects/server/projects";
+import {
+  confirmUserProjectOwnership,
+  updateUserProjectDb,
+} from "@/features/projects/server/projects";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { apiResponse, getContentType, isValidIds } from "@/lib/utils";
+
+export const GET = async (
+  request: Request,
+  { projectId }: { projectId: string },
+) => {
+  try {
+    const { userId } = await getCurrentUser(request.headers);
+
+    if (!userId) {
+      return apiResponse(
+        { error: true, message: "You must be signed in to view a project." },
+        401,
+      );
+    }
+
+    if (!isValidIds(projectId)) {
+      return apiResponse({ error: true, message: "Invalid project ID." }, 400);
+    }
+
+    const existingProject = await confirmUserProjectOwnership(
+      userId,
+      projectId,
+    );
+
+    if (!existingProject) {
+      return apiResponse({ error: true, message: "Project not found." }, 404);
+    }
+
+    const response = apiResponse({
+      error: false,
+      message: "Project loaded successfully.",
+      data: existingProject,
+    });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  } catch (error) {
+    console.error("Failed to load project:", error);
+
+    return apiResponse(
+      { error: true, message: "Unable to load project. Please try again." },
+      500,
+    );
+  }
+};
 
 export const PATCH = async (
   request: Request,

@@ -50,3 +50,5 @@ Organize application code under `src/`:
 - `services/`: Third-party integrations, organized by service, such as Trigger.dev, Daytona, or the Vercel AI SDK. For example, the AI integration could live in `services/ai/`.
 
 Keep resource-specific code in its feature folder; use shared folders for code with application-wide responsibilities or reuse across resources.
+
+When creating test files, place feature tests in `src/features/<feature>/tests/` and service tests in `src/services/<service>/tests/` (for example, `src/features/projects/tests/` and `src/services/github/tests/`). Keep tests for shared infrastructure, such as Query Client, in the root `tests/` folder. Use `.test.ts` or `.test.tsx` filenames.

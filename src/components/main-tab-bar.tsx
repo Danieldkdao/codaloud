@@ -119,13 +119,21 @@ export const MainTabBar = () => {
   return (
     <View
       style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        pointerEvents: "box-none",
         paddingLeft: 16 + insets.left,
         paddingRight: 16 + insets.right,
         paddingTop: 12,
         paddingBottom: Math.max(insets.bottom, 12),
       }}
     >
-      <View className="w-full max-w-md flex-row items-center gap-3 self-center">
+      <View
+        className="w-full max-w-md flex-row items-center gap-3 self-center"
+        style={{ pointerEvents: "box-none" }}
+      >
         <View
           className="min-w-0 flex-1 rounded-full"
           style={{

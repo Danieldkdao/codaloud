@@ -2,8 +2,7 @@ import { AppWrapper } from "@/components/app-wrapper";
 import { HeadingText } from "@/components/ui/text";
 
 export const PlaceholderScreen = ({ title }: { title: string }) => (
-  // The main layout reserves space for the dock and its bottom safe area.
-  <AppWrapper contentContainerStyle={{ justifyContent: "center", paddingBottom: 24 }}>
+  <AppWrapper tabBarShown contentContainerStyle={{ justifyContent: "center" }}>
     <HeadingText
       selectable
       accessibilityRole="header"

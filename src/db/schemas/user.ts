@@ -7,6 +7,7 @@ import {
   uuid,
   index,
 } from "drizzle-orm/pg-core";
+import { ProjectTable } from "./project";
 
 export const user = pgTable("user", {
   id: uuid("id")
@@ -91,6 +92,7 @@ export const verification = pgTable(
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  projects: many(ProjectTable),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

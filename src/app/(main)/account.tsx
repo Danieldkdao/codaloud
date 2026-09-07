@@ -1,5 +1,17 @@
-import { PlaceholderScreen } from "@/components/placeholder-screen";
+import { AppWrapper } from "@/components/app-wrapper";
+import { HeadingText } from "@/components/ui/text";
+import { GitHubConnection } from "@/services/github/components/github-connection";
 
-const AccountScreen = () => <PlaceholderScreen title="Account" />;
+const AccountScreen = () => (
+  <AppWrapper tabBarShown contentContainerStyle={{ gap: 24 }}>
+    <HeadingText
+      accessibilityRole="header"
+      className="text-3xl text-foreground"
+    >
+      Account
+    </HeadingText>
+    <GitHubConnection />
+  </AppWrapper>
+);
 
 export default AccountScreen;

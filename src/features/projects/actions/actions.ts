@@ -3,15 +3,15 @@ import { Platform } from "react-native";
 import {
   createProjectFormSchema,
   createProjectResponseSchema,
+  readProjectsResponseSchema,
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
 import {
   projectParamsSchema,
   type ProjectParamsSchema,
 } from "@/features/projects/lib/project-params";
-import type { ProjectResponseData } from "@/features/projects/lib/types";
+import type { ProjectResponseData } from "@/features/projects/types";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import type { ApiResponse } from "@/lib/types";
 import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
 
 export const readUserProjectsAction = async (
@@ -33,10 +33,11 @@ export const readUserProjectsAction = async (
     });
     if (!response.ok) return null;
 
-    const result: ApiResponse<ProjectResponseData[]> = await response.json();
-    if (result?.error !== false || !Array.isArray(result.data)) return null;
+    const payload: unknown = await response.json();
+    const result = readProjectsResponseSchema.safeParse(payload);
+    if (!result.success) return null;
 
-    return result.data;
+    return result.data.data;
   } catch {
     return null;
   }

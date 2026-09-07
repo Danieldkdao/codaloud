@@ -87,6 +87,38 @@ describe("readUserProjectsAction", () => {
     expect(await readUserProjectsAction()).toBeNull();
   });
 
+  it.each([
+    null, "project", {},
+    { ...projects[0], setupStatus: undefined },
+    { ...projects[0], setupStatus: "unknown" },
+    { ...projects[0], id: 123 },
+    { ...projects[0], id: "" },
+    { ...projects[0], userId: null },
+    { ...projects[0], name: {} },
+    { ...projects[0], sandboxId: 123 },
+    { ...projects[0], setupError: false },
+    { ...projects[0], githubRepositoryId: 123 },
+    { ...projects[0], lastOpenedFilePath: [] },
+    { ...projects[0], lastOpenedAt: "invalid date" },
+    { ...projects[0], createdAt: null },
+    { ...projects[0], updatedAt: "invalid date" },
+  ])("rejects the whole page when any project is malformed: %j", async (invalidProject) => {
+    network.mockResolvedValue(Response.json({
+      error: false, message: "Loaded", data: [...projects, invalidProject],
+    }));
+    expect(await readUserProjectsAction()).toBeNull();
+  });
+
+  it.each(["pending", "running", "ready", "failed"])("preserves valid %s projects and populated nullable fields", async (setupStatus) => {
+    const data = [{
+      ...projects[0], setupStatus, sandboxId: "sandbox-id", setupError: "Setup details",
+      githubRepositoryId: "123", lastOpenedFilePath: "src/index.ts",
+      lastOpenedAt: "2026-09-07T12:00:00.000Z",
+    }];
+    network.mockResolvedValue(Response.json({ error: false, message: "Loaded", data }));
+    expect(await readUserProjectsAction()).toEqual(data);
+  });
+
   it.each(["request", "cookie"])("returns null when %s throws", async (stage) => {
     if (stage === "cookie") {
       mocks.platform.OS = "ios";

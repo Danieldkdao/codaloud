@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
-import type { ProjectResponseData } from "@/features/projects/lib/types";
+import type { ProjectResponseData } from "@/features/projects/types";
 import { cn } from "@/lib/utils";
 
 type ProjectsListItemProps = {

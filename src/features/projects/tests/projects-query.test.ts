@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readUserProjectsAction } from "@/features/projects/actions/actions";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import type { ProjectParamsSchema } from "@/features/projects/lib/project-params";
-import type { ProjectResponseData } from "@/features/projects/lib/types";
+import type { ProjectResponseData } from "@/features/projects/types";
 
 const session = vi.hoisted(() => ({
   data: { user: { id: "user-one" } },

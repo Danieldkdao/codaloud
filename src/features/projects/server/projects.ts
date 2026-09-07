@@ -126,3 +126,15 @@ export const updateUserProjectDb = async (
 
   return updatedProject;
 };
+
+export const deleteUserProjectDb = async (
+  userId: string,
+  projectId: string,
+) => {
+  const [deletedProject] = await db
+    .delete(ProjectTable)
+    .where(and(eq(ProjectTable.id, projectId), eq(ProjectTable.userId, userId)))
+    .returning();
+
+  return deletedProject;
+};

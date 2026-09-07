@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { RadioItem } from "@/components/ui/radio-item";
 import { PText } from "@/components/ui/text";
 import { createProjectAction } from "@/features/projects/actions/actions";
+import { formatProjectSource } from "@/features/projects/lib/formatters";
 import { alert } from "@/lib/utils";
 import { useGitHubConnected } from "@/services/github/hooks/use-github-connected";
 import {
@@ -18,20 +19,7 @@ import {
 } from "@/features/projects/actions/schemas";
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
 
-const projectSources = [
-  {
-    value: "new",
-    icon: "box",
-    title: "New project",
-    description: "Start from scratch in an empty cloud sandbox.",
-  },
-  {
-    value: "github",
-    icon: "github",
-    title: "Import from GitHub",
-    description: "Start with an existing GitHub repository.",
-  },
-] as const;
+const projectSources = ["new", "github"] as const satisfies readonly CreateProjectFormSchema["source"][];
 
 export const CreateProjectForm = () => {
   const queryClient = useQueryClient();
@@ -138,18 +126,22 @@ export const CreateProjectForm = () => {
               accessibilityLabel="Project source"
               className="gap-3"
             >
-              {projectSources.map((source) => (
-                <RadioItem
-                  key={source.value}
-                  value={source.value}
-                  selectedValue={value}
-                  onValueChange={onChange}
-                  onBlur={onBlur}
-                  title={source.title}
-                  description={source.description}
-                  icon={{ family: "Feather", name: source.icon }}
-                />
-              ))}
+              {projectSources.map((source) => {
+                const option = formatProjectSource(source);
+
+                return (
+                  <RadioItem
+                    key={option.value}
+                    value={option.value}
+                    selectedValue={value}
+                    onValueChange={onChange}
+                    onBlur={onBlur}
+                    title={option.title}
+                    description={option.description}
+                    icon={{ family: "Feather", name: option.icon }}
+                  />
+                );
+              })}
             </View>
             {error && (
               <PText

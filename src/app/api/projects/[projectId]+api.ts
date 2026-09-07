@@ -1,6 +1,7 @@
 import { updateProjectSchema } from "@/features/projects/actions/schemas";
 import {
   confirmUserProjectOwnership,
+  deleteUserProjectDb,
   updateUserProjectDb,
 } from "@/features/projects/server/projects";
 import { getCurrentUser } from "@/lib/auth/helpers";
@@ -119,6 +120,49 @@ export const PATCH = async (
 
     return apiResponse(
       { error: true, message: "Unable to update project. Please try again." },
+      500,
+    );
+  }
+};
+
+export const DELETE = async (
+  request: Request,
+  { projectId }: { projectId: string },
+) => {
+  try {
+    const { userId } = await getCurrentUser(request.headers);
+
+    if (!userId) {
+      return apiResponse(
+        { error: true, message: "You must be signed in to delete a project." },
+        401,
+      );
+    }
+
+    if (!isValidIds(userId)) {
+      return apiResponse({ error: true, message: "Invalid user ID." }, 401);
+    }
+
+    if (!isValidIds(projectId)) {
+      return apiResponse({ error: true, message: "Invalid project ID." }, 400);
+    }
+
+    const deletedProject = await deleteUserProjectDb(userId, projectId);
+
+    if (!deletedProject) {
+      return apiResponse({ error: true, message: "Project not found." }, 404);
+    }
+
+    return apiResponse({
+      error: false,
+      message: "Project deleted successfully.",
+      data: deletedProject,
+    });
+  } catch (error) {
+    console.error("Failed to delete project:", error);
+
+    return apiResponse(
+      { error: true, message: "Unable to delete project. Please try again." },
       500,
     );
   }

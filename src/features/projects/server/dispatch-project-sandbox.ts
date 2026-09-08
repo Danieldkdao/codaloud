@@ -21,6 +21,7 @@ export const dispatchProjectSandbox = async (
   const payload: StartProjectSandboxSchema = {
     projectId: operation.projectId,
     userId: operation.userId,
+    operationId: operation.id,
   };
 
   // Keep the Node worker and Daytona SDK out of the Expo API runtime.

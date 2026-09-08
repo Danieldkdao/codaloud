@@ -14,3 +14,16 @@ export type ProjectPageData = {
   projects: ProjectResponseData[];
   nextCursor: string | null;
 };
+
+export type ProjectSandboxLifecycleContext = {
+  operationId?: string;
+  projectId: string;
+  userId: string;
+  runId: string;
+};
+
+export type ProjectSandboxLifecycleTransition =
+  | { action: "start" }
+  | { action: "attach"; sandboxId: string }
+  | { action: "complete"; sandboxId: string }
+  | { action: "fail" };

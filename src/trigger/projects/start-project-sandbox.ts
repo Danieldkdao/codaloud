@@ -5,6 +5,7 @@ import { z } from "zod";
 export const startProjectSandboxSchema = z.strictObject({
   projectId: z.uuid(),
   userId: z.uuid(),
+  operationId: z.uuid().optional(),
 });
 
 export type StartProjectSandboxSchema = z.infer<
@@ -16,18 +17,20 @@ export const startProjectSandbox = schemaTask({
   schema: startProjectSandboxSchema,
   queue: { concurrencyLimit: 1 },
   maxDuration: 300,
-  run: async ({ projectId, userId }) => {
+  run: async ({ projectId, userId, operationId }, { ctx }) => {
     // Validate server configuration at execution time, not during task discovery.
     const { serverEnv } = await import("@/data/env/server");
-    const { confirmUserProjectOwnership, updateUserProjectSandboxDb } =
-      await import("@/features/projects/server/projects");
-    const existingProject = await confirmUserProjectOwnership(
-      userId,
-      projectId,
-    );
+    const { transitionProjectSandboxDb } = await import("@/features/projects/server/sandbox-lifecycle");
+    const lifecycle = { projectId, userId, operationId, runId: ctx.run.id };
+    const startedProjectOperation = await transitionProjectSandboxDb(lifecycle, { action: "start" });
 
-    if (!existingProject) {
-      throw new AbortTaskRunError("Project not found for this user.");
+    if (!startedProjectOperation) {
+      throw new AbortTaskRunError("The project setup operation is no longer current.");
+    }
+    const existingProject = startedProjectOperation.project;
+    lifecycle.operationId = startedProjectOperation.operationId;
+    if (startedProjectOperation.completed) {
+      return { projectId: existingProject.id, sandboxId: existingProject.sandboxId };
     }
 
     const daytona = new Daytona({
@@ -76,14 +79,11 @@ export const startProjectSandbox = schemaTask({
       throw new AbortTaskRunError("The sandbox does not match this project.");
     }
 
-    // Persist the binding before further work; file preparation will mark setup ready.
-    const updatedProject = await updateUserProjectSandboxDb(
-      userId,
-      existingProject.id,
-      sandbox.id,
-    );
+    const updatedProjectOperation = await transitionProjectSandboxDb(lifecycle, {
+      action: "attach", sandboxId: sandbox.id,
+    });
 
-    if (!updatedProject) {
+    if (!updatedProjectOperation) {
       throw new AbortTaskRunError(
         "The project was removed or its sandbox changed.",
       );
@@ -95,6 +95,17 @@ export const startProjectSandbox = schemaTask({
       await sandbox.waitUntilStarted(120);
     }
 
-    return { projectId: updatedProject.id, sandboxId: sandbox.id };
+    const completedProjectOperation = await transitionProjectSandboxDb(lifecycle, {
+      action: "complete", sandboxId: sandbox.id,
+    });
+    if (!completedProjectOperation) {
+      throw new AbortTaskRunError("The project setup operation is no longer current.");
+    }
+
+    return { projectId: existingProject.id, sandboxId: sandbox.id };
+  },
+  onFailure: async ({ payload, ctx }) => {
+    const { transitionProjectSandboxDb } = await import("@/features/projects/server/sandbox-lifecycle");
+    await transitionProjectSandboxDb({ ...payload, runId: ctx.run.id }, { action: "fail" });
   },
 });

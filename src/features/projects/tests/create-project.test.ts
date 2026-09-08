@@ -256,7 +256,7 @@ describe("sandbox task submission", () => {
     expect(options?.method).toBe("POST");
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer test-trigger-secret");
     expect(JSON.parse(options?.body as string)).toEqual({
-      payload: { projectId: "created-project", userId: "current-user" },
+      payload: { projectId: "created-project", userId: "current-user", operationId: "created-operation" },
       options: { idempotencyKey: "start-project-sandbox:created-operation", concurrencyKey: "created-project" },
     });
     expect(timeout).toHaveBeenCalledWith(5_000);

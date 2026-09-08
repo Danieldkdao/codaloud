@@ -46,7 +46,17 @@ export const updateProjectOperationRunDb = async (
     )
     .returning({ id: ProjectOperationTable.id });
 
-  return updatedProjectOperation;
+  if (updatedProjectOperation) return updatedProjectOperation;
+
+  // The worker may have claimed or finished the run before this response arrived.
+  // An acknowledgement must never reset its lifecycle state or clear its error.
+  const [existingProjectOperation] = await db.select({ id: ProjectOperationTable.id })
+    .from(ProjectOperationTable).where(and(
+      eq(ProjectOperationTable.id, operationId),
+      eq(ProjectOperationTable.userId, userId),
+      eq(ProjectOperationTable.triggerRunId, triggerRunId),
+    ));
+  return existingProjectOperation;
 };
 
 const pendingSandboxDispatch = () =>

@@ -5,6 +5,7 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 
 import { AppWrapper } from "@/components/app-wrapper";
+import { useSuccessFeedback } from "@/components/success-feedback-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadioItem } from "@/components/ui/radio-item";
@@ -22,6 +23,7 @@ import { GitHubRepositoriesSelectList } from "@/services/github/components/githu
 const projectSources = ["new", "github"] as const satisfies readonly CreateProjectFormSchema["source"][];
 
 export const CreateProjectForm = () => {
+  const showSuccess = useSuccessFeedback();
   const queryClient = useQueryClient();
   const router = useRouter();
   const { source: initialSource, name: initialName } = useLocalSearchParams<{
@@ -64,6 +66,7 @@ export const CreateProjectForm = () => {
       pathname: "/projects/[projectId]",
       params: { projectId: createdProject.projectId },
     });
+    showSuccess("Project created");
   };
 
   const fields = (

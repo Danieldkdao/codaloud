@@ -4,6 +4,9 @@
 @import "nativewind/theme";
 
 :root {
+  --success: oklch(0.954 0.035 157);
+  --success-foreground: oklch(0.36 0.075 157);
+  --success-border: oklch(0.86 0.055 157);
   --navigation-shadow: rgb(27 45 35 / 0.14);
   --background: oklch(0.9643 0.0111 89.7224);
   --foreground: oklch(0.2836 0.0144 157.9253);
@@ -42,6 +45,9 @@
 /* Follow the system appearance on native and web. */
 @media (prefers-color-scheme: dark) {
   :root {
+    --success: oklch(0.32 0.045 157);
+    --success-foreground: oklch(0.91 0.06 157);
+    --success-border: oklch(0.46 0.065 157);
     --navigation-shadow: rgb(0 0 0 / 0.3);
     --background: oklch(0.2836 0.0144 157.9253);
     --foreground: oklch(0.9643 0.0111 89.7224);
@@ -79,6 +85,9 @@
 }
 
 @theme inline {
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-border: var(--success-border);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

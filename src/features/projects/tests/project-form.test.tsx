@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({
   createProject: vi.fn(),
   replace: vi.fn(),
   alert: vi.fn(),
+  success: vi.fn(),
 }));
+vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({
   createProjectAction: mocks.createProject,
 }));
@@ -140,6 +142,7 @@ describe("project creation cache updates", () => {
       source: "new",
     });
     expect(loadProjects).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project created");
     expect(client.getQueryData(activeKey)).toEqual(newPage);
     expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(repositoryKey)?.isInvalidated).toBe(false);
@@ -160,6 +163,7 @@ describe("project creation cache updates", () => {
     expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(false);
     expect(mocks.replace).not.toHaveBeenCalled();
     expect(mocks.alert).toHaveBeenCalledWith("Error: Creation failed");
+    expect(mocks.success).not.toHaveBeenCalled();
   });
 
   it("navigates after creation even while the list refresh is pending", async () => {
@@ -167,5 +171,6 @@ describe("project creation cache updates", () => {
     await submit();
     expect(loadProjects).toHaveBeenCalledOnce();
     expect(mocks.replace).toHaveBeenCalledOnce();
+    expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project created");
   });
 });

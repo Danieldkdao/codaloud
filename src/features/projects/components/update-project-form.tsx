@@ -6,6 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 
 import { AppWrapper } from "@/components/app-wrapper";
+import { useSuccessFeedback } from "@/components/success-feedback-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
@@ -23,6 +24,7 @@ type UpdateProjectFormProps = {
 
 export const UpdateProjectForm = ({ projectId, defaultValues }: UpdateProjectFormProps) => {
   const queryClient = useQueryClient();
+  const showSuccess = useSuccessFeedback();
   const router = useRouter();
   const isMounted = useRef(true);
   const submissionInFlight = useRef(false);
@@ -52,6 +54,7 @@ export const UpdateProjectForm = ({ projectId, defaultValues }: UpdateProjectFor
     void queryClient.invalidateQueries({ queryKey: ["projects"] });
     // The user may have dismissed the sheet while the request was in flight.
     if (isMounted.current) router.back();
+    showSuccess("Changes saved");
   };
 
   const submitForm = async () => {

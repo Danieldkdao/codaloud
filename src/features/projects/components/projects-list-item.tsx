@@ -7,6 +7,7 @@ import Swipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { Button } from "@/components/ui/button";
+import { useSuccessFeedback } from "@/components/success-feedback-provider";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
@@ -19,6 +20,7 @@ type ProjectsListItemProps = {
 };
 
 export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
+  const showSuccess = useSuccessFeedback();
   const swipeable = useRef<SwipeableMethods>(null);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -69,6 +71,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
 
             // Keep the overlay until the refreshed list removes this card.
             await queryClient.invalidateQueries({ queryKey: ["projects"] });
+            showSuccess("Project deleted");
           } catch {
             alert("Error: Unable to delete project. Please try again.");
           } finally {

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
+
 const mocks = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   listProps: {} as Record<string, any>,
@@ -16,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   fetchNextPage: vi.fn(),
   refetch: vi.fn(),
   createProject: vi.fn(),
+  success: vi.fn(),
   alert: vi.fn(),
   replace: vi.fn(),
   handleConnect: vi.fn(),
@@ -551,7 +554,7 @@ describe("project form repository validation", () => {
     );
   });
 
-  it("disables submission while creating and redirects to the returned project after the success alert", async () => {
+  it("disables submission while creating, redirects, and shows success feedback", async () => {
     mocks.source = "new";
     let resolveCreation!: (result: {
       error: false;
@@ -585,15 +588,14 @@ describe("project form repository validation", () => {
         projectId: "new-project-id",
       }),
     );
-    expect(mocks.alert).toHaveBeenCalledWith(
-      "Success: Project created successfully.",
-    );
+    expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project created");
+    expect(mocks.alert).not.toHaveBeenCalled();
     expect(mocks.replace).toHaveBeenCalledWith({
       pathname: "/projects/[projectId]",
       params: { projectId: "new-project-id" },
     });
-    expect(mocks.alert.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.replace.mock.invocationCallOrder[0],
+    expect(mocks.replace.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.success.mock.invocationCallOrder[0],
     );
     expect(button.disabled).toBe(false);
     expect(button.getAttribute("aria-busy")).toBe("false");

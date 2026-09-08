@@ -6,7 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { UpdateProjectForm } from "@/features/projects/components/update-project-form";
 
-const mocks = vi.hoisted(() => ({ update: vi.fn(), back: vi.fn(), alert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ update: vi.fn(), back: vi.fn(), alert: vi.fn(), success: vi.fn() }));
+vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({ updateProjectAction: mocks.update }));
 vi.mock("expo-router", () => ({ useRouter: () => ({ back: mocks.back }) }));
 vi.mock("@/lib/utils", () => ({ alert: mocks.alert }));
@@ -107,12 +108,14 @@ it("submits the edited name, refreshes project views and closes the sheet", asyn
   expect(client.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
   expect(mocks.back).toHaveBeenCalledOnce();
   expect(mocks.alert).not.toHaveBeenCalled();
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Changes saved");
 });
 
 it("shows validation errors without calling the action", async () => {
   await rename(" ");
   await submit();
   expect(container.textContent).toContain("Project name is required.");
+  expect(mocks.success).not.toHaveBeenCalled();
   expect(mocks.update).not.toHaveBeenCalled();
   expect(mocks.back).not.toHaveBeenCalled();
 });
@@ -122,6 +125,7 @@ it("keeps the draft and cache on failure, alerts, and allows retry", async () =>
   await rename("New name");
   await submit();
   expect(mocks.alert).toHaveBeenCalledWith("Error: Update failed");
+  expect(mocks.success).not.toHaveBeenCalled();
   expect(container.querySelector("input")!.value).toBe("New name");
   expect(container.querySelector("button")!.disabled).toBe(false);
   expect(loadList).not.toHaveBeenCalled();
@@ -129,6 +133,7 @@ it("keeps the draft and cache on failure, alerts, and allows retry", async () =>
   expect(mocks.back).not.toHaveBeenCalled();
   await submit();
   expect(mocks.back).toHaveBeenCalledOnce();
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Changes saved");
 });
 
 it("waits for saving and prevents duplicate button and keyboard submissions", async () => {
@@ -143,9 +148,11 @@ it("waits for saving and prevents duplicate button and keyboard submissions", as
   expect(container.querySelector("button")!.disabled).toBe(true);
   expect(container.querySelector("button")!.getAttribute("aria-busy")).toBe("true");
   expect(container.querySelector("input")!.readOnly).toBe(true);
+  expect(mocks.success).not.toHaveBeenCalled();
   expect(mocks.back).not.toHaveBeenCalled();
   await act(async () => resolve({ error: false, message: "Updated", projectId }));
   expect(mocks.back).toHaveBeenCalledOnce();
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Changes saved");
 });
 
 it("closes after saving even while refreshing the list is pending", async () => {
@@ -165,4 +172,5 @@ it("does not navigate again if the sheet was dismissed during saving", async () 
   await act(async () => resolve({ error: false, message: "Updated", projectId }));
   expect(loadList).toHaveBeenCalledOnce();
   expect(mocks.back).not.toHaveBeenCalled();
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Changes saved");
 });

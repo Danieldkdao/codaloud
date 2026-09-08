@@ -10,7 +10,8 @@ import type { PressableProps, ViewProps } from "react-native";
 import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import type { ConfirmActionOptions } from "@/lib/types";
 
-const mocks = vi.hoisted(() => ({ remove: vi.fn(), confirm: vi.fn(), alert: vi.fn(), push: vi.fn(), close: vi.fn(), swipe: {} as SwipeableProps, card: {} as PressableProps }));
+const mocks = vi.hoisted(() => ({ remove: vi.fn(), confirm: vi.fn(), alert: vi.fn(), push: vi.fn(), close: vi.fn(), success: vi.fn(), swipe: {} as SwipeableProps, card: {} as PressableProps }));
+vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({ deleteProjectAction: mocks.remove }));
 vi.mock("@/lib/utils", () => ({ cn: () => "", confirmAction: mocks.confirm, alert: mocks.alert }));
 vi.mock("expo-router", () => ({
@@ -109,6 +110,7 @@ it("waits for explicit confirmation before deleting the selected project", async
   expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(true);
   expect(client.getQueryState(["github", "repositories"])?.isInvalidated).toBe(false);
   expect(mocks.alert).not.toHaveBeenCalled();
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project deleted");
 });
 
 it("alerts on failure, preserves the cache, and allows another attempt", async () => {
@@ -116,6 +118,7 @@ it("alerts on failure, preserves the cache, and allows another attempt", async (
   openConfirmation();
   await confirm();
   expect(mocks.alert).toHaveBeenCalledWith("Error: Deletion failed");
+  expect(mocks.success).not.toHaveBeenCalled();
   expect(loadList).not.toHaveBeenCalled();
   expect(client.getQueryState(detailKey)?.isInvalidated).toBe(false);
   expect(client.getQueryData(listKey)).toEqual([project]);
@@ -212,9 +215,11 @@ it("blocks the whole card only after confirmation and stays busy through the lis
   expect(loadList).toHaveBeenCalledOnce();
   expect(container.querySelector("progress")).not.toBeNull();
   expect(mocks.card.disabled).toBe(true);
+  expect(mocks.success).not.toHaveBeenCalled();
   await act(async () => { resolveRefresh([]); await pending; });
   expect(container.querySelector("progress")).toBeNull();
   expect(client.getQueryData(listKey)).toEqual([]);
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project deleted");
 });
 
 it.each(["response", "exception"])("restores the card after a deletion %s failure", async (failure) => {
@@ -223,6 +228,7 @@ it.each(["response", "exception"])("restores the card after a deletion %s failur
   openConfirmation();
   await confirm();
   expect(mocks.alert).toHaveBeenCalledOnce();
+  expect(mocks.success).not.toHaveBeenCalled();
   expect(container.querySelector("progress")).toBeNull();
   expect(mocks.card.disabled).toBe(false);
   expect(mocks.swipe.enabled).toBe(true);

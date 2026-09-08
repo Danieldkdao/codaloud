@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   values: vi.fn(),
   returning: vi.fn(),
   transaction: vi.fn(),
+  commit: vi.fn(),
+  update: vi.fn(),
+  set: vi.fn(),
+  where: vi.fn(),
+  updateReturning: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth", () => ({
@@ -21,7 +26,8 @@ vi.mock("@/lib/auth/auth", () => ({
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
-vi.mock("@/db/db", () => ({ db: { transaction: mocks.transaction } }));
+vi.mock("@/db/db", () => ({ db: { transaction: mocks.transaction, update: mocks.update } }));
+vi.mock("@/data/env/server", () => ({ serverEnv: { TRIGGER_SECRET_KEY: "test-trigger-secret" } }));
 
 const request = (payload: unknown, contentType = "application/json") => new Request(
   "https://codaloud.test/api/projects",
@@ -35,18 +41,28 @@ const request = (payload: unknown, contentType = "application/json") => new Requ
 const network = vi.fn<typeof fetch>();
 
 beforeEach(() => {
-  mocks.transaction.mockImplementation(async (callback) => callback({ insert: mocks.insert }));
+  mocks.transaction.mockImplementation(async (callback) => {
+    const result = await callback({ insert: mocks.insert });
+    mocks.commit();
+    return result;
+  });
+  mocks.update.mockReturnValue({ set: mocks.set });
+  mocks.set.mockReturnValue({ where: mocks.where });
+  mocks.where.mockReturnValue({ returning: mocks.updateReturning });
+  mocks.updateReturning.mockReset().mockResolvedValue([{ id: "created-operation" }]);
   mocks.insert.mockReset();
   mocks.returning.mockReset();
   mocks.listUserAccounts.mockResolvedValue([{ id: "linked-account", providerId: "github", scopes: ["repo"] }]);
   mocks.getAccessToken.mockResolvedValue({ accessToken: "test-token" });
   network.mockReset();
-  network.mockImplementation(async () => Response.json({ id: 123456789, permissions: { pull: true } }));
+  network.mockImplementation(async (url) => String(url).startsWith("https://api.trigger.dev/")
+    ? Response.json({ id: "run_sandbox" })
+    : Response.json({ id: 123456789, permissions: { pull: true } }));
   vi.stubGlobal("fetch", network);
   mocks.getCurrentUser.mockResolvedValue({ userId: "current-user" });
   mocks.insert.mockReturnValue({ values: mocks.values });
   mocks.values.mockImplementation((data: ProjectInsertData) => {
-    mocks.returning.mockResolvedValue([{ id: "created-project", ...data }]);
+    mocks.returning.mockResolvedValue([{ id: "kind" in data ? "created-operation" : "created-project", ...data }]);
     return { returning: mocks.returning };
   });
 });
@@ -135,6 +151,7 @@ describe("project creation route and insert flow", () => {
       message: "Unable to create project. Please try again.",
     });
     expect(mocks.insert).toHaveBeenCalledTimes(failedInsert);
+    expect(network).not.toHaveBeenCalled();
     await expect(mocks.transaction.mock.results[0].value).rejects.toBe(error);
   });
 });
@@ -213,6 +230,58 @@ describe("GitHub import access validation", () => {
     mocks.listUserAccounts.mockResolvedValue([]);
     expect((await POST(request({ name: "New", source: "new" }))).status).toBe(201);
     expect(mocks.listUserAccounts).not.toHaveBeenCalled();
-    expect(network).not.toHaveBeenCalled();
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(String(network.mock.calls[0][0])).toBe("https://api.trigger.dev/api/v1/tasks/start-project-sandbox/trigger");
+  });
+});
+
+describe("sandbox task submission", () => {
+  it("submits the saved project after commit and records the run ID", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const req = request({ name: "My project", source: "new" });
+    expect((await POST(req)).status).toBe(201);
+
+    expect(network).toHaveBeenCalledTimes(1);
+    const [url, options] = network.mock.calls[0];
+    expect(url).toBe("https://api.trigger.dev/api/v1/tasks/start-project-sandbox/trigger");
+    expect(options?.method).toBe("POST");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer test-trigger-secret");
+    expect(JSON.parse(options?.body as string)).toEqual({
+      payload: { projectId: "created-project", userId: "current-user" },
+      options: { idempotencyKey: "start-project-sandbox:created-operation", concurrencyKey: "created-project" },
+    });
+    expect(timeout).toHaveBeenCalledWith(5_000);
+    expect(options?.signal).not.toBe(req.signal);
+    expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(network.mock.invocationCallOrder[0]);
+    expect(mocks.update).toHaveBeenCalledWith(ProjectOperationTable);
+    expect(mocks.set).toHaveBeenCalledWith({ triggerRunId: "run_sandbox" });
+    expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.update.mock.invocationCallOrder[0]);
+  });
+
+  it.each(["timeout", "rejected", "invalid-response"])("preserves the saved project when submission has a %s outcome", async (outcome) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    network.mockImplementation(async () => {
+      if (outcome === "timeout") throw new DOMException("private upstream details", "TimeoutError");
+      if (outcome === "rejected") return Response.json({ error: "private upstream details" }, { status: 503 });
+      return Response.json({ unexpected: "private upstream details" });
+    });
+
+    const response = await POST(request({ name: "My project", source: "new" }));
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ error: false, data: { id: "created-project" } });
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/test-trigger-secret|private upstream details/);
+  });
+
+  it("preserves the saved project if recording an accepted run fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.updateReturning.mockRejectedValueOnce(new Error("Database unavailable"));
+    const response = await POST(request({ name: "My project", source: "new" }));
+    expect(response.status).toBe(201);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+    expect(network).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,6 +6,7 @@ import {
   getTableColumns,
   gt,
   ilike,
+  isNull,
   lt,
   or,
   sql,
@@ -137,4 +138,24 @@ export const deleteUserProjectDb = async (
     .returning();
 
   return deletedProject;
+};
+
+export const updateUserProjectSandboxDb = async (
+  userId: string,
+  projectId: string,
+  sandboxId: string,
+) => {
+  const [updatedProject] = await db
+    .update(ProjectTable)
+    .set({ sandboxId })
+    .where(
+      and(
+        eq(ProjectTable.id, projectId),
+        eq(ProjectTable.userId, userId),
+        or(isNull(ProjectTable.sandboxId), eq(ProjectTable.sandboxId, sandboxId)),
+      ),
+    )
+    .returning();
+
+  return updatedProject;
 };

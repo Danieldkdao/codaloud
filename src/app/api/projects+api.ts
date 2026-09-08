@@ -1,7 +1,11 @@
 import { db } from "@/db/db";
 import { createProjectSchema } from "@/features/projects/actions/schemas";
 import { projectParamsSchema } from "@/features/projects/lib/project-params";
-import { insertProjectOperationDB } from "@/features/projects/server/project-operations";
+import { dispatchProjectSandbox } from "@/features/projects/server/dispatch-project-sandbox";
+import {
+  insertProjectOperationDB,
+  updateProjectOperationRunDb,
+} from "@/features/projects/server/project-operations";
 import {
   insertProjectDB,
   readUserProjectsDb,
@@ -116,7 +120,7 @@ export const POST = async (request: Request) => {
     }
 
     // Users may only create their own projects; ownership comes from the session.
-    const insertedProject = await db.transaction(async (tx) => {
+    const { insertedProject, insertedProjectOperation } = await db.transaction(async (tx) => {
       const insertedProject = await insertProjectDB(
         {
           name: result.data.name,
@@ -127,7 +131,7 @@ export const POST = async (request: Request) => {
         tx,
       );
 
-      await insertProjectOperationDB(
+      const insertedProjectOperation = await insertProjectOperationDB(
         {
           projectId: insertedProject.id,
           userId,
@@ -137,8 +141,27 @@ export const POST = async (request: Request) => {
         tx,
       );
 
-      return insertedProject;
+      return { insertedProject, insertedProjectOperation };
     });
+
+    try {
+      const run = await dispatchProjectSandbox(insertedProjectOperation);
+      const updatedProjectOperation = await updateProjectOperationRunDb(
+        insertedProjectOperation.id,
+        userId,
+        run.id,
+      );
+
+      if (!updatedProjectOperation) {
+        throw new Error("The setup operation could not be linked to its run.");
+      }
+    } catch {
+      // Creation committed; an ambiguous submission must not invite a duplicate project.
+      console.error("Unable to confirm sandbox task submission.", {
+        projectId: insertedProject.id,
+        operationId: insertedProjectOperation.id,
+      });
+    }
 
     return apiResponse(
       {

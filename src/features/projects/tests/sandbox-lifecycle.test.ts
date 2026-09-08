@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
@@ -90,11 +91,11 @@ it("records running and the accepted run before contacting Daytona", async () =>
   expect((await state()).status).not.toBe("queued");
 });
 
-it.each([null, "123456"])("finishes sandbox startup without claiming files are ready (repository %s)", async (repositoryId) => {
+it.each([null, "123456"])("marks the project ready when sandbox startup completes (repository %s)", async (repositoryId) => {
   await mocks.pg.query("update projects set github_repository_id = $1", [repositoryId]);
   await run();
   expect(await state()).toMatchObject({
-    setup_status: "running", status: "succeeded", phase: "complete",
+    setup_status: "ready", status: "succeeded", phase: "complete",
     sandbox_id: "sandbox_one", trigger_run_id: ctx.run.id, finished_at: expect.any(Date),
   });
   await task.onFailure({ payload, ctx, error: new Error("late failure") });
@@ -186,4 +187,55 @@ it("accepts late dispatch acknowledgement without clearing an execution failure"
   const failed = await state();
   expect(await updateProjectOperationRunDb(operationId, userId, ctx.run.id, 1)).toBeDefined();
   expect(await state()).toEqual(failed);
+});
+
+
+it("rolls back completion if marking the project ready fails", async () => {
+  mocks.logQuery.mockImplementation((query: string, params: unknown[]) => {
+    if (query.startsWith('update "projects"') && params.includes("ready")) {
+      throw new Error("database unavailable");
+    }
+  });
+  await expect(run()).rejects.toThrow("database unavailable");
+  expect(await state()).toMatchObject({ setup_status: "running", status: "running", finished_at: null });
+  mocks.logQuery.mockReset();
+  await run();
+  expect(await state()).toMatchObject({ setup_status: "ready", status: "succeeded" });
+});
+
+const repairReadiness = async () => (await mocks.pg.exec(readFileSync(
+  new URL("../../../../scripts/repair-project-readiness.sql", import.meta.url), "utf8",
+)))[2];
+
+it("repairs a completed setup once without changing its operation", async () => {
+  await run();
+  await mocks.pg.exec("update projects set setup_status = 'running', setup_error = 'Old setup error'");
+  const operationBefore = (await mocks.pg.query("select * from project_operations")).rows;
+  expect((await repairReadiness()).rows).toHaveLength(1);
+  expect(await state()).toMatchObject({ setup_status: "ready", setup_error: null, status: "succeeded" });
+  expect((await mocks.pg.query("select * from project_operations")).rows).toEqual(operationBefore);
+  expect((await repairReadiness()).rows).toEqual([]);
+});
+
+it.each([
+  "update projects set sandbox_id = null",
+  "update projects set setup_status = 'failed'",
+  "update project_operations set status = 'failed'",
+  "update project_operations set phase = 'starting-sandbox'",
+  "update project_operations set finished_at = null",
+  "update project_operations set kind = 'resume'",
+  "update project_operations set user_id = '00000000-0000-4000-8000-000000000099'",
+  `insert into project_operations (id, project_id, user_id, kind, status, created_at)
+    select '00000000-0000-4000-8000-000000000004', project_id, user_id, 'prepare', 'queued', created_at
+    from project_operations`,
+  `insert into project_operations (id, project_id, user_id, kind, status, created_at)
+    select '00000000-0000-4000-8000-000000000004', project_id, user_id, 'delete', 'running', created_at - interval '1 second'
+    from project_operations`,
+])("does not repair an ineligible or superseded setup: %s", async (change) => {
+  await run();
+  await mocks.pg.exec("update projects set setup_status = 'running'");
+  await mocks.pg.exec(change);
+  const before = (await mocks.pg.query("select * from projects")).rows;
+  expect((await repairReadiness()).rows).toEqual([]);
+  expect((await mocks.pg.query("select * from projects")).rows).toEqual(before);
 });

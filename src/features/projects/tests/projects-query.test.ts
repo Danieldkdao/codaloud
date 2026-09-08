@@ -59,9 +59,31 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   client.clear();
+  vi.useRealTimers();
 });
 
 describe("useProjects", () => {
+  it.each(["ready", "failed"] as const)("polls queued and running setups until %s", async (status) => {
+    vi.useFakeTimers();
+    const pending = page(["a"]);
+    const running = page(["a"]);
+    running.projects[0].setupStatus = "running";
+    const terminal = page(["a"]);
+    terminal.projects[0].setupStatus = status;
+    read.mockResolvedValueOnce(pending).mockResolvedValueOnce(running).mockResolvedValue(terminal);
+    await act(async () => {
+      root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { filters: {} })));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(current.data?.pages[0].projects[0].setupStatus).toBe("pending");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(current.data?.pages[0].projects[0].setupStatus).toBe("running");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(current.data?.pages[0].projects[0].setupStatus).toBe(status);
+    await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
   it("polls while deletion is pending and stops after the project disappears", async () => {
     const deleting = page(["a"]);
     deleting.projects[0].deletionRequested = true;

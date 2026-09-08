@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { ProjectOperationSelectData } from "@/db/schemas/project-operation";
-import type { StartProjectSandboxSchema } from "@/trigger/projects/start-project-sandbox";
+import type { HandleProjectSandboxSchema } from "@/trigger/projects/handle-project-sandbox";
 import {
   claimProjectSandboxDispatchDb,
   recordProjectSandboxDispatchFailureDb,
@@ -15,10 +15,10 @@ export const projectSandboxRunSchema = z.object({
 export type ProjectSandboxRunSchema = z.infer<typeof projectSandboxRunSchema>;
 
 export const dispatchProjectSandbox = async (
-  operation: Pick<ProjectOperationSelectData, "id" | "projectId" | "userId">,
+  operation: Pick<ProjectOperationSelectData, "id" | "projectId" | "userId"> & Partial<Pick<ProjectOperationSelectData, "kind">>,
 ) => {
   const { serverEnv } = await import("@/data/env/server");
-  const payload: StartProjectSandboxSchema = {
+  const payload: HandleProjectSandboxSchema = {
     projectId: operation.projectId,
     userId: operation.userId,
     operationId: operation.id,
@@ -26,7 +26,7 @@ export const dispatchProjectSandbox = async (
 
   // Keep the Node worker and Daytona SDK out of the Expo API runtime.
   const response = await fetch(
-    "https://api.trigger.dev/api/v1/tasks/start-project-sandbox/trigger",
+    "https://api.trigger.dev/api/v1/tasks/handle-project-sandbox/trigger",
     {
       method: "POST",
       headers: {
@@ -36,7 +36,10 @@ export const dispatchProjectSandbox = async (
       body: JSON.stringify({
         payload,
         options: {
-          idempotencyKey: `start-project-sandbox:${operation.id}`,
+          idempotencyKey: `${operation.kind === "delete" ? "delete-project-sandbox" : "handle-project-sandbox"}:${operation.id}`,
+          // Cleanup is idempotent and is rechecked for late sandbox creation. Successful
+          // or cancelled runs must not suppress those checks for the default 30 days.
+          ...(operation.kind === "delete" ? { idempotencyKeyTTL: "5m" } : {}),
           concurrencyKey: operation.projectId,
         },
       }),

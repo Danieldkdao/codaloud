@@ -2,26 +2,30 @@ import { Daytona, DaytonaNotFoundError, type Sandbox } from "@daytona/sdk";
 import { AbortTaskRunError, schemaTask } from "@trigger.dev/sdk";
 import { z } from "zod";
 
-export const startProjectSandboxSchema = z.strictObject({
+export const handleProjectSandboxSchema = z.strictObject({
   projectId: z.uuid(),
   userId: z.uuid(),
   operationId: z.uuid().optional(),
 });
 
-export type StartProjectSandboxSchema = z.infer<
-  typeof startProjectSandboxSchema
+export type HandleProjectSandboxSchema = z.infer<
+  typeof handleProjectSandboxSchema
 >;
 
-export const startProjectSandbox = schemaTask({
-  id: "start-project-sandbox",
-  schema: startProjectSandboxSchema,
+export const handleProjectSandbox = schemaTask({
+  id: "handle-project-sandbox",
+  schema: handleProjectSandboxSchema,
   queue: { concurrencyLimit: 1 },
   maxDuration: 300,
   run: async ({ projectId, userId, operationId }, { ctx }) => {
     // Validate server configuration at execution time, not during task discovery.
     const { serverEnv } = await import("@/data/env/server");
+    const { deleteProjectSandbox, getProjectSandboxName } = await import("@/services/daytona/delete-project-sandbox");
     const { transitionProjectSandboxDb } = await import("@/features/projects/server/sandbox-lifecycle");
     const lifecycle = { projectId, userId, operationId, runId: ctx.run.id };
+    const { readProjectDeletionOperationDb } = await import("@/features/projects/server/project-deletion");
+    // Deletion uses this same task and per-project queue, so it follows in-flight setup.
+    if (await readProjectDeletionOperationDb(lifecycle)) return deleteProjectSandbox(lifecycle);
     const startedProjectOperation = await transitionProjectSandboxDb(lifecycle, { action: "start" });
 
     if (!startedProjectOperation) {
@@ -39,7 +43,7 @@ export const startProjectSandbox = schemaTask({
       otelEnabled: false,
     });
     // Keep this stable so a retry can recover creation before the ID was saved.
-    const sandboxName = `codaloud-production-${existingProject.id}`;
+    const sandboxName = getProjectSandboxName(existingProject.id);
     let sandbox: Sandbox;
 
     try {
@@ -105,6 +109,12 @@ export const startProjectSandbox = schemaTask({
     return { projectId: existingProject.id, sandboxId: sandbox.id };
   },
   onFailure: async ({ payload, ctx }) => {
+    const { readProjectDeletionOperationDb, queueProjectDeletionRetryDb } = await import("@/features/projects/server/project-deletion");
+    const lifecycle = { ...payload, runId: ctx.run.id };
+    if (await readProjectDeletionOperationDb(lifecycle)) {
+      await queueProjectDeletionRetryDb(lifecycle);
+      return;
+    }
     const { transitionProjectSandboxDb } = await import("@/features/projects/server/sandbox-lifecycle");
     await transitionProjectSandboxDb({ ...payload, runId: ctx.run.id }, { action: "fail" });
   },

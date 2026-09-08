@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Link, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
@@ -12,7 +12,7 @@ import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
 import { formatProjectSetupStatus } from "@/features/projects/lib/formatters";
-import type { ProjectResponseData } from "@/features/projects/types";
+import type { ProjectPageData, ProjectResponseData } from "@/features/projects/types";
 import { alert, cn, confirmAction } from "@/lib/utils";
 
 type ProjectsListItemProps = {
@@ -23,7 +23,9 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   const showSuccess = useSuccessFeedback();
   const swipeable = useRef<SwipeableMethods>(null);
   const [actionsVisible, setActionsVisible] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSubmittingDeletion, setIsSubmittingDeletion] = useState(false);
+  const [deletionAccepted, setDeletionAccepted] = useState(false);
+  const isDeleting = isSubmittingDeletion || deletionAccepted || Boolean(project.deletionRequested);
   const deletionInFlight = useRef(false);
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -39,7 +41,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
       })}`;
 
   const updateProject = () => {
-    if (deletionInFlight.current) return;
+    if (deletionInFlight.current || isDeleting) return;
     swipeable.current?.close();
     router.push({
       pathname: "/edit-project",
@@ -48,7 +50,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   };
 
   const deleteProject = () => {
-    if (deletionInFlight.current) return;
+    if (deletionInFlight.current || isDeleting) return;
     swipeable.current?.close();
     confirmAction(
       "Delete project?",
@@ -57,26 +59,40 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
         actionText: "Delete",
         onConfirmPress: async () => {
           // Lock synchronously so repeated confirmations cannot start another request.
-          if (deletionInFlight.current) return;
+          if (deletionInFlight.current || isDeleting) return;
           deletionInFlight.current = true;
-          setIsDeleting(true);
+          setIsSubmittingDeletion(true);
           swipeable.current?.close();
+          let accepted = false;
           try {
-            const deletedProject = await deleteProjectAction(project.id);
+            const requestedProject = await deleteProjectAction(project.id);
 
-            if (deletedProject.error) {
-              alert(`Error: ${deletedProject.message}`);
+            if (requestedProject.error) {
+              alert(`Error: ${requestedProject.message}`);
               return;
             }
 
-            // Keep the overlay until the refreshed list removes this card.
+            accepted = true;
+            setDeletionAccepted(true);
+            const listFilters = { queryKey: ["projects", "infinite", "cursor", project.userId] };
+            await queryClient.cancelQueries(listFilters);
+            // Preserve accepted deletion across failed refreshes and list remounts.
+            queryClient.setQueriesData<InfiniteData<ProjectPageData>>(listFilters, (data) => data && ({
+              ...data,
+              pages: data.pages.map((page) => ({
+                ...page,
+                projects: page.projects.map((item) => item.id === project.id
+                  ? { ...item, deletionRequested: true } : item),
+              })),
+            }));
+            // Acceptance starts background cleanup; only a refreshed list can remove the card.
             await queryClient.invalidateQueries({ queryKey: ["projects"] });
-            showSuccess("Project deleted");
+            showSuccess("Deletion started");
           } catch {
             alert("Error: Unable to delete project. Please try again.");
           } finally {
-            deletionInFlight.current = false;
-            setIsDeleting(false);
+            deletionInFlight.current = accepted;
+            setIsSubmittingDeletion(false);
           }
         },
       },
@@ -147,7 +163,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
               params: { projectId: project.id },
             }}
             onPress={(event) => {
-              if (deletionInFlight.current) event.preventDefault();
+              if (deletionInFlight.current || isDeleting) event.preventDefault();
             }}
             asChild
           >
@@ -228,7 +244,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
       </View>
       {isDeleting && (
         <View
-          className="absolute inset-0 items-center justify-center rounded-2xl bg-background/70"
+          className="absolute inset-0 items-center justify-center gap-3 rounded-2xl bg-background/70"
           accessible
           accessibilityRole="progressbar"
           accessibilityLabel={`Deleting ${project.name}`}
@@ -236,6 +252,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
           accessibilityLiveRegion="polite"
         >
           <ActivityIndicator size="large" className="text-primary" accessible={false} />
+          <PText>Deleting</PText>
         </View>
       )}
     </View>

@@ -1,4 +1,15 @@
-import { and, asc, eq, exists, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  isNull,
+  lte,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db, type DbTransaction } from "@/db/db";
 import { ProjectTable } from "@/db/schemas/project";
@@ -11,7 +22,7 @@ import {
   type ProjectOperationInsertData,
 } from "@/db/schemas/project-operation";
 
-export const insertProjectOperationDB = async (
+export const insertProjectOperationDb = async (
   data: ProjectOperationInsertData,
   tx?: DbTransaction,
 ) => {
@@ -50,26 +61,61 @@ export const updateProjectOperationRunDb = async (
 
   // The worker may have claimed or finished the run before this response arrived.
   // An acknowledgement must never reset its lifecycle state or clear its error.
-  const [existingProjectOperation] = await db.select({ id: ProjectOperationTable.id })
-    .from(ProjectOperationTable).where(and(
-      eq(ProjectOperationTable.id, operationId),
-      eq(ProjectOperationTable.userId, userId),
-      eq(ProjectOperationTable.triggerRunId, triggerRunId),
-    ));
+  const [existingProjectOperation] = await db
+    .select({ id: ProjectOperationTable.id })
+    .from(ProjectOperationTable)
+    .where(
+      and(
+        eq(ProjectOperationTable.id, operationId),
+        eq(ProjectOperationTable.userId, userId),
+        eq(ProjectOperationTable.triggerRunId, triggerRunId),
+      ),
+    );
   return existingProjectOperation;
 };
 
+const deletionOperation = alias(ProjectOperationTable, "deletion_operation");
+
 const pendingSandboxDispatch = () =>
   and(
-    eq(ProjectOperationTable.kind, "prepare"),
     eq(ProjectOperationTable.status, "queued"),
     isNull(ProjectOperationTable.triggerRunId),
     lte(ProjectOperationTable.nextDispatchAt, sql`now()`),
-    exists(
-      db.select({ id: ProjectTable.id }).from(ProjectTable).where(
-        and(
-          eq(ProjectTable.id, ProjectOperationTable.projectId),
-          eq(ProjectTable.userId, ProjectOperationTable.userId),
+    or(
+      and(
+        eq(ProjectOperationTable.kind, "prepare"),
+        exists(
+          db
+            .select({ id: ProjectTable.id })
+            .from(ProjectTable)
+            .where(
+              and(
+                eq(ProjectTable.id, ProjectOperationTable.projectId),
+                eq(ProjectTable.userId, ProjectOperationTable.userId),
+              ),
+            ),
+        ),
+        notExists(
+          db
+            .select({ id: deletionOperation.id })
+            .from(deletionOperation)
+            .where(
+              and(
+                eq(
+                  deletionOperation.projectId,
+                  ProjectOperationTable.projectId,
+                ),
+                eq(deletionOperation.userId, ProjectOperationTable.userId),
+                eq(deletionOperation.kind, "delete"),
+              ),
+            ),
+        ),
+      ),
+      and(
+        eq(ProjectOperationTable.kind, "delete"),
+        or(
+          isNull(ProjectOperationTable.finishedAt),
+          sql`${ProjectOperationTable.finishedAt} > now() - interval '7 days'`,
         ),
       ),
     ),
@@ -77,16 +123,25 @@ const pendingSandboxDispatch = () =>
 
 export const readDueProjectSandboxOperationsDb = async (limit: number) => {
   const pendingProjectOperations = await db
-    .select({ id: ProjectOperationTable.id, userId: ProjectOperationTable.userId })
+    .select({
+      id: ProjectOperationTable.id,
+      userId: ProjectOperationTable.userId,
+    })
     .from(ProjectOperationTable)
     .where(pendingSandboxDispatch())
-    .orderBy(asc(ProjectOperationTable.nextDispatchAt), asc(ProjectOperationTable.id))
+    .orderBy(
+      asc(ProjectOperationTable.nextDispatchAt),
+      asc(ProjectOperationTable.id),
+    )
     .limit(limit);
 
   return pendingProjectOperations;
 };
 
-export const claimProjectSandboxDispatchDb = async (operationId: string, userId: string) => {
+export const claimProjectSandboxDispatchDb = async (
+  operationId: string,
+  userId: string,
+) => {
   // Reserve the next retry before network I/O. A process crash cannot strand a claim,
   // and PostgreSQL rechecks the predicate if another dispatcher updated this row.
   const [updatedProjectOperation] = await db
@@ -98,11 +153,13 @@ export const claimProjectSandboxDispatchDb = async (operationId: string, userId:
         ${projectSandboxDispatchInitialDelaySeconds} * power(2, least(${ProjectOperationTable.dispatchAttempts}, 3))
       ) * interval '1 second'`,
     })
-    .where(and(
-      eq(ProjectOperationTable.id, operationId),
-      eq(ProjectOperationTable.userId, userId),
-      pendingSandboxDispatch(),
-    ))
+    .where(
+      and(
+        eq(ProjectOperationTable.id, operationId),
+        eq(ProjectOperationTable.userId, userId),
+        pendingSandboxDispatch(),
+      ),
+    )
     .returning();
 
   return updatedProjectOperation;
@@ -117,16 +174,19 @@ export const recordProjectSandboxDispatchFailureDb = async (
     .update(ProjectOperationTable)
     .set({
       errorCode: "SANDBOX_DISPATCH_UNCONFIRMED",
-      errorMessage: "Workspace setup could not be submitted. It will be retried automatically.",
+      errorMessage:
+        "Workspace setup could not be submitted. It will be retried automatically.",
     })
-    .where(and(
-      eq(ProjectOperationTable.id, operationId),
-      eq(ProjectOperationTable.userId, userId),
-      eq(ProjectOperationTable.status, "queued"),
-      isNull(ProjectOperationTable.triggerRunId),
-      // A late response from an expired claim cannot overwrite a newer attempt.
-      eq(ProjectOperationTable.dispatchAttempts, dispatchAttempts),
-    ))
+    .where(
+      and(
+        eq(ProjectOperationTable.id, operationId),
+        eq(ProjectOperationTable.userId, userId),
+        eq(ProjectOperationTable.status, "queued"),
+        isNull(ProjectOperationTable.triggerRunId),
+        // A late response from an expired claim cannot overwrite a newer attempt.
+        eq(ProjectOperationTable.dispatchAttempts, dispatchAttempts),
+      ),
+    )
     .returning({ id: ProjectOperationTable.id });
 
   return updatedProjectOperation;

@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
-import { startProjectSandbox } from "@/trigger/projects/start-project-sandbox";
+import { handleProjectSandbox } from "@/trigger/projects/handle-project-sandbox";
 import { updateProjectOperationRunDb } from "@/features/projects/server/project-operations";
 
 const mocks = vi.hoisted(() => ({
@@ -29,7 +29,7 @@ const projectId = "00000000-0000-4000-8000-000000000002";
 const operationId = "00000000-0000-4000-8000-000000000003";
 const payload = { projectId, userId, operationId };
 const ctx = { run: { id: "run_sandbox" }, attempt: { number: 1 } };
-const task = startProjectSandbox as unknown as {
+const task = handleProjectSandbox as unknown as {
   run: (input: typeof payload, context: { ctx: typeof ctx }) => Promise<unknown>;
   onFailure: (input: { payload: typeof payload; ctx: typeof ctx; error: Error }) => Promise<unknown>;
 };

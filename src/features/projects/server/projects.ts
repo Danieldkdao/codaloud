@@ -3,17 +3,20 @@ import {
   asc,
   desc,
   eq,
+  exists,
   getTableColumns,
   gt,
   ilike,
   isNull,
   lt,
+  not,
   or,
   sql,
 } from "drizzle-orm";
 
 import { db, type DbTransaction as DBTransaction } from "@/db/db";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
+import { ProjectOperationTable } from "@/db/schemas/project-operation";
 import type { UpdateProjectSchema } from "@/features/projects/actions/schemas";
 import {
   projectParamsSchema,
@@ -21,6 +24,20 @@ import {
   type ProjectCursorSchema,
   type ProjectParamsSchema,
 } from "@/features/projects/lib/project-params";
+
+const projectDeletionRequested = () =>
+  sql<boolean>`${exists(
+    db
+      .select({ id: ProjectOperationTable.id })
+      .from(ProjectOperationTable)
+      .where(
+        and(
+          eq(ProjectOperationTable.projectId, ProjectTable.id),
+          eq(ProjectOperationTable.userId, ProjectTable.userId),
+          eq(ProjectOperationTable.kind, "delete"),
+        ),
+      ),
+  )}`;
 
 export const readUserProjectsDb = async (
   userId: string,
@@ -44,6 +61,7 @@ export const readUserProjectsDb = async (
   const userProjects = await db
     .select({
       ...getTableColumns(ProjectTable),
+      deletionRequested: projectDeletionRequested(),
       cursorValue:
         sortBy === "name"
           ? ProjectTable.name
@@ -89,7 +107,7 @@ export const readUserProjectsDb = async (
   };
 };
 
-export const insertProjectDB = async (
+export const insertProjectDb = async (
   data: ProjectInsertData,
   tx?: DBTransaction,
 ) => {
@@ -106,7 +124,10 @@ export const confirmUserProjectOwnership = async (
   projectId: string,
 ) => {
   const [existingProject] = await db
-    .select()
+    .select({
+      ...getTableColumns(ProjectTable),
+      deletionRequested: projectDeletionRequested(),
+    })
     .from(ProjectTable)
     .where(and(eq(ProjectTable.userId, userId), eq(ProjectTable.id, projectId)))
     .limit(1);
@@ -122,22 +143,16 @@ export const updateUserProjectDb = async (
   const [updatedProject] = await db
     .update(ProjectTable)
     .set(data)
-    .where(and(eq(ProjectTable.id, projectId), eq(ProjectTable.userId, userId)))
+    .where(
+      and(
+        eq(ProjectTable.id, projectId),
+        eq(ProjectTable.userId, userId),
+        not(projectDeletionRequested()),
+      ),
+    )
     .returning();
 
   return updatedProject;
-};
-
-export const deleteUserProjectDb = async (
-  userId: string,
-  projectId: string,
-) => {
-  const [deletedProject] = await db
-    .delete(ProjectTable)
-    .where(and(eq(ProjectTable.id, projectId), eq(ProjectTable.userId, userId)))
-    .returning();
-
-  return deletedProject;
 };
 
 export const updateUserProjectSandboxDb = async (
@@ -152,7 +167,10 @@ export const updateUserProjectSandboxDb = async (
       and(
         eq(ProjectTable.id, projectId),
         eq(ProjectTable.userId, userId),
-        or(isNull(ProjectTable.sandboxId), eq(ProjectTable.sandboxId, sandboxId)),
+        or(
+          isNull(ProjectTable.sandboxId),
+          eq(ProjectTable.sandboxId, sandboxId),
+        ),
       ),
     )
     .returning();

@@ -30,5 +30,9 @@ export const useProjects = (filters: Partial<ProjectParamsSchema> = {}) => {
       return userProjects;
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchInterval: (query) => query.state.data?.pages.some(
+      (page) => page.projects.some((project) => project.deletionRequested),
+    ) ? 3_000 : false,
+    refetchIntervalInBackground: false,
   });
 };

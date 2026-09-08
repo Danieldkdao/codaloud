@@ -12,6 +12,7 @@ export const projectResponseSchema = z.object({
   sandboxId: z.string().nullable(),
   setupStatus: z.enum(projectSetupStatuses),
   setupError: z.string().nullable(),
+  deletionRequested: z.boolean().optional(),
   githubRepositoryId: z.string().nullable(),
   lastOpenedFilePath: z.string().nullable(),
   lastOpenedAt: z.iso.datetime().nullable(),

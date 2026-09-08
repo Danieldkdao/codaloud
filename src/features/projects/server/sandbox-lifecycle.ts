@@ -18,6 +18,12 @@ export const transitionProjectSandboxDb = async (
   )).for("update");
   if (!existingProject) return null;
 
+  const [deletingProjectOperation] = await tx.select({ id: ProjectOperationTable.id }).from(ProjectOperationTable).where(and(
+    eq(ProjectOperationTable.projectId, context.projectId),
+    eq(ProjectOperationTable.userId, context.userId), eq(ProjectOperationTable.kind, "delete"),
+  )).limit(1);
+  if (deletingProjectOperation) return null;
+
   // Until activeOperationId exists, only the latest operation may update this project.
   const [existingProjectOperation] = await tx.select().from(ProjectOperationTable).where(and(
     eq(ProjectOperationTable.projectId, context.projectId),

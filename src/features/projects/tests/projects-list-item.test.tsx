@@ -68,6 +68,7 @@ const project: ProjectResponseData = {
 const listKey = ["projects", "infinite", "cursor", project.userId, {}];
 const detailKey = ["projects", "detail", project.userId, project.id];
 const filteredKey = ["projects", "infinite", "cursor", project.userId, { search: "My" }];
+const pageData = (projects: ProjectResponseData[]) => ({ pages: [{ projects, nextCursor: null }], pageParams: [null] });
 let client: QueryClient;
 let root: Root;
 let container: HTMLDivElement;
@@ -84,11 +85,11 @@ const confirm = async () => {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  client.setQueryData(listKey, [project]);
+  client.setQueryData(listKey, pageData([project]));
   client.setQueryData(detailKey, project);
-  client.setQueryData(filteredKey, [project]);
+  client.setQueryData(filteredKey, pageData([project]));
   client.setQueryData(["github", "repositories"], []);
-  loadList.mockReset().mockResolvedValue([]);
+  loadList.mockReset().mockResolvedValue(pageData([]));
   unsubscribe = new QueryObserver(client, { queryKey: listKey, queryFn: loadList }).subscribe(() => {});
   mocks.remove.mockReset().mockResolvedValue({ error: false, message: "Deleted", projectId: project.id });
   container = document.createElement("div");
@@ -105,12 +106,12 @@ it("waits for explicit confirmation before deleting the selected project", async
   await confirm();
   expect(mocks.remove).toHaveBeenCalledWith(project.id);
   expect(loadList).toHaveBeenCalledOnce();
-  expect(client.getQueryData(listKey)).toEqual([]);
+  expect(client.getQueryData(listKey)).toEqual(pageData([]));
   expect(client.getQueryState(detailKey)?.isInvalidated).toBe(true);
   expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(true);
   expect(client.getQueryState(["github", "repositories"])?.isInvalidated).toBe(false);
   expect(mocks.alert).not.toHaveBeenCalled();
-  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project deleted");
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Deletion started");
 });
 
 it("alerts on failure, preserves the cache, and allows another attempt", async () => {
@@ -121,7 +122,7 @@ it("alerts on failure, preserves the cache, and allows another attempt", async (
   expect(mocks.success).not.toHaveBeenCalled();
   expect(loadList).not.toHaveBeenCalled();
   expect(client.getQueryState(detailKey)?.isInvalidated).toBe(false);
-  expect(client.getQueryData(listKey)).toEqual([project]);
+  expect(client.getQueryData(listKey)).toEqual(pageData([project]));
   openConfirmation();
   await confirm();
   expect(mocks.remove).toHaveBeenCalledTimes(2);
@@ -159,7 +160,7 @@ it("closes the row on Delete and leaves the project intact if confirmation is di
   expect(mocks.close).toHaveBeenCalledOnce();
   expect(mocks.push).not.toHaveBeenCalled();
   expect(mocks.remove).not.toHaveBeenCalled();
-  expect(client.getQueryData(listKey)).toEqual([project]);
+  expect(client.getQueryData(listKey)).toEqual(pageData([project]));
 });
 
 it("offers Update and Delete to screen readers without requiring a swipe", () => {
@@ -175,9 +176,9 @@ it("offers Update and Delete to screen readers without requiring a swipe", () =>
 });
 
 
-it("blocks the whole card only after confirmation and stays busy through the list refresh", async () => {
+it("blocks the whole card after confirmation and stays busy while cleanup is pending", async () => {
   let resolveDeletion!: (value: { error: false; message: string; projectId: string }) => void;
-  let resolveRefresh!: (value: never[]) => void;
+  let resolveRefresh!: (value: ReturnType<typeof pageData>) => void;
   mocks.remove.mockImplementation(() => new Promise((resolve) => { resolveDeletion = resolve; }));
   loadList.mockImplementation(() => new Promise((resolve) => { resolveRefresh = resolve; }));
   const staleAccessibilityAction = mocks.card.onAccessibilityAction;
@@ -216,10 +217,24 @@ it("blocks the whole card only after confirmation and stays busy through the lis
   expect(container.querySelector("progress")).not.toBeNull();
   expect(mocks.card.disabled).toBe(true);
   expect(mocks.success).not.toHaveBeenCalled();
-  await act(async () => { resolveRefresh([]); await pending; });
-  expect(container.querySelector("progress")).toBeNull();
-  expect(client.getQueryData(listKey)).toEqual([]);
-  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project deleted");
+  await act(async () => { resolveRefresh(pageData([])); await pending; });
+  // This isolated card stays mounted; the real list removes it once the server omits the project.
+  expect(container.querySelector("progress")).not.toBeNull();
+  expect(client.getQueryData(listKey)).toEqual(pageData([]));
+  expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Deletion started");
+});
+
+it("keeps a server-reported deletion disabled after reopening the list", () => {
+  act(() => root.render(createElement(QueryClientProvider, { client },
+    createElement(ProjectsListItem, { project: { ...project, deletionRequested: true } }))));
+  expect(mocks.card.disabled).toBe(true);
+  expect(container.textContent).toContain("Deleting");
+  act(() => {
+    mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "update" } } as never);
+    mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "delete" } } as never);
+  });
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.confirm).not.toHaveBeenCalled();
 });
 
 it.each(["response", "exception"])("restores the card after a deletion %s failure", async (failure) => {
@@ -233,9 +248,19 @@ it.each(["response", "exception"])("restores the card after a deletion %s failur
   expect(mocks.card.disabled).toBe(false);
   expect(mocks.swipe.enabled).toBe(true);
   expect(container.querySelector<HTMLButtonElement>('[aria-label="Delete My project"]')!.disabled).toBe(false);
-  expect(client.getQueryData(listKey)).toEqual([project]);
+  expect(client.getQueryData(listKey)).toEqual(pageData([project]));
   openConfirmation();
   await confirm();
   expect(mocks.remove).toHaveBeenCalledTimes(2);
   expect(loadList).toHaveBeenCalledOnce();
+});
+
+it("keeps accepted deletion in cached lists if the first refresh fails", async () => {
+  loadList.mockRejectedValue(new Error("offline"));
+  openConfirmation();
+  await confirm();
+  expect(client.getQueryData(listKey)).toEqual(pageData([{ ...project, deletionRequested: true }]));
+  expect(client.getQueryData(filteredKey)).toEqual(pageData([{ ...project, deletionRequested: true }]));
+  expect(mocks.card.disabled).toBe(true);
+  expect(mocks.success).toHaveBeenCalledWith("Deletion started");
 });

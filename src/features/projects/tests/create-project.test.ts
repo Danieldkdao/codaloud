@@ -240,7 +240,7 @@ describe("GitHub import access validation", () => {
     expect((await POST(request({ name: "New", source: "new" }))).status).toBe(201);
     expect(mocks.listUserAccounts).not.toHaveBeenCalled();
     expect(network).toHaveBeenCalledTimes(1);
-    expect(String(network.mock.calls[0][0])).toBe("https://api.trigger.dev/api/v1/tasks/start-project-sandbox/trigger");
+    expect(String(network.mock.calls[0][0])).toBe("https://api.trigger.dev/api/v1/tasks/handle-project-sandbox/trigger");
   });
 });
 
@@ -252,12 +252,12 @@ describe("sandbox task submission", () => {
 
     expect(network).toHaveBeenCalledTimes(1);
     const [url, options] = network.mock.calls[0];
-    expect(url).toBe("https://api.trigger.dev/api/v1/tasks/start-project-sandbox/trigger");
+    expect(url).toBe("https://api.trigger.dev/api/v1/tasks/handle-project-sandbox/trigger");
     expect(options?.method).toBe("POST");
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer test-trigger-secret");
     expect(JSON.parse(options?.body as string)).toEqual({
       payload: { projectId: "created-project", userId: "current-user", operationId: "created-operation" },
-      options: { idempotencyKey: "start-project-sandbox:created-operation", concurrencyKey: "created-project" },
+      options: { idempotencyKey: "handle-project-sandbox:created-operation", concurrencyKey: "created-project" },
     });
     expect(timeout).toHaveBeenCalledWith(5_000);
     expect(options?.signal).not.toBe(req.signal);

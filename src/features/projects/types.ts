@@ -5,6 +5,7 @@ export type ProjectResponseData = Omit<
   ProjectSelectData,
   "createdAt" | "updatedAt" | "lastOpenedAt"
 > & {
+  deletionRequested?: boolean;
   createdAt: string;
   updatedAt: string;
   lastOpenedAt: string | null;

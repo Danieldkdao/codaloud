@@ -4,9 +4,11 @@ import {
 } from "@/features/projects/constants";
 import { submitProjectSandbox } from "@/features/projects/server/dispatch-project-sandbox";
 import { readDueProjectSandboxOperationsDb } from "@/features/projects/server/project-operations";
+import { reconcileProjectDeletionRuns } from "@/features/projects/server/project-deletion";
 
 export const retryPendingProjectSandboxes = async () => {
   const startedAt = Date.now();
+  await reconcileProjectDeletionRuns(startedAt + projectSandboxDispatchBudgetMs);
   const pendingProjectOperations = await readDueProjectSandboxOperationsDb(projectSandboxDispatchBatchSize);
   let submitted = 0;
   let failed = 0;

@@ -189,7 +189,6 @@ describe("durable sandbox dispatch recovery", () => {
     "update project_operations set status = 'failed'",
     "update project_operations set status = 'succeeded'",
     "update project_operations set status = 'running'",
-    "update project_operations set kind = 'delete'",
     "update project_operations set kind = 'resume'",
     "delete from projects",
     "update projects set user_id = '00000000-0000-4000-8000-000000000099'",

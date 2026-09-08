@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { APIError } from "better-auth/api";
 import { POST } from "@/app/api/projects+api";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
+import { ProjectOperationTable } from "@/db/schemas/project-operation";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   insert: vi.fn(),
   values: vi.fn(),
   returning: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth", () => ({
@@ -19,7 +21,7 @@ vi.mock("@/lib/auth/auth", () => ({
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
-vi.mock("@/db/db", () => ({ db: { insert: mocks.insert } }));
+vi.mock("@/db/db", () => ({ db: { transaction: mocks.transaction } }));
 
 const request = (payload: unknown, contentType = "application/json") => new Request(
   "https://codaloud.test/api/projects",
@@ -33,6 +35,9 @@ const request = (payload: unknown, contentType = "application/json") => new Requ
 const network = vi.fn<typeof fetch>();
 
 beforeEach(() => {
+  mocks.transaction.mockImplementation(async (callback) => callback({ insert: mocks.insert }));
+  mocks.insert.mockReset();
+  mocks.returning.mockReset();
   mocks.listUserAccounts.mockResolvedValue([{ id: "linked-account", providerId: "github", scopes: ["repo"] }]);
   mocks.getAccessToken.mockResolvedValue({ accessToken: "test-token" });
   network.mockReset();
@@ -54,9 +59,18 @@ describe("project creation route and insert flow", () => {
     const response = await POST(request({ name: " My project ", source, repositoryId }));
 
     expect(response.status).toBe(201);
-    expect(mocks.insert).toHaveBeenCalledWith(ProjectTable);
-    expect(mocks.values).toHaveBeenCalledExactlyOnceWith({
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.insert).toHaveBeenNthCalledWith(1, ProjectTable);
+    expect(mocks.insert).toHaveBeenNthCalledWith(2, ProjectOperationTable);
+    expect(mocks.values).toHaveBeenCalledTimes(2);
+    expect(mocks.values).toHaveBeenNthCalledWith(1, {
       name: "My project", userId: "current-user", githubRepositoryId,
+    });
+    expect(mocks.values).toHaveBeenNthCalledWith(2, {
+      projectId: "created-project",
+      userId: "current-user",
+      kind: "prepare",
+      githubAccountId: source === "github" ? "linked-account" : null,
     });
     expect(await response.json()).toEqual({
       error: false,
@@ -103,6 +117,25 @@ describe("project creation route and insert flow", () => {
     const response = await POST(request({ name: "My project", source: "new" }, "text/plain"));
     expect(response.status).toBe(415);
     expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 2])("rejects the transaction when insert %s fails", async (failedInsert) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    if (failedInsert === 2) {
+      mocks.insert.mockImplementationOnce(() => ({ values: mocks.values }));
+    }
+    const error = new Error("Database insert failed");
+    mocks.insert.mockImplementationOnce(() => { throw error; });
+
+    const response = await POST(request({ name: "My project", source: "new" }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: true,
+      message: "Unable to create project. Please try again.",
+    });
+    expect(mocks.insert).toHaveBeenCalledTimes(failedInsert);
+    await expect(mocks.transaction.mock.results[0].value).rejects.toBe(error);
   });
 });
 

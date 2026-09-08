@@ -1,5 +1,7 @@
+import { db } from "@/db/db";
 import { createProjectSchema } from "@/features/projects/actions/schemas";
 import { projectParamsSchema } from "@/features/projects/lib/project-params";
+import { insertProjectOperationDB } from "@/features/projects/server/project-operations";
 import {
   insertProjectDB,
   readUserProjectsDb,
@@ -7,7 +9,7 @@ import {
 import { apiResponse, getContentType } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import {
-  getGitHubAccessToken,
+  getGitHubCredentials,
   getGitHubErrorResponse,
 } from "@/services/github/server/access";
 import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
@@ -96,14 +98,17 @@ export const POST = async (request: Request) => {
       );
     }
 
+    let githubAccountId: string | null = null;
+
     if (result.data.source === "github") {
       try {
-        const accessToken = await getGitHubAccessToken(request.headers);
+        const { accountId, accessToken } = await getGitHubCredentials(request.headers);
         await verifyGitHubRepositoryAccess(
           accessToken,
           result.data.repositoryId,
           request.signal,
         );
+        githubAccountId = accountId;
       } catch (error) {
         const { body, status } = getGitHubErrorResponse(error);
         return apiResponse(body, status);
@@ -111,11 +116,28 @@ export const POST = async (request: Request) => {
     }
 
     // Users may only create their own projects; ownership comes from the session.
-    const insertedProject = await insertProjectDB({
-      name: result.data.name,
-      userId,
-      githubRepositoryId:
-        result.data.source === "github" ? result.data.repositoryId : null,
+    const insertedProject = await db.transaction(async (tx) => {
+      const insertedProject = await insertProjectDB(
+        {
+          name: result.data.name,
+          userId,
+          githubRepositoryId:
+            result.data.source === "github" ? result.data.repositoryId : null,
+        },
+        tx,
+      );
+
+      await insertProjectOperationDB(
+        {
+          projectId: insertedProject.id,
+          userId,
+          kind: "prepare",
+          githubAccountId,
+        },
+        tx,
+      );
+
+      return insertedProject;
     });
 
     return apiResponse(

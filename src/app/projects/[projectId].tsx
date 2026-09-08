@@ -1,6 +1,7 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 
 import { AppWrapper } from "@/components/app-wrapper";
+import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 
@@ -19,7 +20,14 @@ const ProjectScreen = () => {
           headerShown: false,
         }}
       />
-      <AppWrapper>
+      <AppWrapper scrollable={false} className="gap-4">
+        <Button
+          variant="outline"
+          className="self-start"
+          onPress={() => router.dismissTo("/(main)")}
+        >
+          Back to Projects
+        </Button>
         <PText selectable>Project ID: {projectId}</PText>
       </AppWrapper>
     </>

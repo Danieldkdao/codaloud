@@ -20,3 +20,4 @@ minimumReleaseAgeExclude:
 
 allowBuilds:
   esbuild: false
+  protobufjs: false

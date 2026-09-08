@@ -32,6 +32,7 @@ const request = (payload: unknown, contentType = "application/json") =>
   });
 
 beforeAll(async () => {
+  await mocks.pg.exec("create table project_operations (id uuid primary key, project_id uuid, user_id uuid, kind text)");
   await mocks.pg.exec(`create table projects (
     id uuid primary key, user_id uuid not null, name text not null,
     sandbox_id text, setup_status text not null default 'pending', setup_error text,
@@ -41,7 +42,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await mocks.pg.close(); });
 beforeEach(async () => {
-  await mocks.pg.exec("truncate projects");
+  await mocks.pg.exec("truncate projects, project_operations");
   await mocks.pg.query(`insert into projects
     (id, user_id, name, sandbox_id, github_repository_id, created_at, updated_at)
     values ($1, $2, 'Original', 'sandbox', '123', $5, $5),
@@ -52,6 +53,12 @@ beforeEach(async () => {
 });
 
 describe("project update API", () => {
+  it("prevents edits after deletion has been requested", async () => {
+    await mocks.pg.query("insert into project_operations values ($1, $2, $3, 'delete')", [otherProjectId, projectId, owner]);
+    const response = await PATCH(request({ name: "Renamed" }), { projectId });
+    expect(response.status).toBe(404);
+    expect((await mocks.pg.query("select name from projects where id = $1", [projectId])).rows).toEqual([{ name: "Original" }]);
+  });
   it("updates only the owner's project name, preserves other fields, and returns the updated project", async () => {
     const req = request({ name: " Renamed " });
     const response = await PATCH(req, { projectId });

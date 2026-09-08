@@ -1,9 +1,10 @@
 import { updateProjectSchema } from "@/features/projects/actions/schemas";
 import {
   confirmUserProjectOwnership,
-  deleteUserProjectDb,
   updateUserProjectDb,
 } from "@/features/projects/server/projects";
+import { requestProjectDeletionDb } from "@/features/projects/server/project-deletion";
+import { submitProjectSandbox } from "@/features/projects/server/dispatch-project-sandbox";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { apiResponse, getContentType, isValidIds } from "@/lib/utils";
 
@@ -32,6 +33,10 @@ export const GET = async (
 
     if (!existingProject) {
       return apiResponse({ error: true, message: "Project not found." }, 404);
+    }
+
+    if (existingProject.deletionRequested) {
+      return apiResponse({ error: true, message: "This project is being deleted." }, 409);
     }
 
     const response = apiResponse({
@@ -147,17 +152,24 @@ export const DELETE = async (
       return apiResponse({ error: true, message: "Invalid project ID." }, 400);
     }
 
-    const deletedProject = await deleteUserProjectDb(userId, projectId);
+    const requestedProjectDeletion = await requestProjectDeletionDb(userId, projectId);
 
-    if (!deletedProject) {
+    if (!requestedProjectDeletion) {
       return apiResponse({ error: true, message: "Project not found." }, 404);
+    }
+
+    try {
+      await submitProjectSandbox(requestedProjectDeletion.operation.id, userId);
+    } catch {
+      // The durable operation remains eligible for the scheduled dispatcher.
+      console.error("Unable to confirm project cleanup submission.", { projectId });
     }
 
     return apiResponse({
       error: false,
-      message: "Project deleted successfully.",
-      data: deletedProject,
-    });
+      message: "Project deletion started.",
+      data: { ...requestedProjectDeletion.project, deletionRequested: true },
+    }, 202);
   } catch (error) {
     console.error("Failed to delete project:", error);
 

@@ -44,3 +44,5 @@ example
 .pnpm-store/
 .env
 .env.local
+
+.trigger

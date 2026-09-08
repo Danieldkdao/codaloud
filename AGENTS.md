@@ -13,6 +13,7 @@
 - Work like a practical, efficient senior engineer. Think through each task in steps and choose the simplest implementation that meets the requirements.
 - Before implementing any new feature, always research the latest official documentation for the technologies involved, even when familiar with them. Make sure to also research the best practices, guidelines, and compatability information before continuing. Verify guidance against the versions used by this project. This research is required for every new feature, without exception.
 - If you are going to implement tests to test the feature you are going to build, implement the tests first, before implementing the feature itself. Then test and continue from there.
+- Never write or run dedicated tests for schema files, including database table definitions. Verify schema changes through code review and TypeScript typechecking instead.
 - Before working on application features, flows, or architecture, use the Notion MCP server to find and fetch the document titled "Codaloud" and confirm the relevant scope, requirements, and behavior.
 - Break large features into small, realistically completable chunks with a clear outcome and verification step. Aim to touch fewer than ten files per chunk; use coherent boundaries rather than forcing an arbitrary file limit. If the feature is large and would require more than ten files to implement, go back and suggest a chunked step-by-step plan to the user where each step is less than ten files. Each chunk should be a complete, testable unit of work that can be verified independently.
 - Implement and verify one chunk at a time, continuing through the requested feature while keeping each change manageable and easy to review.
@@ -65,3 +66,9 @@ Organize application code under `src/`:
 Keep resource-specific code in its feature folder; use shared folders for code with application-wide responsibilities or reuse across resources.
 
 When creating test files, place feature tests in `src/features/<feature>/tests/` and service tests in `src/services/<service>/tests/` (for example, `src/features/projects/tests/` and `src/services/github/tests/`). Keep tests for shared infrastructure, such as Query Client, in the root `tests/` folder. Use `.test.ts` or `.test.tsx` filenames.
+
+<!-- TRIGGER.DEV SKILLS START -->
+## Trigger.dev agent skills
+
+This project has Trigger.dev agent skills installed in `.agents/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-tasks`, `trigger-cost-savings`, `trigger-getting-started`.
+<!-- TRIGGER.DEV SKILLS END -->

@@ -11,7 +11,7 @@ export class GitHubAccessError extends Error {
   }
 }
 
-export const getGitHubAccessToken = async (headers: Headers) => {
+export const getGitHubCredentials = async (headers: Headers) => {
   // Select the linked account from the session, never from client input.
   const accounts = await auth.api.listUserAccounts({ headers });
   const githubAccount = accounts.find(
@@ -34,6 +34,11 @@ export const getGitHubAccessToken = async (headers: Headers) => {
       "GITHUB_RECONNECT_REQUIRED",
     );
   }
+  return { accountId: githubAccount.id, accessToken };
+};
+
+export const getGitHubAccessToken = async (headers: Headers) => {
+  const { accessToken } = await getGitHubCredentials(headers);
   return accessToken;
 };
 

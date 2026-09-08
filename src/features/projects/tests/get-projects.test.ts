@@ -65,6 +65,7 @@ const insert = (
   );
 
 beforeAll(async () => {
+  await mocks.pg.exec("create table project_operations (id uuid primary key, project_id uuid, user_id uuid, kind text)");
   await mocks.pg.exec(`create table projects (
     id uuid primary key, user_id uuid not null, name text not null,
     sandbox_id text, setup_status text not null default 'pending', setup_error text,
@@ -76,7 +77,7 @@ afterAll(async () => {
   await mocks.pg.close();
 });
 beforeEach(async () => {
-  await mocks.pg.exec("truncate projects");
+  await mocks.pg.exec("truncate projects, project_operations");
   mocks.getCurrentUser.mockReset().mockResolvedValue({ userId: owner });
   mocks.logQuery.mockReset();
 });
@@ -93,6 +94,16 @@ const seed = async () => {
 describe("single project lookup", () => {
   const projectRequest = (projectId: string) =>
     new Request(`https://codaloud.test/api/projects/${projectId}`);
+
+  it("keeps a deleting project in the list but prevents opening it", async () => {
+    await seed();
+    await mocks.pg.query("insert into project_operations values ($1, $2, $3, 'delete')", [id(300), id(1), owner]);
+    const response = await GET(request());
+    const body = await response.json();
+    expect(body.data.projects.find((project: { id: string }) => project.id === id(1))).toMatchObject({ deletionRequested: true });
+    expect(body.data.projects.find((project: { id: string }) => project.id === id(2))).toMatchObject({ deletionRequested: false });
+    expect((await getProject(projectRequest(id(1)), { projectId: id(1) })).status).toBe(409);
+  });
 
   it("returns the complete project only when the user owns it", async () => {
     await seed();
@@ -218,7 +229,7 @@ describe("project cursor pagination", () => {
     });
     const [sql, params] = mocks.logQuery.mock.calls[0];
     expect(sql).not.toContain("offset");
-    expect(params).toEqual([owner, 21]);
+    expect(params).toEqual(["delete", owner, 21]);
   });
 
   it.each([

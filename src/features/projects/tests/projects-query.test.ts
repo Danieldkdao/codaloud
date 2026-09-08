@@ -62,6 +62,18 @@ afterEach(() => {
 });
 
 describe("useProjects", () => {
+  it("polls while deletion is pending and stops after the project disappears", async () => {
+    const deleting = page(["a"]);
+    deleting.projects[0].deletionRequested = true;
+    read.mockResolvedValueOnce(deleting).mockResolvedValueOnce(page([]));
+    await render();
+    const query = client.getQueryCache().getAll()[0];
+    const refetchInterval = (query.options as { refetchInterval?: (query: unknown) => number | false }).refetchInterval;
+    expect(refetchInterval?.(query)).toBe(3_000);
+    await run(() => current.refetch());
+    expect(current.data?.pages[0].projects).toEqual([]);
+    expect(refetchInterval?.(query)).toBe(false);
+  });
   it("loads projects when the runtime signal has no throwIfAborted method", async () => {
     read.mockImplementation(async (_params, signal) => {
       // React Native's abort-controller polyfill lacks this newer browser API.

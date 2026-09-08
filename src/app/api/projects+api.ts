@@ -1,13 +1,16 @@
+import { db } from "@/db/db";
 import { createProjectSchema } from "@/features/projects/actions/schemas";
 import { projectParamsSchema } from "@/features/projects/lib/project-params";
+import { submitProjectSandbox } from "@/features/projects/server/dispatch-project-sandbox";
+import { insertProjectOperationDb } from "@/features/projects/server/project-operations";
 import {
-  insertProjectDB,
+  insertProjectDb,
   readUserProjectsDb,
 } from "@/features/projects/server/projects";
 import { apiResponse, getContentType } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import {
-  getGitHubAccessToken,
+  getGitHubCredentials,
   getGitHubErrorResponse,
 } from "@/services/github/server/access";
 import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
@@ -96,14 +99,19 @@ export const POST = async (request: Request) => {
       );
     }
 
+    let githubAccountId: string | null = null;
+
     if (result.data.source === "github") {
       try {
-        const accessToken = await getGitHubAccessToken(request.headers);
+        const { accountId, accessToken } = await getGitHubCredentials(
+          request.headers,
+        );
         await verifyGitHubRepositoryAccess(
           accessToken,
           result.data.repositoryId,
           request.signal,
         );
+        githubAccountId = accountId;
       } catch (error) {
         const { body, status } = getGitHubErrorResponse(error);
         return apiResponse(body, status);
@@ -111,12 +119,41 @@ export const POST = async (request: Request) => {
     }
 
     // Users may only create their own projects; ownership comes from the session.
-    const insertedProject = await insertProjectDB({
-      name: result.data.name,
-      userId,
-      githubRepositoryId:
-        result.data.source === "github" ? result.data.repositoryId : null,
-    });
+    const { insertedProject, insertedProjectOperation } = await db.transaction(
+      async (tx) => {
+        const insertedProject = await insertProjectDb(
+          {
+            name: result.data.name,
+            userId,
+            githubRepositoryId:
+              result.data.source === "github" ? result.data.repositoryId : null,
+          },
+          tx,
+        );
+
+        const insertedProjectOperation = await insertProjectOperationDb(
+          {
+            projectId: insertedProject.id,
+            userId,
+            kind: "prepare",
+            githubAccountId,
+          },
+          tx,
+        );
+
+        return { insertedProject, insertedProjectOperation };
+      },
+    );
+
+    try {
+      await submitProjectSandbox(insertedProjectOperation.id, userId);
+    } catch {
+      // Creation committed; the scheduled dispatcher recovers unconfirmed submissions.
+      console.error("Unable to confirm sandbox task submission.", {
+        projectId: insertedProject.id,
+        operationId: insertedProjectOperation.id,
+      });
+    }
 
     return apiResponse(
       {

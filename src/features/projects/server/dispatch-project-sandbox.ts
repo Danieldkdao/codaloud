@@ -2,6 +2,11 @@ import { z } from "zod";
 
 import type { ProjectOperationSelectData } from "@/db/schemas/project-operation";
 import type { StartProjectSandboxSchema } from "@/trigger/projects/start-project-sandbox";
+import {
+  claimProjectSandboxDispatchDb,
+  recordProjectSandboxDispatchFailureDb,
+  updateProjectOperationRunDb,
+} from "@/features/projects/server/project-operations";
 
 export const projectSandboxRunSchema = z.object({
   id: z.string().trim().min(1),
@@ -44,4 +49,34 @@ export const dispatchProjectSandbox = async (
   }
 
   return projectSandboxRunSchema.parse(await response.json());
+};
+
+export const submitProjectSandbox = async (operationId: string, userId: string) => {
+  const claimedProjectOperation = await claimProjectSandboxDispatchDb(operationId, userId);
+  if (!claimedProjectOperation) return false;
+
+  try {
+    // Both callers use REST so the retry's parent Trigger run cannot change the key.
+    const run = await dispatchProjectSandbox(claimedProjectOperation);
+    const updatedProjectOperation = await updateProjectOperationRunDb(
+      claimedProjectOperation.id,
+      claimedProjectOperation.userId,
+      run.id,
+      claimedProjectOperation.dispatchAttempts,
+    );
+
+    if (!updatedProjectOperation) {
+      throw new Error("The setup operation could not be linked to its run.");
+    }
+
+    return true;
+  } catch (error) {
+    // Keep queued work recoverable even when submission or acknowledgement is ambiguous.
+    await recordProjectSandboxDispatchFailureDb(
+      claimedProjectOperation.id,
+      claimedProjectOperation.userId,
+      claimedProjectOperation.dispatchAttempts,
+    );
+    throw error;
+  }
 };

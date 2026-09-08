@@ -1,11 +1,8 @@
 import { db } from "@/db/db";
 import { createProjectSchema } from "@/features/projects/actions/schemas";
 import { projectParamsSchema } from "@/features/projects/lib/project-params";
-import { dispatchProjectSandbox } from "@/features/projects/server/dispatch-project-sandbox";
-import {
-  insertProjectOperationDB,
-  updateProjectOperationRunDb,
-} from "@/features/projects/server/project-operations";
+import { submitProjectSandbox } from "@/features/projects/server/dispatch-project-sandbox";
+import { insertProjectOperationDB } from "@/features/projects/server/project-operations";
 import {
   insertProjectDB,
   readUserProjectsDb,
@@ -145,18 +142,9 @@ export const POST = async (request: Request) => {
     });
 
     try {
-      const run = await dispatchProjectSandbox(insertedProjectOperation);
-      const updatedProjectOperation = await updateProjectOperationRunDb(
-        insertedProjectOperation.id,
-        userId,
-        run.id,
-      );
-
-      if (!updatedProjectOperation) {
-        throw new Error("The setup operation could not be linked to its run.");
-      }
+      await submitProjectSandbox(insertedProjectOperation.id, userId);
     } catch {
-      // Creation committed; an ambiguous submission must not invite a duplicate project.
+      // Creation committed; the scheduled dispatcher recovers unconfirmed submissions.
       console.error("Unable to confirm sandbox task submission.", {
         projectId: insertedProject.id,
         operationId: insertedProjectOperation.id,

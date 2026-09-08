@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   where: vi.fn(),
   updateReturning: vi.fn(),
+  claim: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth", () => ({
@@ -28,6 +29,11 @@ vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
 vi.mock("@/db/db", () => ({ db: { transaction: mocks.transaction, update: mocks.update } }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { TRIGGER_SECRET_KEY: "test-trigger-secret" } }));
+vi.mock("@/features/projects/server/project-operations", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/features/projects/server/project-operations")>(),
+  // Atomic claiming is exercised against PostgreSQL in sandbox-dispatch-recovery.test.ts.
+  claimProjectSandboxDispatchDb: mocks.claim,
+}));
 
 const request = (payload: unknown, contentType = "application/json") => new Request(
   "https://codaloud.test/api/projects",
@@ -41,6 +47,9 @@ const request = (payload: unknown, contentType = "application/json") => new Requ
 const network = vi.fn<typeof fetch>();
 
 beforeEach(() => {
+  mocks.claim.mockReset().mockResolvedValue({
+    id: "created-operation", projectId: "created-project", userId: "current-user", dispatchAttempts: 1,
+  });
   mocks.transaction.mockImplementation(async (callback) => {
     const result = await callback({ insert: mocks.insert });
     mocks.commit();
@@ -254,7 +263,7 @@ describe("sandbox task submission", () => {
     expect(options?.signal).not.toBe(req.signal);
     expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(network.mock.invocationCallOrder[0]);
     expect(mocks.update).toHaveBeenCalledWith(ProjectOperationTable);
-    expect(mocks.set).toHaveBeenCalledWith({ triggerRunId: "run_sandbox" });
+    expect(mocks.set).toHaveBeenCalledWith({ triggerRunId: "run_sandbox", errorCode: null, errorMessage: null });
     expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.update.mock.invocationCallOrder[0]);
   });
 
@@ -270,7 +279,10 @@ describe("sandbox task submission", () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ error: false, data: { id: "created-project" } });
     expect(mocks.commit).toHaveBeenCalledTimes(1);
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.set).toHaveBeenCalledWith({
+      errorCode: "SANDBOX_DISPATCH_UNCONFIRMED",
+      errorMessage: expect.stringContaining("retried automatically"),
+    });
     expect(network).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/test-trigger-secret|private upstream details/);

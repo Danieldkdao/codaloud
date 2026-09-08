@@ -12,7 +12,10 @@ import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
 import { formatProjectSetupStatus } from "@/features/projects/lib/formatters";
-import type { ProjectPageData, ProjectResponseData } from "@/features/projects/types";
+import type {
+  ProjectPageData,
+  ProjectResponseData,
+} from "@/features/projects/types";
 import { alert, cn, confirmAction } from "@/lib/utils";
 
 type ProjectsListItemProps = {
@@ -25,7 +28,10 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   const [actionsVisible, setActionsVisible] = useState(false);
   const [isSubmittingDeletion, setIsSubmittingDeletion] = useState(false);
   const [deletionAccepted, setDeletionAccepted] = useState(false);
-  const isDeleting = isSubmittingDeletion || deletionAccepted || Boolean(project.deletionRequested);
+  const isDeleting =
+    isSubmittingDeletion ||
+    deletionAccepted ||
+    Boolean(project.deletionRequested);
   const deletionInFlight = useRef(false);
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -74,17 +80,26 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
 
             accepted = true;
             setDeletionAccepted(true);
-            const listFilters = { queryKey: ["projects", "infinite", "cursor", project.userId] };
+            const listFilters = {
+              queryKey: ["projects", "infinite", "cursor", project.userId],
+            };
             await queryClient.cancelQueries(listFilters);
             // Preserve accepted deletion across failed refreshes and list remounts.
-            queryClient.setQueriesData<InfiniteData<ProjectPageData>>(listFilters, (data) => data && ({
-              ...data,
-              pages: data.pages.map((page) => ({
-                ...page,
-                projects: page.projects.map((item) => item.id === project.id
-                  ? { ...item, deletionRequested: true } : item),
-              })),
-            }));
+            queryClient.setQueriesData<InfiniteData<ProjectPageData>>(
+              listFilters,
+              (data) =>
+                data && {
+                  ...data,
+                  pages: data.pages.map((page) => ({
+                    ...page,
+                    projects: page.projects.map((item) =>
+                      item.id === project.id
+                        ? { ...item, deletionRequested: true }
+                        : item,
+                    ),
+                  })),
+                },
+            );
             // Acceptance starts background cleanup; only a refreshed list can remove the card.
             await queryClient.invalidateQueries({ queryKey: ["projects"] });
             showSuccess("Deletion started");
@@ -118,15 +133,15 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
           onSwipeableWillClose={() => setActionsVisible(false)}
           renderRightActions={() => (
             <View
-              className="h-full flex-row items-stretch gap-2 pl-2"
+              className="h-full flex-row items-stretch"
               accessibilityElementsHidden={!actionsVisible}
               importantForAccessibility={
                 actionsVisible ? "auto" : "no-hide-descendants"
               }
             >
               <Button
-                variant="outline"
-                className="h-full min-h-0 aspect-square shrink-0 rounded-2xl p-0"
+                variant="secondary"
+                className="h-full min-h-0 aspect-square shrink-0 rounded-none p-0"
                 accessibilityLabel={`Update ${project.name}`}
                 disabled={isDeleting}
                 onPress={updateProject}
@@ -141,7 +156,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
               </Button>
               <Button
                 variant="destructive"
-                className="h-full min-h-0 aspect-square shrink-0 rounded-2xl p-0"
+                className="h-full min-h-0 aspect-square shrink-0 rounded-l-none rounded-r-2xl p-0"
                 accessibilityLabel={`Delete ${project.name}`}
                 disabled={isDeleting}
                 onPress={deleteProject}
@@ -163,7 +178,8 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
               params: { projectId: project.id },
             }}
             onPress={(event) => {
-              if (deletionInFlight.current || isDeleting) event.preventDefault();
+              if (deletionInFlight.current || isDeleting)
+                event.preventDefault();
             }}
             asChild
           >
@@ -188,7 +204,10 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                 if (nativeEvent.actionName === "update") updateProject();
                 if (nativeEvent.actionName === "delete") deleteProject();
               }}
-              className="gap-4 rounded-2xl border border-border bg-card p-4 active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={cn(
+                "gap-4 rounded-2xl border border-border bg-card p-4 active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                actionsVisible && "rounded-r-none",
+              )}
             >
               <View className="flex-row items-start gap-3">
                 <View className="size-12 items-center justify-center rounded-xl bg-secondary">
@@ -234,7 +253,9 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                     </View>
                   )}
                 </View>
-                <View className={cn("rounded-full px-3 py-1", status.className)}>
+                <View
+                  className={cn("rounded-full px-3 py-1", status.className)}
+                >
                   <PText className={status.textClassName}>{status.label}</PText>
                 </View>
               </View>
@@ -251,8 +272,11 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
           accessibilityState={{ busy: true }}
           accessibilityLiveRegion="polite"
         >
-          <ActivityIndicator size="large" className="text-primary" accessible={false} />
-          <PText>Deleting</PText>
+          <ActivityIndicator
+            size="large"
+            className="text-primary"
+            accessible={false}
+          />
         </View>
       )}
     </View>

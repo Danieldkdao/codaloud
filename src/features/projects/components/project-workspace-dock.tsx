@@ -1,10 +1,13 @@
 import { TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
-import { Pressable, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { AccessibilityInfo, Pressable, View, type LayoutChangeEvent } from "react-native";
+import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, type IconProps } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { useThemeColor } from "@/hooks/use-theme";
 
 type WorkspaceTabButtonProps = TabTriggerSlotProps & {
   label: string;
@@ -29,11 +32,11 @@ const WorkspaceTabButton = ({
       { flexDirection: "row", alignItems: "center", justifyContent: "center" },
     ]}
     className={cn(
-      "min-h-14 min-w-0 flex-1 items-center justify-center border-b-2 border-transparent px-1 py-3 active:bg-secondary focus-visible:outline-2 focus-visible:outline-ring",
-      isFocused && "border-secondary-foreground bg-secondary/50",
+      "min-h-12 min-w-0 flex-1 items-center justify-center rounded-full px-1 py-3 active:bg-secondary focus-visible:outline-2 focus-visible:outline-ring",
+      isFocused && "bg-secondary",
     )}
   >
-    <View className="flex-row flex-wrap items-center justify-center gap-2">
+    <View className="flex-row items-center justify-center gap-1.5">
       <Icon
         {...icon}
         size={18}
@@ -44,6 +47,7 @@ const WorkspaceTabButton = ({
       />
       <PText
         accessible={false}
+        numberOfLines={1}
         className={
           isFocused
             ? "font-medium text-secondary-foreground"
@@ -56,135 +60,116 @@ const WorkspaceTabButton = ({
   </Pressable>
 );
 
-export const ProjectWorkspaceDock = () => {
+type DockSurfaceProps = {
+  children: ReactNode;
+  useGlass: boolean;
+};
+
+const DockSurface = ({ children, useGlass }: DockSurfaceProps) => {
+  const shadow = useThemeColor("navigation-shadow");
+
+  return (
+    <View style={{
+      borderRadius: 36,
+      boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow }],
+    }}>
+      {useGlass ? (
+        <GlassView glassEffectStyle="regular" isInteractive style={{ borderRadius: 36 }}>
+          {children}
+        </GlassView>
+      ) : (
+        <View className="rounded-full border border-border bg-card">{children}</View>
+      )}
+    </View>
+  );
+};
+
+type ProjectWorkspaceDockProps = {
+  onLayout?: (event: LayoutChangeEvent) => void;
+};
+
+export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) => {
   const insets = useSafeAreaInsets();
-  const controlsPadding = Math.max(insets.bottom - 12, 8);
+  const [reduceTransparency, setReduceTransparency] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceTransparencyEnabled().then((enabled) => {
+      if (active) setReduceTransparency(enabled);
+    }).catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceTransparencyChanged", setReduceTransparency,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  const useGlass = !reduceTransparency && isGlassEffectAPIAvailable() && isLiquidGlassAvailable();
 
   return (
     <View
-      className="border-t border-border bg-card"
+      onLayout={onLayout}
       style={{
-        paddingLeft: insets.left,
-        paddingRight: insets.right,
-        paddingBottom: controlsPadding,
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        pointerEvents: "box-none",
+        paddingLeft: 16 + insets.left,
+        paddingRight: 16 + insets.right,
+        paddingTop: 12,
+        paddingBottom: Math.max(insets.bottom, 12),
       }}
     >
-      <View className="w-full max-w-3xl self-center">
-        <View className="flex-row border-b border-border">
-          <TabTrigger name="files" asChild>
-            <WorkspaceTabButton
-              label="Files"
-              icon={{ family: "Feather", name: "folder" }}
-            />
-          </TabTrigger>
-          <TabTrigger name="code" asChild>
-            <WorkspaceTabButton
-              label="Code"
-              icon={{ family: "Ionicons", name: "document-text-outline" }}
-            />
-          </TabTrigger>
-          <TabTrigger name="git" asChild>
-            <WorkspaceTabButton
-              label="Git"
-              icon={{ family: "Feather", name: "git-branch" }}
-            />
-          </TabTrigger>
-          <TabTrigger name="agent" asChild>
-            <WorkspaceTabButton
-              label="Agent"
-              icon={{ family: "Ionicons", name: "sparkles-outline" }}
-            />
-          </TabTrigger>
-        </View>
-        <View
-          className="flex-row items-center px-2"
-          style={{ paddingTop: 12 }}
-        >
-          <View
-            style={{
-              flex: 1,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-            }}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Previous file"
-              className="size-12 items-center justify-center rounded-full"
-            >
-              <Icon
-                family="Feather"
-                name="arrow-left"
-                size={20}
-                accessible={false}
-                className="text-foreground"
-              />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Next file"
-              className="size-12 items-center justify-center rounded-full"
-            >
-              <Icon
-                family="Feather"
-                name="arrow-right"
-                size={20}
-                accessible={false}
-                className="text-foreground"
-              />
-            </Pressable>
+      <View className="w-full self-center" style={{ maxWidth: 440, gap: 10, pointerEvents: "box-none" }}>
+        <DockSurface useGlass={useGlass}>
+          <View className="flex-row items-center gap-1 p-1.5">
+            <TabTrigger name="files" asChild>
+              <WorkspaceTabButton label="Files" icon={{ family: "Feather", name: "folder" }} />
+            </TabTrigger>
+            <TabTrigger name="code" asChild>
+              <WorkspaceTabButton label="Code" icon={{ family: "Ionicons", name: "document-text-outline" }} />
+            </TabTrigger>
+            <TabTrigger name="git" asChild>
+              <WorkspaceTabButton label="Git" icon={{ family: "Feather", name: "git-branch" }} />
+            </TabTrigger>
+            <TabTrigger name="agent" asChild>
+              <WorkspaceTabButton label="Agent" icon={{ family: "Ionicons", name: "sparkles-outline" }} />
+            </TabTrigger>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Microphone"
-            className="size-16 items-center justify-center rounded-full bg-secondary"
-          >
-            <Icon
-              family="Feather"
-              name="mic"
-              size={24}
-              accessible={false}
-              className="text-secondary-foreground"
-            />
-          </Pressable>
-          <View
-            style={{
-              flex: 1,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-            }}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Undo"
-              className="size-12 items-center justify-center rounded-full"
-            >
-              <Icon
-                family="Feather"
-                name="corner-up-left"
-                size={20}
-                accessible={false}
-                className="text-foreground"
-              />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Redo"
-              className="size-12 items-center justify-center rounded-full"
-            >
-              <Icon
-                family="Feather"
-                name="corner-up-right"
-                size={20}
-                accessible={false}
-                className="text-foreground"
-              />
-            </Pressable>
-          </View>
+        </DockSurface>
+
+        <View className="w-full self-center" style={{ maxWidth: 360 }}>
+          <DockSurface useGlass={useGlass}>
+            <View className="flex-row items-center p-2">
+              <View style={{ flex: 1, flexDirection: "row", justifyContent: "center" }}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Previous file"
+                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
+                  <Icon family="Feather" name="arrow-left" size={20} accessible={false} className="text-foreground" />
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Next file"
+                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
+                  <Icon family="Feather" name="arrow-right" size={20} accessible={false} className="text-foreground" />
+                </Pressable>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Microphone"
+                className="size-14 items-center justify-center rounded-full bg-primary active:bg-primary/90">
+                <Icon family="Feather" name="mic" size={24} accessible={false} className="text-primary-foreground" />
+              </Pressable>
+              <View style={{ flex: 1, flexDirection: "row", justifyContent: "center" }}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Undo"
+                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
+                  <Icon family="Feather" name="corner-up-left" size={20} accessible={false} className="text-foreground" />
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Redo"
+                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
+                  <Icon family="Feather" name="corner-up-right" size={20} accessible={false} className="text-foreground" />
+                </Pressable>
+              </View>
+            </View>
+          </DockSurface>
         </View>
       </View>
     </View>

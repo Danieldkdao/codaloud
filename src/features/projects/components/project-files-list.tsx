@@ -1,4 +1,6 @@
 import type { FileInfo } from "@daytona/sdk";
+import { use } from "react";
+import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
 import { FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -19,6 +21,7 @@ export const ProjectFilesList = ({
   onDirectoryPress,
 }: ProjectFilesListProps) => {
   const insets = useSafeAreaInsets();
+  const dockHeight = use(ProjectWorkspaceDockHeightContext);
   const contentPadding = {
     paddingTop: 8,
     paddingBottom: 16,
@@ -55,7 +58,8 @@ export const ProjectFilesList = ({
       data={files}
       keyExtractor={(file) => file.path ?? file.name}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={contentPadding}
+      contentContainerStyle={{ ...contentPadding, paddingBottom: dockHeight + 16 }}
+      scrollIndicatorInsets={{ bottom: dockHeight }}
       ListHeaderComponent={parentRow}
       renderItem={({ item }) => (
         <Pressable

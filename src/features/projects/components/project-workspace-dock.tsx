@@ -98,7 +98,7 @@ export const ProjectWorkspaceDock = () => {
         </View>
         <View
           className="flex-row items-center px-2"
-          style={{ paddingTop: controlsPadding - 10 }}
+          style={{ paddingTop: 12 }}
         >
           <View
             style={{
@@ -136,6 +136,19 @@ export const ProjectWorkspaceDock = () => {
               />
             </Pressable>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Microphone"
+            className="size-16 items-center justify-center rounded-full bg-secondary"
+          >
+            <Icon
+              family="Feather"
+              name="mic"
+              size={24}
+              accessible={false}
+              className="text-secondary-foreground"
+            />
+          </Pressable>
           <View
             style={{
               flex: 1,
@@ -166,37 +179,6 @@ export const ProjectWorkspaceDock = () => {
               <Icon
                 family="Feather"
                 name="corner-up-right"
-                size={20}
-                accessible={false}
-                className="text-foreground"
-              />
-            </Pressable>
-          </View>
-        </View>
-        <View className="flex-row items-center gap-3 px-4 pt-1">
-          <View className="flex-1" />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Microphone"
-            className="size-16 items-center justify-center rounded-full bg-secondary"
-          >
-            <Icon
-              family="Feather"
-              name="mic"
-              size={24}
-              accessible={false}
-              className="text-secondary-foreground"
-            />
-          </Pressable>
-          <View className="flex-1 items-center">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Send"
-              className="size-12 items-center justify-center rounded-full"
-            >
-              <Icon
-                family="Feather"
-                name="arrow-up"
                 size={20}
                 accessible={false}
                 className="text-foreground"

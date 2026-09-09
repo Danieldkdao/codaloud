@@ -7,3 +7,10 @@ export type ConfirmActionOptions = {
   actionText: string;
   onConfirmPress: () => void;
 };
+
+export type MaterialIconOptions = {
+  name: string;
+  isDirectory: boolean;
+  expanded?: boolean;
+  light?: boolean;
+};

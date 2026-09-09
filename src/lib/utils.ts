@@ -1,7 +1,8 @@
 import { clsx, type ClassValue } from "clsx";
 import { Alert, Platform } from "react-native";
 import { twMerge } from "tailwind-merge";
-import type { ApiResponse, ConfirmActionOptions } from "./types";
+import type { ApiResponse, ConfirmActionOptions, MaterialIconOptions } from "./types";
+import type { Manifest } from "material-icon-theme";
 import { getBaseURL } from "./auth/utils";
 import { FetchRequestInit } from "expo/fetch";
 import z from "zod";
@@ -82,4 +83,47 @@ export const isValidIds = (ids: string | string[]) => {
     return ids.every((id) => idSchema.safeParse(id).success);
   }
   return idSchema.safeParse(ids).success;
+};
+
+/** Resolve upstream filename/folder associations to locally bundled SVG artwork. */
+export const getMaterialIconXml = ({
+  name,
+  isDirectory,
+  expanded = false,
+  light = false,
+}: MaterialIconOptions): string => {
+  // Utilities also serve API routes; load the artwork only when an icon is requested.
+  const { manifest, icons }: { manifest: Manifest; icons: Record<string, string> } =
+    require("../../assets/material-icons.json");
+  const parts = name.replace(/\\/g, "/").toLowerCase().split("/").filter(Boolean);
+  const base = parts.pop() ?? "";
+  const parent = parts.pop();
+  const overrides = light ? manifest.light : undefined;
+  const lookup = (map: Record<string, string> | undefined, key: string) =>
+    map && Object.hasOwn(map, key) ? map[key] : undefined;
+  const match = (
+    field: "fileNames" | "fileExtensions" | "folderNames" | "folderNamesExpanded",
+    key: string,
+  ) => lookup(overrides?.[field], key) ?? lookup(manifest[field], key);
+  const matchName = (field: "fileNames" | "folderNames" | "folderNamesExpanded") =>
+    (parent ? match(field, `${parent}/${base}`) : undefined) ?? match(field, base);
+
+  const defaultKey = isDirectory ? (expanded ? "folderExpanded" : "folder") : "file";
+  const fallback = overrides?.[defaultKey] ?? manifest[defaultKey] ?? "file";
+  let id: string | undefined;
+
+  if (isDirectory) {
+    id = matchName(expanded ? "folderNamesExpanded" : "folderNames");
+  } else {
+    id = matchName("fileNames");
+    const segments = base.split(".");
+    // Parent associations win; within each group, try the longest extension first.
+    for (const prefix of parent ? [`${parent}/`, ""] : [""]) {
+      for (let index = 1; !id && index < segments.length; index += 1) {
+        id = match("fileExtensions", `${prefix}${segments.slice(index).join(".")}`);
+      }
+    }
+  }
+
+  return lookup(icons, id ?? fallback) ?? lookup(icons, fallback) ?? icons.file;
 };

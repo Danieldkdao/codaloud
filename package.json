@@ -96,8 +96,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:icons": "node scripts/generate-material-icons.mjs",
-    "check:icons": "node scripts/generate-material-icons.mjs --check",
-    "postinstall": "node scripts/generate-material-icons.mjs"
+    "check:icons": "node scripts/generate-material-icons.mjs --check"
   },
   "private": true
 }

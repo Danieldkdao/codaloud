@@ -1,3 +1,4 @@
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type {
@@ -89,3 +90,60 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
       throw new Error(`Unsupported project sort order: ${sortOrder satisfies never}`);
   }
 };
+
+
+export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
+
+export const formatCommitDate = (committedAt: string): string =>
+  new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));
+
+
+export const formatAgentActivityKind = (kind: ProjectAgentActivityKind): {
+  label: string;
+  icon: "mic" | "message-square" | "code" | "terminal" | "git-pull-request";
+} => {
+  switch (kind) {
+    case "voice":
+      return { label: "Voice command", icon: "mic" };
+    case "text":
+      return { label: "Text request", icon: "message-square" };
+    case "symbol":
+      return { label: "Symbol command", icon: "code" };
+    case "command":
+      return { label: "Terminal command", icon: "terminal" };
+    case "review":
+      return { label: "Code review", icon: "git-pull-request" };
+    default:
+      throw new Error(`Unsupported agent activity kind: ${kind satisfies never}`);
+  }
+};
+
+export const formatAgentActivityStatus = (status: ProjectAgentActivityStatus): {
+  label: string;
+  icon: "clock" | "play-circle" | "check-circle" | "alert-circle";
+  className: string;
+  textClassName: string;
+} => {
+  switch (status) {
+    case "queued":
+      return { label: "Queued", icon: "clock", className: "bg-muted", textClassName: "text-muted-foreground" };
+    case "running":
+      return { label: "Running", icon: "play-circle", className: "bg-secondary", textClassName: "text-secondary-foreground" };
+    case "complete":
+      return { label: "Complete", icon: "check-circle", className: "bg-success", textClassName: "text-success-foreground" };
+    case "failed":
+      return { label: "Failed", icon: "alert-circle", className: "bg-destructive/10", textClassName: "text-destructive" };
+    case "needs-attention":
+      return { label: "Needs attention", icon: "alert-circle", className: "bg-accent/10", textClassName: "text-accent" };
+    default:
+      throw new Error(`Unsupported agent activity status: ${status satisfies never}`);
+  }
+};
+
+export const formatAgentActivityDate = (createdAt: string): string =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(createdAt));

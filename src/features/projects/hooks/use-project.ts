@@ -12,6 +12,7 @@ export const useProject = (projectId: string) => {
   return useQuery({
     queryKey: ["projects", "detail", userId, projectId],
     enabled: Boolean(userId),
+    staleTime: 0,
     // Read failures lose their HTTP status; let the user retry instead of retrying 4xx responses.
     retry: false,
     queryFn: async ({ signal }) => {
@@ -24,5 +25,11 @@ export const useProject = (projectId: string) => {
 
       return existingProject;
     },
+    refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
+      const status = query.state.data?.setupStatus;
+      return status === "pending" || status === "running" ? 3_000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 };

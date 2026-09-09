@@ -28,3 +28,44 @@ export type ProjectSandboxLifecycleTransition =
   | { action: "attach"; sandboxId: string }
   | { action: "complete"; sandboxId: string }
   | { action: "fail" };
+
+
+export type ProjectCommitData = {
+  hash: string;
+  message: string;
+  author: string;
+  committedAt: string;
+  isMerge?: boolean;
+  refs?: string[];
+};
+
+
+export type ProjectBranchData = {
+  name: string;
+  commits: ProjectCommitData[];
+};
+
+
+export type ProjectAgentActivityKind =
+  | "voice"
+  | "text"
+  | "symbol"
+  | "command"
+  | "review";
+
+export type ProjectAgentActivityStatus =
+  | "queued"
+  | "running"
+  | "complete"
+  | "failed"
+  | "needs-attention";
+
+export type ProjectAgentActivityData = {
+  id: string;
+  kind: ProjectAgentActivityKind;
+  status: ProjectAgentActivityStatus;
+  title: string;
+  description: string;
+  createdAt: string;
+  target?: string;
+};

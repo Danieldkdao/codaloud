@@ -31,7 +31,9 @@ export const useProjects = (filters: Partial<ProjectParamsSchema> = {}) => {
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     refetchInterval: (query) => query.state.data?.pages.some(
-      (page) => page.projects.some((project) => project.deletionRequested),
+      (page) => page.projects.some((project) =>
+        project.deletionRequested || project.setupStatus === "pending" || project.setupStatus === "running",
+      ),
     ) ? 3_000 : false,
     refetchIntervalInBackground: false,
   });

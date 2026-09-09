@@ -67,9 +67,9 @@ export const transitionProjectSandboxDb = async (
   }).where(eq(ProjectOperationTable.id, existingProjectOperation.id));
 
   const [updatedProject] = await tx.update(ProjectTable).set({
-    // Startup completion is not file preparation. Keep unprepared projects in setup,
-    // and do not erase readiness if an already-prepared workspace is reopened.
-    setupStatus: existingProject.setupStatus === "ready" ? "ready" : failed ? "failed" : "running",
+    // For this milestone, ready means sandbox startup completed; file preparation is separate.
+    // Commit readiness together with the operation result and preserve it on reopen.
+    setupStatus: existingProject.setupStatus === "ready" || completed ? "ready" : failed ? "failed" : "running",
     setupError: existingProject.setupStatus === "ready" ? null : errorMessage,
     ...(transition.action === "attach" ? { sandboxId: transition.sandboxId } : {}),
   }).where(eq(ProjectTable.id, existingProject.id)).returning();

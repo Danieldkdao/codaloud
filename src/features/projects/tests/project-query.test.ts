@@ -58,9 +58,29 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   client.clear();
+  vi.useRealTimers();
 });
 
 describe("useProject", () => {
+  it.each(["ready", "failed"] as const)("refreshes queued and running setup, then stops at %s", async (setupStatus) => {
+    vi.useFakeTimers();
+    read.mockResolvedValueOnce(project)
+      .mockResolvedValueOnce({ ...project, setupStatus: "running" })
+      .mockResolvedValue({ ...project, setupStatus });
+
+    await act(async () => {
+      root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { projectId: project.id })));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(current.data?.setupStatus).toBe("pending");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(current.data?.setupStatus).toBe("running");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(current.data?.setupStatus).toBe(setupStatus);
+    await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
   it("returns the query result and caches by user and project", async () => {
     await render();
     expect(current.isSuccess).toBe(true);

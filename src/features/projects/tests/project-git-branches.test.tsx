@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import GitScreen from "@/app/projects/[projectId]/git";
 
+vi.mock("@/features/projects/hooks/use-workspace-loading-preview", () => ({ useWorkspaceLoadingPreview: () => false }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
 vi.mock("@/components/ui/glass-surface", () => ({
   GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children),

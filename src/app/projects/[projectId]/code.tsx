@@ -3,20 +3,35 @@ import { View } from "react-native";
 
 import CodeEditor from "@/components/code-editor";
 import { CodeEditorLoading } from "@/components/code-editor-loading";
-import { Icon } from "@/components/ui/icon";
-import { CodeText, PText } from "@/components/ui/text";
+import { CodeText } from "@/components/ui/text";
 import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-shortcuts";
 import { demoCode, demoCodeFilename } from "@/features/projects/data/demo-code";
 import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
 import { ProjectIcon } from "@/components/project-icon";
+import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
+import { useWorkspaceLoadingPreview } from "@/features/projects/hooks/use-workspace-loading-preview";
 
 const CodeScreen = () => {
   useEditorDevelopmentShortcuts();
+  const isLoadingPreview = useWorkspaceLoadingPreview();
   const dockHeight = use(ProjectWorkspaceDockHeightContext);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const handleEditorReady = useCallback(async () => {
     setIsEditorReady(true);
   }, []);
+  const isLoading = isLoadingPreview || !isEditorReady;
+
+  if (!demoCodeFilename) {
+    return isLoadingPreview ? (
+      <CodeEditorLoading bottomInset={dockHeight} />
+    ) : (
+      <ProjectWorkspaceState
+        icon="code"
+        title="No file selected"
+        description="Choose a file from the Files tab to start editing."
+      />
+    );
+  }
 
   return (
     <View className="flex-1 bg-background">
@@ -29,10 +44,10 @@ const CodeScreen = () => {
       <View className="flex-1">
         <View
           className="flex-1"
-          pointerEvents={isEditorReady ? "auto" : "none"}
-          accessibilityElementsHidden={!isEditorReady}
+          pointerEvents={isLoading ? "none" : "auto"}
+          accessibilityElementsHidden={isLoading}
           importantForAccessibility={
-            isEditorReady ? "auto" : "no-hide-descendants"
+            isLoading ? "no-hide-descendants" : "auto"
           }
         >
           <CodeEditor
@@ -52,7 +67,7 @@ const CodeScreen = () => {
             }}
           />
         </View>
-        {!isEditorReady ? <CodeEditorLoading bottomInset={dockHeight} /> : null}
+        {isLoading ? <CodeEditorLoading bottomInset={dockHeight} /> : null}
       </View>
     </View>
   );

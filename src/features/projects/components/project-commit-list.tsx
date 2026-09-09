@@ -10,6 +10,7 @@ import {
   formatCommitHash,
 } from "@/features/projects/lib/formatters";
 import type { ProjectCommitData } from "@/features/projects/types";
+import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 
 type ProjectCommitListProps = {
   commits: ProjectCommitData[];
@@ -18,6 +19,18 @@ type ProjectCommitListProps = {
 export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
   const dockHeight = use(ProjectWorkspaceDockHeightContext);
   const insets = useSafeAreaInsets();
+
+  if (commits.length === 0) {
+    return (
+      <View className="flex-1" style={{ paddingBottom: 64 }}>
+        <ProjectWorkspaceState
+          icon="git-commit"
+          title="No commits yet"
+          description="Your commits will appear here once you save changes to Git."
+        />
+      </View>
+    );
+  }
 
   return (
     <FlatList
@@ -41,11 +54,6 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
             Commit history
           </HeadingText>
         </View>
-      }
-      ListEmptyComponent={
-        <PText className="py-8 text-center text-muted-foreground">
-          No commits yet.
-        </PText>
       }
       renderItem={({ item, index }) => (
         <Pressable

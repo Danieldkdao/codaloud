@@ -59,7 +59,17 @@ const CodeFile = ({ left, top, rotation, featured = false }: CodeFileProps) => {
             backgroundColor: secondary,
           }}
         >
-          <CodeText className="text-secondary-foreground" style={{ fontSize: featured ? 26 : 16 }}>
+          <CodeText
+            className="text-secondary-foreground"
+            // This decorative glyph must fit its fixed-size card at every text scale.
+            allowFontScaling={false}
+            style={{
+              fontSize: featured ? 26 : 16,
+              lineHeight: featured ? 34 : 20,
+              includeFontPadding: false,
+              textAlign: "center",
+            }}
+          >
             {featured ? "</>" : "{}"}
           </CodeText>
         </View>

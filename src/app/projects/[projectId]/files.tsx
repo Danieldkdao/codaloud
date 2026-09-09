@@ -1,3 +1,5 @@
+import { View } from "react-native";
+import { ProjectFilesSearch } from "@/features/projects/components/project-files-search";
 import type { FileInfo } from "@daytona/sdk";
 import { useState } from "react";
 
@@ -392,12 +394,15 @@ const FilesScreen = () => {
     : currentDirectory.slice(0, currentDirectory.lastIndexOf("/"));
 
   return (
-    <ProjectFilesList
-      key={currentDirectory}
-      files={currentFiles}
-      parentDirectory={parentDirectory}
-      onDirectoryPress={setCurrentDirectory}
-    />
+    <View className="flex-1">
+      <ProjectFilesList
+        key={currentDirectory}
+        files={currentFiles}
+        parentDirectory={parentDirectory}
+        onDirectoryPress={setCurrentDirectory}
+      />
+      <ProjectFilesSearch />
+    </View>
   );
 };
 

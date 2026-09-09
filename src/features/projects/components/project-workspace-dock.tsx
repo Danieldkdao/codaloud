@@ -1,13 +1,11 @@
 import { TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
-import { useEffect, useState, type ReactNode } from "react";
-import { AccessibilityInfo, Pressable, View, type LayoutChangeEvent } from "react-native";
-import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from "expo-glass-effect";
+import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, type IconProps } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { useThemeColor } from "@/hooks/use-theme";
+import { GlassSurface } from "@/components/ui/glass-surface";
 
 type WorkspaceTabButtonProps = TabTriggerSlotProps & {
   label: string;
@@ -60,53 +58,12 @@ const WorkspaceTabButton = ({
   </Pressable>
 );
 
-type DockSurfaceProps = {
-  children: ReactNode;
-  useGlass: boolean;
-};
-
-const DockSurface = ({ children, useGlass }: DockSurfaceProps) => {
-  const shadow = useThemeColor("navigation-shadow");
-
-  return (
-    <View style={{
-      borderRadius: 36,
-      boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow }],
-    }}>
-      {useGlass ? (
-        <GlassView glassEffectStyle="regular" isInteractive style={{ borderRadius: 36 }}>
-          {children}
-        </GlassView>
-      ) : (
-        <View className="rounded-full border border-border bg-card">{children}</View>
-      )}
-    </View>
-  );
-};
-
 type ProjectWorkspaceDockProps = {
   onLayout?: (event: LayoutChangeEvent) => void;
 };
 
 export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) => {
   const insets = useSafeAreaInsets();
-  const [reduceTransparency, setReduceTransparency] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    AccessibilityInfo.isReduceTransparencyEnabled().then((enabled) => {
-      if (active) setReduceTransparency(enabled);
-    }).catch(() => {});
-    const subscription = AccessibilityInfo.addEventListener(
-      "reduceTransparencyChanged", setReduceTransparency,
-    );
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
-
-  const useGlass = !reduceTransparency && isGlassEffectAPIAvailable() && isLiquidGlassAvailable();
 
   return (
     <View
@@ -124,7 +81,7 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
       }}
     >
       <View className="w-full self-center" style={{ maxWidth: 440, gap: 10, pointerEvents: "box-none" }}>
-        <DockSurface useGlass={useGlass}>
+        <GlassSurface borderRadius={36}>
           <View className="flex-row items-center gap-1 p-1.5">
             <TabTrigger name="files" asChild>
               <WorkspaceTabButton label="Files" icon={{ family: "Feather", name: "folder" }} />
@@ -139,10 +96,10 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
               <WorkspaceTabButton label="Agent" icon={{ family: "Ionicons", name: "sparkles-outline" }} />
             </TabTrigger>
           </View>
-        </DockSurface>
+        </GlassSurface>
 
         <View className="w-full self-center" style={{ maxWidth: 360 }}>
-          <DockSurface useGlass={useGlass}>
+          <GlassSurface borderRadius={36}>
             <View className="flex-row items-center p-2">
               <View style={{ flex: 1, flexDirection: "row", justifyContent: "center" }}>
                 <Pressable accessibilityRole="button" accessibilityLabel="Previous file"
@@ -169,7 +126,7 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
                 </Pressable>
               </View>
             </View>
-          </DockSurface>
+          </GlassSurface>
         </View>
       </View>
     </View>

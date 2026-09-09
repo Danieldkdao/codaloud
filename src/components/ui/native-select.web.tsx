@@ -7,17 +7,17 @@ import { cn } from "@/lib/utils";
 
 export type { NativeSelectProps } from "@/components/ui/native-select";
 
-export const NativeSelect = ({ label, icon, sections }: NativeSelectProps) => {
+export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectProps) => {
   const selectedLabels = sections.map((section) =>
     section.options.find((option) => option.value === section.value)?.label,
   ).filter(Boolean).join(", ");
 
   return (
-    <View className={cn(
+    <View className={trigger ? "relative min-h-12 justify-center rounded-full focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring" : cn(
       "relative min-h-12 flex-row items-center justify-center gap-2 rounded-lg border border-input bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring",
       icon ? "size-12 shrink-0" : "px-3",
     )}>
-      {icon ?? (
+      {trigger ?? icon ?? (
         <>
           <PText aria-hidden className="font-medium">{label}</PText>
           <Icon family="Feather" name="chevron-down" size={18} className="text-muted-foreground" aria-hidden />

@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 export type NativeSelectProps = {
   label: string;
   icon?: ReactNode;
+  /** Custom visual content; the native menu still owns the tap target. */
+  trigger?: ReactNode;
   sections: readonly {
     label: string;
     value: string;
@@ -20,7 +22,7 @@ export type NativeSelectProps = {
   }[];
 };
 
-export const NativeSelect = ({ label, icon, sections }: NativeSelectProps) => {
+export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectProps) => {
   const selectedLabels = sections.map((section) =>
     section.options.find((option) => option.value === section.value)?.label,
   ).filter(Boolean).join(", ");
@@ -55,12 +57,12 @@ export const NativeSelect = ({ label, icon, sections }: NativeSelectProps) => {
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${selectedLabels}`}
         accessibilityHint="Opens available options"
-        className={cn(
+        className={trigger ? "min-h-12 justify-center" : cn(
           "min-h-12 flex-row items-center justify-center gap-2 rounded-lg border border-input bg-card",
           icon ? "size-12" : "px-3",
         )}
       >
-        {icon ?? (
+        {trigger ?? icon ?? (
           <>
             <PText className="font-medium">{label}</PText>
             <Icon family="Feather" name="chevron-down" size={18} className="text-muted-foreground" accessible={false} />

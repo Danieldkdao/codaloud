@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
 
-vi.mock("@/features/projects/components/project-files-search", () => ({ ProjectFilesSearch: () => null }));
+vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
 
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => createElement("div", null, children),

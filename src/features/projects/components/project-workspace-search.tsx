@@ -13,7 +13,15 @@ import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/
 
 const buttonSize = 56;
 
-export const ProjectFilesSearch = () => {
+type ProjectWorkspaceSearchProps = {
+  placeholder?: string;
+  accessibilityLabel?: string;
+};
+
+export const ProjectWorkspaceSearch = ({
+  placeholder = "Search Files",
+  accessibilityLabel = "Search files",
+}: ProjectWorkspaceSearchProps) => {
   const dockHeight = use(ProjectWorkspaceDockHeightContext);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -101,7 +109,7 @@ export const ProjectFilesSearch = () => {
       }}>
         {!anchor ? (
           <GlassSurface>
-            <Pressable onPress={open} accessibilityRole="button" accessibilityLabel="Search files"
+            <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
               accessibilityHint="Opens the search input"
               className="items-center justify-center rounded-full active:bg-secondary"
               style={{ width: buttonSize, height: buttonSize }}>
@@ -112,7 +120,7 @@ export const ProjectFilesSearch = () => {
       </View>
 
       {anchor ? (
-        // Covers the native header and sibling dock as well as the file list.
+        // Covers the native header and sibling dock as well as the active list.
         <Modal transparent animationType="none" presentationStyle="overFullScreen"
           statusBarTranslucent navigationBarTranslucent onRequestClose={close}
           onShow={() => {
@@ -138,7 +146,7 @@ export const ProjectFilesSearch = () => {
                   </View>
                   <Animated.View style={[{ flex: 1, minWidth: 0 }, labelStyle]}>
                     <Input ref={inputRef} type="search" variant="ghost"
-                      placeholder="Search Files" accessibilityLabel="Search Files"
+                      placeholder={placeholder} accessibilityLabel={placeholder}
                       value={query} onChangeText={setQuery}
                       autoCapitalize="none" autoCorrect={false} submitBehavior="submit"
                       className="border-0 px-0 focus:border-transparent focus:outline-0" />

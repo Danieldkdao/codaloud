@@ -2,7 +2,7 @@
 import { act, createElement, useEffect, useImperativeHandle, useRef, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProjectFilesSearch } from "@/features/projects/components/project-files-search";
+import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 
 vi.mock("react-native", () => ({
   View: ({ children, ref }: { children?: ReactNode; ref?: Ref<unknown> }) => {
@@ -53,7 +53,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
-  act(() => root.render(createElement(ProjectFilesSearch)));
+  act(() => root.render(createElement(ProjectWorkspaceSearch)));
 });
 afterEach(() => act(() => root.unmount()));
 
@@ -80,5 +80,23 @@ it("supports system dismissal and the explicit close control", () => {
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Search files");
   click("Close search");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("reuses the same editable search and dismissal behavior for commit history", () => {
+  act(() => root.render(createElement(ProjectWorkspaceSearch, {
+    placeholder: "Search Commits",
+    accessibilityLabel: "Search commits",
+  })));
+  click("Search commits");
+  const input = container.querySelector("input")!;
+  expect(input.placeholder).toBe("Search Commits");
+  expect(input.dataset.variant).toBe("ghost");
+  act(() => {
+    input.value = "initial commit";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(input.value).toBe("initial commit");
+  click("Dismiss search");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });

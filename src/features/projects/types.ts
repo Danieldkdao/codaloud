@@ -28,3 +28,19 @@ export type ProjectSandboxLifecycleTransition =
   | { action: "attach"; sandboxId: string }
   | { action: "complete"; sandboxId: string }
   | { action: "fail" };
+
+
+export type ProjectCommitData = {
+  hash: string;
+  message: string;
+  author: string;
+  committedAt: string;
+  isMerge?: boolean;
+  refs?: string[];
+};
+
+
+export type ProjectBranchData = {
+  name: string;
+  commits: ProjectCommitData[];
+};

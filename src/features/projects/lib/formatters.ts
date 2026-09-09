@@ -89,3 +89,9 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
       throw new Error(`Unsupported project sort order: ${sortOrder satisfies never}`);
   }
 };
+
+
+export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
+
+export const formatCommitDate = (committedAt: string): string =>
+  new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));

@@ -1,4 +1,4 @@
-import type { ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import type { DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { use } from "react";
 import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
 import { FlatList, Pressable, View } from "react-native";
@@ -16,7 +16,9 @@ type ProjectFilesListProps = {
   parentDirectory?: string;
   onDirectoryPress: (path: string) => void;
   onUpdate: (input: UpdateProjectFileSchema) => Promise<void>;
+  onDelete: (input: DeleteProjectFileSchema) => Promise<void>;
   updatingPath?: string;
+  deletingPath?: string;
   navigationDisabled?: boolean;
 };
 
@@ -26,7 +28,9 @@ export const ProjectFilesList = ({
   parentDirectory,
   onDirectoryPress,
   onUpdate,
+  onDelete,
   updatingPath,
+  deletingPath,
   navigationDisabled = false,
 }: ProjectFilesListProps) => {
   const insets = useSafeAreaInsets();
@@ -79,6 +83,8 @@ export const ProjectFilesList = ({
           existingNames={existingNames}
           onDirectoryPress={onDirectoryPress}
           onUpdate={onUpdate}
+          onDelete={onDelete}
+          deleting={deletingPath === item.path}
           disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
         />
       )}

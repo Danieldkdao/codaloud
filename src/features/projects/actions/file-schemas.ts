@@ -46,3 +46,9 @@ export type CreateProjectFileResponseSchema = z.infer<typeof createProjectFileRe
 
 export const updateProjectFileResponseSchema = createProjectFileResponseSchema;
 export type UpdateProjectFileResponseSchema = z.infer<typeof updateProjectFileResponseSchema>;
+
+export const deleteProjectFileSchema = createProjectFileSchema;
+export type DeleteProjectFileSchema = z.infer<typeof deleteProjectFileSchema>;
+
+export const deleteProjectFileResponseSchema = createProjectFileResponseSchema;
+export type DeleteProjectFileResponseSchema = z.infer<typeof deleteProjectFileResponseSchema>;

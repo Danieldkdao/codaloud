@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { GET, PATCH, POST } from "@/app/api/projects/[projectId]/files+api";
+import { DELETE, GET, PATCH, POST } from "@/app/api/projects/[projectId]/files+api";
 import { SandboxFilesError } from "@/services/daytona/api";
 
-const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), read: vi.fn(), create: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), read: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/features/projects/server/projects", () => ({ confirmUserProjectOwnership: mocks.project }));
-vi.mock("@/services/daytona/filesystem", () => ({ readSandboxFiles: mocks.read, createSandboxFile: mocks.create, updateSandboxFile: mocks.update }));
+vi.mock("@/services/daytona/filesystem", () => ({ readSandboxFiles: mocks.read, createSandboxFile: mocks.create, updateSandboxFile: mocks.update, deleteSandboxFile: mocks.delete }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "test-key" } }));
@@ -23,6 +23,7 @@ beforeEach(() => {
   mocks.project.mockReset().mockResolvedValue(project);
   mocks.read.mockReset().mockResolvedValue([]);
   mocks.create.mockReset().mockResolvedValue({ name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 0, modifiedAt: "2026-09-10T00:00:00.000Z" });
+  mocks.delete.mockReset().mockResolvedValue({ name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 12 });
   mocks.update.mockReset().mockResolvedValue({ name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 12 });
 });
 
@@ -123,4 +124,59 @@ it("rejects an injected sandbox ID and malformed JSON", async () => {
   expect((await POST(request({ ...input, sandboxId: "other" } as typeof input), params)).status).toBe(400);
   const malformed = new Request("https://codaloud.test/api/files", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" });
   expect((await POST(malformed, params)).status).toBe(400);
+});
+
+const deleteInput = input;
+const deleteRequest = (body: unknown = deleteInput) => new Request("https://codaloud.test/api/files", {
+  method: "DELETE", headers: { "Content-Type": "application/json", Cookie: "session=valid" }, body: JSON.stringify(body),
+});
+
+it("authenticates deletion and resolves the owned sandbox on the server", async () => {
+  const response = await DELETE(deleteRequest(), params);
+  expect(response.status).toBe(200);
+  expect(mocks.user).toHaveBeenCalledWith(expect.any(Headers));
+  expect(mocks.project).toHaveBeenCalledWith(userId, projectId);
+  expect(mocks.delete).toHaveBeenCalledWith({ projectId, sandboxId: "sandbox-id", allowInitialize: true }, deleteInput);
+  expect((await response.json()).data).toMatchObject({ path: "notes/hello.txt", size: 12 });
+});
+
+it("blocks unauthenticated deletion before looking up a project", async () => {
+  mocks.user.mockResolvedValue({ userId: null });
+  expect((await DELETE(deleteRequest(), params)).status).toBe(401);
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.delete).not.toHaveBeenCalled();
+});
+
+it("blocks deletion for unowned, deleting, and unprepared projects", async () => {
+  for (const [value, status] of [[null, 404], [{ ...project, deletionRequested: true }, 409], [{ ...project, setupStatus: "pending" }, 409], [{ ...project, sandboxId: null }, 409]] as const) {
+    mocks.project.mockResolvedValue(value);
+    expect((await DELETE(deleteRequest(), params)).status).toBe(status);
+  }
+  expect(mocks.delete).not.toHaveBeenCalled();
+});
+
+it("rejects malformed and unsafe deletion requests before reaching the workspace", async () => {
+  for (const body of [null, { ...deleteInput, name: "../escape" }, { ...deleteInput, name: ".." }, { ...deleteInput, parentPath: "/etc" }, { ...deleteInput, sandboxId: "other" }]) {
+    expect((await DELETE(deleteRequest(body), params)).status).toBe(400);
+  }
+  expect((await DELETE(deleteRequest(), { projectId: "invalid" })).status).toBe(400);
+  expect((await DELETE(new Request("https://codaloud.test/api/files", { method: "DELETE", body: "{}" }), params)).status).toBe(415);
+  expect((await DELETE(new Request("https://codaloud.test/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: "{" }), params)).status).toBe(400);
+  expect(mocks.delete).not.toHaveBeenCalled();
+});
+
+it("uses the existing failure response for changed deletion targets and restoring workspaces", async () => {
+  mocks.delete.mockRejectedValue(new SandboxFilesError(409, "FILE_CHANGED", "Refresh the folder."));
+  const conflict = await DELETE(deleteRequest(), params);
+  expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toEqual({ error: true, code: "FILE_CHANGED", message: "Refresh the folder." });
+  mocks.delete.mockRejectedValue(new SandboxFilesError(503, "WORKSPACE_RESTORING", "Restoring."));
+  const restoring = await DELETE(deleteRequest(), params);
+  expect(restoring.status).toBe(503);
+  expect(restoring.headers.get("Retry-After")).toBe("3");
+  expect(restoring.headers.get("Cache-Control")).toBe("private, no-store");
+  mocks.delete.mockRejectedValue(new Error("private provider detail"));
+  const failure = await DELETE(deleteRequest(), params);
+  expect(failure.status).toBe(502);
+  expect(JSON.stringify(await failure.json())).not.toContain("private provider detail");
 });

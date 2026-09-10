@@ -1,17 +1,18 @@
 import { exec } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { createSandboxFile, deleteSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
 
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "server-key" } }));
 const execute = promisify(exec);
 const context = { sandboxId: "sandbox-id", projectId: "project-id", allowInitialize: true };
 let home: string;
 let state: string;
+let deleteStatus: number;
 let labels: Record<string, string>;
 const network = vi.fn<typeof fetch>();
 
@@ -30,6 +31,7 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 `, { mode: 0o755 });
   }
   state = "started";
+  deleteStatus = 204;
   labels = { codaloudApp: "codaloud", codaloudProjectId: context.projectId };
   network.mockReset().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -48,6 +50,12 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
         const failure = error as { stdout: string };
         return Response.json({ exitCode: 1, result: failure.stdout });
       }
+    }
+    if (url.pathname.endsWith("/files") && init?.method === "DELETE") {
+      const target = url.searchParams.get("path")!;
+      expect(target.startsWith(join(home, ".codaloud/workspace") + "/")).toBe(true);
+      await rm(target, { recursive: url.searchParams.get("recursive") === "true" });
+      return new Response(null, { status: deleteStatus });
     }
     if (url.pathname.endsWith("/files")) {
       expect(url.searchParams.get("path")).toBe(join(home, ".codaloud/workspace"));
@@ -177,4 +185,67 @@ it("does not recreate a missing sandbox or mask a provider failure as an empty l
   network.mockResolvedValue(Response.json({}, { status: 404 }));
   await expect(readSandboxFiles(context, "")).rejects.toMatchObject({ code: "SANDBOX_MISSING" });
   expect(network).toHaveBeenCalledTimes(1);
+});
+
+it("deletes only the selected file, treating shell characters as literal data", async () => {
+  const name = "hello ' $(echo unexpected).txt";
+  await createSandboxFile(context, { parentPath: "", name: "notes", kind: "folder" });
+  const input = { parentPath: "notes", name, kind: "file" as const };
+  await createSandboxFile(context, input);
+  await writeFile(join(home, ".codaloud/workspace/notes/keep.txt"), "keep");
+  expect(await deleteSandboxFile(context, input)).toMatchObject({ name, path: `notes/${name}`, isDir: false });
+  await expect(lstat(join(home, ".codaloud/workspace/notes", name))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(home, ".codaloud/workspace/notes/keep.txt"), "utf8")).toBe("keep");
+  expect(network.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
+  const [url] = network.mock.calls.find(([, init]) => init?.method === "DELETE")!;
+  expect(new URL(String(url)).searchParams.get("recursive")).toBe("false");
+});
+
+it("recursively deletes a nonempty folder without following descendant symlinks", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "remove", kind: "folder" });
+  await mkdir(join(home, ".codaloud/workspace/remove/nested"));
+  await writeFile(join(home, ".codaloud/workspace/remove/nested/file.txt"), "delete");
+  await writeFile(join(home, "outside.txt"), "keep");
+  await symlink(join(home, "outside.txt"), join(home, ".codaloud/workspace/remove/link"));
+  expect(await deleteSandboxFile(context, { parentPath: "", name: "remove", kind: "folder" })).toMatchObject({ path: "remove", isDir: true });
+  await expect(lstat(join(home, ".codaloud/workspace/remove"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(home, "outside.txt"), "utf8")).toBe("keep");
+  const [url] = network.mock.calls.find(([, init]) => init?.method === "DELETE")!;
+  expect(new URL(String(url)).searchParams.get("recursive")).toBe("true");
+});
+
+it("blocks missing, changed, symlink, and escaping deletion targets before DELETE", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "source", kind: "file" });
+  await mkdir(join(home, "outside"));
+  await symlink(join(home, "outside"), join(home, ".codaloud/workspace/link"));
+  for (const [input, code] of [
+    [{ parentPath: "", name: "missing", kind: "file" }, "FILE_NOT_FOUND"],
+    [{ parentPath: "", name: "source", kind: "folder" }, "FILE_CHANGED"],
+    [{ parentPath: "", name: "link", kind: "folder" }, "INVALID_PATH"],
+    [{ parentPath: "link", name: "source", kind: "file" }, "INVALID_PATH"],
+  ] as const) {
+    await expect(deleteSandboxFile(context, input)).rejects.toMatchObject({ code });
+  }
+  for (const name of ["..", ".", "", "../outside"]) {
+    await expect(deleteSandboxFile(context, { parentPath: "", name, kind: "folder" })).rejects.toThrow();
+  }
+  expect(network.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
+});
+
+it("does not initialize a workspace for deletion and propagates provider failures", async () => {
+  await expect(deleteSandboxFile(context, { parentPath: "", name: "missing", kind: "file" })).rejects.toMatchObject({ code: "WORKSPACE_NOT_READY" });
+  await expect(lstat(join(home, ".codaloud"))).rejects.toMatchObject({ code: "ENOENT" });
+  await createSandboxFile(context, { parentPath: "", name: "source", kind: "file" });
+  const implementation = network.getMockImplementation()!;
+  network.mockImplementation((input, init) => init?.method === "DELETE" ? Promise.resolve(Response.json({}, { status: 500 })) : implementation(input, init));
+  await expect(deleteSandboxFile(context, { parentPath: "", name: "source", kind: "file" })).rejects.toMatchObject({ code: "DAYTONA_REQUEST_FAILED" });
+  expect((await lstat(join(home, ".codaloud/workspace/source"))).isFile()).toBe(true);
+});
+
+it("accepts a successful empty deletion response with status 200", async () => {
+  deleteStatus = 200;
+  const input = { parentPath: "", name: "remove.txt", kind: "file" as const };
+  await createSandboxFile(context, input);
+  expect(await deleteSandboxFile(context, input)).toMatchObject({ path: "remove.txt" });
+  await expect(lstat(join(home, ".codaloud/workspace/remove.txt"))).rejects.toMatchObject({ code: "ENOENT" });
 });

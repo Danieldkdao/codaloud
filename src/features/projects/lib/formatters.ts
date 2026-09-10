@@ -10,9 +10,9 @@ import type {
 export const formatProjectFileKind = (kind: ProjectFileKind) => {
   switch (kind) {
     case "file":
-      return { inputLabel: "File name", placeholder: "new-file.ts", successMessage: "File created", updateSuccessMessage: "File updated" };
+      return { inputLabel: "File name", placeholder: "new-file.ts", successMessage: "File created", updateSuccessMessage: "File updated", deleteSuccessMessage: "File deleted" };
     case "folder":
-      return { inputLabel: "Folder name", placeholder: "new-folder", successMessage: "Folder created", updateSuccessMessage: "Folder updated" };
+      return { inputLabel: "Folder name", placeholder: "new-folder", successMessage: "Folder created", updateSuccessMessage: "Folder updated", deleteSuccessMessage: "Folder deleted" };
     default:
       throw new Error(`Unsupported file kind: ${kind satisfies never}`);
   }

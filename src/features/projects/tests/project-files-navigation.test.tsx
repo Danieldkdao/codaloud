@@ -8,7 +8,7 @@ import { getDirectoryFiles } from "@/features/projects/lib/files";
 import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
 
-const mocks = vi.hoisted(() => ({ confirm: vi.fn(), update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
+const mocks = vi.hoisted(() => ({ confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
 vi.mock("@/lib/utils", () => ({ confirmAction: mocks.confirm }));
 vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { ref: Ref<HTMLInputElement>; value: string; disabled: boolean; invalid: boolean; accessibilityLabel: string }) => {
@@ -16,7 +16,7 @@ vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { 
   return createElement("input", { ref: props.ref, value: props.value, disabled: props.disabled, "aria-invalid": props.invalid, "aria-label": props.accessibilityLabel, readOnly: true });
 } }));
 vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
-  default: (props: SwipeableProps) => createElement("div", null, props.children,
+  default: (props: SwipeableProps) => createElement("div", { "data-swipe-enabled": String(props.enabled) }, props.children,
     props.renderRightActions?.({ value: 1 } as never, { value: -120 } as never, {} as never)),
 }));
 
@@ -33,6 +33,7 @@ vi.mock("@/features/projects/hooks/use-project-files", () => ({ useProjectFiles:
   query: { data: getDirectoryFiles(files, path), isPending: false, isError: false, isFetching: false, refetch: vi.fn() },
   update: { mutateAsync: mocks.update, isPending: mocks.updatePending, variables: { parentPath: "", previousName: "app" } },
   creation: { mutateAsync: mocks.create },
+  deletion: { mutateAsync: mocks.delete, isPending: mocks.deletePending, variables: mocks.deleteVariables },
 }) }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ onPress, accessibilityLabel, disabled }: { onPress: () => void; accessibilityLabel: string; disabled: boolean }) =>
   createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }),
@@ -43,8 +44,15 @@ vi.mock("@/features/projects/components/project-workspace-state", () => ({ Proje
 
 vi.mock("react-native", () => ({
   Alert: { alert: mocks.alert },
-  ActivityIndicator: () => null,
-  View: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+  ActivityIndicator: () => createElement("span", { "data-native-spinner": true }),
+  View: ({ children, className, pointerEvents, accessibilityRole, accessibilityLabel, accessibilityState, accessibilityElementsHidden, importantForAccessibility }: {
+    children: ReactNode; className?: string; pointerEvents?: string; accessibilityRole?: string; accessibilityLabel?: string;
+    accessibilityState?: { busy?: boolean }; accessibilityElementsHidden?: boolean; importantForAccessibility?: string;
+  }) => createElement("div", {
+    className, role: accessibilityRole, "aria-label": accessibilityLabel, "aria-busy": accessibilityState?.busy,
+    "data-pointer-events": pointerEvents, "data-accessibility-hidden": accessibilityElementsHidden,
+    "data-important-for-accessibility": importantForAccessibility,
+  }, children),
   FlatList: ({ data, renderItem, ListHeaderComponent }: { data: unknown[]; renderItem: (info: { item: unknown }) => ReactNode; ListHeaderComponent?: ReactNode }) =>
     createElement("div", null, ListHeaderComponent, data.map((item, index) =>
       createElement("div", { key: index }, renderItem({ item })))),
@@ -77,6 +85,9 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.update.mockReset().mockResolvedValue(undefined);
   mocks.updatePending = false;
+  mocks.deletePending = false;
+  mocks.deleteVariables = { parentPath: "", name: "app", kind: "folder" };
+  mocks.delete.mockReset().mockResolvedValue(undefined);
   container = document.createElement("div");
   root = createRoot(container);
   act(() => root.render(createElement(FilesScreen)));
@@ -121,7 +132,7 @@ it("shows a parent row only below the root and goes up exactly one level", () =>
 it("keeps parent navigation available alongside the empty state", () => {
   const onDirectoryPress = vi.fn();
   act(() => root.render(createElement(ProjectFilesList, {
-    files: [], existingNames: [], parentDirectory: "/workspace/project", onDirectoryPress, onUpdate: mocks.update,
+    files: [], existingNames: [], parentDirectory: "/workspace/project", onDirectoryPress, onUpdate: mocks.update, onDelete: mocks.delete,
   })));
   expect(container.textContent).toContain("No files created");
   click("Go to parent directory");
@@ -209,16 +220,85 @@ it("passes the loaded directory names into the create form", async () => {
   expect(mocks.create).not.toHaveBeenCalled();
 });
 
-it("confirms recursive folder deletion without removing anything yet", () => {
+it("deletes a folder only after confirmation and waits for success feedback", async () => {
+  let resolve!: () => void;
+  mocks.delete.mockImplementation(() => new Promise<void>((done) => { resolve = done; }));
   click("Delete app");
   expect(mocks.confirm).toHaveBeenCalledWith("Delete folder?", expect.stringContaining("all files and folders inside it"), expect.objectContaining({ actionText: "Delete" }));
-  act(() => mocks.confirm.mock.calls.at(-1)![2].onConfirmPress());
-  click("app, folder");
-  expect(container.textContent).toContain("layout.tsx");
+  expect(mocks.delete).not.toHaveBeenCalled();
+  await act(async () => mocks.confirm.mock.calls.at(-1)![2].onConfirmPress());
+  expect(mocks.delete).toHaveBeenCalledWith({ parentPath: "", name: "app", kind: "folder" });
+  expect(mocks.success).not.toHaveBeenCalled();
+  await act(async () => resolve());
+  expect(mocks.success).toHaveBeenCalledWith("Folder deleted");
 });
 
 it("confirms deletion of only the selected file", () => {
   click("Delete package.json");
   expect(mocks.confirm).toHaveBeenCalledWith("Delete file?", expect.stringContaining('"package.json"'), expect.objectContaining({ actionText: "Delete" }));
   expect(mocks.confirm.mock.calls.at(-1)![1]).not.toContain("inside");
+});
+
+it("shows deletion errors, keeps the item visible, and allows a deliberate retry", async () => {
+  mocks.delete.mockRejectedValueOnce(new Error("Refresh the folder."));
+  click("app, folder");
+  click("Delete layout.tsx");
+  await act(async () => mocks.confirm.mock.calls.at(-1)![2].onConfirmPress());
+  expect(mocks.delete).toHaveBeenCalledWith({ parentPath: "app", name: "layout.tsx", kind: "file" });
+  expect(mocks.alert).toHaveBeenCalledWith("Couldn't delete this item", "Refresh the folder.");
+  expect(container.textContent).toContain("layout.tsx");
+  expect(mocks.success).not.toHaveBeenCalled();
+  click("Delete layout.tsx");
+  await act(async () => mocks.confirm.mock.calls.at(-1)![2].onConfirmPress());
+  expect(mocks.delete).toHaveBeenCalledTimes(2);
+  expect(mocks.success).toHaveBeenCalledWith("File deleted");
+});
+
+it("disables navigation and file actions while deletion is pending", () => {
+  click("app, folder");
+  mocks.deletePending = true;
+  act(() => root.render(createElement(FilesScreen)));
+  for (const label of ["Go to parent directory", "dashboard, folder", "Delete layout.tsx", "Update page.tsx"]) {
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.disabled).toBe(true);
+  }
+});
+
+it.each([
+  { parentPath: "", name: "app", kind: "folder" },
+  { parentPath: "app", name: "layout.tsx", kind: "file" },
+])("covers only the deleting $kind with a spinner and restores interactions on failure", async (input) => {
+  let reject!: (error: Error) => void;
+  mocks.delete.mockImplementation(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
+  if (input.parentPath) click("app, folder");
+  click(`Delete ${input.name}`);
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  await act(async () => mocks.confirm.mock.calls.at(-1)![2].onConfirmPress());
+  mocks.deleteVariables = input;
+  mocks.deletePending = true;
+  act(() => root.render(createElement(FilesScreen)));
+
+  const overlay = container.querySelector(`[role="progressbar"][aria-label="Deleting ${input.name}"]`);
+  expect(overlay).not.toBeNull();
+  expect(container.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
+  expect(overlay?.getAttribute("aria-busy")).toBe("true");
+  expect(overlay?.className).toContain("absolute inset-0");
+  expect(overlay?.className).toContain("bg-background/70");
+  expect(overlay?.querySelector('[data-native-spinner]')).not.toBeNull();
+  const content = overlay?.previousElementSibling;
+  expect(content?.getAttribute("data-pointer-events")).toBe("none");
+  expect(content?.getAttribute("data-accessibility-hidden")).toBe("true");
+  expect(content?.getAttribute("data-important-for-accessibility")).toBe("no-hide-descendants");
+  expect(content?.querySelector('[data-swipe-enabled="false"]')).not.toBeNull();
+  for (const label of [`${input.name}, ${input.kind}`, `Update ${input.name}`, `Delete ${input.name}`]) {
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.disabled).toBe(true);
+    click(label);
+  }
+  expect(mocks.delete).toHaveBeenCalledTimes(1);
+  expect(mocks.update).not.toHaveBeenCalled();
+  await act(async () => reject(new Error("Please try again.")));
+  mocks.deletePending = false;
+  act(() => root.render(createElement(FilesScreen)));
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  expect(container.querySelector<HTMLButtonElement>(`[aria-label="Delete ${input.name}"]`)?.disabled).toBe(false);
+  expect(mocks.alert).toHaveBeenCalledWith("Couldn't delete this item", "Please try again.");
 });

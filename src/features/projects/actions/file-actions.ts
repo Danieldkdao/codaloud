@@ -1,10 +1,13 @@
 import {
+  deleteProjectFileSchema, deleteProjectFileResponseSchema,
+  type DeleteProjectFileSchema, type DeleteProjectFileResponseSchema,
   createProjectFileResponseSchema, createProjectFileSchema, projectDirectoryPathSchema,
   readProjectFilesResponseSchema, type CreateProjectFileSchema, type CreateProjectFileResponseSchema,
   type ProjectFileEntrySchema,
   updateProjectFileSchema, updateProjectFileResponseSchema,
   type UpdateProjectFileSchema, type UpdateProjectFileResponseSchema,
 } from "./file-schemas";
+import { isProjectFileResultValid } from "@/features/projects/utils/is-project-file-result-valid";
 import { createRequestHeaders, fetchBase, isValidIds } from "@/lib/utils";
 
 export const readProjectFilesAction = async (
@@ -37,8 +40,7 @@ export const createProjectFileAction = async (
     });
     const result = createProjectFileResponseSchema.parse(await response.json());
     if (result.error) return result;
-    if (!response.ok || result.data.path !== [input.data.parentPath, input.data.name].filter(Boolean).join("/") ||
-      result.data.name !== input.data.name || result.data.isDir !== (input.data.kind === "folder")) {
+    if (!response.ok || !isProjectFileResultValid(result, input.data)) {
       return { error: true, message: "Unable to confirm creation. Refresh the folder before trying again." };
     }
     return result;
@@ -60,12 +62,34 @@ export const updateProjectFileAction = async (
     });
     const result = updateProjectFileResponseSchema.parse(await response.json());
     if (result.error) return result;
-    if (!response.ok || result.data.path !== [input.data.parentPath, input.data.name].filter(Boolean).join("/") ||
-      result.data.name !== input.data.name || result.data.isDir !== (input.data.kind === "folder")) {
+    if (!response.ok || !isProjectFileResultValid(result, input.data)) {
       return { error: true, message: "Unable to confirm update. Refresh the folder before trying again." };
     }
     return result;
   } catch {
     return { error: true, message: "Unable to confirm update. Refresh the folder before trying again." };
+  }
+};
+
+export const deleteProjectFileAction = async (
+  projectId: string, unsafeInput: DeleteProjectFileSchema,
+): Promise<DeleteProjectFileResponseSchema> => {
+  try {
+    if (!isValidIds(projectId)) return { error: true, message: "Invalid project ID." };
+    const input = deleteProjectFileSchema.safeParse(unsafeInput);
+    if (!input.success) return { error: true, message: input.error.issues[0]?.message ?? "Invalid file or folder name." };
+    const headers = await createRequestHeaders({ "Content-Type": "application/json" });
+    if (!headers.has("Cookie")) return { error: true, message: "Sign in to delete files." };
+    const response = await fetchBase(`/api/projects/${projectId}/files`, {
+      method: "DELETE", headers, credentials: "omit", body: JSON.stringify(input.data),
+    });
+    const result = deleteProjectFileResponseSchema.parse(await response.json());
+    if (result.error) return result;
+    if (!response.ok || !isProjectFileResultValid(result, input.data)) {
+      return { error: true, message: "Unable to confirm deletion. Refresh the folder before trying again." };
+    }
+    return result;
+  } catch {
+    return { error: true, message: "Unable to confirm deletion. Refresh the folder before trying again." };
   }
 };

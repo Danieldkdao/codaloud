@@ -1,7 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { apiResponse, getContentType, isValidIds } from "@/lib/utils";
-import { createProjectFileSchema, projectDirectoryPathSchema, updateProjectFileSchema } from "@/features/projects/actions/file-schemas";
-import { createUserProjectFile, readUserProjectFiles, updateUserProjectFile } from "@/features/projects/server/project-files";
+import { createProjectFileSchema, deleteProjectFileSchema, projectDirectoryPathSchema, updateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import { createUserProjectFile, deleteUserProjectFile, readUserProjectFiles, updateUserProjectFile } from "@/features/projects/server/project-files";
 import { SandboxFilesError } from "@/services/daytona/api";
 
 const failureResponse = (error: unknown) => {
@@ -56,5 +56,18 @@ export const PATCH = async (request: Request, { projectId }: { projectId: string
     if (!input.success) return apiResponse({ error: true, message: input.error.issues[0]?.message ?? "Invalid file request." }, 400);
     const updatedFile = await updateUserProjectFile(userId, projectId, input.data);
     return apiResponse({ error: false, message: "Updated successfully.", data: updatedFile });
+  } catch (error) { return failureResponse(error); }
+};
+
+export const DELETE = async (request: Request, { projectId }: { projectId: string }) => {
+  try {
+    const userId = await authenticate(request, projectId);
+    if (getContentType(request.headers) !== "application/json") {
+      return apiResponse({ error: true, message: "Send a JSON file request." }, 415);
+    }
+    const input = deleteProjectFileSchema.safeParse(await request.json().catch(() => null));
+    if (!input.success) return apiResponse({ error: true, message: input.error.issues[0]?.message ?? "Invalid file request." }, 400);
+    const deletedFile = await deleteUserProjectFile(userId, projectId, input.data);
+    return apiResponse({ error: false, message: "Deleted successfully.", data: deletedFile });
   } catch (error) { return failureResponse(error); }
 };

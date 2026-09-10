@@ -6,11 +6,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 
 const mocks = vi.hoisted(() => ({
-  read: vi.fn(), create: vi.fn(), update: vi.fn(),
+  read: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(),
   session: { isPending: false, error: null, data: { user: { id: "user-one" } } as { user: { id: string } } | null },
 }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => mocks.session }));
-vi.mock("@/features/projects/actions/file-actions", () => ({ readProjectFilesAction: mocks.read, createProjectFileAction: mocks.create, updateProjectFileAction: mocks.update }));
+vi.mock("@/features/projects/actions/file-actions", () => ({ readProjectFilesAction: mocks.read, createProjectFileAction: mocks.create, updateProjectFileAction: mocks.update, deleteProjectFileAction: mocks.delete }));
 let client: QueryClient;
 let root: Root;
 let current: ReturnType<typeof useProjectFiles>;
@@ -30,6 +30,7 @@ beforeEach(() => {
   mocks.session.data = { user: { id: "user-one" } };
   mocks.read.mockReset().mockResolvedValue([]);
   mocks.create.mockReset().mockResolvedValue({ error: false, message: "Created.", data: entry });
+  mocks.delete.mockReset().mockResolvedValue({ error: false, message: "Deleted.", data: entry });
   mocks.update.mockReset().mockResolvedValue({ error: false, message: "Updated.", data: entry });
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); });
@@ -61,6 +62,10 @@ it("does not fetch or mutate without a verified session", async () => {
     await expect(current.update.mutateAsync({ parentPath: "", previousName: "old.txt", name: "hello.txt", kind: "file" })).rejects.toThrow();
   });
   expect(mocks.update).not.toHaveBeenCalled();
+  await act(async () => {
+    await expect(current.deletion.mutateAsync({ parentPath: "", name: "hello.txt", kind: "file" })).rejects.toThrow();
+  });
+  expect(mocks.delete).not.toHaveBeenCalled();
 });
 
 it("keeps rename pending without optimistic changes and updates only the captured account and folder", async () => {
@@ -128,4 +133,48 @@ it("refreshes the captured parent after creation even if navigation changes", as
   expect(client.getQueryData(["projects", "files", "user-one", "project-one", "notes"])).toEqual([entry]);
   expect(client.getQueryState(["projects", "files", "user-one", "project-one", "notes"])?.isInvalidated).toBe(true);
   expect(current.query.data).toEqual([]);
+});
+
+it("keeps a pending deletion visible and applies success only to its captured account and folder", async () => {
+  let resolve!: (value: unknown) => void;
+  mocks.delete.mockImplementation(() => new Promise((done) => { resolve = done; }));
+  mocks.read.mockResolvedValue([entry]);
+  await render("notes");
+  const key = ["projects", "files", "user-one", "project-one", "notes"];
+  let deletion!: Promise<unknown>;
+  await act(async () => { deletion = current.deletion.mutateAsync({ parentPath: "notes", name: "hello.txt", kind: "file" }); });
+  expect(client.getQueryData(key)).toEqual([entry]);
+  mocks.session.data = { user: { id: "user-two" } };
+  await render("other");
+  await act(async () => { resolve({ error: false, message: "Deleted.", data: entry }); await deletion; });
+  expect(client.getQueryData(key)).toEqual([]);
+  expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+  expect(current.query.data).toEqual([entry]);
+});
+
+it("removes deleted folder caches including descendants but preserves siblings and other accounts", async () => {
+  await render("other");
+  const prefix = ["projects", "files", "user-one", "project-one"];
+  const folder = { name: "old", path: "old", isDir: true, size: 0 };
+  for (const path of ["old", "old/nested", "old-sibling", "unrelated"]) client.setQueryData([...prefix, path], [entry]);
+  const otherAccount = ["projects", "files", "user-two", "project-one", "old"];
+  client.setQueryData(otherAccount, [entry]);
+  client.setQueryData([...prefix, ""], [folder]);
+  mocks.delete.mockResolvedValue({ error: false, message: "Deleted.", data: folder });
+  await act(async () => { await current.deletion.mutateAsync({ parentPath: "", name: "old", kind: "folder" }); });
+  expect(client.getQueryData([...prefix, ""])).toEqual([]);
+  for (const path of ["old", "old/nested"]) expect(client.getQueryData([...prefix, path])).toBeUndefined();
+  for (const path of ["old-sibling", "unrelated"]) expect(client.getQueryData([...prefix, path])).toEqual([entry]);
+  expect(client.getQueryData(otherAccount)).toEqual([entry]);
+});
+
+it("keeps files visible after a failed deletion and does not retry it", async () => {
+  mocks.read.mockResolvedValue([entry]);
+  mocks.delete.mockResolvedValue({ error: true, message: "Refresh the folder." });
+  await render("notes");
+  await act(async () => {
+    await expect(current.deletion.mutateAsync({ parentPath: "notes", name: "hello.txt", kind: "file" })).rejects.toThrow("Refresh the folder.");
+  });
+  expect(current.query.data).toEqual([entry]);
+  expect(mocks.delete).toHaveBeenCalledTimes(1);
 });

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
-import type { CreateProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import { createProjectFileAction, deleteProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
+import type { CreateProjectFileSchema, DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { useAuthSession } from "@/hooks/use-auth-session";
 
 export const useProjectFiles = (projectId: string, directoryPath: string) => {
@@ -77,5 +77,38 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
     },
   });
 
-  return { query, creation, update };
+  const deletion = useMutation({
+    mutationKey: ["projects", "files", "delete", userId, projectId],
+    retry: false,
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: DeleteProjectFileSchema) => {
+      if (!userId) throw new Error("Sign in to delete files.");
+      const result = await deleteProjectFileAction(projectId, input);
+      if (result.error) throw new Error(result.message);
+      return result.data;
+    },
+    onSuccess: async (entry, input, context) => {
+      const projectKey = ["projects", "files", context.userId, context.projectId];
+      const queryKey = [...projectKey, input.parentPath];
+      // Cancel stale reads before removing the confirmed entry from the cache.
+      await queryClient.cancelQueries({ queryKey, exact: true });
+      if (entry.isDir) {
+        const subtreeQueries = {
+          queryKey: projectKey,
+          predicate: (query: { queryKey: readonly unknown[] }) => {
+            const path = query.queryKey[4];
+            return typeof path === "string" && (path === entry.path || path.startsWith(`${entry.path}/`));
+          },
+        };
+        await queryClient.cancelQueries(subtreeQueries);
+        queryClient.removeQueries(subtreeQueries);
+      }
+      queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
+        files?.filter((file) => file.path !== entry.path),
+      );
+      await queryClient.invalidateQueries({ queryKey, exact: true });
+    },
+  });
+
+  return { query, creation, update, deletion };
 };

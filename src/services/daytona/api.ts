@@ -20,7 +20,9 @@ export const requestDaytona = async (url: string, init?: RequestInit): Promise<u
     if (!response.ok) {
       throw new SandboxFilesError(response.status === 404 ? 404 : 502, "DAYTONA_REQUEST_FAILED", "Unable to access your workspace. Please try again.");
     }
-    return response.status === 204 ? null : await response.json();
+    // File deletion can succeed without a JSON body.
+    const body = await response.text();
+    return body === "" ? null : JSON.parse(body);
   } catch (error) {
     if (error instanceof SandboxFilesError) throw error;
     throw new SandboxFilesError(502, "DAYTONA_REQUEST_FAILED", "The workspace request could not be completed. Please refresh and try again.");

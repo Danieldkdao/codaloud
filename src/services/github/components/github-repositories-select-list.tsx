@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
+import { ScrollFadeFlatList } from "@/components/ui/scroll-fade-flat-list";
 import { PText } from "@/components/ui/text";
 import type { GitHubRepository } from "@/services/github/types";
 import { cn } from "@/lib/utils";
@@ -110,8 +111,10 @@ export const GitHubRepositoriesSelectList = ({
               placeholder="Search repositories"
             />
           </View>
-          <FlatList<GitHubRepository>
+          <ScrollFadeFlatList<GitHubRepository>
             key={search.trim().toLowerCase()}
+            // Size to the rows while allowing the form's bounded picker to shrink.
+            containerStyle={{ flex: 0, flexShrink: 1, minHeight: 96 }}
             className="min-h-24 shrink overflow-hidden"
             accessibilityLabel="GitHub repositories"
             data={repositories}

@@ -1,15 +1,19 @@
 import { useId, useRef, useState } from "react";
-import { FlatList, View, type FlatListProps } from "react-native";
+import { FlatList, View, type FlatListProps, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { useThemeColor } from "@/hooks/use-theme";
 
 const fadeHeight = 32;
 
+type ScrollFadeFlatListProps<Item> = FlatListProps<Item> & {
+  containerStyle?: StyleProp<ViewStyle>;
+};
+
 /** Scroll-aware edge fades on a solid card surface, shared by native and web. */
 export const ScrollFadeFlatList = <Item,>({
-  onLayout, onContentSizeChange, onScroll, ...props
-}: FlatListProps<Item>) => {
+  containerStyle, onLayout, onContentSizeChange, onScroll, ...props
+}: ScrollFadeFlatListProps<Item>) => {
   const color = useThemeColor("card");
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
   const metrics = useRef({ viewport: 0, content: 0, offset: 0 });
@@ -25,7 +29,7 @@ export const ScrollFadeFlatList = <Item,>({
   };
 
   return (
-    <View style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+    <View style={[{ flex: 1, minHeight: 0, overflow: "hidden" }, containerStyle]}>
       <FlatList
         {...props}
         scrollEventThrottle={16}

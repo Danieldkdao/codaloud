@@ -150,6 +150,10 @@ vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "theme-color" }));
+vi.mock("react-native-svg", () => {
+  const Node = ({ children }: { children?: ReactNode }) => createElement("span", null, children);
+  return { default: Node, Defs: Node, LinearGradient: Node, Stop: Node, Rect: Node };
+});
 vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({
     isConnected: mocks.connected,

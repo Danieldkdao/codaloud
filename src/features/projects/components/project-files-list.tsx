@@ -8,6 +8,7 @@ import { ProjectIcon } from "@/components/project-icon";
 import { PText } from "@/components/ui/text";
 import { ProjectWorkspacePlaceholder } from "@/features/projects/components/project-workspace-placeholder";
 import { SandboxFiles } from "@/features/projects/components/sandbox-files";
+import { ProjectFilesListItem } from "@/features/projects/components/project-files-list-item";
 
 type ProjectFilesListProps = {
   files: ProjectFileEntrySchema[];
@@ -67,26 +68,11 @@ export const ProjectFilesList = ({
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={parentRow}
       renderItem={({ item }) => (
-        <Pressable
-          onPress={item.isDir ? () => {
-            if (item.path) onDirectoryPress(item.path);
-          } : undefined}
+        <ProjectFilesListItem
+          file={item}
+          onDirectoryPress={onDirectoryPress}
           disabled={navigationDisabled}
-          accessibilityState={{ disabled: navigationDisabled }}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name}, ${item.isDir ? "folder" : "file"}`}
-          className="flex-row items-center gap-3 border-b border-border px-3 py-4 active:bg-secondary"
-          style={{ minHeight: 56 }}
-        >
-          <ProjectIcon name={item.path ?? item.name} isDirectory={item.isDir} />
-          <PText
-            className="flex-1 text-foreground text-lg font-medium"
-            numberOfLines={1}
-            ellipsizeMode="middle"
-          >
-            {item.name}
-          </PText>
-        </Pressable>
+        />
       )}
     />
   );

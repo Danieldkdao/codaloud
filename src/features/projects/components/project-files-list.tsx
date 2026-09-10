@@ -58,7 +58,7 @@ export const ProjectFilesList = ({
       data={files}
       keyExtractor={(file) => file.path ?? file.name}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ ...contentPadding, paddingBottom: dockHeight + 80 }}
+      contentContainerStyle={{ ...contentPadding, paddingBottom: dockHeight + 24 }}
       scrollIndicatorInsets={{ bottom: dockHeight }}
       ListHeaderComponent={parentRow}
       renderItem={({ item }) => (

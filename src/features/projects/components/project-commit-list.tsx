@@ -22,7 +22,7 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
 
   if (commits.length === 0) {
     return (
-      <View className="flex-1" style={{ paddingBottom: 64 }}>
+      <View className="flex-1">
         <ProjectWorkspaceState
           icon="git-commit"
           title="No commits yet"
@@ -42,9 +42,9 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
         paddingTop: 16,
         paddingLeft: 20 + insets.left,
         paddingRight: 20 + insets.right,
-        paddingBottom: dockHeight + 80,
+        paddingBottom: dockHeight + 24,
       }}
-      scrollIndicatorInsets={{ bottom: dockHeight + 64 }}
+      scrollIndicatorInsets={{ bottom: dockHeight }}
       ListHeaderComponent={
         <View className="pb-6">
           <HeadingText

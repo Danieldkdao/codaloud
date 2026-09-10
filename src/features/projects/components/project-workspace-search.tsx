@@ -1,4 +1,4 @@
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Keyboard, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions, type TextInput } from "react-native";
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
@@ -6,24 +6,29 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
-import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
+import { useThemeColor } from "@/hooks/use-theme";
 
 const buttonSize = 56;
 
 type ProjectWorkspaceSearchProps = {
+  anchorRef?: RefObject<View | null>;
+  anchorPlacement?: "above" | "replace";
+  onOpenChange?: (open: boolean) => void;
   placeholder?: string;
   accessibilityLabel?: string;
 };
 
 export const ProjectWorkspaceSearch = ({
+  anchorRef,
+  anchorPlacement = "above",
+  onOpenChange,
   placeholder = "Search Files",
   accessibilityLabel = "Search files",
 }: ProjectWorkspaceSearchProps) => {
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
   const insets = useSafeAreaInsets();
+  const shadow = useThemeColor("navigation-shadow");
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const buttonRef = useRef<View>(null);
@@ -36,6 +41,10 @@ export const ProjectWorkspaceSearch = ({
   const barWidth = Math.min(availableWidth, 440);
   const rightInset = 16 + insets.right + Math.max(0, (availableWidth - 440) / 2);
   const closing = useRef(false);
+  const isOpen = anchor !== null;
+
+  useEffect(() => { onOpenChange?.(isOpen); }, [isOpen, onOpenChange]);
+  useEffect(() => () => { onOpenChange?.(false); }, [onOpenChange]);
 
   // A resized window needs a fresh native anchor measurement before reopening.
   useEffect(() => {
@@ -71,11 +80,12 @@ export const ProjectWorkspaceSearch = ({
   };
 
   const open = () => {
-    buttonRef.current?.measureInWindow((x, y, measuredWidth) => {
+    const target = anchorRef?.current ?? buttonRef.current;
+    target?.measureInWindow((_x, y) => {
       closing.current = false;
       progress.value = 0;
       keyboardOffset.value = 0;
-      setAnchor({ right: width - x - measuredWidth, top: y });
+      setAnchor({ right: rightInset, top: Math.max(insets.top + 8, anchorPlacement === "replace" ? y : y - buttonSize - 4) });
     });
   };
 
@@ -94,7 +104,8 @@ export const ProjectWorkspaceSearch = ({
 
   const morphStyle = useAnimatedStyle(() => ({
     width: buttonSize + (barWidth - buttonSize) * progress.value,
-    transform: [{ translateY: -keyboardOffset.value * progress.value }],
+    opacity: progress.value,
+    transform: [{ translateY: 12 * (1 - progress.value) - keyboardOffset.value * progress.value }],
   }));
   const labelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -103,20 +114,13 @@ export const ProjectWorkspaceSearch = ({
 
   return (
     <>
-      <View ref={buttonRef} collapsable={false} style={{
-        position: "absolute", right: rightInset, bottom: dockHeight + 4,
-        width: buttonSize, height: buttonSize,
-      }}>
-        {!anchor ? (
-          <GlassSurface>
-            <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
-              accessibilityHint="Opens the search input"
-              className="items-center justify-center rounded-full active:bg-secondary"
-              style={{ width: buttonSize, height: buttonSize }}>
-              <Icon family="Feather" name="search" size={22} accessible={false} className="text-foreground" />
-            </Pressable>
-          </GlassSurface>
-        ) : null}
+      <View ref={buttonRef} collapsable={false}>
+        <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+          accessibilityHint="Opens the search input"
+          className="items-center justify-center rounded-full active:bg-secondary"
+          style={{ width: 48, height: 48 }}>
+          <Icon family="Feather" name="search" size={22} accessible={false} className="text-foreground" />
+        </Pressable>
       </View>
 
       {anchor ? (
@@ -139,7 +143,12 @@ export const ProjectWorkspaceSearch = ({
             <Animated.View style={[
               { position: "absolute", top: anchor.top, right: anchor.right }, morphStyle,
             ]}>
-              <GlassSurface>
+              {/* Native glass can stop rendering under a parent animated from opacity zero.
+                  A solid card keeps search readable throughout every opening. */}
+              <View className="bg-card border border-border" style={{
+                borderRadius: 28,
+                boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow }],
+              }}>
                 <View style={{ height: buttonSize, flexDirection: "row", alignItems: "center", overflow: "hidden", borderRadius: 28 }}>
                   <View style={{ width: buttonSize, height: buttonSize, alignItems: "center", justifyContent: "center" }}>
                     <Icon family="Feather" name="search" size={22} accessible={false} className="text-foreground" />
@@ -159,7 +168,7 @@ export const ProjectWorkspaceSearch = ({
                     </Pressable>
                   </Animated.View>
                 </View>
-              </GlassSurface>
+              </View>
             </Animated.View>
           </View>
         </Modal>

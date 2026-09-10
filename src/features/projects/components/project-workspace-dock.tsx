@@ -1,11 +1,16 @@
+import { use, useRef, useState } from "react";
+import { usePathname } from "expo-router";
 import { TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, type IconProps } from "@/components/ui/icon";
-import { PText } from "@/components/ui/text";
+import { CodeText, PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { GlassSurface } from "@/components/ui/glass-surface";
+
+import { ProjectActionButtonsLeft, ProjectActionButtonsRight } from "@/features/projects/components/project-action-buttons";
+import { ProjectWorkspaceBranchContext } from "@/features/projects/contexts/project-workspace-context";
 
 type WorkspaceTabButtonProps = TabTriggerSlotProps & {
   label: string;
@@ -64,9 +69,19 @@ type ProjectWorkspaceDockProps = {
 
 export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) => {
   const insets = useSafeAreaInsets();
+  const dockRef = useRef<View>(null);
+  const branchIndicatorRef = useRef<View>(null);
+  const [isGitSearchOpen, setIsGitSearchOpen] = useState(false);
+  const pathname = usePathname();
+  const routeName = pathname.split("/").at(-1);
+  const activeTab = routeName === "code" || routeName === "git" || routeName === "agent" ? routeName : "files";
+  const branchSelection = use(ProjectWorkspaceBranchContext);
+  const isGit = activeTab === "git";
 
   return (
     <View
+      ref={dockRef}
+      collapsable={false}
       onLayout={onLayout}
       style={{
         position: "absolute",
@@ -81,6 +96,20 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
       }}
     >
       <View className="w-full self-center" style={{ maxWidth: 440, gap: 10, pointerEvents: "box-none" }}>
+        {isGit && branchSelection ? (
+          <View ref={branchIndicatorRef} collapsable={false} className="items-center justify-center" style={{ height: 56 }}>
+            {!isGitSearchOpen ? (
+              <View testID="branch-indicator" accessibilityLiveRegion="polite"
+                className="max-w-full flex-row items-center justify-center gap-2 rounded-full border border-border bg-secondary px-3 py-1.5">
+                <Icon family="Feather" name="git-branch" size={18} className="text-secondary-foreground" accessible={false} />
+                <CodeText className="min-w-0 shrink text-center text-lg font-medium text-secondary-foreground"
+                  numberOfLines={1} ellipsizeMode="middle">
+                  {branchSelection.branch.name}
+                </CodeText>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         <GlassSurface borderRadius={36}>
           <View className="flex-row items-center gap-1 p-1.5">
             <TabTrigger name="files" asChild>
@@ -101,29 +130,20 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
         <View className="w-full self-center" style={{ maxWidth: 360 }}>
           <GlassSurface borderRadius={36}>
             <View className="flex-row items-center p-2">
-              <View style={{ flex: 1, flexDirection: "row", justifyContent: "center" }}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Previous file"
-                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
-                  <Icon family="Feather" name="arrow-left" size={20} accessible={false} className="text-foreground" />
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Next file"
-                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
-                  <Icon family="Feather" name="arrow-right" size={20} accessible={false} className="text-foreground" />
-                </Pressable>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: "row", justifyContent: "center" }}>
+                <ProjectActionButtonsLeft tab={activeTab} />
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel="Microphone"
                 className="size-14 items-center justify-center rounded-full bg-primary active:bg-primary/90">
                 <Icon family="Feather" name="mic" size={24} accessible={false} className="text-primary-foreground" />
               </Pressable>
-              <View style={{ flex: 1, flexDirection: "row", justifyContent: "center" }}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Undo"
-                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
-                  <Icon family="Feather" name="corner-up-left" size={20} accessible={false} className="text-foreground" />
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Redo"
-                  className="size-12 items-center justify-center rounded-full active:bg-secondary">
-                  <Icon family="Feather" name="corner-up-right" size={20} accessible={false} className="text-foreground" />
-                </Pressable>
+              <View style={{ flex: 1, minWidth: 0, flexDirection: "row", justifyContent: "center" }}>
+                <ProjectActionButtonsRight
+                  tab={activeTab}
+                  dockRef={dockRef}
+                  branchIndicatorRef={branchIndicatorRef}
+                  onGitSearchOpenChange={setIsGitSearchOpen}
+                />
               </View>
             </View>
           </GlassSurface>

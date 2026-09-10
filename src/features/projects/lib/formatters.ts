@@ -147,3 +147,15 @@ export const formatAgentActivityDate = (createdAt: string): string =>
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(createdAt));
+
+
+export const formatWorkspaceSearch = (tab: string | undefined) => {
+  switch (tab) {
+    case "git":
+      return { placeholder: "Search Commits", accessibilityLabel: "Search commits" };
+    case "agent":
+      return { placeholder: "Search Activity", accessibilityLabel: "Search activity" };
+    default:
+      return { placeholder: "Search Files", accessibilityLabel: "Search files" };
+  }
+};

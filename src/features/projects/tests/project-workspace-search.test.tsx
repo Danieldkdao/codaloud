@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
 import { act, createElement, useEffect, useImperativeHandle, useRef, type ReactNode, type Ref } from "react";
+import type { View } from "react-native";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 
 vi.mock("react-native", () => ({
-  View: ({ children, ref }: { children?: ReactNode; ref?: Ref<unknown> }) => {
+  View: ({ children, ref, className }: { children?: ReactNode; ref?: Ref<unknown>; className?: string }) => {
     useImperativeHandle(ref, () => ({ measureInWindow: (callback: (...values: number[]) => void) => callback(320, 600, 56, 56) }));
-    return createElement("div", null, children);
+    return createElement("div", { className }, children);
   },
   Pressable: ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress?: () => void; accessibilityLabel?: string }) =>
     createElement("button", { onClick: onPress, "aria-label": accessibilityLabel }, children),
@@ -22,7 +23,8 @@ vi.mock("react-native", () => ({
   StyleSheet: { absoluteFill: {} },
 }));
 vi.mock("react-native-reanimated", () => ({
-  default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+  default: { View: ({ children, style }: { children?: ReactNode; style: { top?: number }[] | object }) =>
+    createElement("div", { "data-search-top": Array.isArray(style) ? style[0]?.top : undefined }, children) },
   useSharedValue: (value: number) => useRef({ value }).current,
   useAnimatedStyle: () => ({}),
   useReducedMotion: () => true,
@@ -32,7 +34,7 @@ vi.mock("react-native-reanimated", () => ({
 }));
 vi.mock("react-native-worklets", () => ({ scheduleOnRN: (callback: () => void) => callback() }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
+vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "shadow" }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ ref, value, onChangeText, placeholder, variant }: { ref?: Ref<unknown>; value: string; onChangeText: (text: string) => void; placeholder: string; variant: string }) => {
@@ -99,4 +101,46 @@ it("reuses the same editable search and dismissal behavior for commit history", 
   expect(input.value).toBe("initial commit");
   click("Dismiss search");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+
+it("opens Agent search above the dock and dismisses on an outside tap", () => {
+  const anchorRef = { current: { measureInWindow: (callback: (...values: number[]) => void) => callback(0, 480, 390, 180) } };
+  act(() => root.render(createElement(ProjectWorkspaceSearch, {
+    placeholder: "Search Activity",
+    accessibilityLabel: "Search activity",
+    anchorRef: anchorRef as { current: View },
+  })));
+  click("Search activity");
+  expect(container.querySelector("input")?.placeholder).toBe("Search Activity");
+  expect(container.querySelector("[data-search-top]")?.getAttribute("data-search-top")).toBe("420");
+  click("Dismiss search");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+
+it("keeps a solid card behind search text across repeated openings", () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    click("Search files");
+    expect(container.querySelector("input")?.closest(".bg-card")).not.toBeNull();
+    click("Dismiss search");
+  }
+});
+
+
+it("replaces a supplied anchor and reports closure through each dismissal path", () => {
+  const onOpenChange = vi.fn();
+  const anchorRef = { current: { measureInWindow: (callback: (...values: number[]) => void) => callback(16, 480, 358, 56) } };
+  act(() => root.render(createElement(ProjectWorkspaceSearch, {
+    anchorRef: anchorRef as { current: View },
+    anchorPlacement: "replace",
+    onOpenChange,
+  })));
+  for (const dismiss of ["Dismiss search", "Close search", "System back"]) {
+    click("Search files");
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(container.querySelector("[data-search-top]")?.getAttribute("data-search-top")).toBe("480");
+    click(dismiss);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  }
 });

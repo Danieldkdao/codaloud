@@ -1,14 +1,15 @@
-import { use } from "react";
-import { View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import BottomSheet, { BottomSheetView } from "@expo/ui/community/bottom-sheet";
+import { useRef, useState } from "react";
+import { Pressable, View } from "react-native";
 
-import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
-import { NativeSelect } from "@/components/ui/native-select";
-import { CodeText, PText } from "@/components/ui/text";
-import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
-import { formatCommitHash } from "@/features/projects/lib/formatters";
+import { Input } from "@/components/ui/input";
+import { ScrollFadeFlatList } from "@/components/ui/scroll-fade-flat-list";
+import { PText } from "@/components/ui/text";
 import type { ProjectBranchData } from "@/features/projects/types";
+import { useThemeColor } from "@/hooks/use-theme";
+
+const branchSheetSnapPoints = ["60%"];
 
 type ProjectBranchSelectProps = {
   branch: ProjectBranchData;
@@ -17,45 +18,77 @@ type ProjectBranchSelectProps = {
 };
 
 export const ProjectBranchSelect = ({ branch, branches, onBranchChange }: ProjectBranchSelectProps) => {
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const availableWidth = width - insets.left - insets.right - 32;
-  // Match the search button's 440-point floating area and reserve its 56-point target.
-  const left = 16 + insets.left + Math.max(0, (availableWidth - 440) / 2);
-  const buttonWidth = Math.min(240, availableWidth - 68);
-  const tip = branch.commits[0];
+  const sheetRef = useRef<BottomSheet>(null);
+  const [open, setOpen] = useState(false);
+  const card = useThemeColor("card");
+  const close = () => sheetRef.current?.close();
 
   return (
-    <View style={{ position: "absolute", left, bottom: dockHeight + 4 }}>
-      <GlassSurface>
-        <NativeSelect
-          label="Branch"
-          trigger={
-            <View className="flex-row items-center gap-3 px-4" style={{ width: buttonWidth, height: 56 }}>
-              <Icon family="Feather" name="git-branch" size={22} className="text-primary" accessible={false} />
-              <View className="min-w-0 flex-1">
-                <PText className="font-medium text-foreground" numberOfLines={1} ellipsizeMode="middle">
-                  {branch.name}
-                </PText>
-                <CodeText className="text-muted-foreground" numberOfLines={1}>
-                  {tip ? formatCommitHash(tip.hash) : "No commits"}
-                </CodeText>
-              </View>
-              <Icon family="Feather" name="chevron-down" size={16} className="text-muted-foreground" accessible={false} />
+    <>
+      <Pressable
+        onPress={() => sheetRef.current?.present()}
+        accessibilityRole="button"
+        accessibilityLabel={`Branch: ${branch.name}`}
+        accessibilityHint="Opens available branches"
+        accessibilityState={{ expanded: open }}
+        className="size-12 items-center justify-center rounded-full active:bg-secondary"
+      >
+        <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />
+      </Pressable>
+      <BottomSheet
+        ref={sheetRef}
+        index={-1}
+        snapPoints={branchSheetSnapPoints}
+        enableDynamicSizing={false}
+        enablePanDownToClose
+        backgroundStyle={{ backgroundColor: card }}
+        onChange={(index) => setOpen(index >= 0)}
+        onClose={() => setOpen(false)}
+      >
+        <BottomSheetView style={{ height: "100%" }}>
+          <View className="flex-1 bg-card" accessibilityViewIsModal onAccessibilityEscape={close}>
+            <View className="flex-row items-center justify-between border-b border-border px-5 py-2">
+              <PText accessibilityRole="header" className="flex-1 text-lg font-medium">Branch</PText>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close Branch" onPress={close}
+                className="size-12 items-center justify-center rounded-full active:bg-secondary">
+                <Icon family="Feather" name="x" size={22} className="text-foreground" accessible={false} />
+              </Pressable>
             </View>
-          }
-          sections={[{
-            label: "Branches",
-            value: branch.name,
-            options: branches.map((name) => ({
-              value: name,
-              label: name,
-              onSelect: () => onBranchChange(name),
-            })),
-          }]}
-        />
-      </GlassSurface>
-    </View>
+            <View className="min-h-0 flex-1">
+              <ScrollFadeFlatList
+                data={branches}
+                extraData={branch.name}
+                keyExtractor={(name) => name}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 4 }}
+                ListHeaderComponent={
+                  <PText accessibilityRole="header" className="px-5 pt-4 pb-2 text-muted-foreground">Branches</PText>
+                }
+                renderItem={({ item: name }) => (
+                  <Pressable
+                    accessibilityRole="radio"
+                    accessibilityLabel={name}
+                    accessibilityState={{ checked: branch.name === name }}
+                    onPress={() => { close(); onBranchChange(name); }}
+                    className="min-h-14 flex-row items-center gap-3 px-5 py-4 active:bg-secondary"
+                  >
+                    <PText className="min-w-0 flex-1 text-base text-foreground">{name}</PText>
+                    {branch.name === name && (
+                      <Icon family="Feather" name="check" size={22} className="text-foreground" accessible={false} />
+                    )}
+                  </Pressable>
+                )}
+              />
+            </View>
+            <View className="flex-row items-center gap-2 border-t border-border px-5 pt-1 pb-4">
+              <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
+              <Input type="search" variant="ghost" size="sm" placeholder="Search branches"
+                accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
+                containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
+            </View>
+          </View>
+        </BottomSheetView>
+      </BottomSheet>
+    </>
   );
 };

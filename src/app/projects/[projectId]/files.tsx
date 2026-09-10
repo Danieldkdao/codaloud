@@ -1,5 +1,4 @@
 import { View } from "react-native";
-import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 import type { FileInfo } from "@daytona/sdk";
 import { useState } from "react";
 
@@ -401,7 +400,6 @@ const FilesScreen = () => {
         parentDirectory={parentDirectory}
         onDirectoryPress={setCurrentDirectory}
       />
-      <ProjectWorkspaceSearch />
     </View>
   );
 };

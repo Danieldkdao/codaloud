@@ -3,6 +3,7 @@ import { useColorScheme, type ColorValue } from "react-native";
 
 type ThemeColor =
   | "background"
+  | "card"
   | "foreground"
   | "navigation-shadow"
   | "primary"

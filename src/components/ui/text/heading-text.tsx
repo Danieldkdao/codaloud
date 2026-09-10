@@ -7,6 +7,9 @@ export const HeadingText = ({
   ...props
 }: ComponentPropsWithRef<typeof Text>) => {
   return (
-    <Text {...props} className={cn("text-base font-heading", className)} />
+    <Text
+      {...props}
+      className={cn("text-base font-heading text-foreground", className)}
+    />
   );
 };

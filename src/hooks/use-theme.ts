@@ -1,12 +1,17 @@
 import { useUnstableNativeVariable } from "nativewind";
-import { useColorScheme, type ColorValue } from "react-native";
+import { createContext, use } from "react";
+import { type ColorValue } from "react-native";
+import type { AppThemeState } from "@/lib/types";
 
 type ThemeColor =
   | "background"
   | "card"
+  | "border"
+  | "destructive"
   | "foreground"
   | "navigation-shadow"
   | "primary"
+  | "primary-foreground"
   | "secondary"
   | "secondary-foreground"
   | "muted-foreground";
@@ -21,8 +26,10 @@ export const useThemeColor: (name: ThemeColor) => ColorValue =
     ? (name) => `var(--${name})`
     : (name) => useNativeThemeVariable(`--${name}`);
 
-export const useTheme = () => {
-  const colorScheme = useColorScheme();
+export const AppThemeContext = createContext<AppThemeState | null>(null);
 
-  return { isDarkMode: colorScheme === "dark" };
+export const useTheme = () => {
+  const theme = use(AppThemeContext);
+  if (!theme) throw new Error("useTheme must be used within AppThemeProvider");
+  return theme;
 };

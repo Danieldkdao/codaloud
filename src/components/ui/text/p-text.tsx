@@ -6,5 +6,10 @@ export const PText = ({
   className,
   ...props
 }: ComponentPropsWithRef<typeof Text>) => {
-  return <Text {...props} className={cn("text-base font-sans", className)} />;
+  return (
+    <Text
+      {...props}
+      className={cn("text-base font-sans text-muted-foreground", className)}
+    />
+  );
 };

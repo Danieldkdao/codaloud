@@ -30,7 +30,10 @@ export const ProjectWorkspacePlaceholder = ({
       }}
     >
       {children}
-      <HeadingText accessibilityRole="header" className="text-center text-3xl">
+      <HeadingText
+        accessibilityRole="header"
+        className="text-center text-3xl text-foreground"
+      >
         {title}
       </HeadingText>
       {description ? (

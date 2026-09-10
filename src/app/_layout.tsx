@@ -1,6 +1,8 @@
 import "../global.css";
 
 import { QueryProvider } from "@/components/query-provider";
+import { AppThemeProvider } from "@/components/app-theme-provider";
+import { useTheme } from "@/hooks/use-theme";
 import { SuccessFeedbackProvider } from "@/components/success-feedback-provider";
 import { authClient } from "@/lib/auth/auth-client";
 import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
@@ -14,7 +16,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
 
-const RootLayout = () => {
+const RootNavigator = () => {
+  const { isReady: isThemeReady } = useTheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const { data: session, isPending: isSessionPending } = authClient.useSession();
 
@@ -25,12 +28,12 @@ const RootLayout = () => {
       console.error("Unable to load custom fonts", fontError);
     }
 
-    if ((fontsLoaded || fontError) && !isSessionPending) {
+    if ((fontsLoaded || fontError) && !isSessionPending && isThemeReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, isSessionPending]);
+  }, [fontsLoaded, fontError, isSessionPending, isThemeReady]);
 
-  if ((!fontsLoaded && !fontError) || isSessionPending) {
+  if ((!fontsLoaded && !fontError) || isSessionPending || !isThemeReady) {
     return null;
   }
 
@@ -87,5 +90,11 @@ const RootLayout = () => {
     </QueryProvider>
   );
 };
+
+const RootLayout = () => (
+  <AppThemeProvider>
+    <RootNavigator />
+  </AppThemeProvider>
+);
 
 export default RootLayout;

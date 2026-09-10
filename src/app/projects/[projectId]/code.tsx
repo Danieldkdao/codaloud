@@ -10,8 +10,10 @@ import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/
 import { ProjectIcon } from "@/components/project-icon";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { useWorkspaceLoadingPreview } from "@/features/projects/hooks/use-workspace-loading-preview";
+import { useTheme } from "@/hooks/use-theme";
 
 const CodeScreen = () => {
+  const { isDarkMode } = useTheme();
   useEditorDevelopmentShortcuts();
   const isLoadingPreview = useWorkspaceLoadingPreview();
   const dockHeight = use(ProjectWorkspaceDockHeightContext);
@@ -51,6 +53,7 @@ const CodeScreen = () => {
           }
         >
           <CodeEditor
+            colorScheme={isDarkMode ? "dark" : "light"}
             onReady={handleEditorReady}
             filename={demoCodeFilename}
             initialValue={demoCode}

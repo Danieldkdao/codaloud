@@ -23,6 +23,8 @@ type CodeEditorProps = {
   /** Initial text for this document. Live edits stay inside CodeMirror. */
   initialValue: string;
   bottomInset?: number;
+  /** DOM components have a separate React tree, so appearance crosses as a prop. */
+  colorScheme?: "light" | "dark";
   /** Signals that CodeMirror has finished its initial layout. */
   onReady?: () => Promise<void>;
   dom?: import("expo/dom").DOMProps;
@@ -30,27 +32,45 @@ type CodeEditorProps = {
 
 const highlightStyle = HighlightStyle.define([
   {
-    tag: [tags.keyword, tags.modifier],
-    color: "var(--primary)",
+    tag: [tags.keyword, tags.modifier, tags.meta],
+    color: "var(--syntax-keyword)",
     fontWeight: "600",
   },
-  { tag: [tags.string, tags.regexp], color: "var(--primary)" },
+  { tag: [tags.string, tags.regexp, tags.inserted], color: "var(--syntax-string)" },
   {
-    tag: [tags.number, tags.bool, tags.null, tags.typeName, tags.className],
-    color: "var(--accent)",
+    tag: [tags.number, tags.bool, tags.null, tags.atom, tags.escape],
+    color: "var(--syntax-number)",
   },
+  { tag: [tags.typeName, tags.className, tags.namespace], color: "var(--syntax-type)" },
   {
     tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: "var(--foreground)",
+    color: "var(--syntax-function)",
     fontWeight: "600",
   },
-  { tag: tags.comment, color: "var(--muted-foreground)", fontStyle: "italic" },
+  { tag: [tags.propertyName, tags.attributeName], color: "var(--syntax-property)" },
+  { tag: tags.operator, color: "var(--syntax-operator)" },
+  { tag: [tags.tagName, tags.deleted], color: "var(--syntax-tag)" },
+  { tag: tags.comment, color: "var(--syntax-comment)", fontStyle: "italic" },
+  { tag: [tags.heading, tags.link], color: "var(--syntax-function)", textDecoration: "underline" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: tags.strong, fontWeight: "600" },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  { tag: tags.invalid, color: "var(--destructive)", textDecoration: "underline" },
 ]);
+
+const formatEditorThemeClassName = (colorScheme: CodeEditorProps["colorScheme"]) => {
+  switch (colorScheme) {
+    case "dark": return "code-editor-shell theme-dark";
+    case "light": return "code-editor-shell theme-light";
+    default: return "code-editor-shell";
+  }
+};
 
 const CodeEditor = ({
   filename,
   initialValue,
   bottomInset = 0,
+  colorScheme,
   onReady,
 }: CodeEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
@@ -170,11 +190,13 @@ const CodeEditor = ({
 
   return (
     <section
-      className="code-editor-shell"
+      className={formatEditorThemeClassName(colorScheme)}
+      data-theme={colorScheme}
       aria-label="Code panel"
       style={
         {
           height: viewportHeight ?? "100%",
+          colorScheme,
           "--editor-bottom-inset": `${effectiveInset}px`,
         } as CSSProperties
       }

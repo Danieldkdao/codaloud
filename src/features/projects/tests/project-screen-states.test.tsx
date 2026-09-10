@@ -7,11 +7,12 @@ import CodeScreen from "@/app/projects/[projectId]/code";
 import GitScreen from "@/app/projects/[projectId]/git";
 
 const state = vi.hoisted(() => ({ empty: false, focus: 0, ready: undefined as (() => Promise<void>) | undefined }));
+vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
 vi.mock("expo-router", () => ({ useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/components/code-editor", () => ({ default: ({ onReady }: { onReady: () => Promise<void> }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ onReady, colorScheme }: { onReady: () => Promise<void>; colorScheme: string }) => {
   state.ready = onReady;
-  return createElement("textarea", { defaultValue: "Editable code" });
+  return createElement("textarea", { defaultValue: "Editable code", "data-theme": colorScheme });
 } }));
 vi.mock("@/components/code-editor-loading", () => ({ CodeEditorLoading: () => createElement("span", null, "Initializing your editor") }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
@@ -76,6 +77,7 @@ it("keeps the editor mounted and waits for both the preview and actual readiness
   act(() => root.render(createElement(CodeScreen)));
   const editor = container.querySelector("textarea");
   expect(editor).not.toBeNull();
+  expect(editor?.dataset.theme).toBe("dark");
   act(() => vi.advanceTimersByTime(2000));
   expect(container.textContent).toContain("Initializing your editor");
   await act(async () => { await state.ready!(); });

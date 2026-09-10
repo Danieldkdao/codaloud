@@ -3,7 +3,17 @@
 @import "tailwindcss/utilities.css";
 @import "nativewind/theme";
 
-:root {
+@utility theme-light {
+  /* Syntax hues stay consistent across appearances, with contrast tuned per surface. */
+  --syntax-keyword: #7754a3;
+  --syntax-string: #286447;
+  --syntax-number: #9d4a27;
+  --syntax-type: #816116;
+  --syntax-function: #286384;
+  --syntax-property: #226f70;
+  --syntax-operator: #92536b;
+  --syntax-tag: #a84944;
+  --syntax-comment: #627065;
   --success: oklch(0.954 0.035 157);
   --success-foreground: oklch(0.36 0.075 157);
   --success-border: oklch(0.86 0.055 157);
@@ -42,46 +52,72 @@
   --sidebar-ring: oklch(0.4314 0.0674 167.9810);
 }
 
-/* Follow the system appearance on native and web. */
+@utility theme-dark {
+  --syntax-keyword: #c9a4f5;
+  --syntax-string: #9bd78b;
+  --syntax-number: #f0af7b;
+  --syntax-type: #e6cc83;
+  --syntax-function: #8ac6f2;
+  --syntax-property: #7ed4c5;
+  --syntax-operator: #e4a0bc;
+  --syntax-tag: #ef9a8f;
+  --syntax-comment: #93a397;
+  --success: oklch(0.32 0.045 157);
+  --success-foreground: oklch(0.91 0.06 157);
+  --success-border: oklch(0.46 0.065 157);
+  --navigation-shadow: rgb(0 0 0 / 0.3);
+  --background: oklch(0.2836 0.0144 157.9253);
+  --foreground: oklch(0.9643 0.0111 89.7224);
+  --card: oklch(0.3163 0.0193 157.1933);
+  --card-foreground: oklch(0.9643 0.0111 89.7224);
+  --popover: oklch(0.3163 0.0193 157.1933);
+  --popover-foreground: oklch(0.9643 0.0111 89.7224);
+  --primary: oklch(0.4314 0.0674 167.9810);
+  --primary-foreground: oklch(0.9967 0.0054 95.0974);
+  --secondary: oklch(0.3590 0.0249 158.5332);
+  --secondary-foreground: oklch(0.9188 0.0221 138.9773);
+  --muted: oklch(0.3590 0.0249 158.5332);
+  --muted-foreground: oklch(0.7234 0.0124 153.5825);
+  --accent: oklch(0.6202 0.1013 39.3859);
+  --accent-foreground: oklch(0.9967 0.0054 95.0974);
+  --destructive: #EF4444;
+  --destructive-foreground: oklch(0.9967 0.0054 95.0974);
+  --border: oklch(0.3590 0.0249 158.5332);
+  --input: oklch(0.3590 0.0249 158.5332);
+  --ring: oklch(0.4314 0.0674 167.9810);
+  --chart-1: oklch(0.4314 0.0674 167.9810);
+  --chart-2: oklch(0.6202 0.1013 39.3859);
+  --chart-3: oklch(0.9188 0.0221 138.9773);
+  --chart-4: oklch(0.9643 0.0111 89.7224);
+  --chart-5: oklch(0.9967 0.0054 95.0974);
+  --sidebar: oklch(0.2560 0.0125 160.3536);
+  --sidebar-foreground: oklch(0.9643 0.0111 89.7224);
+  --sidebar-primary: oklch(0.4314 0.0674 167.9810);
+  --sidebar-primary-foreground: oklch(0.9967 0.0054 95.0974);
+  --sidebar-accent: oklch(0.3590 0.0249 158.5332);
+  --sidebar-accent-foreground: oklch(0.9188 0.0221 138.9773);
+  --sidebar-border: oklch(0.3590 0.0249 158.5332);
+  --sidebar-ring: oklch(0.4314 0.0674 167.9810);
+}
+
+:root {
+  @apply theme-light;
+}
+
+/* NativeWind follows Appearance on native; browsers follow the OS by default. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --success: oklch(0.32 0.045 157);
-    --success-foreground: oklch(0.91 0.06 157);
-    --success-border: oklch(0.46 0.065 157);
-    --navigation-shadow: rgb(0 0 0 / 0.3);
-    --background: oklch(0.2836 0.0144 157.9253);
-    --foreground: oklch(0.9643 0.0111 89.7224);
-    --card: oklch(0.3163 0.0193 157.1933);
-    --card-foreground: oklch(0.9643 0.0111 89.7224);
-    --popover: oklch(0.3163 0.0193 157.1933);
-    --popover-foreground: oklch(0.9643 0.0111 89.7224);
-    --primary: oklch(0.4314 0.0674 167.9810);
-    --primary-foreground: oklch(0.9967 0.0054 95.0974);
-    --secondary: oklch(0.3590 0.0249 158.5332);
-    --secondary-foreground: oklch(0.9188 0.0221 138.9773);
-    --muted: oklch(0.3590 0.0249 158.5332);
-    --muted-foreground: oklch(0.7234 0.0124 153.5825);
-    --accent: oklch(0.6202 0.1013 39.3859);
-    --accent-foreground: oklch(0.9967 0.0054 95.0974);
-    --destructive: #EF4444;
-    --destructive-foreground: oklch(0.9967 0.0054 95.0974);
-    --border: oklch(0.3590 0.0249 158.5332);
-    --input: oklch(0.3590 0.0249 158.5332);
-    --ring: oklch(0.4314 0.0674 167.9810);
-    --chart-1: oklch(0.4314 0.0674 167.9810);
-    --chart-2: oklch(0.6202 0.1013 39.3859);
-    --chart-3: oklch(0.9188 0.0221 138.9773);
-    --chart-4: oklch(0.9643 0.0111 89.7224);
-    --chart-5: oklch(0.9967 0.0054 95.0974);
-    --sidebar: oklch(0.2560 0.0125 160.3536);
-    --sidebar-foreground: oklch(0.9643 0.0111 89.7224);
-    --sidebar-primary: oklch(0.4314 0.0674 167.9810);
-    --sidebar-primary-foreground: oklch(0.9967 0.0054 95.0974);
-    --sidebar-accent: oklch(0.3590 0.0249 158.5332);
-    --sidebar-accent-foreground: oklch(0.9188 0.0221 138.9773);
-    --sidebar-border: oklch(0.3590 0.0249 158.5332);
-    --sidebar-ring: oklch(0.4314 0.0674 167.9810);
+    @apply theme-dark;
   }
+}
+
+/* Explicit browser preferences override the media query in either direction. */
+:root[data-theme="light"] {
+  @apply theme-light;
+}
+
+:root[data-theme="dark"] {
+  @apply theme-dark;
 }
 
 @theme inline {

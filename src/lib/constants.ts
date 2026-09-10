@@ -1,5 +1,7 @@
 export const MAIN_TAB_BAR_HEIGHT = 64;
 
+export const themePreferences = ["light", "dark", "system"] as const;
+
 export const MODAL_SCREEN_OPTIONS = {
   presentation: "modal",
   headerTitleStyle: {

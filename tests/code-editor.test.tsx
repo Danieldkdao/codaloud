@@ -44,6 +44,25 @@ it("keeps edits and undo history when the available space changes", async () => 
   expect(view.state.doc.toString()).toBe("const answer = 42;");
 });
 
+it("updates the embedded appearance without losing edits or undo history", async () => {
+  const renderTheme = async (colorScheme: "light" | "dark") => {
+    await act(async () => root.render(createElement(CodeEditor, {
+      filename: "demo.ts", initialValue: "const answer = 42;", colorScheme,
+    })));
+  };
+  await renderTheme("light");
+  const view = editor();
+  act(() => view.dispatch({ changes: { from: 0, insert: "// keep me\n" } }));
+  await renderTheme("dark");
+  expect(container.querySelector('[data-theme="dark"]')).not.toBeNull();
+  expect(editor()).toBe(view);
+  expect(view.state.doc.toString()).toContain("// keep me");
+  act(() => { undo(view); });
+  expect(view.state.doc.toString()).toBe("const answer = 42;");
+  await renderTheme("light");
+  expect(container.querySelector('[data-theme="light"]')).not.toBeNull();
+});
+
 it("creates a fresh document when the file identity changes", async () => {
   await render();
   const previous = editor();

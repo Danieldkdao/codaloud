@@ -6,18 +6,18 @@ body { background: var(--background); }
 .code-editor-host .cm-editor { height: 100%; color: var(--foreground); background: var(--background); font-size: 16px; }
 .code-editor-host .cm-editor.cm-focused { outline: none; }
 .code-editor-host .cm-scroller { overflow: auto; font-family: EditorMono, ui-monospace, monospace; line-height: 1.65; overscroll-behavior: contain; }
-.code-editor-host .cm-content { padding: 16px 0 var(--editor-bottom-inset); caret-color: var(--primary); }
+.code-editor-host .cm-content { padding: 16px 0 var(--editor-bottom-inset); caret-color: var(--secondary-foreground); }
 .code-editor-host .cm-line { padding: 0 20px 0 12px; }
 .code-editor-host .cm-gutters { border: 0; background: var(--background); color: var(--muted-foreground); }
 .code-editor-host .cm-lineNumbers .cm-gutterElement { min-width: 36px; padding-left: 10px; }
 .code-editor-host .cm-foldGutter .cm-gutterElement { padding: 0 6px; cursor: pointer; }
 .code-editor-host .cm-activeLine, .code-editor-host .cm-activeLineGutter { background: color-mix(in srgb, var(--secondary) 45%, transparent); }
-.code-editor-host .cm-cursor, .code-editor-host .cm-dropCursor { border-left-color: var(--primary); }
+.code-editor-host .cm-cursor, .code-editor-host .cm-dropCursor { border-left-color: var(--secondary-foreground); }
 .code-editor-host .cm-selectionBackground, .code-editor-host .cm-focused .cm-selectionBackground, .code-editor-host .cm-content ::selection { background: var(--secondary); }
 .code-editor-host .cm-selectionMatch, .code-editor-host .cm-searchMatch { background: color-mix(in srgb, var(--secondary) 70%, transparent); }
-.code-editor-host .cm-searchMatch-selected { outline: 1px solid var(--primary); }
-.code-editor-host .cm-matchingBracket { background: var(--secondary); color: var(--primary); }
-.code-editor-host .cm-foldPlaceholder { color: var(--primary); background: var(--secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
+.code-editor-host .cm-searchMatch-selected { outline: 1px solid var(--secondary-foreground); }
+.code-editor-host .cm-matchingBracket { background: var(--secondary); color: var(--secondary-foreground); }
+.code-editor-host .cm-foldPlaceholder { color: var(--secondary-foreground); background: var(--secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
 .code-editor-host .cm-panels { background: var(--card); color: var(--foreground); font-family: EditorUI, sans-serif; font-size: 16px; }
 .code-editor-host .cm-panels-top { border-bottom: 1px solid var(--border); }
 .code-editor-host .cm-panel.cm-search { padding: 8px 44px 8px 12px; }
@@ -25,7 +25,7 @@ body { background: var(--background); }
 .code-editor-host .cm-textfield { color: var(--foreground); background: var(--background); border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 44px; font: inherit; }
 .code-editor-host .cm-button { background: var(--secondary); color: var(--foreground); border: 0; min-height: 44px; font: inherit; }
 .code-editor-host .cm-panel label { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; }
-.code-editor-host .cm-panel input[type=checkbox] { accent-color: var(--primary); }
+.code-editor-host .cm-panel input[type=checkbox] { accent-color: var(--secondary-foreground); }
 .code-editor-host .cm-tooltip { border: 1px solid var(--border); border-radius: 8px; background: var(--popover); color: var(--foreground); font-size: 16px; }
 .code-editor-host .cm-tooltip-autocomplete ul li { padding: 8px 12px; min-height: 44px; }
 .code-editor-host .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }

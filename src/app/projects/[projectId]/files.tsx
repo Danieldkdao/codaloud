@@ -15,7 +15,7 @@ import { getDirectoryFiles } from "@/features/projects/lib/files";
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const [currentDirectory, setCurrentDirectory] = useState("");
-  const { query, creation } = useProjectFiles(projectId, currentDirectory);
+  const { query, creation, update } = useProjectFiles(projectId, currentDirectory);
   const fileCreation = use(ProjectWorkspaceFileCreationContext);
   const showSuccess = useSuccessFeedback();
   const parentDirectory =
@@ -65,12 +65,16 @@ const FilesScreen = () => {
     );
   }
 
+  const directoryFiles = getDirectoryFiles(query.data ?? [], currentDirectory);
+  const existingNames = directoryFiles.map((file) => file.name);
+
   return (
     <View className="flex-1 bg-background">
       {fileCreation?.kind && (
         <ProjectFileCreateRow
           key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
           kind={fileCreation.kind}
+          existingNames={existingNames}
           parentPath={currentDirectory}
           onCancel={fileCreation.finish}
           onCreate={async (input) => {
@@ -82,9 +86,17 @@ const FilesScreen = () => {
       )}
       <ProjectFilesList
         key={currentDirectory}
-        files={getDirectoryFiles(query.data ?? [], currentDirectory)}
+        files={directoryFiles}
+        existingNames={existingNames}
         parentDirectory={parentDirectory}
         onDirectoryPress={setCurrentDirectory}
+        onUpdate={async (input) => {
+          await update.mutateAsync(input);
+          showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
+        }}
+        updatingPath={update.isPending
+          ? [update.variables.parentPath, update.variables.previousName].filter(Boolean).join("/")
+          : undefined}
         navigationDisabled={Boolean(fileCreation?.kind)}
       />
     </View>

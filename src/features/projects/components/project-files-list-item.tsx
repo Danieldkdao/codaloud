@@ -6,18 +6,20 @@ import { ProjectIcon } from "@/components/project-icon";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
-import type { ProjectFileEntrySchema } from "@/features/projects/actions/file-schemas";
+import type { ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { ProjectFileNameRow } from "@/features/projects/components/project-file-name-row";
 import { formatProjectFileDeletion } from "@/features/projects/lib/formatters";
 import { confirmAction } from "@/lib/utils";
 
 type ProjectFilesListItemProps = {
   file: ProjectFileEntrySchema;
+  existingNames: readonly string[];
   onDirectoryPress: (path: string) => void;
+  onUpdate: (input: UpdateProjectFileSchema) => Promise<void>;
   disabled?: boolean;
 };
 
-export const ProjectFilesListItem = ({ file, onDirectoryPress, disabled = false }: ProjectFilesListItemProps) => {
+export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, onUpdate, disabled = false }: ProjectFilesListItemProps) => {
   const swipeable = useRef<SwipeableMethods>(null);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -55,10 +57,11 @@ export const ProjectFilesListItem = ({ file, onDirectoryPress, disabled = false 
         mode="update"
         kind={kind}
         initialName={file.name}
+        existingNames={existingNames}
         parentPath={file.path.slice(0, Math.max(0, file.path.lastIndexOf("/")))}
         onCancel={() => setIsUpdating(false)}
-        onSubmit={async () => {
-          // UI preview only; preserve the server's file name until rename is wired.
+        onSubmit={async (input) => {
+          if (input.name !== file.name) await onUpdate({ ...input, previousName: file.name });
           setIsUpdating(false);
         }}
       />

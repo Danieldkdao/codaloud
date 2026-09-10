@@ -19,6 +19,11 @@ export const createProjectFileSchema = z.strictObject({
 });
 export type CreateProjectFileSchema = z.infer<typeof createProjectFileSchema>;
 
+export const updateProjectFileSchema = createProjectFileSchema.extend({
+  previousName: projectFileNameSchema,
+});
+export type UpdateProjectFileSchema = z.infer<typeof updateProjectFileSchema>;
+
 export const projectFileEntrySchema = z.object({
   name: projectFileNameSchema,
   path: projectDirectoryPathSchema,
@@ -38,3 +43,6 @@ export const createProjectFileResponseSchema = z.discriminatedUnion("error", [
   z.object({ error: z.literal(false), message: z.string(), data: projectFileEntrySchema }),
 ]);
 export type CreateProjectFileResponseSchema = z.infer<typeof createProjectFileResponseSchema>;
+
+export const updateProjectFileResponseSchema = createProjectFileResponseSchema;
+export type UpdateProjectFileResponseSchema = z.infer<typeof updateProjectFileResponseSchema>;

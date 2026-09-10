@@ -1,4 +1,4 @@
-import type { ProjectFileEntrySchema } from "@/features/projects/actions/file-schemas";
+import type { ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { use } from "react";
 import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
 import { FlatList, Pressable, View } from "react-native";
@@ -12,15 +12,21 @@ import { ProjectFilesListItem } from "@/features/projects/components/project-fil
 
 type ProjectFilesListProps = {
   files: ProjectFileEntrySchema[];
+  existingNames: readonly string[];
   parentDirectory?: string;
   onDirectoryPress: (path: string) => void;
+  onUpdate: (input: UpdateProjectFileSchema) => Promise<void>;
+  updatingPath?: string;
   navigationDisabled?: boolean;
 };
 
 export const ProjectFilesList = ({
   files,
+  existingNames,
   parentDirectory,
   onDirectoryPress,
+  onUpdate,
+  updatingPath,
   navigationDisabled = false,
 }: ProjectFilesListProps) => {
   const insets = useSafeAreaInsets();
@@ -34,8 +40,8 @@ export const ProjectFilesList = ({
   const parentRow = parentDirectory !== undefined ? (
     <Pressable
       onPress={() => onDirectoryPress(parentDirectory)}
-      disabled={navigationDisabled}
-      accessibilityState={{ disabled: navigationDisabled }}
+      disabled={navigationDisabled || Boolean(updatingPath)}
+      accessibilityState={{ disabled: navigationDisabled || Boolean(updatingPath) }}
       accessibilityRole="button"
       accessibilityLabel="Go to parent directory"
       className="flex-row items-center gap-3 border-b border-border px-3 py-4 active:bg-secondary"
@@ -70,8 +76,10 @@ export const ProjectFilesList = ({
       renderItem={({ item }) => (
         <ProjectFilesListItem
           file={item}
+          existingNames={existingNames}
           onDirectoryPress={onDirectoryPress}
-          disabled={navigationDisabled}
+          onUpdate={onUpdate}
+          disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
         />
       )}
     />

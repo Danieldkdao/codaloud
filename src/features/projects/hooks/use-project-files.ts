@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createProjectFileAction, readProjectFilesAction } from "@/features/projects/actions/file-actions";
-import type { CreateProjectFileSchema, ProjectFileEntrySchema } from "@/features/projects/actions/file-schemas";
+import { createProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
+import type { CreateProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { useAuthSession } from "@/hooks/use-auth-session";
 
 export const useProjectFiles = (projectId: string, directoryPath: string) => {
@@ -40,5 +40,42 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
     },
   });
 
-  return { query, creation };
+  const update = useMutation({
+    mutationKey: ["projects", "files", "update", userId, projectId],
+    retry: false,
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: UpdateProjectFileSchema) => {
+      if (!userId) throw new Error("Sign in to update files.");
+      const result = await updateProjectFileAction(projectId, input);
+      if (result.error) throw new Error(result.message);
+      return result.data;
+    },
+    onSuccess: async (entry, input, context) => {
+      const projectKey = ["projects", "files", context.userId, context.projectId];
+      const queryKey = [...projectKey, input.parentPath];
+      const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
+      // An earlier directory read must not put the old name back after the rename.
+      await queryClient.cancelQueries({ queryKey, exact: true });
+      if (entry.isDir && previousPath !== entry.path) {
+        const subtreeQueries = {
+          queryKey: projectKey,
+          predicate: (query: { queryKey: readonly unknown[] }) => {
+            const path = query.queryKey[4];
+            return typeof path === "string" && [previousPath, entry.path].some((root) =>
+              path === root || path.startsWith(`${root}/`),
+            );
+          },
+        };
+        // Cached children carry full paths. Fetch them afresh at the new location.
+        await queryClient.cancelQueries(subtreeQueries);
+        queryClient.removeQueries(subtreeQueries);
+      }
+      queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
+        files ? [...files.filter((file) => file.path !== previousPath && file.path !== entry.path), entry] : undefined,
+      );
+      await queryClient.invalidateQueries({ queryKey, exact: true });
+    },
+  });
+
+  return { query, creation, update };
 };

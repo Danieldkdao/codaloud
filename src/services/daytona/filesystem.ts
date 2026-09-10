@@ -1,19 +1,22 @@
 import { z } from "zod";
 import {
   createProjectFileSchema, projectDirectoryPathSchema, projectFileEntrySchema,
-  type CreateProjectFileSchema,
+  updateProjectFileSchema, type CreateProjectFileSchema, type UpdateProjectFileSchema,
 } from "@/features/projects/actions/file-schemas";
 import { getSandboxToolboxUrl, requestDaytona, SandboxFilesError } from "./api";
 
 type SandboxFilesystemContext = { sandboxId: string; projectId: string; allowInitialize: boolean };
 
-// Run inside Daytona, not in the Expo server. Uploads overwrite files; exclusive
-// creation must happen in the sandbox's filesystem, where concurrent writers meet.
+// Run inside Daytona, not in the Expo server. Creation and rename must reject
+// collisions in the sandbox's filesystem, where concurrent writers meet.
 const filesystemCommand = String.raw`
 const fs = require("node:fs");
 const path = require("node:path").posix;
 const input = JSON.parse(Buffer.from(process.argv[1], "base64").toString("utf8"));
 const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
+const validateName = (name) => {
+  if (!name || name === "." || name === ".." || /[\/\\\x00-\x1f\x7f]/.test(name)) fail("INVALID_PATH");
+};
 const directory = (target, initialize) => {
   if (initialize) {
     try { fs.mkdirSync(target, { mode: 0o755 }); }
@@ -38,9 +41,25 @@ try {
   if (input.name === undefined) {
     process.stdout.write(JSON.stringify({ path: parent }));
   } else {
-    if (!input.name || input.name === "." || input.name === ".." || /[\/\\\x00-\x1f\x7f]/.test(input.name)) fail("INVALID_PATH");
+    validateName(input.name);
     const target = path.join(parent, input.name);
-    if (input.kind === "folder") fs.mkdirSync(target, { mode: 0o755 });
+    if (input.previousName !== undefined) {
+      validateName(input.previousName);
+      const source = path.join(parent, input.previousName);
+      const existing = fs.lstatSync(source, { throwIfNoEntry: false });
+      if (!existing) fail("FILE_NOT_FOUND");
+      if (existing.isSymbolicLink()) fail("INVALID_PATH");
+      if (input.kind === "folder" ? !existing.isDirectory() : !existing.isFile()) fail("FILE_CHANGED");
+      if (source !== target) {
+        if (fs.lstatSync(target, { throwIfNoEntry: false })) fail("EEXIST");
+        // GNU mv in Daytona uses an exclusive rename. -T prevents nesting a folder
+        // into a destination created concurrently; -n prevents overwriting it.
+        require("node:child_process").execFileSync("mv", ["-n", "-T", "--", source, target], { timeout: 5000, stdio: "pipe" });
+        const updated = fs.lstatSync(target, { throwIfNoEntry: false });
+        // mv -n can exit successfully after skipping a collision.
+        if (!updated || updated.dev !== existing.dev || updated.ino !== existing.ino) fail("EEXIST");
+      }
+    } else if (input.kind === "folder") fs.mkdirSync(target, { mode: 0o755 });
     else fs.closeSync(fs.openSync(target, "wx", 0o644));
     const info = fs.lstatSync(target);
     process.stdout.write(JSON.stringify({ name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
@@ -58,6 +77,8 @@ export type HomeDirectorySchema = z.infer<typeof homeDirectorySchema>;
 
 const throwFilesystemError = (code: unknown): never => {
   switch (code) {
+    case "FILE_NOT_FOUND": throw new SandboxFilesError(404, "FILE_NOT_FOUND", "The selected file or folder could not be found. Please refresh and try again.");
+    case "FILE_CHANGED": throw new SandboxFilesError(409, "FILE_CHANGED", "The selected item has changed. Please refresh the folder before trying again.");
     case "EEXIST": throw new SandboxFilesError(409, "NAME_CONFLICT", "Conflicting filename. Please rename this file or folder.");
     case "INVALID_PATH": throw new SandboxFilesError(400, "INVALID_PATH", "Choose a folder inside this project. Symbolic links are not supported.");
     case "WORKSPACE_NOT_READY": throw new SandboxFilesError(409, "WORKSPACE_NOT_READY", "This folder is unavailable or the project workspace has not been prepared.");
@@ -71,10 +92,10 @@ const throwFilesystemError = (code: unknown): never => {
 };
 
 const executeFilesystemOperation = async (
-  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, creation?: CreateProjectFileSchema,
+  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, operation?: CreateProjectFileSchema | UpdateProjectFileSchema,
 ) => {
   const { dir: home } = homeDirectorySchema.parse(await requestDaytona(`${toolboxUrl}/user-home-dir`));
-  const payload = JSON.stringify({ home, allowInitialize: context.allowInitialize, parentPath, ...creation });
+  const payload = JSON.stringify({ home, allowInitialize: context.allowInitialize, parentPath, ...operation });
   const encoded = btoa(Array.from(new TextEncoder().encode(payload), (byte) => String.fromCharCode(byte)).join(""));
   // Only the fixed script and base64 data enter the shell. Names remain data.
   const command = `node -e '${filesystemCommand.replace(/'/g, "'\\''")}' '${encoded}'`;
@@ -99,4 +120,11 @@ export const createSandboxFile = async (context: SandboxFilesystemContext, unsaf
   const input = createProjectFileSchema.parse(unsafeInput);
   const toolboxUrl = await getSandboxToolboxUrl(context.sandboxId, context.projectId);
   return projectFileEntrySchema.parse(await executeFilesystemOperation(toolboxUrl, context, input.parentPath, input));
+};
+
+export const updateSandboxFile = async (context: SandboxFilesystemContext, unsafeInput: UpdateProjectFileSchema) => {
+  const input = updateProjectFileSchema.parse(unsafeInput);
+  const toolboxUrl = await getSandboxToolboxUrl(context.sandboxId, context.projectId);
+  // Renaming never needs to create a missing workspace or parent directory.
+  return projectFileEntrySchema.parse(await executeFilesystemOperation(toolboxUrl, { ...context, allowInitialize: false }, input.parentPath, input));
 };

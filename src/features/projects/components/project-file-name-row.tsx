@@ -11,12 +11,13 @@ type ProjectFileNameRowProps = {
   kind: ProjectFileKind;
   mode: "create" | "update";
   initialName?: string;
+  existingNames: readonly string[];
   parentPath: string;
   onSubmit: (input: CreateProjectFileSchema) => Promise<void>;
   onCancel: () => void;
 };
 
-export const ProjectFileNameRow = ({ kind, mode, initialName = "", parentPath, onSubmit, onCancel }: ProjectFileNameRowProps) => {
+export const ProjectFileNameRow = ({ kind, mode, initialName = "", existingNames, parentPath, onSubmit, onCancel }: ProjectFileNameRowProps) => {
   const [name, setName] = useState(initialName);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,10 @@ export const ProjectFileNameRow = ({ kind, mode, initialName = "", parentPath, o
   const mounted = useRef(true);
   const presentation = formatProjectFileKind(kind);
   const action = formatProjectFileNameAction(mode);
+  const hasNameConflict = existingNames.includes(name) && !(mode === "update" && name === initialName);
+  const visibleError = pending ? null : hasNameConflict
+    ? "A file or folder with this name already exists. Please use a different name."
+    : error;
 
   useEffect(() => {
     mounted.current = true;
@@ -36,6 +41,8 @@ export const ProjectFileNameRow = ({ kind, mode, initialName = "", parentPath, o
   const submit = async (source: "submit" | "blur") => {
     // Native keyboards can emit submit and blur before React renders disabled.
     if (submitting.current || cancelling.current || (source === "blur" && lastAttempt.current === name)) return;
+    // Keep typing and cancellation available, but block both keyboard and blur submission.
+    if (hasNameConflict) return;
     if (!name.trim()) { onCancel(); return; }
     lastAttempt.current = name;
     const input = createProjectFileSchema.safeParse({ parentPath, name, kind });
@@ -79,7 +86,7 @@ export const ProjectFileNameRow = ({ kind, mode, initialName = "", parentPath, o
           returnKeyType="done"
           submitBehavior="submit"
           disabled={pending}
-          invalid={error !== null}
+          invalid={visibleError !== null}
           onSubmitEditing={() => void submit("submit")}
           onBlur={() => void submit("blur")}
           onKeyPress={({ nativeEvent }) => {
@@ -99,7 +106,7 @@ export const ProjectFileNameRow = ({ kind, mode, initialName = "", parentPath, o
           <Icon family="Feather" name="x" size={22} className="text-muted-foreground" accessible={false} />
         </Pressable>
       </View>
-      {error && <PText accessibilityRole="alert" className="text-destructive">{error}</PText>}
+      {visibleError && <PText accessibilityRole="alert" accessibilityLiveRegion="polite" className="text-destructive">{visibleError}</PText>}
     </View>
   );
 };

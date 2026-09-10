@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createSandboxFile, readSandboxFiles } from "@/services/daytona/filesystem";
+import { createSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
 
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "server-key" } }));
 const execute = promisify(exec);
@@ -17,6 +17,18 @@ const network = vi.fn<typeof fetch>();
 
 beforeEach(async () => {
   home = await realpath(await mkdtemp(join(tmpdir(), "codaloud-files-")));
+  if (process.platform === "darwin") {
+    // Emulate GNU mv's -n -T contract on macOS using its exclusive rename syscall.
+    // The production command below still runs unchanged; Linux uses real GNU mv.
+    await mkdir(join(home, "bin"));
+    await writeFile(join(home, "bin/mv"), `#!/usr/bin/python3
+import ctypes, errno, os, sys
+assert sys.argv[1:4] == ['-n', '-T', '--']
+libc = ctypes.CDLL(None, use_errno=True)
+result = libc.renamex_np(os.fsencode(sys.argv[4]), os.fsencode(sys.argv[5]), 4)
+sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
+`, { mode: 0o755 });
+  }
   state = "started";
   labels = { codaloudApp: "codaloud", codaloudProjectId: context.projectId };
   network.mockReset().mockImplementation(async (input, init) => {
@@ -30,7 +42,7 @@ beforeEach(async () => {
     if (url.pathname.endsWith("/process/execute")) {
       const body = JSON.parse(String(init?.body));
       try {
-        const { stdout } = await execute(body.command, { timeout: 10_000 });
+        const { stdout } = await execute(body.command, { timeout: 10_000, env: { ...process.env, PATH: `${join(home, "bin")}:${process.env.PATH}` } });
         return Response.json({ exitCode: 0, result: stdout });
       } catch (error) {
         const failure = error as { stdout: string };
@@ -100,6 +112,65 @@ it("refuses a mismatched sandbox before accessing its runtime", async () => {
   labels.codaloudProjectId = "another-project";
   await expect(readSandboxFiles(context, "")).rejects.toMatchObject({ status: 409 });
   expect(network).toHaveBeenCalledTimes(1);
+});
+
+it("renames a file in its parent and preserves content, including literal shell characters", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "notes", kind: "folder" });
+  const source = join(home, ".codaloud/workspace/notes/old.txt");
+  await writeFile(source, "preserve these bytes");
+  const name = "new ' $(echo unexpected).txt";
+  const updatedFile = await updateSandboxFile(context, { parentPath: "notes", previousName: "old.txt", name, kind: "file" });
+  expect(updatedFile).toMatchObject({ name, path: `notes/${name}`, isDir: false, size: 20 });
+  expect(await readFile(join(home, ".codaloud/workspace/notes", name), "utf8")).toBe("preserve these bytes");
+  await expect(readFile(source)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("renames a nonempty folder with all descendants intact", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "old", kind: "folder" });
+  await mkdir(join(home, ".codaloud/workspace/old/nested"));
+  await writeFile(join(home, ".codaloud/workspace/old/nested/file.ts"), "contents");
+  expect(await updateSandboxFile(context, { parentPath: "", previousName: "old", name: "new", kind: "folder" })).toMatchObject({ path: "new", isDir: true });
+  expect(await readFile(join(home, ".codaloud/workspace/new/nested/file.ts"), "utf8")).toBe("contents");
+});
+
+it.each(["file", "folder"] as const)("allows only one concurrent %s rename to a destination", async (kind) => {
+  for (const name of ["first", "second"]) {
+    await createSandboxFile(context, { parentPath: "", name, kind });
+    await writeFile(join(home, ".codaloud/workspace", name, ...(kind === "folder" ? ["contents.txt"] : [])), name);
+  }
+  const results = await Promise.allSettled(["first", "second"].map((previousName) => updateSandboxFile(context, { parentPath: "", previousName, name: "destination", kind })));
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { status: 409, code: "NAME_CONFLICT" } });
+  const winner = results[0].status === "fulfilled" ? "first" : "second";
+  const loser = winner === "first" ? "second" : "first";
+  for (const [name, contents] of [["destination", winner], [loser, loser]]) {
+    expect(await readFile(join(home, ".codaloud/workspace", name, ...(kind === "folder" ? ["contents.txt"] : [])), "utf8")).toBe(contents);
+  }
+});
+
+it("rejects occupied destinations, including empty folders and dangling symlinks", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "source", kind: "folder" });
+  await createSandboxFile(context, { parentPath: "", name: "occupied", kind: "folder" });
+  await symlink(join(home, "missing"), join(home, ".codaloud/workspace/link"));
+  for (const name of ["occupied", "link"]) {
+    await expect(updateSandboxFile(context, { parentPath: "", previousName: "source", name, kind: "folder" })).rejects.toMatchObject({ status: 409, code: "NAME_CONFLICT" });
+  }
+});
+
+it("reports missing or changed sources and rejects symlink sources and parents", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "source", kind: "file" });
+  await expect(updateSandboxFile(context, { parentPath: "", previousName: "missing", name: "new", kind: "file" })).rejects.toMatchObject({ status: 404, code: "FILE_NOT_FOUND" });
+  await expect(updateSandboxFile(context, { parentPath: "", previousName: "source", name: "new", kind: "folder" })).rejects.toMatchObject({ status: 409, code: "FILE_CHANGED" });
+  await mkdir(join(home, "outside"));
+  await symlink(join(home, "outside"), join(home, ".codaloud/workspace/link"));
+  await expect(updateSandboxFile(context, { parentPath: "", previousName: "link", name: "new", kind: "folder" })).rejects.toMatchObject({ code: "INVALID_PATH" });
+  await expect(updateSandboxFile(context, { parentPath: "link", previousName: "source", name: "new", kind: "file" })).rejects.toMatchObject({ code: "INVALID_PATH" });
+});
+
+it("treats an unchanged name as a verified no-op", async () => {
+  await createSandboxFile(context, { parentPath: "", name: "source", kind: "file" });
+  await writeFile(join(home, ".codaloud/workspace/source"), "keep");
+  expect(await updateSandboxFile(context, { parentPath: "", previousName: "source", name: "source", kind: "file" })).toMatchObject({ name: "source", size: 4 });
 });
 
 it("does not recreate a missing sandbox or mask a provider failure as an empty list", async () => {

@@ -1,7 +1,7 @@
 import { confirmUserProjectOwnership } from "./projects";
-import { createSandboxFile, readSandboxFiles } from "@/services/daytona/filesystem";
+import { createSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
 import { SandboxFilesError } from "@/services/daytona/api";
-import type { CreateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import type { CreateProjectFileSchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 
 const getProjectFilesystem = async (userId: string, projectId: string) => {
   const existingProject = await confirmUserProjectOwnership(userId, projectId);
@@ -19,3 +19,6 @@ export const readUserProjectFiles = async (userId: string, projectId: string, pa
 
 export const createUserProjectFile = async (userId: string, projectId: string, input: CreateProjectFileSchema) =>
   createSandboxFile(await getProjectFilesystem(userId, projectId), input);
+
+export const updateUserProjectFile = async (userId: string, projectId: string, input: UpdateProjectFileSchema) =>
+  updateSandboxFile(await getProjectFilesystem(userId, projectId), input);

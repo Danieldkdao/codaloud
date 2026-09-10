@@ -3,12 +3,13 @@ import { act, createElement, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
+import { ProjectFileNameRow } from "@/features/projects/components/project-file-name-row";
 
 const mocks = vi.hoisted(() => ({ alert: vi.fn() }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
-vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { ref: Ref<HTMLInputElement>; value: string; disabled: boolean; accessibilityLabel: string }) => {
+vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { ref: Ref<HTMLInputElement>; value: string; disabled: boolean; invalid: boolean; accessibilityLabel: string }) => {
   inputEvents = props;
-  return createElement("input", { ref: props.ref, value: props.value, disabled: props.disabled, "aria-label": props.accessibilityLabel, readOnly: true });
+  return createElement("input", { ref: props.ref, value: props.value, disabled: props.disabled, "aria-invalid": props.invalid, "aria-label": props.accessibilityLabel, readOnly: true });
 } }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: ({ name, isDirectory }: { name: string; isDirectory: boolean }) => createElement("span", { "data-icon-name": name, "data-is-folder": isDirectory }) }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
@@ -23,8 +24,8 @@ let root: Root;
 let container: HTMLDivElement;
 const create = vi.fn();
 const cancel = vi.fn();
-const render = (kind: "file" | "folder" = "file") => act(() => root.render(createElement(ProjectFileCreateRow, {
-  kind, parentPath: "notes", onCreate: create, onCancel: cancel,
+const render = (kind: "file" | "folder" = "file", existingNames: readonly string[] = []) => act(() => root.render(createElement(ProjectFileCreateRow, {
+  kind, existingNames, parentPath: "notes", onCreate: create, onCancel: cancel,
 })));
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -96,5 +97,68 @@ it("also cancels accessibility activation without a preceding press-in event", a
   act(() => inputEvents.onChangeText("do-not-create.txt"));
   await act(async () => { container.querySelector("button")!.click(); inputEvents.onBlur(); });
   expect(cancel).toHaveBeenCalledTimes(1);
+  expect(create).not.toHaveBeenCalled();
+});
+
+it.each(["file", "folder"] as const)("marks a conflicting %s name immediately and blocks Enter and blur until corrected", async (kind) => {
+  render(kind, ["taken"]);
+  act(() => inputEvents.onChangeText("taken"));
+  expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("true");
+  expect(container.textContent).toContain("already exists");
+  expect(container.querySelector("input")?.disabled).toBe(false);
+  expect(container.querySelector("button")?.disabled).toBe(false);
+  await act(async () => { inputEvents.onSubmitEditing(); inputEvents.onBlur(); });
+  expect(create).not.toHaveBeenCalled();
+  expect(cancel).not.toHaveBeenCalled();
+  expect(mocks.alert).not.toHaveBeenCalled();
+  act(() => inputEvents.onChangeText("available"));
+  expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("false");
+  expect(container.textContent).not.toContain("already exists");
+  await act(async () => inputEvents.onSubmitEditing());
+  expect(create).toHaveBeenCalledWith({ parentPath: "notes", name: "available", kind });
+});
+
+it("updates conflict feedback when the loaded sibling names change", async () => {
+  render();
+  act(() => inputEvents.onChangeText("incoming.txt"));
+  render("file", ["incoming.txt"]);
+  expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("true");
+  await act(async () => inputEvents.onBlur());
+  expect(create).not.toHaveBeenCalled();
+  render("file", []);
+  expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("false");
+  await act(async () => inputEvents.onBlur());
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it.each(["create", "update"] as const)("hides conflict feedback when sibling names refresh during %s", async (mode) => {
+  let reject!: (error: Error) => void;
+  create.mockImplementation(() => new Promise<void>((_, fail) => { reject = fail; }));
+  const renderNames = (existingNames: readonly string[]) => act(() => root.render(createElement(ProjectFileNameRow, {
+    kind: "file", mode, initialName: mode === "update" ? "before.txt" : "",
+    existingNames, parentPath: "notes", onSubmit: create, onCancel: cancel,
+  })));
+  renderNames([]);
+  act(() => inputEvents.onChangeText("saved.txt"));
+  await act(async () => inputEvents.onSubmitEditing());
+  renderNames(["saved.txt"]);
+  expect(container.querySelector("input")?.disabled).toBe(true);
+  expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("false");
+  expect(container.textContent).not.toContain("already exists");
+  expect(mocks.alert).not.toHaveBeenCalled();
+
+  // A failed request must still restore normal feedback once loading finishes.
+  renderNames([]);
+  await act(async () => reject(new Error("Unable to save.")));
+  expect(container.querySelector("input")?.disabled).toBe(false);
+  expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("true");
+  expect(container.textContent).toContain("Unable to save.");
+});
+
+it("keeps cancellation available while the name conflicts", async () => {
+  render("file", ["taken"]);
+  act(() => inputEvents.onChangeText("taken"));
+  await act(async () => container.querySelector("button")!.click());
+  expect(cancel).toHaveBeenCalledOnce();
   expect(create).not.toHaveBeenCalled();
 });

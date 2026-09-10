@@ -104,20 +104,11 @@
   @apply theme-light;
 }
 
-/* NativeWind follows Appearance on native; browsers follow the OS by default. */
+/* NativeWind follows the device Appearance setting. */
 @media (prefers-color-scheme: dark) {
   :root {
     @apply theme-dark;
   }
-}
-
-/* Explicit browser preferences override the media query in either direction. */
-:root[data-theme="light"] {
-  @apply theme-light;
-}
-
-:root[data-theme="dark"] {
-  @apply theme-dark;
 }
 
 @theme inline {

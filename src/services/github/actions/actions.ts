@@ -6,7 +6,6 @@ import { PAGE_SIZE } from "@/lib/constants";
 import type { ApiResponse } from "@/lib/types";
 import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
 import { gitHubRepositoryPageSchema } from "@/services/github/schemas";
-import { Platform } from "react-native";
 
 export const readGitHubRepositories = async ({
   signal,
@@ -24,7 +23,7 @@ export const readGitHubRepositories = async ({
   const response = await fetchBase(`/api/github/repositories?${query}`, {
     method: "GET",
     headers,
-    credentials: Platform.OS === "web" ? "same-origin" : "omit",
+    credentials: "omit",
     signal,
   });
 

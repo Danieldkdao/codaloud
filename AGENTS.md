@@ -1,10 +1,15 @@
 # Agent working principles
 
+## Supported platforms
+
+- Codaloud is exclusively an iOS and Android app. Web is not a current or future target; implement and verify application behavior for these two native platforms only. Do not add web-specific components, browser fallbacks, or web app setup.
+- Keep infrastructure required by the mobile app: Expo API routes and their server export configuration, OAuth browser sessions, and the CodeMirror editor embedded through Expo DOM/WebView, including its dependencies.
+
 ## Required filenames — check before creating files and before finishing
 
 - Use lowercase kebab-case for every authored filename, including components, hooks, utilities, tests, scripts, and documentation. Separate words with hyphens: `project-filters.tsx`, `use-projects-filters.ts`, and `project-filters.test.tsx`.
 - Keep React component and type names in PascalCase inside the file. A component named `ProjectFilters` belongs in `project-filters.tsx`. Treat component-style names in requests, including `ProjectFilters.tsx`, as referring to the component and normalize the filename to kebab-case under this project convention.
-- Before creating or renaming a file, check its proposed path against this rule. Preserve platform and test suffixes, such as `native-select.web.tsx` and `project-filters.test.tsx`.
+- Before creating or renaming a file, check its proposed path against this rule. Preserve platform and test suffixes, such as `native-select.ios.tsx` and `project-filters.test.tsx`.
 - Preserve filenames required by tools or frameworks, such as `AGENTS.md`, `CLAUDE.md`, Expo Router's `_layout.tsx`, and route parameter syntax. Preserve tool-generated filenames. These exceptions do not apply to ordinary component files.
 - Before reporting completion, inspect every added or renamed file, including untracked files. Correct any filename that violates this rule, update imports and references, and verify that no stale paths remain. Filename verification is part of completing every file-changing task.
 

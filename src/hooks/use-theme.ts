@@ -20,11 +20,8 @@ type ThemeColor =
 const useNativeThemeVariable = useUnstableNativeVariable as
   typeof import("react-native-css/native").useUnstableNativeVariable;
 
-// Web consumes CSS variables directly; the native hook is unavailable on web.
-export const useThemeColor: (name: ThemeColor) => ColorValue =
-  process.env.EXPO_OS === "web"
-    ? (name) => `var(--${name})`
-    : (name) => useNativeThemeVariable(`--${name}`);
+export const useThemeColor = (name: ThemeColor): ColorValue =>
+  useNativeThemeVariable(`--${name}`);
 
 export const AppThemeContext = createContext<AppThemeState | null>(null);
 

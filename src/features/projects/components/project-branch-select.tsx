@@ -62,7 +62,7 @@ export const ProjectBranchSelect = ({ branch, branches, onBranchChange }: Projec
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 4 }}
                 ListHeaderComponent={
-                  <PText accessibilityRole="header" className="px-5 pt-4 pb-2 text-muted-foreground">Branches</PText>
+                  <PText accessibilityRole="header" className="px-5 pt-4 pb-2">Branches</PText>
                 }
                 renderItem={({ item: name }) => (
                   <Pressable

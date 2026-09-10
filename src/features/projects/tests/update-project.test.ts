@@ -17,7 +17,7 @@ vi.mock("@/db/db", async () => {
 });
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
-vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
+vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 
 const owner = "00000000-0000-4000-8000-000000000001";
 const projectId = "00000000-0000-4000-8000-000000000002";

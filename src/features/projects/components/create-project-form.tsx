@@ -200,7 +200,6 @@ export const CreateProjectForm = () => {
                   <View className="gap-3">
                     <PText
                       accessibilityLiveRegion="polite"
-                      className="text-muted-foreground"
                     >
                       {isChecking
                         ? "Checking GitHub connection…"

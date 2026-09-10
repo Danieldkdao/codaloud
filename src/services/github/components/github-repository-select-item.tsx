@@ -21,7 +21,7 @@ export const GitHubRepositorySelectItem = ({
     accessibilityLabel={`${repository.fullName}, ${repository.private ? "Private repository" : "Public repository"}`}
     accessibilityHint={selected ? "Clear selection and show all repositories" : "Select this repository"}
     accessibilityState={{ selected }}
-    className="flex-row items-start gap-3 px-4 py-3 active:opacity-80 focus-visible:outline-2 focus-visible:outline-ring"
+    className="flex-row items-start gap-3 px-4 py-3 active:opacity-80"
   >
     <Icon
       family="FontAwesome"
@@ -53,7 +53,6 @@ export const GitHubRepositorySelectItem = ({
         <PText
           numberOfLines={1}
           ellipsizeMode="tail"
-          className="text-muted-foreground"
         >
           {repository.description}
         </PText>

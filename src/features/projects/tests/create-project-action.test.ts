@@ -6,14 +6,14 @@ import type { CreateProjectFormSchema } from "@/features/projects/actions/schema
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getCookie: vi.fn(),
-  platform: { OS: "web" },
+  platform: { OS: "ios" },
 }));
 
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { getSession: mocks.getSession, getCookie: mocks.getCookie },
 }));
 vi.mock("@/lib/auth/utils", () => ({
-  getBaseURL: () => mocks.platform.OS === "web" ? undefined : "https://api.codaloud.test/",
+  getBaseURL: () => "https://api.codaloud.test/",
 }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, Alert: { alert: vi.fn() } }));
 
@@ -22,7 +22,7 @@ const validData: CreateProjectFormSchema = { name: " My project ", source: "new"
 const successBody = { error: false, message: "Project created successfully.", data: { id: "created-project" } };
 
 beforeEach(() => {
-  mocks.platform.OS = "web";
+  mocks.platform.OS = "ios";
   mocks.getSession.mockResolvedValue({ data: { user: { id: "current-user" } }, error: null });
   mocks.getCookie.mockResolvedValue("session=mobile");
   network.mockReset();
@@ -66,19 +66,19 @@ describe("createProjectAction", () => {
     });
     expect(network).toHaveBeenCalledOnce();
     const [url, options] = network.mock.calls[0];
-    expect(url).toBe("/api/projects");
+    expect(url).toBe("https://api.codaloud.test/api/projects");
     expect(options?.method).toBe("POST");
     expect(new Headers(options?.headers).get("Content-Type")).toBe("application/json");
     expect(JSON.parse(String(options?.body))).toEqual({ ...data, name: "My project" });
   });
 
-  it.each(["web", "ios", "android"])("uses the correct session transport on %s", async (os) => {
+  it.each(["ios", "android"])("uses the correct session transport on %s", async (os) => {
     mocks.platform.OS = os;
     await createProjectAction(validData);
     const [url, options] = network.mock.calls[0];
-    expect(url).toBe(os === "web" ? "/api/projects" : "https://api.codaloud.test/api/projects");
-    expect(options?.credentials).toBe(os === "web" ? "same-origin" : "omit");
-    expect(new Headers(options?.headers).get("Cookie")).toBe(os === "web" ? null : "session=mobile");
+    expect(url).toBe("https://api.codaloud.test/api/projects");
+    expect(options?.credentials).toBe("omit");
+    expect(new Headers(options?.headers).get("Cookie")).toBe("session=mobile");
   });
 
   it.each([200, 400, 401, 500])("returns an API error message for status %s", async (status) => {

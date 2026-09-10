@@ -60,7 +60,7 @@ export const AppearanceSelector = () => {
               accessibilityState={{ checked: selected, disabled: !isReady }}
               disabled={!isReady}
               onPress={() => setPreference(mode)}
-              className="min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-3 active:opacity-70 focus-visible:outline-2 focus-visible:outline-ring"
+              className="min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-3 active:opacity-70"
             >
               <PreviewWindow preference={mode} />
               <View className="flex-row flex-wrap items-center justify-center gap-1.5">
@@ -71,7 +71,7 @@ export const AppearanceSelector = () => {
           );
         })}
       </View>
-      <PText accessibilityLiveRegion="polite" className="text-center text-muted-foreground">
+      <PText accessibilityLiveRegion="polite" className="text-center">
         {formatThemePreference(preference).description}
       </PText>
       {error && <PText accessibilityRole="alert" className="text-destructive">{error}</PText>}

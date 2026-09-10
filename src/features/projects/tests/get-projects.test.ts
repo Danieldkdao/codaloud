@@ -34,7 +34,6 @@ vi.mock("@/db/db", async () => {
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
 vi.mock("react-native", () => ({
-  Platform: { OS: "web" },
   Alert: { alert: vi.fn() },
 }));
 vi.mock("@/services/github/server/access", () => ({

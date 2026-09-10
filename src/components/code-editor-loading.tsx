@@ -57,7 +57,7 @@ export const CodeEditorLoading = ({
         <PText className="text-center text-xl text-foreground font-medium">
           Initializing your editor…
         </PText>
-        <PText className="text-center text-lg text-muted-foreground">
+        <PText className="text-center text-lg">
           Getting your code ready.
         </PText>
       </View>

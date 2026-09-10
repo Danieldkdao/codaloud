@@ -14,7 +14,7 @@ const ProjectsScreen = () => {
       <View className="w-full max-w-2xl min-h-0 flex-1 self-center gap-4">
         <HeadingText
           accessibilityRole="header"
-          className="text-3xl font-semibold text-foreground"
+          className="text-3xl font-semibold"
         >
           Projects
         </HeadingText>

@@ -6,7 +6,7 @@ import { LoadingSwap } from "@/components/loading-swap";
 import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
-  "flex-row items-center justify-center gap-2 rounded-lg active:opacity-80 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+  "flex-row items-center justify-center gap-2 rounded-lg active:opacity-80 disabled:opacity-50",
   {
     variants: {
       variant: {

@@ -7,7 +7,7 @@ type SettingsSectionProps = { title: string; children: ReactNode };
 
 export const SettingsSection = ({ title, children }: SettingsSectionProps) => (
   <View className="gap-2">
-    <PText accessibilityRole="header" className="px-4 text-muted-foreground">{title}</PText>
+    <PText accessibilityRole="header" className="px-4">{title}</PText>
     <View className="overflow-hidden rounded-2xl bg-card" style={{ borderCurve: "continuous" }}>
       {children}
     </View>

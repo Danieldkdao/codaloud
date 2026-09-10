@@ -32,12 +32,12 @@ export const ProjectWorkspacePlaceholder = ({
       {children}
       <HeadingText
         accessibilityRole="header"
-        className="text-center text-3xl text-foreground"
+        className="text-center text-3xl"
       >
         {title}
       </HeadingText>
       {description ? (
-        <PText className="text-center text-muted-foreground text-lg">
+        <PText className="text-center text-lg">
           {description}
         </PText>
       ) : null}

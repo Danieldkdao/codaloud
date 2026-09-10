@@ -91,7 +91,7 @@
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo run:ios",
-    "web": "expo start --web",
+    "export:api": "EXPO_NO_WEB_SETUP=1 expo export --platform web --api-only",
     "lint": "expo lint",
     "test": "vitest run",
     "test:watch": "vitest",

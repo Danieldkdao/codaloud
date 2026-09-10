@@ -4,13 +4,13 @@ import { updateProjectAction } from "@/features/projects/actions/actions";
 import type { UpdateProjectSchema } from "@/features/projects/actions/schemas";
 
 const mocks = vi.hoisted(() => ({
-  getSession: vi.fn(), getCookie: vi.fn(), platform: { OS: "web" },
+  getSession: vi.fn(), getCookie: vi.fn(), platform: { OS: "ios" },
 }));
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { getSession: mocks.getSession, getCookie: mocks.getCookie },
 }));
 vi.mock("@/lib/auth/utils", () => ({
-  getBaseURL: () => mocks.platform.OS === "web" ? undefined : "https://api.codaloud.test/",
+  getBaseURL: () => "https://api.codaloud.test/",
 }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, Alert: { alert: vi.fn() } }));
 
@@ -27,7 +27,7 @@ const network = vi.fn<typeof fetch>();
 const update = () => updateProjectAction(projectId, { name: " Renamed project " });
 
 beforeEach(() => {
-  mocks.platform.OS = "web";
+  mocks.platform.OS = "ios";
   mocks.getSession.mockReset().mockResolvedValue({ data: { user: { id: userId } }, error: null });
   mocks.getCookie.mockReset().mockResolvedValue("session=mobile");
   network.mockReset().mockImplementation(async () => Response.json(successBody));
@@ -56,16 +56,16 @@ it.each([{}, { name: undefined }, { name: " " }, { name: "x".repeat(101) }, { so
   expect(network).not.toHaveBeenCalled();
 });
 
-it.each(["web", "ios", "android"])("sends validated PATCH data with %s authentication", async (os) => {
+it.each(["ios", "android"])("sends validated PATCH data with %s authentication", async (os) => {
   mocks.platform.OS = os;
   expect(await update()).toEqual({ error: false, message: successBody.message, projectId });
   const [url, options] = network.mock.calls[0];
-  expect(url).toBe(`${os === "web" ? "" : "https://api.codaloud.test"}/api/projects/${projectId}`);
-  expect(options).toMatchObject({ method: "PATCH", credentials: os === "web" ? "same-origin" : "omit" });
+  expect(url).toBe(`https://api.codaloud.test/api/projects/${projectId}`);
+  expect(options).toMatchObject({ method: "PATCH", credentials: "omit" });
   expect(JSON.parse(String(options?.body))).toEqual({ name: "Renamed project" });
   const headers = new Headers(options?.headers);
   expect(headers.get("Content-Type")).toBe("application/json");
-  expect(headers.get("Cookie")).toBe(os === "web" ? null : "session=mobile");
+  expect(headers.get("Cookie")).toBe("session=mobile");
 });
 
 it.each([200, 401, 404, 500])("returns the API error for status %s", async (status) => {

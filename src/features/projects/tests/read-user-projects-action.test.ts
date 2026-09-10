@@ -4,12 +4,12 @@ import { readUserProjectsAction } from "@/features/projects/actions/actions";
 
 const mocks = vi.hoisted(() => ({
   getCookie: vi.fn(),
-  platform: { OS: "web" },
+  platform: { OS: "ios" },
 }));
 
 vi.mock("@/lib/auth/auth-client", () => ({ authClient: { getCookie: mocks.getCookie } }));
 vi.mock("@/lib/auth/utils", () => ({
-  getBaseURL: () => mocks.platform.OS === "web" ? undefined : "https://api.codaloud.test/",
+  getBaseURL: () => "https://api.codaloud.test/",
 }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, Alert: { alert: vi.fn() } }));
 
@@ -25,7 +25,7 @@ const projectPage = { projects, nextCursor: null };
 const cursor = JSON.stringify({ version: 1, id: "00000000-0000-4000-8000-000000000001", value: "Previous", search: "My & project", sortBy: "name", sortOrder: "desc" });
 
 beforeEach(() => {
-  mocks.platform.OS = "web";
+  mocks.platform.OS = "ios";
   mocks.getCookie.mockResolvedValue("session=mobile");
   network.mockReset();
   network.mockImplementation(async () => Response.json({ error: false, message: "Loaded", data: projectPage }));
@@ -64,13 +64,13 @@ describe("readUserProjectsAction", () => {
     expect(network).not.toHaveBeenCalled();
   });
 
-  it.each(["web", "ios", "android"])("uses session transport for %s", async (os) => {
+  it.each(["ios", "android"])("uses session transport for %s", async (os) => {
     mocks.platform.OS = os;
     await readUserProjectsAction();
     const [url, options] = network.mock.calls[0];
-    expect(String(url).startsWith(os === "web" ? "/api/projects?" : "https://api.codaloud.test/api/projects?")).toBe(true);
-    expect(options?.credentials).toBe(os === "web" ? "same-origin" : "omit");
-    expect(new Headers(options?.headers).get("Cookie")).toBe(os === "web" ? null : "session=mobile");
+    expect(String(url).startsWith("https://api.codaloud.test/api/projects?")).toBe(true);
+    expect(options?.credentials).toBe("omit");
+    expect(new Headers(options?.headers).get("Cookie")).toBe("session=mobile");
   });
 
   it.each([400, 401, 403, 500])("returns null for HTTP %s even with a success body", async (status) => {

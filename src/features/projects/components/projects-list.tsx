@@ -72,7 +72,7 @@ export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsList
         error ? null : (
           <View className="flex-1 items-center justify-center gap-3 px-6 py-12">
             {isPaused ? (
-              <PText className="text-center text-muted-foreground">
+              <PText className="text-center">
                 Waiting for a connection…
               </PText>
             ) : isPending ? (
@@ -81,7 +81,7 @@ export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsList
                   className="text-primary"
                   accessible={false}
                 />
-                <PText className="text-muted-foreground">
+                <PText>
                   Loading projects…
                 </PText>
               </>
@@ -97,7 +97,7 @@ export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsList
                 <HeadingText className="text-center text-2xl">
                   {hasSearch ? "No matching projects" : "No projects yet"}
                 </HeadingText>
-                <PText className="text-center text-muted-foreground">
+                <PText className="text-center">
                   {hasSearch
                     ? "Try a different search or clear it to see all your projects."
                     : "Your projects will appear here once you create one."}
@@ -130,13 +130,13 @@ export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsList
             </Button>
           </View>
         ) : isPaused && projects.length > 0 ? (
-          <PText className="py-6 text-center text-muted-foreground">
+          <PText className="py-6 text-center">
             Waiting for a connection…
           </PText>
         ) : isFetchingNextPage ? (
           <View className="items-center gap-3 py-6">
             <ActivityIndicator className="text-primary" accessible={false} />
-            <PText className="text-muted-foreground">
+            <PText>
               Loading more projects…
             </PText>
           </View>

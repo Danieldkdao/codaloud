@@ -6,7 +6,7 @@ export const PlaceholderScreen = ({ title }: { title: string }) => (
     <HeadingText
       selectable
       accessibilityRole="header"
-      className="text-center text-3xl text-foreground"
+      className="text-center text-3xl"
     >
       {title}
     </HeadingText>

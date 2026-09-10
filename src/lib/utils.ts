@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
-import { Alert, Platform } from "react-native";
+import { Alert } from "react-native";
 import { twMerge } from "tailwind-merge";
 import type { ApiResponse, ConfirmActionOptions, MaterialIconOptions } from "./types";
 import type { Manifest } from "material-icon-theme";
@@ -15,11 +15,7 @@ export const isError = (error: unknown): error is Error =>
   error instanceof Error ? true : false;
 
 export const alert = (message: string) => {
-  if (Platform.OS === "web") {
-    window.alert(message);
-  } else {
-    Alert.alert(message);
-  }
+  Alert.alert(message);
 };
 
 export const confirmAction = (
@@ -27,12 +23,6 @@ export const confirmAction = (
   description: string,
   { cancelText = "Cancel", actionText, onConfirmPress }: ConfirmActionOptions,
 ) => {
-  if (Platform.OS === "web") {
-    // Browser confirmation dialogs use the browser's own button labels.
-    if (window.confirm(`${title}\n\n${description}`)) onConfirmPress();
-    return;
-  }
-
   Alert.alert(title, description, [
     { text: cancelText, style: "cancel" },
     { text: actionText, style: "destructive", onPress: onConfirmPress },
@@ -45,7 +35,7 @@ export const apiResponse = <T = never>(
 ): Response => Response.json(body, { status });
 
 export const fetchBase = (path: string, options?: FetchRequestInit) => {
-  const baseURL = getBaseURL()?.replace(/\/$/, "") ?? "";
+  const baseURL = getBaseURL().replace(/\/$/, "");
   return fetch(`${baseURL}${path.startsWith("/") ? "" : "/"}${path}`, options);
 };
 
@@ -64,12 +54,10 @@ export const createRequestHeaders = async (
   const headers = new Headers(init);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-  if (Platform.OS !== "web") {
-    // This module also serves API routes; load native auth only when needed.
-    const { authClient } = await import("./auth/auth-client");
-    const cookie = await authClient.getCookie();
-    if (cookie) headers.set("Cookie", cookie);
-  }
+  // This module also serves API routes; load native auth only when needed.
+  const { authClient } = await import("./auth/auth-client");
+  const cookie = await authClient.getCookie();
+  if (cookie) headers.set("Cookie", cookie);
 
   return headers;
 };

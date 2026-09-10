@@ -26,7 +26,7 @@ vi.mock("@/lib/auth/auth", () => ({
 }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
-vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
+vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 vi.mock("@/db/db", () => ({ db: { transaction: mocks.transaction, update: mocks.update } }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { TRIGGER_SECRET_KEY: "test-trigger-secret" } }));
 vi.mock("@/features/projects/server/project-operations", async (importOriginal) => ({

@@ -44,7 +44,7 @@ export const RadioItem = <Value extends string,>({
       aria-disabled={isDisabled}
       onPress={() => onValueChange(value)}
       className={cn(
-        "flex-row items-center gap-4 rounded-xl border-2 p-4 active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        "flex-row items-center gap-4 rounded-xl border-2 p-4 active:opacity-80",
         selected ? "border-primary bg-secondary" : "border-border bg-card",
         isDisabled && "opacity-50",
         className,
@@ -64,7 +64,7 @@ export const RadioItem = <Value extends string,>({
       )}
       <View className="min-w-0 flex-1 gap-1">
         <PText className="font-semibold text-foreground">{title}</PText>
-        {description && <PText className="text-muted-foreground">{description}</PText>}
+        {description && <PText>{description}</PText>}
       </View>
       <View
         className={cn(

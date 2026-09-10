@@ -29,15 +29,13 @@ const render = async () => {
 };
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubEnv("EXPO_OS", "ios");
   mocks.scheme = "light";
   mocks.read.mockReset().mockResolvedValue(null);
   mocks.write.mockReset().mockResolvedValue(undefined);
   container = document.createElement("div");
   root = createRoot(container);
-  localStorage.clear();
 });
-afterEach(() => { act(() => root.unmount()); vi.unstubAllEnvs(); });
+afterEach(() => { act(() => root.unmount()); });
 
 it("defaults to System without persisting over a saved preference during startup", async () => {
   await render();
@@ -97,17 +95,4 @@ it("serializes rapid native writes so the last selection wins on restart", async
   expect(mocks.write).toHaveBeenCalledTimes(1);
   await act(async () => finishWrite());
   expect(mocks.write.mock.calls.map((call) => call[1])).toEqual(["dark", "light"]);
-});
-
-it("uses browser storage and an explicit CSS override, clearing it for System", async () => {
-  vi.stubEnv("EXPO_OS", "web");
-  localStorage.setItem("codaloud.theme", "dark");
-  await render();
-  expect(theme.isDarkMode).toBe(true);
-  expect(document.documentElement.dataset.theme).toBe("dark");
-  await act(async () => theme.setPreference("light"));
-  expect(localStorage.getItem("codaloud.theme")).toBe("light");
-  await act(async () => theme.setPreference("system"));
-  expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
-  expect(mocks.appearance).not.toHaveBeenCalled();
 });

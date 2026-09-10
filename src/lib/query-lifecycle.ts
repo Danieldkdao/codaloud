@@ -1,11 +1,8 @@
 import { focusManager, onlineManager } from "@tanstack/react-query";
 import * as Network from "expo-network";
-import { AppState, Platform } from "react-native";
+import { AppState } from "react-native";
 
 export const subscribeToQueryLifecycle = () => {
-  // The browser already supplies TanStack Query's default lifecycle events.
-  if (Platform.OS === "web") return;
-
   let disposed = false;
   let receivedNetworkEvent = false;
   const updateNetworkState = (state: Network.NetworkState) => {

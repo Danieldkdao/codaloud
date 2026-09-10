@@ -20,9 +20,9 @@
       },
       "predictiveBackGestureEnabled": false
     },
+    "platforms": ["ios", "android"],
     "web": {
-      "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "output": "server"
     },
     "plugins": [
       "expo-router",

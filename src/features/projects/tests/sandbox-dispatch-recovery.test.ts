@@ -21,7 +21,7 @@ vi.mock("@/lib/auth/helpers", () => ({
 }));
 vi.mock("@/lib/auth/auth", () => ({ auth: { api: {} } }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
-vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: { alert: vi.fn() } }));
+vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { TRIGGER_SECRET_KEY: "test-secret" } }));
 vi.mock("@trigger.dev/sdk", () => ({ schedules: { task: (options: unknown) => options } }));
 

@@ -10,7 +10,7 @@ type ScrollFadeFlatListProps<Item> = FlatListProps<Item> & {
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-/** Scroll-aware edge fades on a solid card surface, shared by native and web. */
+/** Scroll-aware edge fades on a solid card surface. */
 export const ScrollFadeFlatList = <Item,>({
   containerStyle, onLayout, onContentSizeChange, onScroll, ...props
 }: ScrollFadeFlatListProps<Item>) => {

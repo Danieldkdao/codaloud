@@ -17,11 +17,11 @@ export const ProjectSandboxState = ({ ready }: { ready: boolean }) => (
       <HeadingText
         selectable
         accessibilityRole="header"
-        className="text-center text-3xl text-foreground"
+        className="text-center text-3xl"
       >
         {ready ? "Ready when you are" : "Scaffolding your sandbox"}
       </HeadingText>
-      <PText selectable className="text-center text-lg text-muted-foreground">
+      <PText selectable className="text-center text-lg">
         {ready
           ? "Your sandbox is ready to go. You can start coding now!"
           : "We’re getting everything set up for you. This may take a little while. Feel free to leave and come back later. Setup will keep going."}

@@ -138,7 +138,6 @@ export const GitHubRepositoriesSelectList = ({
                   )}
                   <PText
                     accessibilityLiveRegion="polite"
-                    className="text-muted-foreground"
                   >
                     {isPending
                       ? "Loading repositories…"
@@ -168,7 +167,7 @@ export const GitHubRepositoriesSelectList = ({
               ) : fetchStatus === "paused" ? (
                 <PText
                   accessibilityLiveRegion="polite"
-                  className="p-4 text-muted-foreground"
+                  className="p-4"
                 >
                   Waiting for a connection…
                 </PText>
@@ -177,7 +176,6 @@ export const GitHubRepositoriesSelectList = ({
                   <ActivityIndicator className="text-foreground" />
                   <PText
                     accessibilityLiveRegion="polite"
-                    className="text-muted-foreground"
                   >
                     Loading more repositories…
                   </PText>

@@ -84,8 +84,8 @@ it("does nothing when the optional native module is unavailable", async () => {
   expect(native.getPreferencesAsync).not.toHaveBeenCalled();
 });
 
-it.each(["android", "web"])("does not alter shortcuts on %s", async (platform) => {
-  native.platform = platform;
+it("does not alter shortcuts on Android", async () => {
+  native.platform = "android";
   await render();
   expect(native.getPreferencesAsync).not.toHaveBeenCalled();
 });

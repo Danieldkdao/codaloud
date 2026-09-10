@@ -28,8 +28,8 @@ export const SettingsScreen = () => {
     <AppWrapper tabBarShown>
       <View className="w-full max-w-xl gap-6 self-center">
         <View className="gap-2">
-          <HeadingText accessibilityRole="header" className="text-4xl text-foreground">Settings</HeadingText>
-          <PText className="text-muted-foreground">Make Codaloud feel like you.</PText>
+          <HeadingText accessibilityRole="header" className="text-4xl">Settings</HeadingText>
+          <PText>Make Codaloud feel like you.</PText>
         </View>
 
         <View className="flex-row items-center gap-4 rounded-2xl bg-card p-4" style={{ borderCurve: "continuous" }}>
@@ -40,7 +40,7 @@ export const SettingsScreen = () => {
           </View>
           <View className="min-w-0 flex-1 gap-1">
             <PText selectable className="text-xl font-semibold text-foreground">{name}</PText>
-            {email && <PText selectable className="text-muted-foreground">{email}</PText>}
+            {email && <PText selectable>{email}</PText>}
             <PText className="text-secondary-foreground">Personal account</PText>
           </View>
         </View>
@@ -91,7 +91,7 @@ export const SettingsScreen = () => {
         </SettingsSection>
         <View className="items-center gap-1 pb-2">
           <HeadingText className="text-xl text-muted-foreground">Codaloud</HeadingText>
-          <PText className="text-muted-foreground">{formatAppVersion(Constants.expoConfig?.version)}</PText>
+          <PText>{formatAppVersion(Constants.expoConfig?.version)}</PText>
         </View>
       </View>
     </AppWrapper>

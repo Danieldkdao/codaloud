@@ -35,7 +35,7 @@ const WorkspaceTabButton = ({
       { flexDirection: "row", alignItems: "center", justifyContent: "center" },
     ]}
     className={cn(
-      "min-h-12 min-w-0 flex-1 items-center justify-center rounded-full px-1 py-3 active:bg-secondary focus-visible:outline-2 focus-visible:outline-ring",
+      "min-h-12 min-w-0 flex-1 items-center justify-center rounded-full px-1 py-3 active:bg-secondary",
       isFocused && "bg-secondary",
     )}
   >
@@ -54,7 +54,7 @@ const WorkspaceTabButton = ({
         className={
           isFocused
             ? "font-medium text-secondary-foreground"
-            : "text-muted-foreground"
+            : undefined
         }
       >
         {label}

@@ -1,5 +1,3 @@
-import { Platform } from "react-native";
-
 import {
   createProjectFormSchema,
   createProjectResponseSchema,
@@ -30,7 +28,7 @@ export const readProjectAction = async (
     const response = await fetchBase(`/api/projects/${projectId}`, {
       method: "GET",
       headers,
-      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      credentials: "omit",
       signal,
     });
     if (!response.ok) return null;
@@ -60,7 +58,7 @@ export const readUserProjectsAction = async (
     const response = await fetchBase(`/api/projects?${query}`, {
       method: "GET",
       headers,
-      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      credentials: "omit",
       signal,
     });
     if (!response.ok) return null;
@@ -114,7 +112,7 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
     const response = await fetchBase("/api/projects", {
       method: "POST",
       headers,
-      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      credentials: "omit",
       body: JSON.stringify(validatedData.data),
     });
 
@@ -197,7 +195,7 @@ export const updateProjectAction = async (
     const response = await fetchBase(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers,
-      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      credentials: "omit",
       body: JSON.stringify(validatedData.data),
     });
 
@@ -278,7 +276,7 @@ export const deleteProjectAction = async (projectId: string) => {
     const response = await fetchBase(`/api/projects/${projectId}`, {
       method: "DELETE",
       headers,
-      credentials: Platform.OS === "web" ? "same-origin" : "omit",
+      credentials: "omit",
     });
 
     const payload: unknown = await response.json();

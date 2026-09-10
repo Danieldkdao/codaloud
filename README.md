@@ -1,6 +1,10 @@
 # Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Codaloud is an [Expo](https://expo.dev) app for iOS and Android only.
+
+Expo API routes provide the mobile backend, so `web.output: "server"` remains configured for server exports. The CodeMirror editor runs inside Expo DOM/WebView on the phone and requires `react-dom` and `react-native-web`.
+
+Run `pnpm export:api` to export only the backend routes. Expo calls this export platform `web`; `EXPO_NO_WEB_SETUP=1` lets the backend export run with the app's supported platforms restricted to iOS and Android.
 
 ## Get started
 
@@ -46,11 +50,10 @@ This command will move the starter code to the **app-example** directory and cre
 To learn more about developing your project with Expo, look at the following resources:
 
 - [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
 
 ## Join the community
 
-Join our community of developers creating universal apps.
+Join the Expo developer community.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.

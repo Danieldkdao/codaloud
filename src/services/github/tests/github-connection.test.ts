@@ -71,14 +71,6 @@ it("waits for native authorization before resetting repositories", async () => {
   expect(connection.isPending).toBe(false);
 });
 
-it("leaves web recovery to the OAuth callback reload", async () => {
-  mocks.platform.OS = "web";
-  const reset = vi.spyOn(client, "resetQueries");
-  await act(async () => connection.handleConnect());
-  expect(mocks.listAccounts).toHaveBeenCalledTimes(1);
-  expect(reset).not.toHaveBeenCalled();
-});
-
 it("keeps failed authorization recoverable", async () => {
   mocks.linkSocial.mockResolvedValue({ error: { message: "Authorization failed" } });
   const reset = vi.spyOn(client, "resetQueries");

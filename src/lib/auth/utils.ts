@@ -1,7 +1,6 @@
 import { SignJWT, importPKCS8 } from "jose";
 import { clientEnv } from "@/data/env/client";
 import Constants from "expo-constants";
-import { Platform } from "react-native";
 
 export const generateAppleClientSecret = async (
   clientId: string,
@@ -23,8 +22,6 @@ export const generateAppleClientSecret = async (
 };
 
 export const getBaseURL = () => {
-  // Web uses same-origin cookies; native needs an absolute, reachable server URL.
-  if (Platform.OS === "web") return undefined;
   if (clientEnv.EXPO_PUBLIC_BETTER_AUTH_URL) {
     return clientEnv.EXPO_PUBLIC_BETTER_AUTH_URL;
   }

@@ -205,7 +205,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                 if (nativeEvent.actionName === "delete") deleteProject();
               }}
               className={cn(
-                "gap-4 rounded-2xl border border-border bg-card p-4 active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                "gap-4 rounded-2xl border border-border bg-card p-4 active:opacity-80",
                 actionsVisible && "rounded-r-none",
               )}
             >
@@ -236,7 +236,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                   >
                     {project.name}
                   </HeadingText>
-                  <PText className="text-muted-foreground text-lg">
+                  <PText className="text-lg">
                     {updatedLabel}
                   </PText>
                   {sourceLabel && (
@@ -247,7 +247,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                         className="text-muted-foreground"
                         size={16}
                       />
-                      <PText className="text-lg text-muted-foreground">
+                      <PText className="text-lg">
                         {sourceLabel}
                       </PText>
                     </View>

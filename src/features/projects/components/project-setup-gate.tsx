@@ -64,7 +64,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
               <PText
                 selectable
                 accessibilityRole="alert"
-                className="text-center text-muted-foreground"
+                className="text-center"
               >
                 {isError
                   ? "Unable to load your sandbox. Please try again."
@@ -83,7 +83,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           ) : (
             <View className="items-center gap-6">
               <SandboxScaffold />
-              <PText className="text-center text-muted-foreground">
+              <PText className="text-center">
                 Opening your sandbox…
               </PText>
             </View>

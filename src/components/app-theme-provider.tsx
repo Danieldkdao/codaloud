@@ -10,14 +10,7 @@ import { Appearance, useColorScheme } from "react-native";
 const storageKey = "codaloud.theme";
 
 const applyPreference = (preference: ThemePreference) => {
-  if (process.env.EXPO_OS === "web") {
-    // React Native Web has no Appearance.setColorScheme implementation.
-    if (preference === "system") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.dataset.theme = preference;
-    document.documentElement.style.colorScheme = preference === "system" ? "light dark" : preference;
-  } else {
-    Appearance.setColorScheme(preference === "system" ? "unspecified" : preference);
-  }
+  Appearance.setColorScheme(preference === "system" ? "unspecified" : preference);
 };
 
 export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
@@ -41,9 +34,7 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
     const restore = async () => {
       let restored: ThemePreference = "system";
       try {
-        const saved = process.env.EXPO_OS === "web"
-          ? localStorage.getItem(storageKey)
-          : await SecureStore.getItemAsync(storageKey);
+        const saved = await SecureStore.getItemAsync(storageKey);
         restored = themePreferences.find((value) => value === saved) ?? "system";
       } catch {
         // An unavailable preference store must not prevent the app from opening.
@@ -65,8 +56,7 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
     // Serialize storage writes so quick taps cannot restore an older choice next launch.
     writes.current = writes.current.then(async () => {
       try {
-        if (process.env.EXPO_OS === "web") localStorage.setItem(storageKey, next);
-        else await SecureStore.setItemAsync(storageKey, next);
+        await SecureStore.setItemAsync(storageKey, next);
         if (active.current) setError(null);
       } catch {
         if (active.current) setError("Appearance changed, but couldn’t be saved on this device. Tap your choice to try again.");

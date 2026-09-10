@@ -22,7 +22,7 @@ export const GitHubConnection = ({
         </View>
         <View className="min-w-0 flex-1 gap-1">
           <PText className="text-foreground">GitHub</PText>
-          {isConnected && <PText className="text-muted-foreground">Connected</PText>}
+          {isConnected && <PText>Connected</PText>}
         </View>
         <Button
           variant="secondary"
@@ -35,13 +35,13 @@ export const GitHubConnection = ({
         </Button>
       </View>
       {!isConnected && (
-        <PText className="text-muted-foreground">
+        <PText>
           Connect to import and publish repositories. GitHub grants read and write
           access to public and private repositories.
         </PText>
       )}
       {(!isConnected || isPending || isChecking || connectionError) && (
-        <PText accessibilityLiveRegion="polite" className="text-muted-foreground">
+        <PText accessibilityLiveRegion="polite">
           {status}
         </PText>
       )}

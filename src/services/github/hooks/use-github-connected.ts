@@ -1,7 +1,6 @@
 import { authClient } from "@/lib/auth/auth-client";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useState, useTransition } from "react";
-import { Platform } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 export const useGitHubConnected = (callbackURL = "/account") => {
@@ -70,8 +69,8 @@ export const useGitHubConnected = (callbackURL = "/account") => {
         });
         if (error) throw new Error("Unable to connect GitHub.");
 
-        // Web reloads at the callback; native resolves after the browser closes.
-        if (Platform.OS !== "web" && await refreshConnection(undefined, true)) {
+        // Authorization resolves after the browser session closes.
+        if (await refreshConnection(undefined, true)) {
           // Discard old-account data and rejected queries before loading with the new token.
           await queryClient.resetQueries({ queryKey: ["github", "repositories"] });
         }

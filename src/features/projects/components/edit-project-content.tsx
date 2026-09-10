@@ -25,7 +25,7 @@ export const EditProjectContent = ({ projectId }: EditProjectContentProps) => {
       <View className="min-h-36 items-center justify-center gap-4">
         {isError ? (
           <>
-            <PText accessibilityRole="alert" className="text-center text-muted-foreground">
+            <PText accessibilityRole="alert" className="text-center">
               Unable to load project. Please try again.
             </PText>
             <Button disabled={isFetching} onPress={() => void refetch()}>
@@ -35,7 +35,7 @@ export const EditProjectContent = ({ projectId }: EditProjectContentProps) => {
         ) : (
           <>
             <ActivityIndicator color={primary} accessibilityLabel="Loading project" />
-            <PText className="text-muted-foreground">Loading project…</PText>
+            <PText>Loading project…</PText>
           </>
         )}
       </View>

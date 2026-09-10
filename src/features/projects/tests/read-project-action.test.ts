@@ -4,11 +4,11 @@ import { readProjectAction } from "@/features/projects/actions/actions";
 
 const mocks = vi.hoisted(() => ({
   getCookie: vi.fn(),
-  platform: { OS: "web" },
+  platform: { OS: "ios" },
 }));
 vi.mock("@/lib/auth/auth-client", () => ({ authClient: { getCookie: mocks.getCookie } }));
 vi.mock("@/lib/auth/utils", () => ({
-  getBaseURL: () => mocks.platform.OS === "web" ? undefined : "https://api.codaloud.test/",
+  getBaseURL: () => "https://api.codaloud.test/",
 }));
 vi.mock("react-native", () => ({ Platform: mocks.platform, Alert: { alert: vi.fn() } }));
 
@@ -23,25 +23,25 @@ const successBody = { error: false, message: "Project loaded successfully.", dat
 const network = vi.fn<typeof fetch>();
 
 beforeEach(() => {
-  mocks.platform.OS = "web";
+  mocks.platform.OS = "ios";
   mocks.getCookie.mockReset().mockResolvedValue("session=mobile");
   network.mockReset().mockImplementation(async () => Response.json(successBody));
   vi.stubGlobal("fetch", network);
 });
 
 describe("readProjectAction", () => {
-  it.each(["web", "ios", "android"])("returns validated project data using %s session transport", async (os) => {
+  it.each(["ios", "android"])("returns validated project data using %s session transport", async (os) => {
     mocks.platform.OS = os;
     const controller = new AbortController();
     expect(await readProjectAction(projectId, controller.signal)).toEqual(project);
     const [url, options] = network.mock.calls[0];
-    expect(url).toBe(`${os === "web" ? "" : "https://api.codaloud.test"}/api/projects/${projectId}`);
+    expect(url).toBe(`https://api.codaloud.test/api/projects/${projectId}`);
     expect(options).toMatchObject({
-      method: "GET", credentials: os === "web" ? "same-origin" : "omit", signal: controller.signal,
+      method: "GET", credentials: "omit", signal: controller.signal,
     });
     const headers = new Headers(options?.headers);
     expect(headers.get("Accept")).toBe("application/json");
-    expect(headers.get("Cookie")).toBe(os === "web" ? null : "session=mobile");
+    expect(headers.get("Cookie")).toBe("session=mobile");
   });
 
   it.each(["", "invalid", "../projects", "123"])("rejects invalid ID %s before fetching", async (id) => {

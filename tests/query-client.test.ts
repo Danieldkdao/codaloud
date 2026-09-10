@@ -4,7 +4,6 @@ import type { NetworkState } from "expo-network";
 import type { AppStateStatus } from "react-native";
 
 const mocks = vi.hoisted(() => ({
-  platform: { OS: "ios" },
   appState: { currentState: "active", addEventListener: vi.fn() },
   getNetworkStateAsync: vi.fn(),
   addNetworkStateListener: vi.fn(),
@@ -13,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("react-native", () => ({
-  Platform: mocks.platform,
   AppState: mocks.appState,
 }));
 vi.mock("expo-network", () => ({
@@ -29,7 +27,6 @@ let networkChanged: (state: NetworkState) => void;
 let appStateChanged: (state: AppStateStatus) => void;
 
 beforeEach(() => {
-  mocks.platform.OS = "ios";
   mocks.appState.currentState = "active";
   mocks.getNetworkStateAsync.mockResolvedValue({ isConnected: true });
   mocks.addNetworkStateListener.mockImplementation((listener) => {
@@ -158,11 +155,4 @@ describe("native query lifecycle", () => {
     expect(onlineManager.isOnline()).toBe(true);
   });
 
-  it("leaves browser lifecycle handling to TanStack Query", () => {
-    mocks.platform.OS = "web";
-    cleanup = subscribeToQueryLifecycle();
-    expect(mocks.addNetworkStateListener).not.toHaveBeenCalled();
-    expect(mocks.appState.addEventListener).not.toHaveBeenCalled();
-    expect(mocks.getNetworkStateAsync).not.toHaveBeenCalled();
-  });
 });

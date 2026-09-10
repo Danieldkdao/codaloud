@@ -4,7 +4,7 @@ import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { getMaterialIconXml } from "@/lib/utils";
 
-vi.mock("react-native", () => ({ Platform: { OS: "web" }, Alert: {} }));
+vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => undefined }));
 
 const require = createRequire(import.meta.url);

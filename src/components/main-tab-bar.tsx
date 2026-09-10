@@ -39,7 +39,7 @@ const TabButton = ({
       justifyContent: "center",
     }}
     className={cn(
-      "min-w-0 flex-1 items-center justify-center rounded-full active:bg-secondary focus-visible:outline-2 focus-visible:outline-ring",
+      "min-w-0 flex-1 items-center justify-center rounded-full active:bg-secondary",
       isFocused && "bg-secondary",
     )}
   >

@@ -26,11 +26,11 @@ const Index = () => {
           <View className="w-full shrink-0 items-center gap-3">
             <HeadingText
               accessibilityRole="header"
-              className="text-center text-3xl text-foreground"
+              className="text-center text-3xl"
             >
               Your voice. Your code.
             </HeadingText>
-            <PText className="max-w-sm text-center text-xl text-muted-foreground">
+            <PText className="max-w-sm text-center text-xl">
               Build, edit, and explore code with your voice. Your next idea
               starts here, wherever you are.
             </PText>

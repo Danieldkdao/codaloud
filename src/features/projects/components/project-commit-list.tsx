@@ -49,7 +49,7 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
         <View className="pb-6">
           <HeadingText
             accessibilityRole="header"
-            className="text-2xl text-foreground"
+            className="text-2xl"
           >
             Commit history
           </HeadingText>
@@ -111,7 +111,7 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
                     accessible={false}
                   />
                   <PText
-                    className="min-w-0 text-muted-foreground"
+                    className="min-w-0"
                     numberOfLines={1}
                   >
                     {item.author}
@@ -124,7 +124,7 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
                   className="text-muted-foreground"
                   accessible={false}
                 />
-                <PText className="text-muted-foreground">
+                <PText>
                   {formatCommitDate(item.committedAt)}
                 </PText>
               </View>

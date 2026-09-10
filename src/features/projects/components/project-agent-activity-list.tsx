@@ -35,9 +35,9 @@ const ProjectAgentActivityRow = ({ activity }: { activity: ProjectAgentActivityD
           <PText selectable className="text-lg font-medium text-foreground">
             {activity.title}
           </PText>
-          <PText className="text-muted-foreground">{kind.label}</PText>
+          <PText>{kind.label}</PText>
         </View>
-        <PText selectable className="text-muted-foreground">
+        <PText selectable>
           {activity.description}
         </PText>
         {activity.target ? (
@@ -50,7 +50,7 @@ const ProjectAgentActivityRow = ({ activity }: { activity: ProjectAgentActivityD
             <Icon family="Feather" name={status.icon} size={14} className={status.textClassName} accessible={false} />
             <PText className={cn("font-medium", status.textClassName)}>{status.label}</PText>
           </View>
-          <PText className="text-muted-foreground">
+          <PText>
             {formatAgentActivityDate(activity.createdAt)}
           </PText>
         </View>
@@ -78,7 +78,7 @@ export const ProjectAgentActivityList = ({ activities }: ProjectAgentActivityLis
       scrollIndicatorInsets={{ bottom: dockHeight }}
       ListHeaderComponent={
         <View className="pb-2">
-          <HeadingText accessibilityRole="header" className="text-2xl text-foreground">
+          <HeadingText accessibilityRole="header" className="text-2xl">
             Agent activity
           </HeadingText>
         </View>
@@ -90,7 +90,7 @@ export const ProjectAgentActivityList = ({ activities }: ProjectAgentActivityLis
             <Icon family="Feather" name="activity" size={26} className="text-secondary-foreground" accessible={false} />
           </View>
           <PText className="text-lg font-medium text-foreground">No activity yet</PText>
-          <PText className="text-center text-muted-foreground">
+          <PText className="text-center">
             Your requests and their results will appear here.
           </PText>
         </View>

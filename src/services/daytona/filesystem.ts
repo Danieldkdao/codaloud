@@ -1,0 +1,102 @@
+import { z } from "zod";
+import {
+  createProjectFileSchema, projectDirectoryPathSchema, projectFileEntrySchema,
+  type CreateProjectFileSchema,
+} from "@/features/projects/actions/file-schemas";
+import { getSandboxToolboxUrl, requestDaytona, SandboxFilesError } from "./api";
+
+type SandboxFilesystemContext = { sandboxId: string; projectId: string; allowInitialize: boolean };
+
+// Run inside Daytona, not in the Expo server. Uploads overwrite files; exclusive
+// creation must happen in the sandbox's filesystem, where concurrent writers meet.
+const filesystemCommand = String.raw`
+const fs = require("node:fs");
+const path = require("node:path").posix;
+const input = JSON.parse(Buffer.from(process.argv[1], "base64").toString("utf8"));
+const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
+const directory = (target, initialize) => {
+  if (initialize) {
+    try { fs.mkdirSync(target, { mode: 0o755 }); }
+    catch (error) { if (error.code !== "EEXIST") throw error; }
+  }
+  let info;
+  try { info = fs.lstatSync(target); }
+  catch (error) { if (error.code === "ENOENT" && !initialize) fail("WORKSPACE_NOT_READY"); throw error; }
+  if (info.isSymbolicLink()) fail("INVALID_PATH");
+  if (!info.isDirectory()) fail("ENOTDIR");
+  return target;
+};
+try {
+  const home = fs.realpathSync(input.home);
+  const base = directory(path.join(home, ".codaloud"), input.allowInitialize);
+  const root = directory(path.join(base, "workspace"), input.allowInitialize);
+  let parent = root;
+  for (const part of input.parentPath.split("/").filter(Boolean)) {
+    if (part === "." || part === ".." || part.includes("\\") || part.includes("\0")) fail("INVALID_PATH");
+    parent = directory(path.join(parent, part), false);
+  }
+  if (input.name === undefined) {
+    process.stdout.write(JSON.stringify({ path: parent }));
+  } else {
+    if (!input.name || input.name === "." || input.name === ".." || /[\/\\\x00-\x1f\x7f]/.test(input.name)) fail("INVALID_PATH");
+    const target = path.join(parent, input.name);
+    if (input.kind === "folder") fs.mkdirSync(target, { mode: 0o755 });
+    else fs.closeSync(fs.openSync(target, "wx", 0o644));
+    const info = fs.lstatSync(target);
+    process.stdout.write(JSON.stringify({ name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
+  }
+} catch (error) {
+  process.stdout.write(JSON.stringify({ code: error.code || "FILESYSTEM_ERROR" }));
+  process.exitCode = 1;
+}
+`;
+
+const executeResponseSchema = z.object({ exitCode: z.number(), result: z.string() });
+export type ExecuteResponseSchema = z.infer<typeof executeResponseSchema>;
+const homeDirectorySchema = z.object({ dir: z.string().startsWith("/").min(2) });
+export type HomeDirectorySchema = z.infer<typeof homeDirectorySchema>;
+
+const throwFilesystemError = (code: unknown): never => {
+  switch (code) {
+    case "EEXIST": throw new SandboxFilesError(409, "NAME_CONFLICT", "Conflicting filename. Please rename this file or folder.");
+    case "INVALID_PATH": throw new SandboxFilesError(400, "INVALID_PATH", "Choose a folder inside this project. Symbolic links are not supported.");
+    case "WORKSPACE_NOT_READY": throw new SandboxFilesError(409, "WORKSPACE_NOT_READY", "This folder is unavailable or the project workspace has not been prepared.");
+    case "ENOENT":
+    case "ENOTDIR": throw new SandboxFilesError(404, "FOLDER_NOT_FOUND", "The selected folder could not be found. Please refresh and try again.");
+    case "EACCES":
+    case "EPERM": throw new SandboxFilesError(403, "FILESYSTEM_PERMISSION_DENIED", "This workspace does not allow that file operation.");
+    case "ENOSPC": throw new SandboxFilesError(409, "WORKSPACE_FULL", "Your workspace is out of disk space.");
+    default: throw new SandboxFilesError(502, "FILESYSTEM_ERROR", "The file operation could not be completed. Please refresh and try again.");
+  }
+};
+
+const executeFilesystemOperation = async (
+  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, creation?: CreateProjectFileSchema,
+) => {
+  const { dir: home } = homeDirectorySchema.parse(await requestDaytona(`${toolboxUrl}/user-home-dir`));
+  const payload = JSON.stringify({ home, allowInitialize: context.allowInitialize, parentPath, ...creation });
+  const encoded = btoa(Array.from(new TextEncoder().encode(payload), (byte) => String.fromCharCode(byte)).join(""));
+  // Only the fixed script and base64 data enter the shell. Names remain data.
+  const command = `node -e '${filesystemCommand.replace(/'/g, "'\\''")}' '${encoded}'`;
+  const response = executeResponseSchema.parse(await requestDaytona(`${toolboxUrl}/process/execute`, {
+    method: "POST", body: JSON.stringify({ command, timeout: 10 }),
+  }));
+  const result: unknown = JSON.parse(response.result);
+  if (response.exitCode !== 0) throwFilesystemError(z.object({ code: z.string() }).parse(result).code);
+  return result;
+};
+
+export const readSandboxFiles = async (context: SandboxFilesystemContext, unsafePath: string) => {
+  const path = projectDirectoryPathSchema.parse(unsafePath);
+  const toolboxUrl = await getSandboxToolboxUrl(context.sandboxId, context.projectId);
+  const directory = z.object({ path: z.string() }).parse(await executeFilesystemOperation(toolboxUrl, context, path));
+  const query = new URLSearchParams({ path: directory.path, depth: "1" });
+  const entries = z.array(projectFileEntrySchema.omit({ path: true })).parse(await requestDaytona(`${toolboxUrl}/files?${query}`));
+  return entries.map((entry) => ({ ...entry, path: [path, entry.name].filter(Boolean).join("/") }));
+};
+
+export const createSandboxFile = async (context: SandboxFilesystemContext, unsafeInput: CreateProjectFileSchema) => {
+  const input = createProjectFileSchema.parse(unsafeInput);
+  const toolboxUrl = await getSandboxToolboxUrl(context.sandboxId, context.projectId);
+  return projectFileEntrySchema.parse(await executeFilesystemOperation(toolboxUrl, context, input.parentPath, input));
+};

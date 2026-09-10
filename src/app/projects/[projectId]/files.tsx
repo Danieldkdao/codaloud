@@ -1,404 +1,91 @@
+import { useLocalSearchParams } from "expo-router";
+import { use, useState } from "react";
 import { View } from "react-native";
-import type { FileInfo } from "@daytona/sdk";
-import { useState } from "react";
-
+import { Button } from "@/components/ui/button";
+import { HeadingText, PText } from "@/components/ui/text";
+import { useSuccessFeedback } from "@/components/success-feedback-provider";
+import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
+import { ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
+import { formatProjectFileKind } from "@/features/projects/lib/formatters";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
+import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
+import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { getDirectoryFiles } from "@/features/projects/lib/files";
 
-// Mock depth-3 listing of a Next.js App Router project at /workspace/project.
-// Daytona returns nested directory entries in the same flat array, linked by path.
-// All metadata values are illustrative.
-const mockFiles: FileInfo[] = [
-  {
-    name: "app",
-    path: "/workspace/project/app",
-    isDir: true,
-    size: 4096,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0755",
-    permissions: "rwxr-xr-x",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "layout.tsx",
-    path: "/workspace/project/app/layout.tsx",
-    isDir: false,
-    size: 1160,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "page.tsx",
-    path: "/workspace/project/app/page.tsx",
-    isDir: false,
-    size: 2480,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "globals.css",
-    path: "/workspace/project/app/globals.css",
-    isDir: false,
-    size: 1824,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "loading.tsx",
-    path: "/workspace/project/app/loading.tsx",
-    isDir: false,
-    size: 420,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "error.tsx",
-    path: "/workspace/project/app/error.tsx",
-    isDir: false,
-    size: 768,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "not-found.tsx",
-    path: "/workspace/project/app/not-found.tsx",
-    isDir: false,
-    size: 560,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "favicon.ico",
-    path: "/workspace/project/app/favicon.ico",
-    isDir: false,
-    size: 25931,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "dashboard",
-    path: "/workspace/project/app/dashboard",
-    isDir: true,
-    size: 4096,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0755",
-    permissions: "rwxr-xr-x",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "page.tsx",
-    path: "/workspace/project/app/dashboard/page.tsx",
-    isDir: false,
-    size: 3264,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "components",
-    path: "/workspace/project/components",
-    isDir: true,
-    size: 4096,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0755",
-    permissions: "rwxr-xr-x",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "site-header.tsx",
-    path: "/workspace/project/components/site-header.tsx",
-    isDir: false,
-    size: 1480,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "site-footer.tsx",
-    path: "/workspace/project/components/site-footer.tsx",
-    isDir: false,
-    size: 620,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "project-card.tsx",
-    path: "/workspace/project/components/project-card.tsx",
-    isDir: false,
-    size: 1860,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "button.tsx",
-    path: "/workspace/project/components/button.tsx",
-    isDir: false,
-    size: 940,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "lib",
-    path: "/workspace/project/lib",
-    isDir: true,
-    size: 4096,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0755",
-    permissions: "rwxr-xr-x",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "utils.ts",
-    path: "/workspace/project/lib/utils.ts",
-    isDir: false,
-    size: 320,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "constants.ts",
-    path: "/workspace/project/lib/constants.ts",
-    isDir: false,
-    size: 480,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "types.ts",
-    path: "/workspace/project/lib/types.ts",
-    isDir: false,
-    size: 860,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "public",
-    path: "/workspace/project/public",
-    isDir: true,
-    size: 4096,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0755",
-    permissions: "rwxr-xr-x",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "logo.svg",
-    path: "/workspace/project/public/logo.svg",
-    isDir: false,
-    size: 2140,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "next.svg",
-    path: "/workspace/project/public/next.svg",
-    isDir: false,
-    size: 1375,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: ".gitignore",
-    path: "/workspace/project/.gitignore",
-    isDir: false,
-    size: 480,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "eslint.config.mjs",
-    path: "/workspace/project/eslint.config.mjs",
-    isDir: false,
-    size: 465,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "next-env.d.ts",
-    path: "/workspace/project/next-env.d.ts",
-    isDir: false,
-    size: 262,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "next.config.ts",
-    path: "/workspace/project/next.config.ts",
-    isDir: false,
-    size: 145,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "package.json",
-    path: "/workspace/project/package.json",
-    isDir: false,
-    size: 624,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "pnpm-lock.yaml",
-    path: "/workspace/project/pnpm-lock.yaml",
-    isDir: false,
-    size: 148732,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "postcss.config.mjs",
-    path: "/workspace/project/postcss.config.mjs",
-    isDir: false,
-    size: 94,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "README.md",
-    path: "/workspace/project/README.md",
-    isDir: false,
-    size: 1450,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-  {
-    name: "tsconfig.json",
-    path: "/workspace/project/tsconfig.json",
-    isDir: false,
-    size: 680,
-    modifiedAt: "2026-09-08T15:30:00Z",
-    modTime: "2026-09-08 15:30:00 +0000 UTC",
-    mode: "0644",
-    permissions: "rw-r--r--",
-    owner: "daytona",
-    group: "daytona",
-  },
-];
-
-const mockRootDirectory = "/workspace/project";
-
 const FilesScreen = () => {
-  const [currentDirectory, setCurrentDirectory] = useState(mockRootDirectory);
-  const currentFiles = getDirectoryFiles(mockFiles, currentDirectory);
-  const parentDirectory = currentDirectory === mockRootDirectory
-    ? undefined
-    : currentDirectory.slice(0, currentDirectory.lastIndexOf("/"));
+  const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const [currentDirectory, setCurrentDirectory] = useState("");
+  const { query, creation } = useProjectFiles(projectId, currentDirectory);
+  const fileCreation = use(ProjectWorkspaceFileCreationContext);
+  const showSuccess = useSuccessFeedback();
+  const parentDirectory =
+    currentDirectory === ""
+      ? undefined
+      : currentDirectory.slice(
+          0,
+          Math.max(0, currentDirectory.lastIndexOf("/")),
+        );
+
+  if (query.isPending) {
+    return (
+      <ProjectWorkspaceState
+        title="Opening files…"
+        description="Connecting to your workspace."
+        icon="code"
+        isLoading
+      />
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-background px-6">
+        <HeadingText className="text-center text-2xl font-semibold">
+          An error occurred
+        </HeadingText>
+        <PText accessibilityRole="alert" className="text-center max-w-100">
+          {query.error.message}
+        </PText>
+        <Button
+          variant="outline"
+          disabled={query.isFetching}
+          onPress={() => void query.refetch()}
+        >
+          {query.isFetching ? "Refreshing…" : "Try again"}
+        </Button>
+        {parentDirectory !== undefined && (
+          <Button
+            variant="ghost"
+            onPress={() => setCurrentDirectory(parentDirectory)}
+          >
+            Go to parent folder
+          </Button>
+        )}
+      </View>
+    );
+  }
 
   return (
-    <View className="flex-1">
+    <View className="flex-1 bg-background">
+      {fileCreation?.kind && (
+        <ProjectFileCreateRow
+          key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
+          kind={fileCreation.kind}
+          parentPath={currentDirectory}
+          onCancel={fileCreation.finish}
+          onCreate={async (input) => {
+            await creation.mutateAsync(input);
+            fileCreation.finish();
+            showSuccess(formatProjectFileKind(input.kind).successMessage);
+          }}
+        />
+      )}
       <ProjectFilesList
         key={currentDirectory}
-        files={currentFiles}
+        files={getDirectoryFiles(query.data ?? [], currentDirectory)}
         parentDirectory={parentDirectory}
         onDirectoryPress={setCurrentDirectory}
+        navigationDisabled={Boolean(fileCreation?.kind)}
       />
     </View>
   );

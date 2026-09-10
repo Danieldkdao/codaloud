@@ -4,6 +4,25 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
+import { getDirectoryFiles } from "@/features/projects/lib/files";
+
+const files = [
+  { name: "app", path: "app", isDir: true, size: 0 },
+  { name: "package.json", path: "package.json", isDir: false, size: 0 },
+  { name: "layout.tsx", path: "app/layout.tsx", isDir: false, size: 0 },
+  { name: "page.tsx", path: "app/page.tsx", isDir: false, size: 0 },
+  { name: "dashboard", path: "app/dashboard", isDir: true, size: 0 },
+  { name: "page.tsx", path: "app/dashboard/page.tsx", isDir: false, size: 0 },
+];
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }) }));
+vi.mock("@/features/projects/hooks/use-project-files", () => ({ useProjectFiles: (_id: string, path: string) => ({
+  query: { data: getDirectoryFiles(files, path), isPending: false, isError: false, isFetching: false, refetch: vi.fn() },
+}) }));
+vi.mock("@/components/ui/button", () => ({ Button: () => null }));
+vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => vi.fn() }));
+vi.mock("@/features/projects/components/project-file-create-row", () => ({ ProjectFileCreateRow: () => null }));
+vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/features/projects/components/project-workspace-state", () => ({ ProjectWorkspaceState: () => null }));
 
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => createElement("div", null, children),

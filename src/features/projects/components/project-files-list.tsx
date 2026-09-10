@@ -1,4 +1,4 @@
-import type { FileInfo } from "@daytona/sdk";
+import type { ProjectFileEntrySchema } from "@/features/projects/actions/file-schemas";
 import { use } from "react";
 import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
 import { FlatList, Pressable, View } from "react-native";
@@ -10,15 +10,17 @@ import { ProjectWorkspacePlaceholder } from "@/features/projects/components/proj
 import { SandboxFiles } from "@/features/projects/components/sandbox-files";
 
 type ProjectFilesListProps = {
-  files: FileInfo[];
+  files: ProjectFileEntrySchema[];
   parentDirectory?: string;
   onDirectoryPress: (path: string) => void;
+  navigationDisabled?: boolean;
 };
 
 export const ProjectFilesList = ({
   files,
   parentDirectory,
   onDirectoryPress,
+  navigationDisabled = false,
 }: ProjectFilesListProps) => {
   const insets = useSafeAreaInsets();
   const dockHeight = use(ProjectWorkspaceDockHeightContext);
@@ -28,9 +30,11 @@ export const ProjectFilesList = ({
     paddingLeft: 16 + insets.left,
     paddingRight: 16 + insets.right,
   };
-  const parentRow = parentDirectory ? (
+  const parentRow = parentDirectory !== undefined ? (
     <Pressable
       onPress={() => onDirectoryPress(parentDirectory)}
+      disabled={navigationDisabled}
+      accessibilityState={{ disabled: navigationDisabled }}
       accessibilityRole="button"
       accessibilityLabel="Go to parent directory"
       className="flex-row items-center gap-3 border-b border-border px-3 py-4 active:bg-secondary"
@@ -60,12 +64,15 @@ export const ProjectFilesList = ({
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ ...contentPadding, paddingBottom: dockHeight + 24 }}
       scrollIndicatorInsets={{ bottom: dockHeight }}
+      keyboardShouldPersistTaps="handled"
       ListHeaderComponent={parentRow}
       renderItem={({ item }) => (
         <Pressable
           onPress={item.isDir ? () => {
             if (item.path) onDirectoryPress(item.path);
           } : undefined}
+          disabled={navigationDisabled}
+          accessibilityState={{ disabled: navigationDisabled }}
           accessibilityRole="button"
           accessibilityLabel={`${item.name}, ${item.isDir ? "folder" : "file"}`}
           className="flex-row items-center gap-3 border-b border-border px-3 py-4 active:bg-secondary"

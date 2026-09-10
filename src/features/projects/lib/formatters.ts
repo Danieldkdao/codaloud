@@ -1,10 +1,22 @@
 import type { ProjectAgentActivityKind, ProjectAgentActivityStatus } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
+import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 import type {
   ProjectSortField,
   ProjectSortOrder,
 } from "@/features/projects/lib/project-params";
+
+export const formatProjectFileKind = (kind: ProjectFileKind) => {
+  switch (kind) {
+    case "file":
+      return { inputLabel: "File name", placeholder: "new-file.ts", successMessage: "File created" };
+    case "folder":
+      return { inputLabel: "Folder name", placeholder: "new-folder", successMessage: "Folder created" };
+    default:
+      throw new Error(`Unsupported file kind: ${kind satisfies never}`);
+  }
+};
 
 export const formatProjectSource = (source: CreateProjectSchema["source"]): {
   value: CreateProjectSchema["source"];

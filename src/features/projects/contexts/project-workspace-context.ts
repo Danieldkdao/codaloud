@@ -1,4 +1,4 @@
-import { createContext } from "react";
+import { createContext, type Dispatch, type SetStateAction } from "react";
 import type { ProjectBranchData } from "@/features/projects/types";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 
@@ -14,4 +14,9 @@ export const ProjectWorkspaceDockHeightContext = createContext(0);
 export const ProjectWorkspaceBranchContext = createContext<{
   branch: ProjectBranchData;
   setBranch: (branch: ProjectBranchData) => void;
+} | null>(null);
+
+export const ProjectWorkspaceCurrentFileContext = createContext<{
+  filePath: string | null;
+  setFilePath: Dispatch<SetStateAction<string | null>>;
 } | null>(null);

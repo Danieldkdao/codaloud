@@ -15,6 +15,7 @@ type ProjectFilesListProps = {
   existingNames: readonly string[];
   parentDirectory?: string;
   onDirectoryPress: (path: string) => void;
+  onFilePress: (path: string) => void;
   onUpdate: (input: UpdateProjectFileSchema) => Promise<void>;
   onDelete: (input: DeleteProjectFileSchema) => Promise<void>;
   updatingPath?: string;
@@ -27,6 +28,7 @@ export const ProjectFilesList = ({
   existingNames,
   parentDirectory,
   onDirectoryPress,
+  onFilePress,
   onUpdate,
   onDelete,
   updatingPath,
@@ -82,6 +84,7 @@ export const ProjectFilesList = ({
           file={item}
           existingNames={existingNames}
           onDirectoryPress={onDirectoryPress}
+          onFilePress={onFilePress}
           onUpdate={onUpdate}
           onDelete={onDelete}
           deleting={deletingPath === item.path}

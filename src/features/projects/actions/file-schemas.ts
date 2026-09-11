@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
 export const projectFileKinds = ["file", "folder"] as const;
 export type ProjectFileKind = (typeof projectFileKinds)[number];
@@ -11,6 +12,26 @@ export type ProjectFileNameSchema = z.infer<typeof projectFileNameSchema>;
 export const projectDirectoryPathSchema = z.string().max(4096)
   .refine((path) => path === "" || path.split("/").every((part) => projectFileNameSchema.safeParse(part).success), "Invalid folder path.");
 export type ProjectDirectoryPathSchema = z.infer<typeof projectDirectoryPathSchema>;
+
+export const projectFilePathSchema = projectDirectoryPathSchema.min(1, "Choose a file.");
+export type ProjectFilePathSchema = z.infer<typeof projectFilePathSchema>;
+
+export const projectFileContentSchema = z.object({
+  path: projectFilePathSchema,
+  content: z.string().max(MAX_PROJECT_FILE_SIZE_BYTES),
+  size: z.number().int().nonnegative().max(MAX_PROJECT_FILE_SIZE_BYTES),
+}).refine(({ content, size }) => new TextEncoder().encode(content).byteLength === size, "File size does not match its contents.");
+export type ProjectFileContentSchema = z.infer<typeof projectFileContentSchema>;
+
+export const projectFileContentErrorSchema = z.object({
+  error: z.literal(true), message: z.string().min(1), code: z.string().optional(),
+});
+export type ProjectFileContentErrorSchema = z.infer<typeof projectFileContentErrorSchema>;
+
+export const readProjectFileContentResponseSchema = z.object({
+  error: z.literal(false), message: z.string(), data: projectFileContentSchema,
+});
+export type ReadProjectFileContentResponseSchema = z.infer<typeof readProjectFileContentResponseSchema>;
 
 export const createProjectFileSchema = z.strictObject({
   parentPath: projectDirectoryPathSchema,

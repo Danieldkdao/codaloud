@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { createProjectFileAction, deleteProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
+import { createProjectFileAction, deleteProjectFileAction, readProjectFileContentAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
+import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
 const mocks = vi.hoisted(() => ({ getCookie: vi.fn() }));
 vi.mock("@/lib/auth/auth-client", () => ({ authClient: { getCookie: mocks.getCookie } }));
@@ -15,6 +16,63 @@ beforeEach(() => {
 });
 
 const updateInput = { parentPath: "notes", previousName: "old.txt", name: "hello.txt", kind: "file" as const };
+
+it("reads the selected file using encoded paths, native authentication, and cancellation", async () => {
+  const data = { path: "notes/hello #?&你好.txt", content: "你好", size: 6 };
+  network.mockResolvedValue(Response.json({ error: false, message: "File loaded.", data }));
+  const controller = new AbortController();
+  expect(await readProjectFileContentAction(projectId, data.path, controller.signal)).toEqual(data);
+  const [url, options] = network.mock.calls[0];
+  expect(String(url).split("?")[0]).toBe(`https://codaloud.test/api/projects/${projectId}/file-content`);
+  expect(new URL(String(url)).searchParams.get("path")).toBe(data.path);
+  expect(options).toMatchObject({ method: "GET", credentials: "omit", signal: controller.signal });
+  expect(new Headers(options?.headers).get("Cookie")).toBe("session=mobile");
+});
+
+it("does not request file contents with invalid input or missing authentication", async () => {
+  expect(await readProjectFileContentAction("invalid", "file.txt")).toBeNull();
+  for (const path of ["", "../outside", "/etc/passwd", "a//b", "a\\b"]) {
+    expect(await readProjectFileContentAction(projectId, path)).toBeNull();
+  }
+  mocks.getCookie.mockResolvedValue("");
+  expect(await readProjectFileContentAction(projectId, "file.txt")).toBeNull();
+  expect(network).not.toHaveBeenCalled();
+});
+
+it("accepts an empty file but rejects mismatched, oversized, and malformed content responses", async () => {
+  const data = { path: "file.txt", content: "", size: 0 };
+  network.mockResolvedValue(Response.json({ error: false, message: "File loaded.", data }));
+  expect(await readProjectFileContentAction(projectId, data.path)).toEqual(data);
+  for (const invalid of [{ ...data, path: "other.txt" }, { ...data, content: "é", size: 1 }, { ...data, content: "a".repeat(MAX_PROJECT_FILE_SIZE_BYTES + 1), size: MAX_PROJECT_FILE_SIZE_BYTES + 1 }, { ...data, size: -1 }, {}]) {
+    network.mockResolvedValue(Response.json({ error: false, message: "File loaded.", data: invalid }));
+    expect(await readProjectFileContentAction(projectId, data.path)).toBeNull();
+  }
+  network.mockResolvedValue(Response.json({ error: false, message: "File loaded.", data }, { status: 500 }));
+  expect(await readProjectFileContentAction(projectId, data.path)).toBeNull();
+});
+
+it("reports file read errors separately while preserving the data-or-null contract", async () => {
+  const onFailure = vi.fn();
+  for (const [status, code] of [[413, "FILE_TOO_LARGE"], [503, "WORKSPACE_RESTORING"]] as const) {
+    const failure = { error: true, code, message: "Unable to open this file." };
+    network.mockResolvedValue(Response.json(failure, { status, headers: { "Retry-After": "3" } }));
+    expect(await readProjectFileContentAction(projectId, "file.txt", undefined, onFailure)).toBeNull();
+    expect(onFailure).toHaveBeenLastCalledWith(failure, "3");
+  }
+});
+
+it("returns null for malformed JSON, network failures, cancellation, or auth lookup failures", async () => {
+  network.mockResolvedValue(new Response("not JSON"));
+  expect(await readProjectFileContentAction(projectId, "file.txt")).toBeNull();
+  network.mockRejectedValue(new Error("offline"));
+  expect(await readProjectFileContentAction(projectId, "file.txt")).toBeNull();
+  network.mockRejectedValue(new DOMException("Cancelled", "AbortError"));
+  expect(await readProjectFileContentAction(projectId, "file.txt")).toBeNull();
+  network.mockClear();
+  mocks.getCookie.mockRejectedValue(new Error("session unavailable"));
+  expect(await readProjectFileContentAction(projectId, "file.txt")).toBeNull();
+  expect(network).not.toHaveBeenCalled();
+});
 
 it("sends rename through the shared authenticated request helpers", async () => {
   const result = { error: false, message: "Updated.", data: entry };

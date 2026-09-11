@@ -1,18 +1,25 @@
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createSandboxFile, deleteSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "server-key" } }));
 const execute = promisify(exec);
+const executeFile = promisify(execFile);
+// bash scripts/test-daytona-filesystem.sh supplies a disposable Linux container
+// on macOS. The real sandbox command then runs against Linux VFS, not a procfs mock.
+const sandboxContainer = process.env.CODALOUD_TEST_SANDBOX_CONTAINER;
+const contentTest = it.runIf(process.platform === "linux" || Boolean(sandboxContainer));
 const context = { sandboxId: "sandbox-id", projectId: "project-id", allowInitialize: true };
 let home: string;
 let state: string;
 let labels: Record<string, string>;
+let readHook: string | undefined;
 const network = vi.fn<typeof fetch>();
 
 beforeEach(async () => {
@@ -30,6 +37,7 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 `, { mode: 0o755 });
   }
   state = "started";
+  readHook = undefined;
   labels = { codaloudApp: "codaloud", codaloudProjectId: context.projectId };
   network.mockReset().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -42,7 +50,15 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
     if (url.pathname.endsWith("/process/execute")) {
       const body = JSON.parse(String(init?.body));
       try {
-        const { stdout } = await execute(body.command, { timeout: 10_000, env: { ...process.env, PATH: `${join(home, "bin")}:${process.env.PATH}` } });
+        if (readHook) await writeFile(join(home, "read-hook.cjs"), readHook);
+        const options = {
+          timeout: 10_000,
+          maxBuffer: 8 * 1024 * 1024,
+          env: { ...process.env, PATH: `${join(home, "bin")}:${process.env.PATH}`, ...(readHook ? { NODE_OPTIONS: `--require=${join(home, "read-hook.cjs")}` } : {}) },
+        };
+        const { stdout } = sandboxContainer
+          ? await executeFile("docker", ["exec", "--env", `NODE_OPTIONS=${readHook ? `--require=${join(home, "read-hook.cjs")}` : ""}`, sandboxContainer, "sh", "-c", body.command], options)
+          : await execute(body.command, options);
         return Response.json({ exitCode: 0, result: stdout });
       } catch (error) {
         const failure = error as { stdout: string };
@@ -60,6 +76,249 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 });
 
 afterEach(async () => { await rm(home, { recursive: true, force: true }); });
+
+contentTest.each(["", "const greeting = '你好 👋';\r\n", "\uFEFFhello\r\n"])("reads complete UTF-8 contents without changing bytes: %j", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace/notes"), { recursive: true });
+  const path = "notes/hello ' $(echo unexpected).txt";
+  await writeFile(join(home, ".codaloud/workspace", path), content);
+  expect(await readSandboxFileContent(context, path)).toEqual({ path, content, size: Buffer.byteLength(content) });
+});
+
+contentTest.each(["a", "é"])("accepts text exactly at the byte limit using %j", async (character) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const content = character.repeat(MAX_PROJECT_FILE_SIZE_BYTES / Buffer.byteLength(character));
+  await writeFile(join(home, ".codaloud/workspace/limit.txt"), content);
+  expect(await readSandboxFileContent(context, "limit.txt")).toEqual({ path: "limit.txt", content, size: MAX_PROJECT_FILE_SIZE_BYTES });
+});
+
+contentTest("rejects an oversized file from metadata before reading any contents", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/large.txt"), "a".repeat(MAX_PROJECT_FILE_SIZE_BYTES + 1));
+  readHook = `require('node:fs').readSync = () => { throw new Error('Content must not be read'); };`;
+  await expect(readSandboxFileContent(context, "large.txt")).rejects.toMatchObject({ status: 413, code: "FILE_TOO_LARGE" });
+});
+
+contentTest("stops at the limit plus one byte and closes the file if it grows after the size check", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const path = join(home, ".codaloud/workspace/growing.txt");
+  await writeFile(path, "small");
+  readHook = `
+    const fs = require('node:fs');
+    const stat = fs.fstatSync;
+    const read = fs.readSync;
+    const close = fs.closeSync;
+    let total = 0;
+    let target;
+    fs.fstatSync = (...args) => {
+      const info = stat(...args);
+      if (target === undefined && info.isFile()) {
+        target = args[0];
+        fs.appendFileSync(${JSON.stringify(path)}, 'é'.repeat(${MAX_PROJECT_FILE_SIZE_BYTES}));
+      }
+      return info;
+    };
+    fs.readSync = (...args) => {
+      const count = read(...args);
+      if (args[0] === target) total += count;
+      return count;
+    };
+    fs.closeSync = (fd) => {
+      close(fd);
+      if (fd === target) fs.writeFileSync(${JSON.stringify(join(home, "read-count.txt"))}, String(total));
+    };
+  `;
+  await expect(readSandboxFileContent(context, "growing.txt")).rejects.toMatchObject({ status: 413, code: "FILE_TOO_LARGE" });
+  expect(Number(await readFile(join(home, "read-count.txt"), "utf8"))).toBe(MAX_PROJECT_FILE_SIZE_BYTES + 1);
+});
+
+contentTest.each([Buffer.from([0, 1, 2]), Buffer.from([0xc3, 0x28])])("rejects binary or invalid UTF-8 contents", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/data.bin"), content);
+  await expect(readSandboxFileContent(context, "data.bin")).rejects.toMatchObject({ status: 415, code: "UNSUPPORTED_FILE_ENCODING" });
+});
+
+contentTest("rejects missing files, directories, and symlinks without reading outside the workspace", async () => {
+  await mkdir(join(home, ".codaloud/workspace/folder"), { recursive: true });
+  await writeFile(join(home, "outside.txt"), "private");
+  await symlink(join(home, "outside.txt"), join(home, ".codaloud/workspace/link"));
+  await symlink(home, join(home, ".codaloud/workspace/parent-link"));
+  for (const [path, code] of [["missing.txt", "FILE_NOT_FOUND"], ["folder", "NOT_A_FILE"], ["link", "INVALID_PATH"], ["parent-link/outside.txt", "INVALID_PATH"]]) {
+    await expect(readSandboxFileContent(context, path)).rejects.toMatchObject({ code });
+  }
+});
+
+contentTest.each(
+  [".codaloud", ".codaloud/workspace", ".codaloud/workspace/notes", ".codaloud/workspace/notes/nested"]
+    .flatMap((directory) => ["before-directory-open", "after-directory-open", "before-file-open"].map((timing) => ({ directory, timing }))),
+)("contains a $timing symlink swap at $directory, even when the path is restored", async ({ directory, timing }) => {
+  const relativeFile = ".codaloud/workspace/notes/nested/file.txt";
+  const target = join(home, directory);
+  const outside = join(home, "outside");
+  const suffix = relativeFile.slice(directory.length + 1);
+  await mkdir(join(home, ".codaloud/workspace/notes/nested"), { recursive: true });
+  await mkdir(join(outside, suffix.slice(0, Math.max(0, suffix.lastIndexOf("/")))), { recursive: true });
+  await writeFile(join(home, relativeFile), "workspace content");
+  await writeFile(join(outside, suffix), "outside secret");
+  readHook = `
+    const fs = require('node:fs');
+    const target = ${JSON.stringify(target)};
+    const outside = ${JSON.stringify(outside)};
+    const timing = ${JSON.stringify(timing)};
+    const originalStat = fs.lstatSync;
+    const originalOpen = fs.openSync;
+    const expected = originalStat(target);
+    let swapped = false;
+    let restored = false;
+    const swap = () => {
+      if (swapped) return;
+      fs.renameSync(target, target + '-held');
+      fs.symlinkSync(outside, target);
+      swapped = true;
+    };
+    fs.lstatSync = (path, ...args) => {
+      if (timing === 'before-file-open' && String(path).endsWith('/file.txt')) swap();
+      const info = originalStat(path, ...args);
+      // Reproduce the vulnerable implementation's validation-to-open window.
+      if (path === target && timing !== 'before-file-open') swap();
+      return info;
+    };
+    fs.openSync = (path, flags, ...args) => {
+      if (timing === 'before-directory-open' && String(path).endsWith('/' + target.split('/').pop())) swap();
+      const fd = originalOpen(path, flags, ...args);
+      const info = fs.fstatSync(fd);
+      if (timing === 'after-directory-open' && info.dev === expected.dev && info.ino === expected.ino) swap();
+      if (swapped && !restored && String(path).endsWith('/file.txt')) {
+        fs.unlinkSync(target);
+        fs.renameSync(target + '-held', target);
+        restored = true;
+      }
+      return fd;
+    };
+    process.on('exit', () => fs.writeFileSync(${JSON.stringify(join(home, "attack-result.json"))}, JSON.stringify({ swapped, restored })));
+  `;
+  const result = await readSandboxFileContent(context, "notes/nested/file.txt").catch((error: unknown) => error);
+  // Either reject the changed path or finish reading the original anchored file.
+  // Returning any contents from the replacement directory is a containment failure.
+  if (result instanceof Error) expect(result).toMatchObject({ code: "INVALID_PATH" });
+  else expect(result).toEqual({ path: "notes/nested/file.txt", content: "workspace content", size: 17 });
+  const attack = JSON.parse(await readFile(join(home, "attack-result.json"), "utf8"));
+  expect(attack.swapped).toBe(true);
+  if (!(result instanceof Error)) expect(attack.restored).toBe(true);
+  expect(await readFile(join(outside, suffix), "utf8")).toBe("outside secret");
+});
+
+contentTest.each(["symlink", "fifo", "file"])("rejects a file replaced with a %s immediately before open", async (kind) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "workspace");
+  await writeFile(join(home, "outside.txt"), "outside secret");
+  readHook = `
+    const fs = require('node:fs');
+    const open = fs.openSync;
+    let replaced = false;
+    fs.openSync = (path, ...args) => {
+      if (!replaced && String(path).endsWith('/file.txt')) {
+        replaced = true;
+        fs.renameSync(${JSON.stringify(target)}, ${JSON.stringify(target + "-held")});
+        ${kind === "symlink"
+          ? `fs.symlinkSync(${JSON.stringify(join(home, "outside.txt"))}, ${JSON.stringify(target)});`
+          : kind === "fifo"
+            ? `require('node:child_process').execFileSync('mkfifo', [${JSON.stringify(target)}]);`
+            : `fs.writeFileSync(${JSON.stringify(target)}, 'replacement');`}
+      }
+      return open(path, ...args);
+    };
+  `;
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ code: kind === "fifo" ? "NOT_A_FILE" : "INVALID_PATH" });
+});
+
+contentTest.each(["success", "deep-path", "encoding", "changed", "missing-parent", "missing-proc"])("closes every opened descriptor on %s", async (outcome) => {
+  const parent = outcome === "deep-path" ? Array.from({ length: 64 }, () => "nested").join("/") : "notes";
+  await mkdir(join(home, ".codaloud/workspace", parent), { recursive: true });
+  const target = join(home, ".codaloud/workspace", parent, "file.txt");
+  await writeFile(target, outcome === "encoding" ? Buffer.from([0xff]) : "contents");
+  readHook = `
+    const fs = require('node:fs');
+    const open = fs.openSync;
+    const close = fs.closeSync;
+    const read = fs.readSync;
+    const opened = new Set();
+    let count = 0;
+    let peak = 0;
+    let changed = false;
+    fs.openSync = (path, ...args) => {
+      if (${JSON.stringify(outcome)} === 'missing-proc' && String(path).startsWith('/proc/self/fd/')) {
+        const error = new Error('proc unavailable'); error.code = 'EACCES'; throw error;
+      }
+      const fd = open(path, ...args);
+      opened.add(fd); count++;
+      peak = Math.max(peak, opened.size);
+      return fd;
+    };
+    fs.readSync = (...args) => {
+      const count = read(...args);
+      if (${JSON.stringify(outcome)} === 'changed' && !changed) {
+        changed = true;
+        fs.writeFileSync(${JSON.stringify(target)}, 'modified');
+        fs.utimesSync(${JSON.stringify(target)}, new Date(0), new Date(0));
+      }
+      return count;
+    };
+    fs.closeSync = (fd) => { close(fd); opened.delete(fd); };
+    process.on('exit', () => {
+      const result = JSON.stringify({ remaining: opened.size, count, peak });
+      fs.writeFileSync(${JSON.stringify(join(home, "descriptor-result.json"))}, result);
+    });
+  `;
+  const path = outcome === "missing-parent" ? "missing/file.txt" : `${parent}/file.txt`;
+  const result = await readSandboxFileContent(context, path).catch((error: unknown) => error);
+  if (outcome === "success" || outcome === "deep-path") expect(result).toMatchObject({ content: "contents" });
+  else if (outcome === "changed") expect(result).toMatchObject({ code: "FILE_CHANGED" });
+  else expect(result).toBeInstanceOf(Error);
+  const descriptors = JSON.parse(await readFile(join(home, "descriptor-result.json"), "utf8"));
+  expect(descriptors.remaining).toBe(0);
+  expect(descriptors.count).toBeGreaterThan(0);
+  if (outcome === "deep-path") expect(descriptors.peak).toBe(2);
+});
+
+contentTest("rejects a symlink in the provider's home path", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/file.txt"), "contents");
+  await symlink(home, join(home, "alias"));
+  const implementation = network.getMockImplementation()!;
+  network.mockImplementation((input, init) => String(input).endsWith("/user-home-dir")
+    ? Promise.resolve(Response.json({ dir: join(home, "alias") }))
+    : implementation(input, init));
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ code: "INVALID_PATH" });
+});
+
+it("fails closed on a runtime without Linux descriptor-relative access", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/file.txt"), "contents");
+  readHook = `Object.defineProperty(process, 'platform', { value: 'darwin' });`;
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ status: 502, code: "FILESYSTEM_UNAVAILABLE" });
+});
+
+it("validates content paths before contacting Daytona", async () => {
+  for (const path of ["", "/etc/passwd", "../outside", "a/../outside", "a//b", "a\\b", "a/", "a\u0000b"]) {
+    await expect(readSandboxFileContent(context, path)).rejects.toThrow();
+  }
+  expect(network).not.toHaveBeenCalled();
+});
+
+contentTest("never initializes a missing workspace for a content read", async () => {
+  await expect(readSandboxFileContent(context, "missing.txt")).rejects.toMatchObject({ code: "WORKSPACE_NOT_READY" });
+  await expect(lstat(join(home, ".codaloud"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("preserves workspace restoration and sandbox ownership checks for content reads", async () => {
+  state = "archived";
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ status: 503, code: "WORKSPACE_RESTORING" });
+  state = "started";
+  labels.codaloudProjectId = "another-project";
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ code: "SANDBOX_MISMATCH" });
+  expect(network.mock.calls.some(([url]) => String(url).includes("/toolbox/"))).toBe(false);
+});
 
 it.each(["file", "folder"] as const)("preserves a replacement %s created after the sandbox deletion command returns", async (kind) => {
   const input = { parentPath: "", name: "selected", kind };

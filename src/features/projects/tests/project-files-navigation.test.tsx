@@ -6,9 +6,9 @@ import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import { getDirectoryFiles } from "@/features/projects/lib/files";
 import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
-import { ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
+import { ProjectWorkspaceCurrentFileContext, ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
 
-const mocks = vi.hoisted(() => ({ confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), selectFile: vi.fn(), confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
 vi.mock("@/lib/utils", () => ({ confirmAction: mocks.confirm }));
 vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { ref: Ref<HTMLInputElement>; value: string; disabled: boolean; invalid: boolean; accessibilityLabel: string }) => {
@@ -28,7 +28,7 @@ const files = [
   { name: "dashboard", path: "app/dashboard", isDir: true, size: 0 },
   { name: "page.tsx", path: "app/dashboard/page.tsx", isDir: false, size: 0 },
 ];
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ navigate: mocks.navigate }) }));
 vi.mock("@/features/projects/hooks/use-project-files", () => ({ useProjectFiles: (_id: string, path: string) => ({
   query: { data: getDirectoryFiles(files, path), isPending: false, isError: false, isFetching: false, refetch: vi.fn() },
   update: { mutateAsync: mocks.update, isPending: mocks.updatePending, variables: { parentPath: "", previousName: "app" } },
@@ -105,14 +105,18 @@ it("replaces the current directory and supports drilling into nested folders", (
   expect(container.textContent).toBe("..page.tsx");
 });
 
-it("keeps file presses inert at the root and inside a folder", () => {
-  const initial = container.textContent;
+it("selects the full file path and opens the Code tab from any folder", () => {
+  act(() => root.render(createElement(ProjectWorkspaceCurrentFileContext, {
+    value: { filePath: null, setFilePath: mocks.selectFile },
+  }, createElement(FilesScreen))));
   click("package.json, file");
-  expect(container.textContent).toBe(initial);
+  expect(mocks.selectFile).toHaveBeenLastCalledWith("package.json");
+  expect(mocks.navigate).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
   click("app, folder");
-  const contents = container.textContent;
+  expect(mocks.navigate).toHaveBeenCalledTimes(1);
   click("page.tsx, file");
-  expect(container.textContent).toBe(contents);
+  expect(mocks.selectFile).toHaveBeenLastCalledWith("app/page.tsx");
+  expect(mocks.navigate).toHaveBeenCalledTimes(2);
 });
 
 
@@ -132,7 +136,7 @@ it("shows a parent row only below the root and goes up exactly one level", () =>
 it("keeps parent navigation available alongside the empty state", () => {
   const onDirectoryPress = vi.fn();
   act(() => root.render(createElement(ProjectFilesList, {
-    files: [], existingNames: [], parentDirectory: "/workspace/project", onDirectoryPress, onUpdate: mocks.update, onDelete: mocks.delete,
+    files: [], existingNames: [], parentDirectory: "/workspace/project", onDirectoryPress, onFilePress: mocks.selectFile, onUpdate: mocks.update, onDelete: mocks.delete,
   })));
   expect(container.textContent).toContain("No files created");
   click("Go to parent directory");

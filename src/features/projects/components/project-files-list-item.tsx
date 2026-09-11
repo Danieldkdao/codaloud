@@ -15,13 +15,14 @@ type ProjectFilesListItemProps = {
   file: ProjectFileEntrySchema;
   existingNames: readonly string[];
   onDirectoryPress: (path: string) => void;
+  onFilePress: (path: string) => void;
   onUpdate: (input: UpdateProjectFileSchema) => Promise<void>;
   onDelete: (input: DeleteProjectFileSchema) => Promise<void>;
   disabled?: boolean;
   deleting?: boolean;
 };
 
-export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, onUpdate, onDelete, disabled = false, deleting = false }: ProjectFilesListItemProps) => {
+export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, onFilePress, onUpdate, onDelete, disabled = false, deleting = false }: ProjectFilesListItemProps) => {
   const swipeable = useRef<SwipeableMethods>(null);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -119,7 +120,7 @@ export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, on
           )}
         >
           <Pressable
-            onPress={file.isDir ? () => onDirectoryPress(file.path) : undefined}
+            onPress={() => file.isDir ? onDirectoryPress(file.path) : onFilePress(file.path)}
             disabled={isDisabled}
             accessibilityState={{ disabled: isDisabled, busy: deleting }}
             accessibilityRole="button"

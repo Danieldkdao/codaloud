@@ -15,3 +15,8 @@ export const ProjectWorkspaceBranchContext = createContext<{
   branch: ProjectBranchData;
   setBranch: (branch: ProjectBranchData) => void;
 } | null>(null);
+
+export const ProjectWorkspaceCurrentFileContext = createContext<{
+  filePath: string | null;
+  setFilePath: (filePath: string | null) => void;
+} | null>(null);

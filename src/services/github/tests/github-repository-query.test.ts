@@ -1,13 +1,33 @@
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
-import { gitHubRepositoriesQueryOptions } from "@/services/github/queries/repositories";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useGitHubRepositories } from "@/services/github/hooks/use-github-repositories";
 import { readGitHubRepositories } from "@/services/github/actions/actions";
 import type { GitHubRepositoryPage } from "@/services/github/types";
 
 vi.mock("@/services/github/actions/actions", () => ({ readGitHubRepositories: vi.fn() }));
 const read = vi.mocked(readGitHubRepositories);
 let client: QueryClient;
-const subscriptions: (() => void)[] = [];
+let root: Root;
+let current: ReturnType<typeof useGitHubRepositories>;
+const Probe = ({ search, enabled }: { search: string; enabled: boolean }) => {
+  // Track result fields during render so updates reach the test's assertions.
+  current = { ...useGitHubRepositories({ search, pageSize: 2, enabled }) };
+  return null;
+};
+const render = async (search = "match", enabled = false) => {
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { search, enabled })));
+  });
+};
+const runQuery = async (operation: () => Promise<unknown>) => {
+  await act(async () => {
+    await operation();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
 const page = (ids: number[], nextCursor: string | null): GitHubRepositoryPage => ({
   repositories: ids.map((id) => ({
     id, name: `repo-${id}`, fullName: `owner/repo-${id}`, description: null,
@@ -16,18 +36,14 @@ const page = (ids: number[], nextCursor: string | null): GitHubRepositoryPage =>
   })),
   nextCursor,
 });
-const observe = (search = "match") => {
-  const observer = new InfiniteQueryObserver(client, gitHubRepositoriesQueryOptions({ search, pageSize: 2, enabled: false }));
-  subscriptions.push(observer.subscribe(() => {}));
-  return observer;
-};
-
 beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   read.mockReset();
 });
 afterEach(() => {
-  subscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
+  act(() => root.unmount());
   client.clear();
 });
 
@@ -36,43 +52,44 @@ describe("repository infinite queries", () => {
     read.mockResolvedValueOnce(page([], "sixth"))
       .mockResolvedValueOnce(page([1], "seventh"))
       .mockResolvedValueOnce(page([2, 3], null));
-    const observer = observe();
-    await observer.refetch();
-    expect(observer.getCurrentResult().hasNextPage).toBe(true);
-    await observer.fetchNextPage();
-    expect(observer.getCurrentResult().hasNextPage).toBe(true);
-    await observer.fetchNextPage();
-    expect(observer.getCurrentResult().hasNextPage).toBe(false);
-    await observer.fetchNextPage();
+    await render();
+    await runQuery(() => current.refetch());
+    expect(current.hasNextPage).toBe(true);
+    await runQuery(() => current.fetchNextPage());
+    expect(current.hasNextPage).toBe(true);
+    await runQuery(() => current.fetchNextPage());
+    expect(current.hasNextPage).toBe(false);
+    await runQuery(() => current.fetchNextPage());
     expect(read.mock.calls.map(([options]) => options?.cursor)).toEqual([null, "sixth", "seventh"]);
-    expect(observer.getCurrentResult().data?.pages.flatMap((p) => p.repositories.map((r) => r.id))).toEqual([1, 2, 3]);
+    expect(current.data?.pages.flatMap((p) => p.repositories.map((r) => r.id))).toEqual([1, 2, 3]);
   });
 
   it("retries a failed continuation without discarding loaded results", async () => {
     read.mockResolvedValueOnce(page([1], "retry-here"))
       .mockRejectedValueOnce(new Error("Rate limited"))
       .mockResolvedValueOnce(page([2], null));
-    const observer = observe();
-    await observer.refetch();
-    await observer.fetchNextPage();
-    expect(observer.getCurrentResult().isFetchNextPageError).toBe(true);
-    expect(observer.getCurrentResult().data?.pages).toEqual([page([1], "retry-here")]);
-    await observer.fetchNextPage();
+    await render();
+    await runQuery(() => current.refetch());
+    await runQuery(() => current.fetchNextPage());
+    expect(current.isFetchNextPageError).toBe(true);
+    expect(current.data?.pages).toEqual([page([1], "retry-here")]);
+    await runQuery(() => current.fetchNextPage());
     expect(read.mock.calls.map(([options]) => options?.cursor)).toEqual([null, "retry-here", "retry-here"]);
-    expect(observer.getCurrentResult().data?.pages).toHaveLength(2);
+    expect(current.data?.pages).toHaveLength(2);
   });
 
   it("normalizes search keys and starts a different search from its own first page", async () => {
-    expect(gitHubRepositoriesQueryOptions({ search: " MATCH " }).queryKey)
-      .toEqual(gitHubRepositoriesQueryOptions({ search: "match" }).queryKey);
     read.mockResolvedValueOnce(page([1], "first-search"))
       .mockResolvedValueOnce(page([2], null));
-    const observer = observe(" MATCH ");
-    await observer.refetch();
-    observer.setOptions(gitHubRepositoriesQueryOptions({ search: "different", pageSize: 2, enabled: false }));
-    await observer.refetch();
+    await render(" MATCH ");
+    await runQuery(() => current.refetch());
+    await render("match");
+    expect(client.getQueryCache().getAll()).toHaveLength(1);
+    expect(current.data?.pages).toEqual([page([1], "first-search")]);
+    await render("different");
+    await runQuery(() => current.refetch());
     expect(read.mock.calls.map(([options]) => [options?.search, options?.cursor])).toEqual([["match", null], ["different", null]]);
-    expect(observer.getCurrentResult().data?.pages).toEqual([page([2], null)]);
+    expect(current.data?.pages).toEqual([page([2], null)]);
   });
 
   it("passes cancellation to in-flight requests", async () => {
@@ -81,11 +98,14 @@ describe("repository infinite queries", () => {
       requestSignal = signal;
       signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
     }));
-    const observer = observe();
-    const pending = observer.refetch();
+    await render();
+    let pending!: Promise<unknown>;
+    await act(async () => { pending = current.refetch(); });
     expect(requestSignal?.aborted).toBe(false);
-    await client.cancelQueries({ queryKey: ["github", "repositories"] });
-    await pending;
+    await runQuery(async () => {
+      await client.cancelQueries({ queryKey: ["github", "repositories"] });
+      await pending;
+    });
     expect(requestSignal?.aborted).toBe(true);
   });
 
@@ -94,11 +114,11 @@ describe("repository infinite queries", () => {
       .mockResolvedValueOnce(page([2], null))
       .mockResolvedValueOnce(page([3], "new-position"))
       .mockResolvedValueOnce(page([4], null));
-    const observer = observe();
-    await observer.refetch();
-    await observer.fetchNextPage();
-    await observer.refetch();
+    await render();
+    await runQuery(() => current.refetch());
+    await runQuery(() => current.fetchNextPage());
+    await runQuery(() => current.refetch());
     expect(read.mock.calls.map(([options]) => options?.cursor)).toEqual([null, "old-position", null, "new-position"]);
-    expect(observer.getCurrentResult().data?.pages).toEqual([page([3], "new-position"), page([4], null)]);
+    expect(current.data?.pages).toEqual([page([3], "new-position"), page([4], null)]);
   });
 });

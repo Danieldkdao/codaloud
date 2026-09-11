@@ -7,6 +7,7 @@ import { updateProjectOperationRunDb } from "@/features/projects/server/project-
 
 const mocks = vi.hoisted(() => ({
   pg: undefined as unknown as PGlite,
+  importSource: vi.fn(), clone: vi.fn(),
   get: vi.fn(), create: vi.fn(), start: vi.fn(), waitUntilStarted: vi.fn(), logQuery: vi.fn(),
 }));
 vi.mock("@/db/db", async () => {
@@ -24,6 +25,12 @@ vi.mock("@trigger.dev/sdk", () => ({
   schemaTask: (options: unknown) => options,
   AbortTaskRunError: class extends Error {},
 }));
+
+vi.mock("@/services/github/server/import-source", () => ({ getGitHubImportSource: mocks.importSource }));
+vi.mock("@/services/github/server/access", () => ({
+  getGitHubErrorResponse: () => ({ status: 403, body: { message: "Reconnect GitHub." } }),
+}));
+vi.mock("@/services/daytona/clone-github-repository", () => ({ cloneGitHubRepository: mocks.clone }));
 
 const userId = "00000000-0000-4000-8000-000000000001";
 const projectId = "00000000-0000-4000-8000-000000000002";
@@ -59,7 +66,7 @@ beforeAll(async () => {
     create table project_operations (
       id uuid primary key, project_id uuid not null, user_id uuid not null,
       kind text not null, status text default 'queued', phase text default 'queued',
-      trigger_run_id text, github_account_id uuid, error_code text, error_message text,
+      trigger_run_id text, github_account_id uuid, github_branch_name text, error_code text, error_message text,
       next_dispatch_at timestamptz default now(), dispatch_attempts integer default 1,
       created_at timestamptz default now(), updated_at timestamptz default now(), finished_at timestamptz
     );
@@ -68,6 +75,8 @@ beforeAll(async () => {
 afterAll(async () => { await mocks.pg.close(); });
 beforeEach(async () => {
   mocks.logQuery.mockReset();
+  mocks.importSource.mockReset().mockResolvedValue({ repository: { id: 123456, cloneUrl: "https://github.com/owner/repo.git" }, accessToken: "fresh-token", branchName: "feature/import" });
+  mocks.clone.mockReset().mockResolvedValue(undefined);
   await mocks.pg.exec("truncate projects, project_operations");
   await mocks.pg.query("insert into projects (id, user_id, name) values ($1, $2, 'Lifecycle')", [projectId, userId]);
   await mocks.pg.query("insert into project_operations (id, project_id, user_id, kind) values ($1, $2, $3, 'prepare')", [operationId, projectId, userId]);
@@ -238,4 +247,60 @@ it.each([
   const before = (await mocks.pg.query("select * from projects")).rows;
   expect((await repairReadiness()).rows).toEqual([]);
   expect((await mocks.pg.query("select * from projects")).rows).toEqual(before);
+});
+
+const prepareImport = async () => {
+  await mocks.pg.exec("update projects set github_repository_id = '123456'");
+  await mocks.pg.query("update project_operations set github_account_id = $1, github_branch_name = 'feature/import'", [userId]);
+};
+
+it("validates saved import details before creation and clones only after startup", async () => {
+  await prepareImport();
+  const { DaytonaNotFoundError } = await import("@daytona/sdk");
+  mocks.get.mockRejectedValueOnce(new DaytonaNotFoundError("Missing"));
+  mocks.clone.mockImplementation(async () => {
+    expect(mocks.start).toHaveBeenCalledOnce();
+    expect(await state()).toMatchObject({ setup_status: "running", status: "running" });
+  });
+  await run();
+  expect(mocks.importSource).toHaveBeenCalledWith(userId, userId, "123456", "feature/import", undefined);
+  expect(mocks.importSource.mock.invocationCallOrder[0]).toBeLessThan(mocks.create.mock.invocationCallOrder[0]);
+  expect(mocks.clone).toHaveBeenCalledWith(expect.objectContaining({ id: "sandbox_one" }), {
+    operationId, repositoryId: "123456", branchName: "feature/import",
+    cloneUrl: "https://github.com/owner/repo.git", accessToken: "fresh-token",
+  });
+  expect((await state()).status).toBe("succeeded");
+});
+
+it("does not create or clone when GitHub validation fails, and sanitizes the task error", async () => {
+  await prepareImport();
+  mocks.importSource.mockRejectedValue(new Error("fresh-token private response"));
+  await expect(run()).rejects.toThrow("Reconnect GitHub.");
+  expect(mocks.get).not.toHaveBeenCalled();
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(mocks.clone).not.toHaveBeenCalled();
+});
+
+it("does not clone if sandbox startup fails", async () => {
+  await prepareImport();
+  mocks.start.mockRejectedValue(new Error("startup failed"));
+  await expect(run()).rejects.toThrow();
+  expect(mocks.clone).not.toHaveBeenCalled();
+});
+
+it("keeps import failures unready and revalidates credentials on retry", async () => {
+  await prepareImport();
+  mocks.clone.mockRejectedValueOnce(new Error("Clone failed"));
+  await expect(run()).rejects.toThrow("Clone failed");
+  expect((await state()).setup_status).toBe("running");
+  await run();
+  expect(mocks.importSource).toHaveBeenCalledTimes(2);
+  expect(mocks.get).toHaveBeenLastCalledWith("sandbox_one");
+  expect((await state()).status).toBe("succeeded");
+});
+
+it("does not resolve credentials or clone for an empty project", async () => {
+  await run();
+  expect(mocks.importSource).not.toHaveBeenCalled();
+  expect(mocks.clone).not.toHaveBeenCalled();
 });

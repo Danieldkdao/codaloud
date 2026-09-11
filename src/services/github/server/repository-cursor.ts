@@ -9,6 +9,8 @@ const repositoryCursorSchema = z.strictObject({
   offset: z.number().int().min(0).max(GITHUB_SEARCH_BATCH_SIZE - 1),
   search: z.string().max(200),
   pageSize: z.number().int().min(1).max(GITHUB_SEARCH_BATCH_SIZE),
+  // Branch cursors belong to one repository; unscoped repository-list cursors stay compatible.
+  scope: z.string().max(200).optional(),
 });
 export type RepositoryCursorSchema = z.infer<typeof repositoryCursorSchema>;
 
@@ -25,8 +27,9 @@ export const readRepositoryCursor = (
   cursor: string | null | undefined,
   search: string,
   pageSize: number,
+  scope?: string,
 ): RepositoryCursorSchema => {
-  if (cursor == null) return { version: 1, page: 1, offset: 0, search, pageSize };
+  if (cursor == null) return { version: 1, page: 1, offset: 0, search, pageSize, scope };
   try {
     if (cursor.length > GITHUB_CURSOR_MAX_LENGTH || !/^[A-Za-z0-9_-]+$/.test(cursor)) {
       throw new GitHubRepositoryCursorError();
@@ -37,6 +40,7 @@ export const readRepositoryCursor = (
     if (
       position.search !== search ||
       position.pageSize !== pageSize ||
+      position.scope !== scope ||
       (!search && position.offset >= pageSize)
     ) {
       throw new GitHubRepositoryCursorError();

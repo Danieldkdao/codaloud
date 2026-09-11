@@ -37,7 +37,7 @@ Note the naming conventions for each.
 - Export each Zod schema's inferred type from the same file, using the schema variable's name in PascalCase with the `Schema` suffix. For example, `createProjectSchema` exports `type CreateProjectSchema = z.infer<typeof createProjectSchema>`.
 - For every Zod enum, define and export its values as a named `as const` array, export a union type derived with `(typeof values)[number]`, and pass the array to `z.enum()`. Reuse existing arrays when available so schemas and UI options share one source of truth.
 - Read actions return the requested data on success, including empty collections, and `null` on validation, request, or response failure. Catch errors and return `null`; keep error response objects in API routes.
-- Keep TanStack Query configuration and logic directly inside the resource's hook, including query keys, query functions, and pagination. Extract query-options files or a `queries/` folder only when the user explicitly requests it.
+- Keep each `useQuery` or `useInfiniteQuery` hook and all of its TanStack Query configuration and logic in the same hook file, with options defined directly inside the hook. This includes query keys, query functions, search normalization, pagination, and enabled conditions. Never separate query options into another file or a `queries/` folder. Shared helpers and resource-specific request functions may be imported when useful.
 - After making changes to the codebase, use the `review-change-flows` skill and follow its instructions to give the user a flow-based review guide that groups all changed files and provides a recommended reading order.
 
 

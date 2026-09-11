@@ -13,6 +13,11 @@ export const gitHubRepositoryRequestSchema = z.object({
 });
 export type GitHubRepositoryRequestSchema = z.infer<typeof gitHubRepositoryRequestSchema>;
 
+export const gitHubRepositoryBranchesRequestSchema = gitHubRepositoryRequestSchema.extend({
+  repositoryId: z.string().regex(/^[1-9]\d*$/, "Invalid GitHub repository ID."),
+});
+export type GitHubRepositoryBranchesRequestSchema = z.infer<typeof gitHubRepositoryBranchesRequestSchema>;
+
 export const gitHubRepositorySchema = z.object({
   id: z.number().int().positive(),
   name: z.string(),
@@ -33,3 +38,23 @@ export const gitHubRepositoryPageSchema = z.object({
   nextCursor: z.string().min(1).max(GITHUB_CURSOR_MAX_LENGTH).nullable(),
 });
 export type GitHubRepositoryPageSchema = z.infer<typeof gitHubRepositoryPageSchema>;
+
+export const gitHubRepositoryBranchSchema = z.object({
+  name: z.string(),
+  commitSha: z.string(),
+  protected: z.boolean(),
+});
+export type GitHubRepositoryBranchSchema = z.infer<typeof gitHubRepositoryBranchSchema>;
+
+export const gitHubRepositoryBranchPageSchema = z.object({
+  branches: z.array(gitHubRepositoryBranchSchema),
+  nextCursor: gitHubRepositoryRequestSchema.shape.cursor.nonoptional(),
+});
+export type GitHubRepositoryBranchPageSchema = z.infer<typeof gitHubRepositoryBranchPageSchema>;
+
+export const readGitHubRepositoryBranchesResponseSchema = z.object({
+  error: z.literal(false),
+  message: z.string(),
+  data: gitHubRepositoryBranchPageSchema,
+});
+export type ReadGitHubRepositoryBranchesResponseSchema = z.infer<typeof readGitHubRepositoryBranchesResponseSchema>;

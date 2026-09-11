@@ -45,7 +45,7 @@ export const transitionProjectSandboxDb = async (
   // A retry after a lost completion response returns the recorded result.
   if (transition.action === "start" && existingProjectOperation.status === "succeeded" &&
     existingProjectOperation.triggerRunId === context.runId && existingProject.sandboxId) {
-    return { project: existingProject, operationId: existingProjectOperation.id, completed: true };
+    return { project: existingProject, operationId: existingProjectOperation.id, operation: existingProjectOperation, completed: true };
   }
   if (!["queued", "running"].includes(existingProjectOperation.status)) return null;
 
@@ -67,12 +67,12 @@ export const transitionProjectSandboxDb = async (
   }).where(eq(ProjectOperationTable.id, existingProjectOperation.id));
 
   const [updatedProject] = await tx.update(ProjectTable).set({
-    // For this milestone, ready means sandbox startup completed; file preparation is separate.
+    // Import setup completes only after the worker has prepared repository files.
     // Commit readiness together with the operation result and preserve it on reopen.
     setupStatus: existingProject.setupStatus === "ready" || completed ? "ready" : failed ? "failed" : "running",
     setupError: existingProject.setupStatus === "ready" ? null : errorMessage,
     ...(transition.action === "attach" ? { sandboxId: transition.sandboxId } : {}),
   }).where(eq(ProjectTable.id, existingProject.id)).returning();
 
-  return { project: updatedProject, operationId: existingProjectOperation.id, completed };
+  return { project: updatedProject, operationId: existingProjectOperation.id, operation: existingProjectOperation, completed };
 });

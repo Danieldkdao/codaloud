@@ -66,7 +66,20 @@ beforeEach(() => {
   network.mockReset();
   network.mockImplementation(async (url) => String(url).startsWith("https://api.trigger.dev/")
     ? Response.json({ id: "run_sandbox" })
-    : Response.json({ id: 123456789, permissions: { pull: true } }));
+    : String(url).includes("/branches/")
+    ? Response.json({ name: "feature/import", commit: { sha: "abc123" } })
+    : Response.json({
+        id: 123456789,
+        name: "selected-repository",
+        full_name: "owner/selected-repository",
+        description: null,
+        private: true,
+        archived: false,
+        default_branch: "main",
+        clone_url: "https://github.com/owner/selected-repository.git",
+        html_url: "https://github.com/owner/selected-repository",
+        permissions: { pull: true },
+      }));
   vi.stubGlobal("fetch", network);
   mocks.getCurrentUser.mockResolvedValue({ userId: "current-user" });
   mocks.insert.mockReturnValue({ values: mocks.values });
@@ -78,10 +91,10 @@ beforeEach(() => {
 
 describe("project creation route and insert flow", () => {
   it.each([
-    { source: "new", repositoryId: undefined, githubRepositoryId: null },
-    { source: "github", repositoryId: "123456789", githubRepositoryId: "123456789" },
-  ])("inserts a $source project with the correct repository and session owner", async ({ source, repositoryId, githubRepositoryId }) => {
-    const response = await POST(request({ name: " My project ", source, repositoryId }));
+    { source: "new", repositoryId: undefined, branchName: undefined, githubRepositoryId: null },
+    { source: "github", branchName: "feature/import", repositoryId: "123456789", githubRepositoryId: "123456789" },
+  ])("inserts a $source project and saves its import branch on the operation", async ({ source, repositoryId, branchName, githubRepositoryId }) => {
+    const response = await POST(request({ name: " My project ", source, repositoryId, branchName }));
 
     expect(response.status).toBe(201);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
@@ -96,6 +109,7 @@ describe("project creation route and insert flow", () => {
       userId: "current-user",
       kind: "prepare",
       githubAccountId: source === "github" ? "linked-account" : null,
+      githubBranchName: source === "github" ? branchName : null,
     });
     expect(await response.json()).toEqual({
       error: false,
@@ -104,15 +118,21 @@ describe("project creation route and insert flow", () => {
     });
   });
 
-  it.each([undefined, null, "", "abc", "0", "-1", "1.5", 123])(
+  it.each([undefined, null, "", " ", "abc", "0", "-1", "1.5", 123])(
     "rejects a GitHub import with invalid repository ID %s before inserting",
     async (repositoryId) => {
-      const response = await POST(request({ name: "My project", source: "github", repositoryId }));
+      const response = await POST(request({ name: "My project", source: "github", branchName: "feature/import", repositoryId }));
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: true, message: "Select a GitHub repository." });
       expect(mocks.insert).not.toHaveBeenCalled();
     },
   );
+
+  it.each([undefined, null, "", "   "])("rejects a missing branch %s before inserting", async (branchName) => {
+    const response = await POST(request({ name: "Import", source: "github", repositoryId: "123", branchName }));
+    expect(response.status).toBe(400);
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
 
   it.each([undefined, "unknown"])("rejects missing or unsupported source %s", async (source) => {
     const response = await POST(request({ name: "My project", source }));
@@ -123,8 +143,12 @@ describe("project creation route and insert flow", () => {
 
   it.each([
     { source: "new", repositoryId: "123" },
+    { source: "new", branchName: "main" },
     { source: "new", userId: "another-user" },
-    { source: "github", repositoryId: "123", githubRepositoryId: "456" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", githubRepositoryId: "456" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", accountId: "another-account" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", cloneUrl: "https://example.com/repository.git" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", accessToken: "client-token" },
   ])("rejects unexpected fields before inserting: %o", async (fields) => {
     const response = await POST(request({ name: "My project", ...fields }));
     expect(response.status).toBe(400);
@@ -167,7 +191,7 @@ describe("project creation route and insert flow", () => {
 
 
 describe("GitHub import access validation", () => {
-  const importRequest = () => request({ name: "Import", source: "github", repositoryId: "123456789" });
+  const importRequest = () => request({ name: "Import", source: "github", branchName: "feature/import", repositoryId: "123456789" });
 
   it.each([
     { accounts: [] },
@@ -192,6 +216,54 @@ describe("GitHub import access validation", () => {
     expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
     expect(options?.signal).toBe(req.signal);
     expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.insert.mock.invocationCallOrder[0]);
+  });
+
+  it("verifies the selected branch with the authorized repository before starting the transaction", async () => {
+    const req = importRequest();
+    expect((await POST(req)).status).toBe(201);
+    const [url, options] = network.mock.calls[1];
+    expect(String(url)).toBe("https://api.github.com/repos/owner/selected-repository/branches/feature%2Fimport");
+    expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
+    expect(options?.signal).toBe(req.signal);
+    expect(network.mock.invocationCallOrder[1]).toBeLessThan(mocks.transaction.mock.invocationCallOrder[0]);
+  });
+
+  it.each([
+    { scenario: "missing", upstream: 404, expected: 403 },
+    { scenario: "renamed", upstream: 200, expected: 403 },
+    { scenario: "rate-limited", upstream: 429, expected: 429 },
+    { scenario: "unavailable", upstream: 500, expected: 502 },
+  ])("rejects a $scenario branch before creating or dispatching a project", async ({ scenario, upstream, expected }) => {
+    const defaultResponse = network.getMockImplementation()!;
+    network.mockImplementation(async (url, options) => String(url).includes("/branches/")
+      ? Response.json(
+          scenario === "renamed"
+            ? { name: "renamed", commit: { sha: "abc123" } }
+            : { message: "private upstream details" },
+          { status: upstream },
+        )
+      : defaultResponse(url, options));
+
+    const response = await POST(importRequest());
+    expect(response.status).toBe(expected);
+    const body = await response.json();
+    expect(body.error).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/test-token|private upstream/);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.claim).not.toHaveBeenCalled();
+    expect(network).toHaveBeenCalledTimes(2);
+  });
+
+  it("dispatches saved identifiers without putting GitHub credentials in the job payload", async () => {
+    const response = await POST(importRequest());
+    expect(response.status).toBe(201);
+    const [, options] = network.mock.calls.find(([url]) => String(url).startsWith("https://api.trigger.dev/"))!;
+    expect(JSON.parse(String(options?.body)).payload).toEqual({
+      projectId: "created-project", userId: "current-user", operationId: "created-operation",
+    });
+    expect(String(options?.body)).not.toMatch(/test-token|linked-account|clone_url/);
+    expect(await response.text()).not.toMatch(/test-token|linked-account/);
   });
 
   it.each([

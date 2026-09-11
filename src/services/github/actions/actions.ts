@@ -1,11 +1,17 @@
 import type {
   GitHubRepositoryPage,
+  GitHubRepositoryBranchPage,
   ReadGitHubRepositoriesOptions,
 } from "@/services/github/types";
 import { PAGE_SIZE } from "@/lib/constants";
+import { getCurrentUserClient } from "@/lib/auth/client-helpers";
 import type { ApiResponse } from "@/lib/types";
 import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
-import { gitHubRepositoryPageSchema } from "@/services/github/schemas";
+import {
+  gitHubRepositoryPageSchema,
+  gitHubRepositoryBranchesRequestSchema,
+  readGitHubRepositoryBranchesResponseSchema,
+} from "@/services/github/schemas";
 
 export const readGitHubRepositories = async ({
   signal,
@@ -49,4 +55,43 @@ export const readGitHubRepositories = async ({
   }
 
   return page.data;
+};
+
+export const readGitHubRepositoryBranches = async (
+  repositoryId: string,
+  { signal, search, cursor, pageSize }: ReadGitHubRepositoriesOptions = {},
+): Promise<GitHubRepositoryBranchPage | null> => {
+  try {
+    const input = gitHubRepositoryBranchesRequestSchema.safeParse({
+      repositoryId, search, cursor, pageSize,
+    });
+    if (!input.success) return null;
+
+    const { userId, error } = await getCurrentUserClient();
+    if (!userId || error) return null;
+
+    const headers = await createRequestHeaders();
+    const query = createSearchParams({
+      pageSize: input.data.pageSize,
+      cursor: input.data.cursor,
+      search: input.data.search || undefined,
+    });
+    // The route rechecks the session, repository existence, and read permission.
+    const response = await fetchBase(`/api/github/repository/${input.data.repositoryId}/branches?${query}`, {
+      method: "GET",
+      headers,
+      credentials: "omit",
+      signal,
+    });
+    if (!response.ok) return null;
+
+    const payload: unknown = await response.json();
+    const result = readGitHubRepositoryBranchesResponseSchema.safeParse(payload);
+    if (!result.success) return null;
+    if (cursor != null && result.data.data.nextCursor === cursor) return null;
+
+    return result.data.data;
+  } catch {
+    return null;
+  }
 };

@@ -15,8 +15,8 @@ const mocks = vi.hoisted(() => ({
   connected: false,
   checking: false,
   source: "github",
-  fetchNextPage: vi.fn(),
-  refetch: vi.fn(),
+  loadMore: vi.fn(),
+  retry: vi.fn(),
   createProject: vi.fn(),
   success: vi.fn(),
   alert: vi.fn(),
@@ -34,6 +34,10 @@ vi.mock("@/features/projects/actions/actions", () => ({
 }));
 vi.mock("@/services/github/hooks/use-github-repositories", () => ({
   useGitHubRepositories: () => mocks.query,
+}));
+vi.mock("@/services/github/components/github-repository-branches-list", () => ({
+  GitHubRepositoryBranchesList: ({ onValueChange }: { onValueChange: (name: string) => void }) =>
+    createElement("button", { onClick: () => onValueChange("main") }, "Select main"),
 }));
 vi.mock("@/lib/utils", () => ({
   cn: (...values: Parameters<typeof clsx>) => twMerge(clsx(...values)),
@@ -188,6 +192,7 @@ beforeEach(() => {
               fullName: "owner/private-repo",
               description: "A repository description",
               private: true,
+              defaultBranch: "main",
             },
           ],
           nextCursor: "second",
@@ -199,6 +204,7 @@ beforeEach(() => {
               fullName: "owner/public-repo",
               description: null,
               private: false,
+              defaultBranch: "develop",
             },
           ],
           nextCursor: "third",
@@ -211,8 +217,8 @@ beforeEach(() => {
     isFetchNextPageError: false,
     error: null,
     hasNextPage: true,
-    fetchNextPage: mocks.fetchNextPage,
-    refetch: mocks.refetch,
+    loadMore: mocks.loadMore,
+    retry: mocks.retry,
   };
 });
 
@@ -223,7 +229,7 @@ const SelectListHarness = ({ className }: { className?: string }) => {
   return createElement(GitHubRepositoriesSelectList, {
     className,
     selectedRepositoryId,
-    onValueChange: setSelectedRepositoryId,
+    onValueChange: (repository) => setSelectedRepositoryId(repository ? String(repository.id) : null),
   });
 };
 
@@ -289,7 +295,7 @@ describe("new-project screen scrolling", () => {
       container.querySelector('[placeholder="Search repositories"]'),
     ).toBeNull();
     expect(container.querySelector("[data-native-flat-list]")).toBeNull();
-    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+    expect(mocks.loadMore).not.toHaveBeenCalled();
   });
 
   it.each([20, 500])(
@@ -353,18 +359,7 @@ describe("GitHub repositories list", () => {
   it("loads another page on reaching the end", () => {
     renderList();
     mocks.listProps.onEndReached();
-    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
-  });
-
-  it.each([
-    { isFetching: true },
-    { hasNextPage: false },
-    { error: new Error("Failed") },
-  ])("does not automatically load more when blocked by %o", (state) => {
-    Object.assign(mocks.query, state);
-    renderList();
-    mocks.listProps.onEndReached();
-    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+    expect(mocks.loadMore).toHaveBeenCalledOnce();
   });
 
   it("shows initial loading and empty states", () => {
@@ -516,6 +511,7 @@ describe("project form repository validation", () => {
       name: "My project",
       source: "github",
       repositoryId: "1",
+      branchName: "main",
     });
 
     await press(container, "owner/private-repo");
@@ -649,7 +645,7 @@ describe("project form GitHub reconnection", () => {
       expect(container.textContent).not.toContain("Try again");
       await act(async () => reconnect!.click());
       expect(mocks.handleConnect).toHaveBeenCalledOnce();
-      expect(mocks.refetch).not.toHaveBeenCalled();
+      expect(mocks.retry).not.toHaveBeenCalled();
     },
   );
 
@@ -722,6 +718,9 @@ it("refreshes repository authorization when the import itself requires reconnect
       .find((button) => button.textContent?.includes("owner/private-repo"))!
       .click(),
   );
+  await act(async () => {
+    Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Select main")!.click();
+  });
   await act(async () =>
     Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent === "Create project")!
@@ -748,9 +747,7 @@ it("offers a manual continuation when an empty search batch has more pages", () 
   );
   expect(more).toBeDefined();
   act(() => more!.click());
-  expect(mocks.fetchNextPage).toHaveBeenCalledExactlyOnceWith({
-    cancelRefetch: false,
-  });
+  expect(mocks.loadMore).toHaveBeenCalledOnce();
 });
 
 it("deduplicates repositories if GitHub's sort order shifts between pages", () => {

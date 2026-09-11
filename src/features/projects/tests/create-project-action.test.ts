@@ -49,7 +49,9 @@ describe("createProjectAction", () => {
 
   it.each([
     [{ name: " ", source: "new" }, "Project name is required."],
+    [{ name: " ", source: "github", repositoryId: "123", branchName: "main" }, "Project name is required."],
     [{ name: "My project", source: "github" }, "Select a GitHub repository."],
+    [{ name: "My project", source: "github", repositoryId: "123" }, "Select a GitHub branch."],
     [{ name: "My project", source: "other" }, "Choose how to start your project."],
   ])("validates unsafe data before posting: %o", async (data, message) => {
     expect(await createProjectAction(data as CreateProjectFormSchema)).toEqual({ error: true, message });
@@ -59,7 +61,7 @@ describe("createProjectAction", () => {
 
   it.each<CreateProjectFormSchema>([
     { name: " My project ", source: "new" },
-    { name: " My project ", source: "github", repositoryId: "123" },
+    { name: " My project ", source: "github", repositoryId: "123", branchName: "feature/import" },
   ])("posts validated $source data and returns the project ID", async (data) => {
     expect(await createProjectAction(data)).toEqual({
       error: false, message: successBody.message, projectId: "created-project",
@@ -133,7 +135,7 @@ describe("createProjectAction", () => {
 
 it("preserves the reconnect-required response when credentials expire during submission", async () => {
   network.mockResolvedValue(Response.json({ error: true, message: "Reconnect GitHub to access your repositories.", code: "GITHUB_RECONNECT_REQUIRED" }, { status: 403 }));
-  expect(await createProjectAction({ name: "Import", source: "github", repositoryId: "123" })).toEqual({
+  expect(await createProjectAction({ name: "Import", source: "github", repositoryId: "123", branchName: "feature/import" })).toEqual({
     error: true, message: "Reconnect GitHub to access your repositories.", code: "GITHUB_RECONNECT_REQUIRED",
   });
 });

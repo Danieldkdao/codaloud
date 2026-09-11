@@ -1,16 +1,13 @@
-import { use } from "react";
 import { View } from "react-native";
 
 import { ProjectCommitList } from "@/features/projects/components/project-commit-list";
-import { demoBranches } from "@/features/projects/data/demo-commits";
-import { ProjectWorkspaceBranchContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { useWorkspaceLoadingPreview } from "@/features/projects/hooks/use-workspace-loading-preview";
 
 const GitScreen = () => {
   const isLoading = useWorkspaceLoadingPreview();
-  const selectedBranch =
-    use(ProjectWorkspaceBranchContext)?.branch ?? demoBranches[0];
+  const { branch: selectedBranch } = useProjectWorkspaceBranch();
 
   if (isLoading) {
     return (

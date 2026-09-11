@@ -11,7 +11,7 @@ import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwip
 import type { ConfirmActionOptions } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({ remove: vi.fn(), confirm: vi.fn(), alert: vi.fn(), push: vi.fn(), close: vi.fn(), success: vi.fn(), swipe: {} as SwipeableProps, card: {} as PressableProps }));
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({ deleteProjectAction: mocks.remove }));
 vi.mock("@/lib/utils", () => ({ cn: () => "", confirmAction: mocks.confirm, alert: mocks.alert }));
 vi.mock("expo-router", () => ({

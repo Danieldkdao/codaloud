@@ -1,6 +1,5 @@
 import type { DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
-import { use } from "react";
-import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -36,7 +35,7 @@ export const ProjectFilesList = ({
   navigationDisabled = false,
 }: ProjectFilesListProps) => {
   const insets = useSafeAreaInsets();
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
+  const { dockHeight } = useProjectWorkspaceDockHeight();
   const contentPadding = {
     paddingTop: 8,
     paddingBottom: 16,

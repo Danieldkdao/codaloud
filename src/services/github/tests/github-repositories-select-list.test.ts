@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => mocks.success }));
 
 const mocks = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,

@@ -16,7 +16,7 @@ import ProjectsScreen from "@/app/(main)/index";
 import type { ProjectFiltersProps } from "@/features/projects/components/project-filters";
 import type { ProjectResponseData } from "@/features/projects/types";
 
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => vi.fn() }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
 
 const mocks = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,

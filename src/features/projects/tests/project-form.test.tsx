@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
   success: vi.fn(),
 }));
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({
   createProjectAction: mocks.createProject,
 }));

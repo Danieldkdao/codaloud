@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { use, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ActivityIndicator, Alert, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
-import { useSuccessFeedback } from "@/components/success-feedback-provider";
+import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
-import { ProjectWorkspaceCurrentFileContext, ProjectWorkspaceDockHeightContext, ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
+import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
+import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { formatProjectFileKind } from "@/features/projects/lib/formatters";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
@@ -14,11 +16,11 @@ import { getDirectoryFiles, isProjectFilePathWithin } from "@/features/projects/
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
-  const currentFile = use(ProjectWorkspaceCurrentFileContext);
+  const currentFile = useProjectWorkspaceCurrentFile();
   const [currentDirectory, setCurrentDirectory] = useState("");
   const { query, creation, update, deletion } = useProjectFiles(projectId, currentDirectory);
-  const fileCreation = use(ProjectWorkspaceFileCreationContext);
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
+  const fileCreation = useProjectWorkspaceFileCreation();
+  const { dockHeight } = useProjectWorkspaceDockHeight();
   const showSuccess = useSuccessFeedback();
   const deletionInFlight = useRef(false);
   const parentDirectory =
@@ -77,7 +79,7 @@ const FilesScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      {fileCreation?.kind && !deletion.isPending && (
+      {fileCreation.kind && !deletion.isPending && (
         <ProjectFileCreateRow
           key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
           kind={fileCreation.kind}
@@ -85,7 +87,8 @@ const FilesScreen = () => {
           parentPath={currentDirectory}
           onCancel={fileCreation.finish}
           onCreate={async (input) => {
-            await creation.mutateAsync(input);
+            const createdFile = await creation.mutateAsync(input);
+            currentFile.refreshFile(createdFile.path);
             fileCreation.finish();
             showSuccess(formatProjectFileKind(input.kind).successMessage);
           }}
@@ -98,13 +101,13 @@ const FilesScreen = () => {
         parentDirectory={parentDirectory}
         onDirectoryPress={setCurrentDirectory}
         onFilePress={(path) => {
-          currentFile?.setFilePath(path);
+          currentFile.setFilePath(path);
           router.navigate({ pathname: "/projects/[projectId]/code", params: { projectId } });
         }}
         onUpdate={async (input) => {
           const updatedFile = await update.mutateAsync(input);
           const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
-          currentFile?.setFilePath((path) => path !== null && isProjectFilePathWithin(path, previousPath)
+          currentFile.setFilePath((path) => path !== null && isProjectFilePathWithin(path, previousPath)
             ? updatedFile.path + path.slice(previousPath.length)
             : path);
           showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
@@ -114,7 +117,7 @@ const FilesScreen = () => {
           deletionInFlight.current = true;
           try {
             const deletedFile = await deletion.mutateAsync(input);
-            currentFile?.setFilePath((path) => path !== null && isProjectFilePathWithin(path, deletedFile.path) ? null : path);
+            currentFile.setFilePath((path) => path !== null && isProjectFilePathWithin(path, deletedFile.path) ? null : path);
             showSuccess(formatProjectFileKind(input.kind).deleteSuccessMessage);
           } catch (error) {
             Alert.alert("Couldn't delete this item", error instanceof Error ? error.message : "Refresh the folder and try again.");
@@ -128,7 +131,7 @@ const FilesScreen = () => {
         deletingPath={deletion.isPending
           ? [deletion.variables.parentPath, deletion.variables.name].filter(Boolean).join("/")
           : undefined}
-        navigationDisabled={Boolean(fileCreation?.kind) || deletion.isPending}
+        navigationDisabled={Boolean(fileCreation.kind) || deletion.isPending}
       />
     </View>
   );

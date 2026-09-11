@@ -1,11 +1,11 @@
-import { use, type RefObject } from "react";
+import { type RefObject } from "react";
 import { Pressable, type View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { ProjectBranchSelect } from "@/features/projects/components/project-branch-select";
 import { ProjectFilesAdd } from "@/features/projects/components/project-files-add";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
-import { ProjectWorkspaceBranchContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { demoBranches } from "@/features/projects/data/demo-commits";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 
@@ -14,7 +14,7 @@ type ProjectActionButtonsProps = {
 };
 
 export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => {
-  const branchSelection = use(ProjectWorkspaceBranchContext);
+  const branchSelection = useProjectWorkspaceBranch();
 
   switch (tab) {
     case "files":
@@ -33,7 +33,6 @@ export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => 
         </>
       );
     case "git":
-      if (!branchSelection) return null;
       return (
         <ProjectBranchSelect
           branch={branchSelection.branch}

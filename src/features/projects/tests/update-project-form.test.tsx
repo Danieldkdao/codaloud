@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { UpdateProjectForm } from "@/features/projects/components/update-project-form";
 
 const mocks = vi.hoisted(() => ({ update: vi.fn(), back: vi.fn(), alert: vi.fn(), success: vi.fn() }));
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({ updateProjectAction: mocks.update }));
 vi.mock("expo-router", () => ({ useRouter: () => ({ back: mocks.back }) }));
 vi.mock("@/lib/utils", () => ({ alert: mocks.alert }));

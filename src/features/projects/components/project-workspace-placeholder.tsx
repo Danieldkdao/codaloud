@@ -1,5 +1,5 @@
-import { use, type ReactNode } from "react";
-import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
+import { type ReactNode } from "react";
+import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 
 import { AppWrapper } from "@/components/app-wrapper";
 import { HeadingText, PText } from "@/components/ui/text";
@@ -15,7 +15,7 @@ export const ProjectWorkspacePlaceholder = ({
   description,
   children,
 }: ProjectWorkspacePlaceholderProps) => {
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
+  const { dockHeight } = useProjectWorkspaceDockHeight();
 
   return (
     <AppWrapper

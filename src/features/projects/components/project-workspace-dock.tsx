@@ -1,7 +1,7 @@
-import { use, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { usePathname } from "expo-router";
 import { TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
-import { Pressable, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon, type IconProps } from "@/components/ui/icon";
@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 import { GlassSurface } from "@/components/ui/glass-surface";
 
 import { ProjectActionButtonsLeft, ProjectActionButtonsRight } from "@/features/projects/components/project-action-buttons";
-import { ProjectWorkspaceBranchContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
+import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 
 type WorkspaceTabButtonProps = TabTriggerSlotProps & {
   label: string;
@@ -63,11 +64,8 @@ const WorkspaceTabButton = ({
   </Pressable>
 );
 
-type ProjectWorkspaceDockProps = {
-  onLayout?: (event: LayoutChangeEvent) => void;
-};
-
-export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) => {
+export const ProjectWorkspaceDock = () => {
+  const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
   const dockRef = useRef<View>(null);
   const branchIndicatorRef = useRef<View>(null);
@@ -75,14 +73,14 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
   const pathname = usePathname();
   const routeName = pathname.split("/").at(-1);
   const activeTab = routeName === "code" || routeName === "git" || routeName === "agent" ? routeName : "files";
-  const branchSelection = use(ProjectWorkspaceBranchContext);
+  const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
 
   return (
     <View
       ref={dockRef}
       collapsable={false}
-      onLayout={onLayout}
+      onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
       style={{
         position: "absolute",
         bottom: 0,
@@ -96,7 +94,7 @@ export const ProjectWorkspaceDock = ({ onLayout }: ProjectWorkspaceDockProps) =>
       }}
     >
       <View className="w-full self-center" style={{ maxWidth: 440, gap: 10, pointerEvents: "box-none" }}>
-        {isGit && branchSelection ? (
+        {isGit ? (
           <View ref={branchIndicatorRef} collapsable={false} className="items-center justify-center" style={{ height: 56 }}>
             {!isGitSearchOpen ? (
               <View testID="branch-indicator" accessibilityLiveRegion="polite"

@@ -4,10 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import AgentScreen from "@/app/projects/[projectId]/agent";
 import CodeScreen from "@/app/projects/[projectId]/code";
-import { ProjectWorkspaceCurrentFileContext } from "@/features/projects/contexts/project-workspace-context";
 import GitScreen from "@/app/projects/[projectId]/git";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
+const selection = vi.hoisted(() => ({ filePath: null as string | null, version: 0, setFilePath: vi.fn(), refreshFile: vi.fn() }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => selection }));
+vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => ({ branch: state.empty ? undefined : { name: "main", commits: [] }, setBranch: vi.fn() }) }));
+vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const readFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));
@@ -76,9 +79,10 @@ it.each([
   expect(container.textContent).toContain(empty);
 });
 
-const renderCode = (path: string | null = "app/page.tsx") => act(() => root.render(
-  createElement(ProjectWorkspaceCurrentFileContext, { value: { filePath: path, setFilePath: vi.fn() } }, createElement(CodeScreen)),
-));
+const renderCode = (path: string | null = "app/page.tsx") => {
+  selection.filePath = path;
+  act(() => root.render(createElement(CodeScreen)));
+};
 const finishLoading = (content = "const value = 1;", path = "app/page.tsx") => {
   Object.assign(fileQuery, { data: { path, content, size: content.length }, isPending: false, isFetching: false, isError: false });
 };

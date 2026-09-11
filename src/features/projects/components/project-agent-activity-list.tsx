@@ -1,10 +1,9 @@
-import { use } from "react";
 import { FlatList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
 import { CodeText, HeadingText, PText } from "@/components/ui/text";
-import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import {
   formatAgentActivityDate,
   formatAgentActivityKind,
@@ -60,7 +59,7 @@ const ProjectAgentActivityRow = ({ activity }: { activity: ProjectAgentActivityD
 };
 
 export const ProjectAgentActivityList = ({ activities }: ProjectAgentActivityListProps) => {
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
+  const { dockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
 
   return (

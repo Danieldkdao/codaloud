@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { use, useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { View } from "react-native";
 
 import CodeEditor from "@/components/code-editor";
@@ -8,7 +8,8 @@ import { ProjectIcon } from "@/components/project-icon";
 import { Button } from "@/components/ui/button";
 import { CodeText, HeadingText, PText } from "@/components/ui/text";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
-import { ProjectWorkspaceCurrentFileContext, ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
+import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useProjectFile } from "@/features/projects/hooks/use-project-file";
 import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-shortcuts";
 import { useTheme } from "@/hooks/use-theme";
@@ -59,10 +60,10 @@ const LoadedCodeEditor = ({ filePath, content, bottomInset }: {
 
 const CodeScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const currentFile = use(ProjectWorkspaceCurrentFileContext);
-  const filePath = currentFile?.filePath ?? null;
+  const currentFile = useProjectWorkspaceCurrentFile();
+  const filePath = currentFile.filePath;
   const query = useProjectFile(projectId, filePath);
-  const dockHeight = use(ProjectWorkspaceDockHeightContext);
+  const { dockHeight } = useProjectWorkspaceDockHeight();
   useEditorDevelopmentShortcuts();
 
   if (!filePath) {
@@ -86,7 +87,7 @@ const CodeScreen = () => {
       <View className="flex-1">
         {query.data ? (
           <LoadedCodeEditor
-            key={`${projectId}/${filePath}`}
+            key={`${projectId}/${filePath}/${currentFile.version}`}
             filePath={filePath}
             content={query.data.content}
             bottomInset={dockHeight}

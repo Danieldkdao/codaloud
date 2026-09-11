@@ -1,22 +1,28 @@
 // @vitest-environment happy-dom
+import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
+import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { act, createElement, useImperativeHandle, useState, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import GitScreen from "@/app/projects/[projectId]/git";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
-import { ProjectWorkspaceBranchContext } from "@/features/projects/contexts/project-workspace-context";
-import { demoBranches } from "@/features/projects/data/demo-commits";
+import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 
 let activeTab = "git";
 vi.mock("expo-router", () => ({ usePathname: () => `/projects/demo/${activeTab}` }));
 vi.mock("expo-router/ui", () => ({
   TabTrigger: ({ children }: { children: ReactNode }) => children,
 }));
-const Workspace = () => {
-  const [branch, setBranch] = useState(demoBranches[0]);
-  return createElement(ProjectWorkspaceBranchContext, { value: { branch, setBranch } },
-    createElement(GitScreen), createElement(ProjectWorkspaceDock));
-};
+const Workspace = () => (
+  <ProjectWorkspaceDockHeightProvider>
+    <ProjectWorkspaceBranchProvider>
+      <GitScreen />
+      <ProjectWorkspaceFileCreationProvider projectId="demo">
+        <ProjectWorkspaceDock />
+      </ProjectWorkspaceFileCreationProvider>
+    </ProjectWorkspaceBranchProvider>
+  </ProjectWorkspaceDockHeightProvider>
+);
 
 vi.mock("@/features/projects/hooks/use-workspace-loading-preview", () => ({ useWorkspaceLoadingPreview: () => false }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: ({ accessibilityLabel, onOpenChange }: { accessibilityLabel: string; onOpenChange?: (open: boolean) => void }) => {

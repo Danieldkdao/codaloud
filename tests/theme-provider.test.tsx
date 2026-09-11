@@ -2,8 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { AppThemeProvider } from "@/components/app-theme-provider";
-import { useTheme } from "@/hooks/use-theme";
+import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
 
 const mocks = vi.hoisted(() => ({
   read: vi.fn(), write: vi.fn(), appearance: vi.fn(), scheme: "light",

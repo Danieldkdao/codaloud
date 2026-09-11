@@ -7,7 +7,7 @@ import Swipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { Button } from "@/components/ui/button";
-import { useSuccessFeedback } from "@/components/success-feedback-provider";
+import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";

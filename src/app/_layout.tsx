@@ -1,9 +1,8 @@
 import "../global.css";
 
 import { QueryProvider } from "@/components/query-provider";
-import { AppThemeProvider } from "@/components/app-theme-provider";
-import { useTheme } from "@/hooks/use-theme";
-import { SuccessFeedbackProvider } from "@/components/success-feedback-provider";
+import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
+import { SuccessFeedbackProvider } from "@/hooks/use-success-feedback";
 import { authClient } from "@/lib/auth/auth-client";
 import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
 import { fontAssets } from "@/lib/fonts";

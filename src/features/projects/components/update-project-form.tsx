@@ -6,7 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 
 import { AppWrapper } from "@/components/app-wrapper";
-import { useSuccessFeedback } from "@/components/success-feedback-provider";
+import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";

@@ -6,9 +6,14 @@ import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import { getDirectoryFiles } from "@/features/projects/lib/files";
 import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
-import { ProjectWorkspaceCurrentFileContext, ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
+import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
+
+const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
+vi.mock("@/features/projects/hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => fileCreation }));
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), selectFile: vi.fn(), confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: null, version: 0, setFilePath: mocks.selectFile, refreshFile: vi.fn() }) }));
+vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
 vi.mock("@/lib/utils", () => ({ confirmAction: mocks.confirm }));
 vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { ref: Ref<HTMLInputElement>; value: string; disabled: boolean; invalid: boolean; accessibilityLabel: string }) => {
@@ -38,7 +43,7 @@ vi.mock("@/features/projects/hooks/use-project-files", () => ({ useProjectFiles:
 vi.mock("@/components/ui/button", () => ({ Button: ({ onPress, accessibilityLabel, disabled }: { onPress: () => void; accessibilityLabel: string; disabled: boolean }) =>
   createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }),
 }));
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => mocks.success }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/features/projects/components/project-workspace-state", () => ({ ProjectWorkspaceState: () => null }));
 
@@ -82,6 +87,7 @@ const click = (label: string) => {
 };
 
 beforeEach(() => {
+  fileCreation.kind = null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.update.mockReset().mockResolvedValue(undefined);
   mocks.updatePending = false;
@@ -106,9 +112,6 @@ it("replaces the current directory and supports drilling into nested folders", (
 });
 
 it("selects the full file path and opens the Code tab from any folder", () => {
-  act(() => root.render(createElement(ProjectWorkspaceCurrentFileContext, {
-    value: { filePath: null, setFilePath: mocks.selectFile },
-  }, createElement(FilesScreen))));
   click("package.json, file");
   expect(mocks.selectFile).toHaveBeenLastCalledWith("package.json");
   expect(mocks.navigate).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
@@ -215,9 +218,8 @@ it("checks rename against sibling files and folders as the user types", async ()
 });
 
 it("passes the loaded directory names into the create form", async () => {
-  act(() => root.render(createElement(ProjectWorkspaceFileCreationContext, {
-    value: { kind: "file", begin: vi.fn(), finish: vi.fn() },
-  }, createElement(FilesScreen))));
+  fileCreation.kind = "file";
+  act(() => root.render(createElement(FilesScreen)));
   act(() => inputEvents.onChangeText("app"));
   expect(container.querySelector("input")?.getAttribute("aria-invalid")).toBe("true");
   await act(async () => { inputEvents.onSubmitEditing(); inputEvents.onBlur(); });

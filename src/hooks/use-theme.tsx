@@ -1,11 +1,33 @@
-import { AppThemeContext, useThemeColor } from "@/hooks/use-theme";
+import { useUnstableNativeVariable } from "nativewind";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Appearance, useColorScheme, type ColorValue } from "react-native";
+import type { AppThemeState, ThemePreference } from "@/lib/types";
 import { themePreferences } from "@/lib/constants";
-import type { ThemePreference } from "@/lib/types";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Appearance, useColorScheme } from "react-native";
+
+type ThemeColor =
+  | "background"
+  | "card"
+  | "border"
+  | "destructive"
+  | "foreground"
+  | "navigation-shadow"
+  | "primary"
+  | "primary-foreground"
+  | "secondary"
+  | "secondary-foreground"
+  | "muted-foreground";
+
+// NativeWind's default declarations describe its web stub, which has no arguments.
+const useNativeThemeVariable = useUnstableNativeVariable as
+  typeof import("react-native-css/native").useUnstableNativeVariable;
+
+export const useThemeColor = (name: ThemeColor): ColorValue =>
+  useNativeThemeVariable(`--${name}`);
+
+const AppThemeContext = createContext<AppThemeState | null>(null);
 
 const storageKey = "codaloud.theme";
 
@@ -80,4 +102,10 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
       </ThemeProvider>
     </AppThemeContext>
   );
+};
+
+export const useTheme = () => {
+  const theme = useContext(AppThemeContext);
+  if (!theme) throw new Error("useTheme must be used within AppThemeProvider");
+  return theme;
 };

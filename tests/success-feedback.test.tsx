@@ -2,7 +2,7 @@
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { SuccessFeedbackProvider, useSuccessFeedback } from "@/components/success-feedback-provider";
+import { SuccessFeedbackProvider, useSuccessFeedback } from "@/hooks/use-success-feedback";
 
 const mocks = vi.hoisted(() => ({
   haptic: vi.fn(), announce: vi.fn(), screenReader: vi.fn(), timeout: vi.fn(),

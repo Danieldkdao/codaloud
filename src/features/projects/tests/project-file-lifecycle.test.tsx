@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
-import { act, createElement, Fragment, use, useEffect, type ComponentProps, type ReactNode } from "react";
+import { act, createElement, Fragment, useEffect, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ProjectLayout from "@/app/projects/[projectId]/_layout";
 import FilesScreen from "@/app/projects/[projectId]/files";
 import CodeScreen from "@/app/projects/[projectId]/code";
-import { ProjectWorkspaceCurrentFileContext, ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
+import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
+import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 
@@ -14,8 +15,8 @@ const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn()
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {
-  selection = use(ProjectWorkspaceCurrentFileContext)!;
-  creation = use(ProjectWorkspaceFileCreationContext)!;
+  selection = useProjectWorkspaceCurrentFile();
+  creation = useProjectWorkspaceFileCreation();
   return null;
 };
 vi.mock("expo-router/ui", () => ({
@@ -35,7 +36,7 @@ vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFilesAction: async () => [], readProjectFileContentAction: mocks.readContent,
   createProjectFileAction: mocks.create, updateProjectFileAction: mocks.update, deleteProjectFileAction: mocks.delete,
 }));
-vi.mock("@/components/success-feedback-provider", () => ({ useSuccessFeedback: () => vi.fn() }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
@@ -51,8 +52,8 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/components/ui/button", () => ({ Button: (props: { children?: ReactNode }) => createElement(Children, props) }));
 vi.mock("react-native", () => ({ View: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));
 
-let selection: NonNullable<React.ContextType<typeof ProjectWorkspaceCurrentFileContext>>;
-let creation: NonNullable<React.ContextType<typeof ProjectWorkspaceFileCreationContext>>;
+let selection: ReturnType<typeof useProjectWorkspaceCurrentFile>;
+let creation: ReturnType<typeof useProjectWorkspaceFileCreation>;
 let fileList: ComponentProps<typeof ProjectFilesList>;
 let createRow: ComponentProps<typeof ProjectFileCreateRow>;
 let client: QueryClient;

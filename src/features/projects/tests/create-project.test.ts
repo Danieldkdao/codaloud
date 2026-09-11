@@ -66,6 +66,8 @@ beforeEach(() => {
   network.mockReset();
   network.mockImplementation(async (url) => String(url).startsWith("https://api.trigger.dev/")
     ? Response.json({ id: "run_sandbox" })
+    : String(url).includes("/branches/")
+    ? Response.json({ name: "feature/import", commit: { sha: "abc123" } })
     : Response.json({
         id: 123456789,
         name: "selected-repository",
@@ -214,6 +216,43 @@ describe("GitHub import access validation", () => {
     expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
     expect(options?.signal).toBe(req.signal);
     expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.insert.mock.invocationCallOrder[0]);
+  });
+
+  it("verifies the selected branch with the authorized repository before starting the transaction", async () => {
+    const req = importRequest();
+    expect((await POST(req)).status).toBe(201);
+    const [url, options] = network.mock.calls[1];
+    expect(String(url)).toBe("https://api.github.com/repos/owner/selected-repository/branches/feature%2Fimport");
+    expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
+    expect(options?.signal).toBe(req.signal);
+    expect(network.mock.invocationCallOrder[1]).toBeLessThan(mocks.transaction.mock.invocationCallOrder[0]);
+  });
+
+  it.each([
+    { scenario: "missing", upstream: 404, expected: 403 },
+    { scenario: "renamed", upstream: 200, expected: 403 },
+    { scenario: "rate-limited", upstream: 429, expected: 429 },
+    { scenario: "unavailable", upstream: 500, expected: 502 },
+  ])("rejects a $scenario branch before creating or dispatching a project", async ({ scenario, upstream, expected }) => {
+    const defaultResponse = network.getMockImplementation()!;
+    network.mockImplementation(async (url, options) => String(url).includes("/branches/")
+      ? Response.json(
+          scenario === "renamed"
+            ? { name: "renamed", commit: { sha: "abc123" } }
+            : { message: "private upstream details" },
+          { status: upstream },
+        )
+      : defaultResponse(url, options));
+
+    const response = await POST(importRequest());
+    expect(response.status).toBe(expected);
+    const body = await response.json();
+    expect(body.error).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/test-token|private upstream/);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.claim).not.toHaveBeenCalled();
+    expect(network).toHaveBeenCalledTimes(2);
   });
 
   it("dispatches saved identifiers without putting GitHub credentials in the job payload", async () => {

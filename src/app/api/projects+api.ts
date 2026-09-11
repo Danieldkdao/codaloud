@@ -13,7 +13,10 @@ import {
   getGitHubCredentials,
   getGitHubErrorResponse,
 } from "@/services/github/server/access";
-import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
+import {
+  verifyGitHubRepositoryAccess,
+  verifyGitHubRepositoryBranch,
+} from "@/services/github/server/repositories";
 
 export const GET = async (request: Request) => {
   try {
@@ -106,9 +109,15 @@ export const POST = async (request: Request) => {
         const { accountId, accessToken } = await getGitHubCredentials(
           request.headers,
         );
-        await verifyGitHubRepositoryAccess(
+        const repository = await verifyGitHubRepositoryAccess(
           accessToken,
           result.data.repositoryId,
+          request.signal,
+        );
+        await verifyGitHubRepositoryBranch(
+          accessToken,
+          repository,
+          result.data.branchName,
           request.signal,
         );
         githubAccountId = accountId;

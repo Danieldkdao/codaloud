@@ -1,14 +1,13 @@
 import { useLocalSearchParams } from "expo-router";
 import { use, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { ActivityIndicator, Alert, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useSuccessFeedback } from "@/components/success-feedback-provider";
 import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
-import { ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
+import { ProjectWorkspaceDockHeightContext, ProjectWorkspaceFileCreationContext } from "@/features/projects/contexts/project-workspace-context";
 import { formatProjectFileKind } from "@/features/projects/lib/formatters";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
-import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { getDirectoryFiles } from "@/features/projects/lib/files";
 
@@ -17,6 +16,7 @@ const FilesScreen = () => {
   const [currentDirectory, setCurrentDirectory] = useState("");
   const { query, creation, update, deletion } = useProjectFiles(projectId, currentDirectory);
   const fileCreation = use(ProjectWorkspaceFileCreationContext);
+  const dockHeight = use(ProjectWorkspaceDockHeightContext);
   const showSuccess = useSuccessFeedback();
   const deletionInFlight = useRef(false);
   const parentDirectory =
@@ -29,12 +29,16 @@ const FilesScreen = () => {
 
   if (query.isPending) {
     return (
-      <ProjectWorkspaceState
-        title="Opening files…"
-        description="Connecting to your workspace."
-        icon="code"
-        isLoading
-      />
+      <View
+        className="flex-1 items-center justify-center bg-background"
+        style={{ marginBottom: dockHeight }}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Loading files"
+        accessibilityState={{ busy: true }}
+      >
+        <ActivityIndicator size="large" className="text-primary" accessible={false} />
+      </View>
     );
   }
 

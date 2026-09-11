@@ -2,22 +2,16 @@ import type {
   GitHubRepositorySchema,
   GitHubRepositoryPageSchema,
   GitHubRepositoryRequestSchema,
+  GitHubRepositoryBranchSchema,
+  GitHubRepositoryBranchPageSchema,
 } from "./schemas";
 
 export type GitHubRepository = GitHubRepositorySchema;
 export type GitHubRepositoryPage = GitHubRepositoryPageSchema;
 export type GitHubRepositoryPagination = Partial<GitHubRepositoryRequestSchema>;
 
-export type GitHubRepositoryBranch = {
-  name: string;
-  commitSha: string;
-  protected: boolean;
-};
-
-export type GitHubRepositoryBranchPage = {
-  branches: GitHubRepositoryBranch[];
-  nextCursor: string | null;
-};
+export type GitHubRepositoryBranch = GitHubRepositoryBranchSchema;
+export type GitHubRepositoryBranchPage = GitHubRepositoryBranchPageSchema;
 
 export type GitHubSearchPage<T> = {
   items: T[];

@@ -73,6 +73,21 @@ it("returns empty collections on success and null for failed or unrelated listin
   expect(await readProjectFilesAction(projectId, "")).toBeNull();
 });
 
+it("reports restoration retry metadata while preserving the null failure contract", async () => {
+  const onRestoring = vi.fn();
+  network.mockResolvedValue(Response.json({ error: true, code: "WORKSPACE_RESTORING" }, {
+    status: 503, headers: { "Retry-After": "3" },
+  }));
+  expect(await readProjectFilesAction(projectId, "", undefined, onRestoring)).toBeNull();
+  expect(onRestoring).toHaveBeenCalledExactlyOnceWith("3");
+  onRestoring.mockClear();
+  for (const status of [401, 403, 404, 503]) {
+    network.mockResolvedValue(Response.json({ error: true, code: "OTHER_FAILURE" }, { status }));
+    expect(await readProjectFilesAction(projectId, "", undefined, onRestoring)).toBeNull();
+  }
+  expect(onRestoring).not.toHaveBeenCalled();
+});
+
 it("returns a conflict to the caller without retrying or claiming creation", async () => {
   const conflict = { error: true, code: "NAME_CONFLICT", message: "Conflicting filename. Please rename this file or folder." };
   network.mockResolvedValue(Response.json(conflict, { status: 409 }));

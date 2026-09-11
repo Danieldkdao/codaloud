@@ -45,11 +45,14 @@ try {
     validateName(input.name);
     const target = path.join(parent, input.name);
     let info;
-    if (input.prepareDelete) {
+    if (input.delete) {
       info = fs.lstatSync(target, { throwIfNoEntry: false });
       if (!info) fail("FILE_NOT_FOUND");
       if (info.isSymbolicLink()) fail("INVALID_PATH");
       if (input.kind === "folder" ? !info.isDirectory() : !info.isFile()) fail("FILE_CHANGED");
+      // Keep validation and deletion in this command: returning a pathname for
+      // a later HTTP DELETE lets another writer replace it during the round trip.
+      fs.rmSync(target, { recursive: input.kind === "folder" });
     } else if (input.previousName !== undefined) {
       validateName(input.previousName);
       const source = path.join(parent, input.previousName);
@@ -69,7 +72,7 @@ try {
     } else if (input.kind === "folder") fs.mkdirSync(target, { mode: 0o755 });
     else fs.closeSync(fs.openSync(target, "wx", 0o644));
     info ??= fs.lstatSync(target);
-    process.stdout.write(JSON.stringify({ ...(input.prepareDelete ? { absolutePath: target } : {}), name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
+    process.stdout.write(JSON.stringify({ name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
   }
 } catch (error) {
   process.stdout.write(JSON.stringify({ code: error.code || "FILESYSTEM_ERROR" }));
@@ -99,7 +102,7 @@ const throwFilesystemError = (code: unknown): never => {
 };
 
 const executeFilesystemOperation = async (
-  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, operation?: (CreateProjectFileSchema | UpdateProjectFileSchema) & { prepareDelete?: boolean },
+  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, operation?: (CreateProjectFileSchema | UpdateProjectFileSchema) & { delete?: boolean },
 ) => {
   const { dir: home } = homeDirectorySchema.parse(await requestDaytona(`${toolboxUrl}/user-home-dir`));
   const payload = JSON.stringify({ home, allowInitialize: context.allowInitialize, parentPath, ...operation });
@@ -139,11 +142,7 @@ export const updateSandboxFile = async (context: SandboxFilesystemContext, unsaf
 export const deleteSandboxFile = async (context: SandboxFilesystemContext, unsafeInput: DeleteProjectFileSchema) => {
   const input = deleteProjectFileSchema.parse(unsafeInput);
   const toolboxUrl = await getSandboxToolboxUrl(context.sandboxId, context.projectId);
-  // Resolve and validate the target inside the existing workspace before deleting it.
-  const { absolutePath, ...deletedFile } = projectFileEntrySchema.extend({ absolutePath: z.string().startsWith("/") }).parse(
-    await executeFilesystemOperation(toolboxUrl, { ...context, allowInitialize: false }, input.parentPath, { ...input, prepareDelete: true }),
+  return projectFileEntrySchema.parse(
+    await executeFilesystemOperation(toolboxUrl, { ...context, allowInitialize: false }, input.parentPath, { ...input, delete: true }),
   );
-  const query = new URLSearchParams({ path: absolutePath, recursive: String(input.kind === "folder") });
-  await requestDaytona(`${toolboxUrl}/files?${query}`, { method: "DELETE" });
-  return deletedFile;
 };

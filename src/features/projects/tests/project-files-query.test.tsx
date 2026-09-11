@@ -33,13 +33,65 @@ beforeEach(() => {
   mocks.delete.mockReset().mockResolvedValue({ error: false, message: "Deleted.", data: entry });
   mocks.update.mockReset().mockResolvedValue({ error: false, message: "Updated.", data: entry });
 });
-afterEach(() => { act(() => root.unmount()); client.clear(); });
+afterEach(() => { act(() => root.unmount()); client.clear(); vi.useRealTimers(); });
+
+const renderWithTimers = async (path = "") => {
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { path })));
+  });
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+};
+
+it("keeps loading during restoration and retries after the server's delay", async () => {
+  vi.useFakeTimers();
+  mocks.read.mockImplementationOnce(async (_project, _path, _signal, onRestoring) => {
+    onRestoring("3");
+    return null;
+  }).mockResolvedValue([entry]);
+  await renderWithTimers();
+  expect(current.query.isPending).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+  expect(mocks.read).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2); });
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+  expect(current.query.data).toEqual([entry]);
+  expect(current.query.isError).toBe(false);
+});
+
+it("stops restoration retries after a bounded number of attempts", async () => {
+  vi.useFakeTimers();
+  mocks.read.mockImplementation(async (_project, _path, _signal, onRestoring) => {
+    onRestoring("3");
+    return null;
+  });
+  await renderWithTimers();
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_001); });
+  expect(mocks.read).toHaveBeenCalledTimes(21);
+  expect(current.query.isError).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(mocks.read).toHaveBeenCalledTimes(21);
+});
+
+it("cancels the old folder's restoration retry when navigation changes", async () => {
+  vi.useFakeTimers();
+  mocks.read.mockImplementation(async (_project, path, _signal, onRestoring) => {
+    if (path === "old") { onRestoring("3"); return null; }
+    return [];
+  });
+  await renderWithTimers("old");
+  const signal = mocks.read.mock.calls[0][2] as AbortSignal;
+  await renderWithTimers("new");
+  expect(signal.aborted).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(mocks.read.mock.calls.filter((call) => call[1] === "old")).toHaveLength(1);
+  expect(current.query.data).toEqual([]);
+});
 
 it("caches folders separately and does not reuse another account's entries", async () => {
   mocks.read.mockResolvedValue([entry]);
   await render("notes");
   expect(current.query.data).toEqual([entry]);
-  expect(mocks.read).toHaveBeenCalledWith("project-one", "notes", expect.any(AbortSignal));
+  expect(mocks.read).toHaveBeenCalledWith("project-one", "notes", expect.any(AbortSignal), expect.any(Function));
   mocks.read.mockResolvedValue([]);
   await render("other");
   expect(current.query.data).toEqual([]);

@@ -12,6 +12,7 @@ import { createRequestHeaders, fetchBase, isValidIds } from "@/lib/utils";
 
 export const readProjectFilesAction = async (
   projectId: string, directoryPath = "", signal?: AbortSignal,
+  onWorkspaceRestoring?: (retryAfter: string | null) => void,
 ): Promise<ProjectFileEntrySchema[] | null> => {
   try {
     if (!isValidIds(projectId)) return null;
@@ -20,7 +21,16 @@ export const readProjectFilesAction = async (
     const response = await fetchBase(`/api/projects/${projectId}/files?${new URLSearchParams({ path })}`, {
       method: "GET", headers, credentials: "omit", signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // Report transient response metadata separately from the data-or-null result.
+      if (response.status === 503 && onWorkspaceRestoring) {
+        const failure = await response.json();
+        if (failure?.code === "WORKSPACE_RESTORING") {
+          onWorkspaceRestoring(response.headers.get("Retry-After"));
+        }
+      }
+      return null;
+    }
     const result = readProjectFilesResponseSchema.parse(await response.json());
     if (result.data.some((entry) => entry.path !== [path, entry.name].filter(Boolean).join("/"))) return null;
     return result.data;

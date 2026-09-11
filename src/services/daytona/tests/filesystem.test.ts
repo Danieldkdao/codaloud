@@ -1,5 +1,5 @@
 import { exec } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -12,7 +12,6 @@ const execute = promisify(exec);
 const context = { sandboxId: "sandbox-id", projectId: "project-id", allowInitialize: true };
 let home: string;
 let state: string;
-let deleteStatus: number;
 let labels: Record<string, string>;
 const network = vi.fn<typeof fetch>();
 
@@ -31,7 +30,6 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 `, { mode: 0o755 });
   }
   state = "started";
-  deleteStatus = 204;
   labels = { codaloudApp: "codaloud", codaloudProjectId: context.projectId };
   network.mockReset().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -51,12 +49,6 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
         return Response.json({ exitCode: 1, result: failure.stdout });
       }
     }
-    if (url.pathname.endsWith("/files") && init?.method === "DELETE") {
-      const target = url.searchParams.get("path")!;
-      expect(target.startsWith(join(home, ".codaloud/workspace") + "/")).toBe(true);
-      await rm(target, { recursive: url.searchParams.get("recursive") === "true" });
-      return new Response(null, { status: deleteStatus });
-    }
     if (url.pathname.endsWith("/files")) {
       expect(url.searchParams.get("path")).toBe(join(home, ".codaloud/workspace"));
       expect(url.searchParams.get("depth")).toBe("1");
@@ -68,6 +60,26 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 });
 
 afterEach(async () => { await rm(home, { recursive: true, force: true }); });
+
+it.each(["file", "folder"] as const)("preserves a replacement %s created after the sandbox deletion command returns", async (kind) => {
+  const input = { parentPath: "", name: "selected", kind };
+  await createSandboxFile(context, input);
+  const target = join(home, ".codaloud/workspace/selected");
+  const replacementContent = kind === "folder" ? join(target, "keep.txt") : target;
+  const implementation = network.getMockImplementation()!;
+  network.mockImplementation(async (url, init) => {
+    const response = await implementation(url, init);
+    if (String(url).endsWith("/process/execute")) {
+      // Reproduce the old validation/DELETE gap with a concurrent sandbox writer.
+      if (await lstat(target).catch(() => null)) await rename(target, `${target}-moved`);
+      if (kind === "folder") await mkdir(target);
+      await writeFile(replacementContent, "unrelated work");
+    }
+    return response;
+  });
+  await deleteSandboxFile(context, input);
+  expect(await readFile(replacementContent, "utf8")).toBe("unrelated work");
+});
 
 it("initializes a new workspace and reads an empty directory through Daytona", async () => {
   expect(await readSandboxFiles(context, "")).toEqual([]);
@@ -196,9 +208,7 @@ it("deletes only the selected file, treating shell characters as literal data", 
   expect(await deleteSandboxFile(context, input)).toMatchObject({ name, path: `notes/${name}`, isDir: false });
   await expect(lstat(join(home, ".codaloud/workspace/notes", name))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(join(home, ".codaloud/workspace/notes/keep.txt"), "utf8")).toBe("keep");
-  expect(network.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
-  const [url] = network.mock.calls.find(([, init]) => init?.method === "DELETE")!;
-  expect(new URL(String(url)).searchParams.get("recursive")).toBe("false");
+  expect(network.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
 });
 
 it("recursively deletes a nonempty folder without following descendant symlinks", async () => {
@@ -210,8 +220,7 @@ it("recursively deletes a nonempty folder without following descendant symlinks"
   expect(await deleteSandboxFile(context, { parentPath: "", name: "remove", kind: "folder" })).toMatchObject({ path: "remove", isDir: true });
   await expect(lstat(join(home, ".codaloud/workspace/remove"))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(join(home, "outside.txt"), "utf8")).toBe("keep");
-  const [url] = network.mock.calls.find(([, init]) => init?.method === "DELETE")!;
-  expect(new URL(String(url)).searchParams.get("recursive")).toBe("true");
+  expect(network.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
 });
 
 it("blocks missing, changed, symlink, and escaping deletion targets before DELETE", async () => {
@@ -237,15 +246,7 @@ it("does not initialize a workspace for deletion and propagates provider failure
   await expect(lstat(join(home, ".codaloud"))).rejects.toMatchObject({ code: "ENOENT" });
   await createSandboxFile(context, { parentPath: "", name: "source", kind: "file" });
   const implementation = network.getMockImplementation()!;
-  network.mockImplementation((input, init) => init?.method === "DELETE" ? Promise.resolve(Response.json({}, { status: 500 })) : implementation(input, init));
+  network.mockImplementation((input, init) => String(input).endsWith("/process/execute") ? Promise.resolve(Response.json({}, { status: 500 })) : implementation(input, init));
   await expect(deleteSandboxFile(context, { parentPath: "", name: "source", kind: "file" })).rejects.toMatchObject({ code: "DAYTONA_REQUEST_FAILED" });
   expect((await lstat(join(home, ".codaloud/workspace/source"))).isFile()).toBe(true);
-});
-
-it("accepts a successful empty deletion response with status 200", async () => {
-  deleteStatus = 200;
-  const input = { parentPath: "", name: "remove.txt", kind: "file" as const };
-  await createSandboxFile(context, input);
-  expect(await deleteSandboxFile(context, input)).toMatchObject({ path: "remove.txt" });
-  await expect(lstat(join(home, ".codaloud/workspace/remove.txt"))).rejects.toMatchObject({ code: "ENOENT" });
 });

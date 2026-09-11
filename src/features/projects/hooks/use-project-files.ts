@@ -3,6 +3,13 @@ import { createProjectFileAction, deleteProjectFileAction, readProjectFilesActio
 import type { CreateProjectFileSchema, DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { useAuthSession } from "@/hooks/use-auth-session";
 
+class WorkspaceRestoringError extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super("Your workspace is still restoring. Please try again shortly.");
+    this.name = "WorkspaceRestoringError";
+  }
+}
+
 export const useProjectFiles = (projectId: string, directoryPath: string) => {
   const session = useAuthSession();
   const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
@@ -11,10 +18,17 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
     queryKey: ["projects", "files", userId, projectId, directoryPath],
     enabled: Boolean(userId),
     staleTime: 5_000,
-    retry: false,
+    retry: (failureCount, error) => error instanceof WorkspaceRestoringError && failureCount < 20,
+    retryDelay: (_attempt, error) => error instanceof WorkspaceRestoringError ? error.retryAfterMs : 0,
     queryFn: async ({ signal }) => {
       if (!userId) throw new Error("Sign in to view project files.");
-      const files = await readProjectFilesAction(projectId, directoryPath, signal);
+      let restoringError: WorkspaceRestoringError | undefined;
+      const files = await readProjectFilesAction(projectId, directoryPath, signal, (retryAfter) => {
+        const seconds = Number(retryAfter);
+        const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 3000;
+        restoringError = new WorkspaceRestoringError(Math.min(Math.max(delay, 1000), 30_000));
+      });
+      if (files === null && restoringError) throw restoringError;
       if (files === null) throw new Error("Unable to load this folder. Your workspace may still be restoring. Please try again.");
       return files;
     },

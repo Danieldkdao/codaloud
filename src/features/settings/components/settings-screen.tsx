@@ -1,7 +1,5 @@
 import { AppWrapper } from "@/components/app-wrapper";
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import { useSuccessFeedback } from "@/components/success-feedback-provider";
-import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -16,7 +14,6 @@ import { AppearanceSelector } from "./appearance-selector";
 import { SettingsRow, SettingsSection } from "./settings-section";
 
 export const SettingsScreen = () => {
-  const showSuccess = useSuccessFeedback();
   const { data: session } = authClient.useSession();
   const [voiceHints, setVoiceHints] = useState(true);
   const [taskNotifications, setTaskNotifications] = useState(false);
@@ -96,10 +93,6 @@ export const SettingsScreen = () => {
           <HeadingText className="text-xl text-muted-foreground">Codaloud</HeadingText>
           <PText>{formatAppVersion(Constants.expoConfig?.version)}</PText>
         </View>
-        {/* Temporary control for manually previewing the toast styling. */}
-        <Button variant="outline" onPress={() => showSuccess("This is a test toast.")}>
-          Activate Toast
-        </Button>
       </View>
     </AppWrapper>
   );

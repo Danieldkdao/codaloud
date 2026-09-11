@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createProjectFileAction, deleteProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
 import type { CreateProjectFileSchema, DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { useAuthSession } from "@/hooks/use-auth-session";
+import { isProjectFilePathWithin } from "@/features/projects/lib/files";
 
 class WorkspaceRestoringError extends Error {
   constructor(readonly retryAfterMs: number) {
@@ -10,14 +11,34 @@ class WorkspaceRestoringError extends Error {
   }
 }
 
-export const useProjectFiles = (projectId: string, directoryPath: string) => {
+export const useProjectFiles = (
+  projectId: string,
+  directoryPath: string,
+  { enabled = true, verifyOnMount = false }: { enabled?: boolean; verifyOnMount?: boolean } = {},
+) => {
   const session = useAuthSession();
   const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
   const queryClient = useQueryClient();
+  const clearFileContents = async (userId: string | null, projectId: string, paths: readonly string[]) => {
+    const contentQueries = {
+      queryKey: ["projects", "file", userId, projectId],
+      predicate: (query: { queryKey: readonly unknown[] }) => {
+        const path = query.queryKey[4];
+        return typeof path === "string" && paths.some((root) => isProjectFilePathWithin(path, root));
+      },
+    };
+    // A removed/reused path represents a different document. Invalidation alone
+    // can mount the editor with obsolete contents while it refetches in the background.
+    await queryClient.cancelQueries(contentQueries);
+    queryClient.removeQueries(contentQueries);
+  };
   const query = useQuery({
     queryKey: ["projects", "files", userId, projectId, directoryPath],
-    enabled: Boolean(userId),
-    staleTime: 5_000,
+    enabled: Boolean(userId) && enabled,
+    // The workspace gate must check Daytona again on entry, including when
+    // setup finishes after this observer mounts. Cached files do not prove readiness.
+    staleTime: verifyOnMount ? 0 : 5_000,
+    refetchOnMount: verifyOnMount ? "always" : true,
     retry: (failureCount, error) => error instanceof WorkspaceRestoringError && failureCount < 20,
     retryDelay: (_attempt, error) => error instanceof WorkspaceRestoringError ? error.retryAfterMs : 0,
     queryFn: async ({ signal }) => {
@@ -46,6 +67,7 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
     },
     onSuccess: async (entry, input, context) => {
       // Target the submitted folder and account, even if navigation changed.
+      await clearFileContents(context.userId, context.projectId, [entry.path]);
       const queryKey = ["projects", "files", context.userId, context.projectId, input.parentPath];
       queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
         files ? [...files.filter((file) => file.path !== entry.path), entry] : undefined,
@@ -68,6 +90,7 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
       const projectKey = ["projects", "files", context.userId, context.projectId];
       const queryKey = [...projectKey, input.parentPath];
       const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
+      if (previousPath !== entry.path) await clearFileContents(context.userId, context.projectId, [previousPath, entry.path]);
       // An earlier directory read must not put the old name back after the rename.
       await queryClient.cancelQueries({ queryKey, exact: true });
       if (entry.isDir && previousPath !== entry.path) {
@@ -76,7 +99,7 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
           predicate: (query: { queryKey: readonly unknown[] }) => {
             const path = query.queryKey[4];
             return typeof path === "string" && [previousPath, entry.path].some((root) =>
-              path === root || path.startsWith(`${root}/`),
+              isProjectFilePathWithin(path, root),
             );
           },
         };
@@ -102,6 +125,7 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
       return result.data;
     },
     onSuccess: async (entry, input, context) => {
+      await clearFileContents(context.userId, context.projectId, [entry.path]);
       const projectKey = ["projects", "files", context.userId, context.projectId];
       const queryKey = [...projectKey, input.parentPath];
       // Cancel stale reads before removing the confirmed entry from the cache.
@@ -111,7 +135,7 @@ export const useProjectFiles = (projectId: string, directoryPath: string) => {
           queryKey: projectKey,
           predicate: (query: { queryKey: readonly unknown[] }) => {
             const path = query.queryKey[4];
-            return typeof path === "string" && (path === entry.path || path.startsWith(`${entry.path}/`));
+            return typeof path === "string" && isProjectFilePathWithin(path, entry.path);
           },
         };
         await queryClient.cancelQueries(subtreeQueries);

@@ -230,3 +230,77 @@ it("keeps files visible after a failed deletion and does not retry it", async ()
   expect(current.query.data).toEqual([entry]);
   expect(mocks.delete).toHaveBeenCalledTimes(1);
 });
+
+it.each(["creation", "update", "deletion"] as const)("clears only affected content caches after %s succeeds, using the submitted account", async (operation) => {
+  await render("other");
+  const paths = ["old", "old/nested/file.ts", "new", "new/nested/file.ts", "old-sibling/file.ts", "new-sibling/file.ts", "unrelated"];
+  const key = (user: string, project: string, path: string) => ["projects", "file", user, project, path];
+  for (const path of paths) {
+    for (const [user, project] of [["user-one", "project-one"], ["user-two", "project-one"], ["user-one", "project-two"]]) {
+      client.setQueryData(key(user, project, path), { path, content: "old contents", size: 12 });
+    }
+  }
+  const result = { name: operation === "deletion" ? "old" : "new", path: operation === "deletion" ? "old" : "new", isDir: true, size: 0 };
+  let resolve!: (value: unknown) => void;
+  const action = operation === "creation" ? mocks.create : operation === "update" ? mocks.update : mocks.delete;
+  action.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  let mutation!: Promise<unknown>;
+  await act(async () => {
+    mutation = current[operation].mutateAsync({ parentPath: "", previousName: "old", name: result.name, kind: "folder" });
+  });
+  expect(client.getQueryData(key("user-one", "project-one", result.path))).toBeDefined();
+  mocks.session.data = { user: { id: "user-two" } };
+  await render("another");
+  await act(async () => { resolve({ error: false, message: "Done.", data: result }); await mutation; });
+  const affected = operation === "update" ? ["old", "new"] : [result.path];
+  for (const path of paths) {
+    const shouldRemove = affected.some((root) => path === root || path.startsWith(`${root}/`));
+    expect(client.getQueryData(key("user-one", "project-one", path)) === undefined).toBe(shouldRemove);
+    expect(client.getQueryData(key("user-two", "project-one", path))).toBeDefined();
+    expect(client.getQueryData(key("user-one", "project-two", path))).toBeDefined();
+  }
+});
+
+it.each(["creation", "update", "deletion"] as const)("cancels old content reads before clearing a %s path", async (operation) => {
+  await render("other");
+  const path = entry.path;
+  const queryKey = ["projects", "file", "user-one", "project-one", path];
+  let finish!: (value: unknown) => void;
+  let signal!: AbortSignal;
+  const read = client.fetchQuery({ queryKey, queryFn: (context) => {
+    signal = context.signal;
+    return new Promise((resolve) => { finish = resolve; });
+  } }).catch(() => null);
+  await act(async () => {
+    await current[operation].mutateAsync({ parentPath: "notes", previousName: "old.txt", name: "hello.txt", kind: "file" });
+  });
+  expect(signal.aborted).toBe(true);
+  expect(client.getQueryState(queryKey)).toBeUndefined();
+  finish({ path, content: "obsolete", size: 8 });
+  await read;
+  expect(client.getQueryData(queryKey)).toBeUndefined();
+});
+
+it.each(["creation", "update", "deletion"] as const)("preserves file contents after a failed %s", async (operation) => {
+  await render("notes");
+  const queryKey = ["projects", "file", "user-one", "project-one", entry.path];
+  const content = { path: entry.path, content: "keep", size: 4 };
+  client.setQueryData(queryKey, content);
+  const action = operation === "creation" ? mocks.create : operation === "update" ? mocks.update : mocks.delete;
+  action.mockResolvedValueOnce({ error: true, message: "Operation failed." });
+  await act(async () => {
+    await expect(current[operation].mutateAsync({ parentPath: "notes", previousName: "hello.txt", name: "hello.txt", kind: "file" })).rejects.toThrow("Operation failed.");
+  });
+  expect(client.getQueryData(queryKey)).toEqual(content);
+});
+
+it("retains content for a rename that does not change the path", async () => {
+  await render("notes");
+  const queryKey = ["projects", "file", "user-one", "project-one", entry.path];
+  const content = { path: entry.path, content: "keep", size: 4 };
+  client.setQueryData(queryKey, content);
+  await act(async () => {
+    await current.update.mutateAsync({ parentPath: "notes", previousName: "hello.txt", name: "hello.txt", kind: "file" });
+  });
+  expect(client.getQueryData(queryKey)).toEqual(content);
+});

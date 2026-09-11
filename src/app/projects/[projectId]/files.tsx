@@ -9,7 +9,7 @@ import { ProjectWorkspaceCurrentFileContext, ProjectWorkspaceDockHeightContext, 
 import { formatProjectFileKind } from "@/features/projects/lib/formatters";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
-import { getDirectoryFiles } from "@/features/projects/lib/files";
+import { getDirectoryFiles, isProjectFilePathWithin } from "@/features/projects/lib/files";
 
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -102,14 +102,19 @@ const FilesScreen = () => {
           router.navigate({ pathname: "/projects/[projectId]/code", params: { projectId } });
         }}
         onUpdate={async (input) => {
-          await update.mutateAsync(input);
+          const updatedFile = await update.mutateAsync(input);
+          const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
+          currentFile?.setFilePath((path) => path !== null && isProjectFilePathWithin(path, previousPath)
+            ? updatedFile.path + path.slice(previousPath.length)
+            : path);
           showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
         }}
         onDelete={async (input) => {
           if (deletionInFlight.current) return;
           deletionInFlight.current = true;
           try {
-            await deletion.mutateAsync(input);
+            const deletedFile = await deletion.mutateAsync(input);
+            currentFile?.setFilePath((path) => path !== null && isProjectFilePathWithin(path, deletedFile.path) ? null : path);
             showSuccess(formatProjectFileKind(input.kind).deleteSuccessMessage);
           } catch (error) {
             Alert.alert("Couldn't delete this item", error instanceof Error ? error.message : "Refresh the folder and try again.");

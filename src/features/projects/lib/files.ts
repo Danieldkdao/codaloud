@@ -1,5 +1,8 @@
 import type { FileInfo } from "@daytona/sdk";
 
+export const isProjectFilePathWithin = (path: string, root: string) =>
+  path === root || path.startsWith(`${root}/`);
+
 export const getDirectoryFiles = <T extends Pick<FileInfo, "name" | "path" | "isDir">>(
   files: readonly T[],
   directoryPath: string,

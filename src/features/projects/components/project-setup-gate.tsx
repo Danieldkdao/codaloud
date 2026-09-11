@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams } from "expo-router";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -7,8 +7,8 @@ import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
 import { ProjectSandboxState } from "@/features/projects/components/project-sandbox-state";
-import { SandboxScaffold } from "@/features/projects/components/sandbox-scaffold";
 import { useProject } from "@/features/projects/hooks/use-project";
+import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useThemeColor } from "@/hooks/use-theme";
 
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
@@ -18,9 +18,19 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
   const background = useThemeColor("background");
   const foreground = useThemeColor("foreground");
+  const [openedProjectId, setOpenedProjectId] = useState<string | null>(null);
   const { data: project, isError, isFetching, refetch } = useProject(projectId);
 
-  const ready = !isError && project?.setupStatus === "ready";
+  const setupReady = !isError && project?.setupStatus === "ready";
+  const { query: workspace } = useProjectFiles(projectId, "", { enabled: setupReady, verifyOnMount: true });
+  // A successful root read proves the sandbox is running and warms the Files tab.
+  // Background refreshes alone must not unmount the editor or other workspace tabs.
+  const ready = setupReady && workspace.isFetchedAfterMount && workspace.isSuccess && workspace.failureCount === 0;
+  const workspaceError = setupReady && workspace.isError;
+  const checking = workspaceError ? workspace.isFetching : isFetching;
+  useEffect(() => {
+    if (ready) setOpenedProjectId(projectId);
+  }, [projectId, ready]);
 
   return (
     // Keep a native screen root so replacing a form sheet cannot retain its ScrollView bounds.
@@ -32,7 +42,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerShadowVisible: false,
           headerShown: true,
           headerTransparent: !ready,
-          headerTitle: ready ? project.name : "",
+          headerTitle: ready ? project?.name : "",
           headerTitleStyle: {
             fontSize: 22,
             fontFamily: "Fraunces_500Medium",
@@ -41,9 +51,20 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerBackTitleStyle: {},
         }}
       />
-      {ready ? (
-        children
-      ) : (
+      {setupReady && (ready || openedProjectId === projectId) && (
+        // Preserve local editor state during later restoration while making every
+        // workspace control unavailable, including to native accessibility services.
+        <View
+          key={projectId}
+          style={{ flex: 1, display: ready ? "flex" : "none" }}
+          pointerEvents={ready ? "auto" : "none"}
+          accessibilityElementsHidden={!ready}
+          importantForAccessibility={ready ? "auto" : "no-hide-descendants"}
+        >
+          {children}
+        </View>
+      )}
+      {!ready && (
         <AppWrapper
           headerShown
           contentInsetAdjustmentBehavior="never"
@@ -59,7 +80,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
             paddingRight: horizontalPadding,
           }}
         >
-          {isError || project?.setupStatus === "failed" ? (
+          {isError || project?.setupStatus === "failed" || workspaceError ? (
             <View className="items-center gap-4">
               <PText
                 selectable
@@ -68,25 +89,20 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
               >
                 {isError
                   ? "Unable to load your sandbox. Please try again."
-                  : "Sandbox setup couldn’t finish. Please check back later."}
+                  : workspaceError
+                    ? "Unable to start your sandbox. Please try again."
+                    : "Sandbox setup couldn’t finish. Please check back later."}
               </PText>
               <Button
                 variant="outline"
-                disabled={isFetching}
-                onPress={() => void refetch()}
+                disabled={checking}
+                onPress={() => void (workspaceError ? workspace.refetch() : refetch())}
               >
-                {isFetching ? "Checking…" : "Refresh status"}
+                {checking ? "Checking…" : "Refresh status"}
               </Button>
             </View>
-          ) : project ? (
-            <ProjectSandboxState ready={false} />
           ) : (
-            <View className="items-center gap-6">
-              <SandboxScaffold />
-              <PText className="text-center">
-                Opening your sandbox…
-              </PText>
-            </View>
+            <ProjectSandboxState ready={false} restoring={!project || setupReady} />
           )}
         </AppWrapper>
       )}

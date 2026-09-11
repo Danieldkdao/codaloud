@@ -23,7 +23,13 @@ const ProjectLayout = () => {
     <ProjectSetupGate>
       <ProjectWorkspaceCurrentFileContext value={{
         filePath: currentFile?.projectId === projectId ? currentFile.path : null,
-        setFilePath: (path) => setCurrentFile(path === null ? null : { projectId, path }),
+        setFilePath: (nextPath) => setCurrentFile((current) => {
+          // A mutation can finish after navigation. Apply its updater only to
+          // this project's latest selection, never a newer project's file.
+          if (typeof nextPath === "function" && current?.projectId !== projectId) return current;
+          const path = typeof nextPath === "function" ? nextPath(current?.path ?? null) : nextPath;
+          return path === null ? null : { projectId, path };
+        }),
       }}>
         <ProjectWorkspaceFileCreationContext value={{
           kind: creation?.projectId === projectId ? creation.kind : null,

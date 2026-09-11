@@ -48,21 +48,25 @@ beforeEach(async () => {
   await mocks.pg.exec("truncate account");
   await mocks.pg.query("insert into account values ($1, $2, 'github', 'read:user, repo')", [accountId, userId]);
   mocks.getAccessToken.mockReset().mockResolvedValue({ accessToken: "fresh-token" });
-  network.mockReset().mockImplementation(async () => Response.json(repository));
+  network.mockReset().mockImplementation(async (url) => Response.json(
+    String(url).includes("/branches/") ? { name: "feature/import", commit: { sha: "abc123" } } : repository,
+  ));
   vi.stubGlobal("fetch", network);
 });
 
 describe("GitHub import source for background work", () => {
   it("resolves the saved account without a phone session and rechecks the repository by ID", async () => {
-    const source = await getGitHubImportSource(userId, accountId, "123");
+    const source = await getGitHubImportSource(userId, accountId, "123", "feature/import");
 
     expect(mocks.getAccessToken).toHaveBeenCalledExactlyOnceWith({ body: { userId, accountId } });
-    expect(network).toHaveBeenCalledOnce();
+    expect(network).toHaveBeenCalledTimes(2);
+    expect(String(network.mock.calls[1][0])).toBe("https://api.github.com/repos/new-owner/renamed-repository/branches/feature%2Fimport");
     const [url, options] = network.mock.calls[0];
     expect(String(url)).toBe("https://api.github.com/repositories/123");
     expect(new Headers(options?.headers).get("authorization")).toBe("token fresh-token");
     expect(source).toEqual({
       accessToken: "fresh-token",
+      branchName: "feature/import",
       repository: {
         id: 123,
         name: "renamed-repository",
@@ -89,21 +93,21 @@ describe("GitHub import source for background work", () => {
       if (scenario === "similar-grant") await mocks.pg.exec("update account set scope = 'repo:status'");
       if (scenario === "null-grant") await mocks.pg.exec("update account set scope = null");
 
-      await expect(getGitHubImportSource(userId, accountId, "123")).rejects.toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
+      await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
       expect(mocks.getAccessToken).not.toHaveBeenCalled();
       expect(network).not.toHaveBeenCalled();
     },
   );
 
   it("does not substitute another linked account when the saved account is missing", async () => {
-    await expect(getGitHubImportSource(userId, null, "123")).rejects.toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
+    await expect(getGitHubImportSource(userId, null, "123", "feature/import")).rejects.toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
     expect(mocks.getAccessToken).not.toHaveBeenCalled();
     expect(network).not.toHaveBeenCalled();
   });
 
   it("rejects an empty token before contacting GitHub", async () => {
     mocks.getAccessToken.mockResolvedValue({ accessToken: "" });
-    await expect(getGitHubImportSource(userId, accountId, "123")).rejects.toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
+    await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toMatchObject({ code: "GITHUB_RECONNECT_REQUIRED" });
     expect(network).not.toHaveBeenCalled();
   });
 
@@ -112,19 +116,42 @@ describe("GitHub import source for background work", () => {
     { ...repository, id: 456 },
   ])("rejects access removed since selection or an incorrect repository", async (response) => {
     network.mockImplementation(async () => Response.json(response));
-    await expect(getGitHubImportSource(userId, accountId, "123")).rejects.toThrow(/access to import/);
+    await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toThrow(/access to import/);
   });
 
   it("rejects incomplete clone metadata", async () => {
     network.mockImplementation(async () => Response.json({ id: 123, permissions: { pull: true } }));
-    await expect(getGitHubImportSource(userId, accountId, "123")).rejects.toThrow();
+    await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toThrow();
   });
 
   it.each([401, 404, 429, 500])("preserves GitHub %s for safe error handling and retry decisions", async (status) => {
     network.mockImplementation(async () => Response.json({ message: "upstream-secret" }, { status }));
-    const error = await getGitHubImportSource(userId, accountId, "123").catch((error: unknown) => error);
+    const error = await getGitHubImportSource(userId, accountId, "123", "feature/import").catch((error: unknown) => error);
     expect(error).toMatchObject({ status });
     expect(JSON.stringify(getGitHubErrorResponse(error))).not.toMatch(/fresh-token|upstream-secret/);
     expect(network).toHaveBeenCalledOnce();
   });
+});
+
+it("rejects an operation whose branch was never saved", async () => {
+  await expect(getGitHubImportSource(userId, accountId, "123", null)).rejects.toThrow(/branch/i);
+  expect(network).not.toHaveBeenCalled();
+});
+
+it.each([404, 401, 429])("rejects branch validation failure %s", async (status) => {
+  network.mockImplementation(async (url) => String(url).includes("/branches/")
+    ? Response.json({ message: "private details" }, { status }) : Response.json(repository));
+  await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toMatchObject({ status });
+});
+
+it("rejects a branch renamed since selection", async () => {
+  network.mockImplementation(async (url) => Response.json(String(url).includes("/branches/")
+    ? { name: "renamed", commit: { sha: "abc123" } } : repository));
+  await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toThrow(/branch/i);
+});
+
+it.each(["https://example.com/repo.git", "https://token@github.com/new-owner/renamed-repository.git"])
+("rejects unsafe clone URLs before passing credentials to Daytona", async (cloneUrl) => {
+  network.mockImplementation(async () => Response.json({ ...repository, clone_url: cloneUrl }));
+  await expect(getGitHubImportSource(userId, accountId, "123", "feature/import")).rejects.toThrow(/clone/i);
 });

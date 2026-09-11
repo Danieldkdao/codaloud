@@ -91,7 +91,7 @@ describe("project creation route and insert flow", () => {
   it.each([
     { source: "new", repositoryId: undefined, branchName: undefined, githubRepositoryId: null },
     { source: "github", branchName: "feature/import", repositoryId: "123456789", githubRepositoryId: "123456789" },
-  ])("inserts a $source project without persisting the branch selection", async ({ source, repositoryId, branchName, githubRepositoryId }) => {
+  ])("inserts a $source project and saves its import branch on the operation", async ({ source, repositoryId, branchName, githubRepositoryId }) => {
     const response = await POST(request({ name: " My project ", source, repositoryId, branchName }));
 
     expect(response.status).toBe(201);
@@ -107,6 +107,7 @@ describe("project creation route and insert flow", () => {
       userId: "current-user",
       kind: "prepare",
       githubAccountId: source === "github" ? "linked-account" : null,
+      githubBranchName: source === "github" ? branchName : null,
     });
     expect(await response.json()).toEqual({
       error: false,

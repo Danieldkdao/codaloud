@@ -64,6 +64,22 @@ export const verifyGitHubRepositoryAccess = async (
   return gitHubRepositorySchema.parse(toGitHubRepository(repository));
 };
 
+export const verifyGitHubRepositoryBranch = async (
+  accessToken: string,
+  repository: GitHubRepository,
+  branchName: string,
+  signal?: AbortSignal,
+) => {
+  const [owner, repo] = repository.fullName.split("/");
+  const { data } = await createGitHubClient(accessToken, signal).rest.repos.getBranch({
+    owner, repo, branch: branchName,
+  });
+  // GitHub may redirect renamed branches; do not silently import a different selection.
+  if (data.name !== branchName || !data.commit?.sha) {
+    throw new GitHubAccessError("The selected GitHub branch is no longer available.");
+  }
+};
+
 // Server callers supply the user's resolved token; recheck access on every call.
 export const listGitHubRepositoryBranches = async (
   accessToken: string,

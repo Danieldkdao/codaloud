@@ -32,6 +32,7 @@ export const ProjectOperationTable = pgTable(
     githubAccountId: uuid("github_account_id").references(() => account.id, {
       onDelete: "set null",
     }),
+    githubBranchName: text("github_branch_name"),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     nextDispatchAt: timestamp("next_dispatch_at", { withTimezone: true })

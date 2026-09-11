@@ -137,6 +137,7 @@ export const POST = async (request: Request) => {
             userId,
             kind: "prepare",
             githubAccountId,
+            githubBranchName: result.data.source === "github" ? result.data.branchName : null,
           },
           tx,
         );

@@ -71,7 +71,6 @@ export const createProjectSchema = z.discriminatedUnion(
       repositoryId: z
         .string({ error: "Select a GitHub repository." })
         .regex(/^[1-9]\d*$/, "Select a GitHub repository."),
-      // Accepted by the API now; sandbox setup does not use the selection yet.
       branchName: z
         .string({ error: "Select a GitHub branch." })
         .trim()

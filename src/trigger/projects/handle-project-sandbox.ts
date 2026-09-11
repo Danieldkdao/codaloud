@@ -1,6 +1,7 @@
 import { Daytona, DaytonaNotFoundError, type Sandbox } from "@daytona/sdk";
 import { AbortTaskRunError, schemaTask } from "@trigger.dev/sdk";
 import { z } from "zod";
+import type { getGitHubImportSource } from "@/services/github/server/import-source";
 
 export const handleProjectSandboxSchema = z.strictObject({
   projectId: z.uuid(),
@@ -16,8 +17,8 @@ export const handleProjectSandbox = schemaTask({
   id: "handle-project-sandbox",
   schema: handleProjectSandboxSchema,
   queue: { concurrencyLimit: 1 },
-  maxDuration: 300,
-  run: async ({ projectId, userId, operationId }, { ctx }) => {
+  maxDuration: 900,
+  run: async ({ projectId, userId, operationId }, { ctx, signal }) => {
     // Validate server configuration at execution time, not during task discovery.
     const { serverEnv } = await import("@/data/env/server");
     const { deleteProjectSandbox, getProjectSandboxName } = await import("@/services/daytona/delete-project-sandbox");
@@ -37,10 +38,30 @@ export const handleProjectSandbox = schemaTask({
       return { projectId: existingProject.id, sandboxId: existingProject.sandboxId };
     }
 
+    let importSource: Awaited<ReturnType<typeof getGitHubImportSource>> | undefined;
+    if (existingProject.githubRepositoryId) {
+      const { getGitHubImportSource } = await import("@/services/github/server/import-source");
+      const { getGitHubErrorResponse } = await import("@/services/github/server/access");
+      try {
+        // Revalidate before allocating a sandbox, using the operation's saved account and branch.
+        importSource = await getGitHubImportSource(
+          userId, startedProjectOperation.operation.githubAccountId,
+          existingProject.githubRepositoryId, startedProjectOperation.operation.githubBranchName, signal,
+        );
+      } catch (error) {
+        const { status, body } = getGitHubErrorResponse(error);
+        if (status === 401 || status === 403) throw new AbortTaskRunError(body.message);
+        // Provider errors may contain access tokens; only safe messages reach task logs.
+        throw new Error(body.message);
+      }
+    }
+
     const daytona = new Daytona({
       apiKey: serverEnv.DAYTONA_API_KEY,
       target: serverEnv.DAYTONA_TARGET,
       otelEnabled: false,
+      // Leave time for startup and completion around a bounded clone request.
+      requestTimeoutMs: 600_000,
     });
     // Keep this stable so a retry can recover creation before the ID was saved.
     const sandboxName = getProjectSandboxName(existingProject.id);
@@ -97,6 +118,17 @@ export const handleProjectSandbox = schemaTask({
       await sandbox.start(120);
     } else if (sandbox.state !== "started") {
       await sandbox.waitUntilStarted(120);
+    }
+
+    if (importSource) {
+      const { cloneGitHubRepository } = await import("@/services/daytona/clone-github-repository");
+      await cloneGitHubRepository(sandbox, {
+        operationId: startedProjectOperation.operationId,
+        repositoryId: String(importSource.repository.id),
+        branchName: importSource.branchName,
+        cloneUrl: importSource.repository.cloneUrl,
+        accessToken: importSource.accessToken,
+      });
     }
 
     const completedProjectOperation = await transitionProjectSandboxDb(lifecycle, {

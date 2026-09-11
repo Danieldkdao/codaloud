@@ -52,7 +52,7 @@ beforeAll(async () => {
     create table project_operations (
       id uuid primary key default gen_random_uuid(), project_id uuid not null, user_id uuid not null,
       kind text not null, status text default 'queued', phase text default 'queued',
-      trigger_run_id text, github_account_id uuid, error_code text, error_message text,
+      trigger_run_id text, github_account_id uuid, github_branch_name text, error_code text, error_message text,
       next_dispatch_at timestamptz default now(), dispatch_attempts integer default 1,
       created_at timestamptz default now(), updated_at timestamptz default now(), finished_at timestamptz
     );

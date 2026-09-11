@@ -41,7 +41,7 @@ const readContent = (target) => {
   try {
     const info = fs.fstatSync(fd);
     if (!info.isFile()) fail("NOT_A_FILE");
-    if (info.dev !== existing.dev || info.ino !== existing.ino || fs.realpathSync(target) !== target) fail("INVALID_PATH");
+    if (info.dev !== existing.dev || info.ino !== existing.ino) fail("INVALID_PATH");
     if (info.size > input.maxBytes) fail("FILE_TOO_LARGE");
     // One extra byte detects growth past the limit without reading the whole file.
     const bytes = Buffer.alloc(input.maxBytes + 1);
@@ -65,52 +65,85 @@ const readContent = (target) => {
     fs.closeSync(fd);
   }
 };
-try {
-  const home = fs.realpathSync(input.home);
-  const base = directory(path.join(home, ".codaloud"), input.allowInitialize);
-  const root = directory(path.join(base, "workspace"), input.allowInitialize);
-  let parent = root;
-  for (const part of input.parentPath.split("/").filter(Boolean)) {
-    if (part === "." || part === ".." || part.includes("\\") || part.includes("\0")) fail("INVALID_PATH");
-    parent = directory(path.join(parent, part), false);
-  }
-  if (input.readContent) {
-    validateName(input.name);
-    process.stdout.write(JSON.stringify(readContent(path.join(parent, input.name))));
-  } else if (input.name === undefined) {
-    process.stdout.write(JSON.stringify({ path: parent }));
-  } else {
-    validateName(input.name);
-    const target = path.join(parent, input.name);
-    let info;
-    if (input.delete) {
-      info = fs.lstatSync(target, { throwIfNoEntry: false });
-      if (!info) fail("FILE_NOT_FOUND");
-      if (info.isSymbolicLink()) fail("INVALID_PATH");
-      if (input.kind === "folder" ? !info.isDirectory() : !info.isFile()) fail("FILE_CHANGED");
-      // Keep validation and deletion in this command: returning a pathname for
-      // a later HTTP DELETE lets another writer replace it during the round trip.
-      fs.rmSync(target, { recursive: input.kind === "folder" });
-    } else if (input.previousName !== undefined) {
-      validateName(input.previousName);
-      const source = path.join(parent, input.previousName);
-      const existing = fs.lstatSync(source, { throwIfNoEntry: false });
-      if (!existing) fail("FILE_NOT_FOUND");
-      if (existing.isSymbolicLink()) fail("INVALID_PATH");
-      if (input.kind === "folder" ? !existing.isDirectory() : !existing.isFile()) fail("FILE_CHANGED");
-      if (source !== target) {
-        if (fs.lstatSync(target, { throwIfNoEntry: false })) fail("EEXIST");
-        // GNU mv in Daytona uses an exclusive rename. -T prevents nesting a folder
-        // into a destination created concurrently; -n prevents overwriting it.
-        require("node:child_process").execFileSync("mv", ["-n", "-T", "--", source, target], { timeout: 5000, stdio: "pipe" });
-        const updated = fs.lstatSync(target, { throwIfNoEntry: false });
-        // mv -n can exit successfully after skipping a collision.
-        if (!updated || updated.dev !== existing.dev || updated.ino !== existing.ino) fail("EEXIST");
+const readWorkspaceContent = () => {
+  // Node has no openat API. Linux procfs lets us resolve each single component
+  // relative to an open directory, even if another process renames that directory.
+  // Never fall back to absolute pathname checks: an attacker can swap and restore
+  // a parent between those checks while the opened file remains outside the workspace.
+  if (process.platform !== "linux") fail("FILESYSTEM_UNAVAILABLE");
+  const flags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
+  let parentFd = fs.openSync("/", flags);
+  try {
+    // Anchor the home path too; opening the workspace's full path would still
+    // follow symlinks in .codaloud, workspace, or any earlier component.
+    const parts = [...input.home.split("/").filter(Boolean), ".codaloud", "workspace", ...input.parentPath.split("/").filter(Boolean)];
+    for (const part of parts) {
+      validateName(part);
+      let childFd;
+      try { childFd = fs.openSync("/proc/self/fd/" + parentFd + "/" + part, flags); }
+      catch (error) {
+        if (error.code === "ELOOP" || error.code === "ENOTDIR") fail("INVALID_PATH");
+        if (error.code === "ENOENT") fail("WORKSPACE_NOT_READY");
+        throw error;
       }
-    } else if (input.kind === "folder") fs.mkdirSync(target, { mode: 0o755 });
-    else fs.closeSync(fs.openSync(target, "wx", 0o644));
-    info ??= fs.lstatSync(target);
-    process.stdout.write(JSON.stringify({ name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
+      // Keep at most two directory descriptors live, regardless of path depth.
+      const previousFd = parentFd;
+      parentFd = childFd;
+      fs.closeSync(previousFd);
+    }
+    validateName(input.name);
+    return readContent("/proc/self/fd/" + parentFd + "/" + input.name);
+  } finally {
+    fs.closeSync(parentFd);
+  }
+};
+try {
+  if (input.readContent) {
+    process.stdout.write(JSON.stringify(readWorkspaceContent()));
+  } else {
+    const home = fs.realpathSync(input.home);
+    const base = directory(path.join(home, ".codaloud"), input.allowInitialize);
+    const root = directory(path.join(base, "workspace"), input.allowInitialize);
+    let parent = root;
+    for (const part of input.parentPath.split("/").filter(Boolean)) {
+      if (part === "." || part === ".." || part.includes("\\") || part.includes("\0")) fail("INVALID_PATH");
+      parent = directory(path.join(parent, part), false);
+    }
+    if (input.name === undefined) {
+      process.stdout.write(JSON.stringify({ path: parent }));
+    } else {
+      validateName(input.name);
+      const target = path.join(parent, input.name);
+      let info;
+      if (input.delete) {
+        info = fs.lstatSync(target, { throwIfNoEntry: false });
+        if (!info) fail("FILE_NOT_FOUND");
+        if (info.isSymbolicLink()) fail("INVALID_PATH");
+        if (input.kind === "folder" ? !info.isDirectory() : !info.isFile()) fail("FILE_CHANGED");
+        // Keep validation and deletion in this command: returning a pathname for
+        // a later HTTP DELETE lets another writer replace it during the round trip.
+        fs.rmSync(target, { recursive: input.kind === "folder" });
+      } else if (input.previousName !== undefined) {
+        validateName(input.previousName);
+        const source = path.join(parent, input.previousName);
+        const existing = fs.lstatSync(source, { throwIfNoEntry: false });
+        if (!existing) fail("FILE_NOT_FOUND");
+        if (existing.isSymbolicLink()) fail("INVALID_PATH");
+        if (input.kind === "folder" ? !existing.isDirectory() : !existing.isFile()) fail("FILE_CHANGED");
+        if (source !== target) {
+          if (fs.lstatSync(target, { throwIfNoEntry: false })) fail("EEXIST");
+          // GNU mv in Daytona uses an exclusive rename. -T prevents nesting a folder
+          // into a destination created concurrently; -n prevents overwriting it.
+          require("node:child_process").execFileSync("mv", ["-n", "-T", "--", source, target], { timeout: 5000, stdio: "pipe" });
+          const updated = fs.lstatSync(target, { throwIfNoEntry: false });
+          // mv -n can exit successfully after skipping a collision.
+          if (!updated || updated.dev !== existing.dev || updated.ino !== existing.ino) fail("EEXIST");
+        }
+      } else if (input.kind === "folder") fs.mkdirSync(target, { mode: 0o755 });
+      else fs.closeSync(fs.openSync(target, "wx", 0o644));
+      info ??= fs.lstatSync(target);
+      process.stdout.write(JSON.stringify({ name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
+    }
   }
 } catch (error) {
   process.stdout.write(JSON.stringify({ code: error.code || "FILESYSTEM_ERROR" }));
@@ -125,6 +158,7 @@ export type HomeDirectorySchema = z.infer<typeof homeDirectorySchema>;
 
 const throwFilesystemError = (code: unknown): never => {
   switch (code) {
+    case "FILESYSTEM_UNAVAILABLE": throw new SandboxFilesError(502, "FILESYSTEM_UNAVAILABLE", "Secure file access is unavailable in this workspace. Please try again later.");
     case "FILE_NOT_FOUND": throw new SandboxFilesError(404, "FILE_NOT_FOUND", "The selected file or folder could not be found. Please refresh and try again.");
     case "FILE_CHANGED": throw new SandboxFilesError(409, "FILE_CHANGED", "The selected item has changed. Please refresh the folder before trying again.");
     case "FILE_TOO_LARGE": throw new SandboxFilesError(413, "FILE_TOO_LARGE", `This file is too large to open in the editor. The limit is ${MAX_PROJECT_FILE_SIZE_BYTES} bytes.`);

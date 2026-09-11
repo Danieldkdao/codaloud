@@ -1,4 +1,4 @@
-import type { FileInfo } from "@daytona/sdk";
+import type { DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { use } from "react";
 import { ProjectWorkspaceDockHeightContext } from "@/features/projects/contexts/project-workspace-context";
 import { FlatList, Pressable, View } from "react-native";
@@ -8,17 +8,30 @@ import { ProjectIcon } from "@/components/project-icon";
 import { PText } from "@/components/ui/text";
 import { ProjectWorkspacePlaceholder } from "@/features/projects/components/project-workspace-placeholder";
 import { SandboxFiles } from "@/features/projects/components/sandbox-files";
+import { ProjectFilesListItem } from "@/features/projects/components/project-files-list-item";
 
 type ProjectFilesListProps = {
-  files: FileInfo[];
+  files: ProjectFileEntrySchema[];
+  existingNames: readonly string[];
   parentDirectory?: string;
   onDirectoryPress: (path: string) => void;
+  onUpdate: (input: UpdateProjectFileSchema) => Promise<void>;
+  onDelete: (input: DeleteProjectFileSchema) => Promise<void>;
+  updatingPath?: string;
+  deletingPath?: string;
+  navigationDisabled?: boolean;
 };
 
 export const ProjectFilesList = ({
   files,
+  existingNames,
   parentDirectory,
   onDirectoryPress,
+  onUpdate,
+  onDelete,
+  updatingPath,
+  deletingPath,
+  navigationDisabled = false,
 }: ProjectFilesListProps) => {
   const insets = useSafeAreaInsets();
   const dockHeight = use(ProjectWorkspaceDockHeightContext);
@@ -28,9 +41,11 @@ export const ProjectFilesList = ({
     paddingLeft: 16 + insets.left,
     paddingRight: 16 + insets.right,
   };
-  const parentRow = parentDirectory ? (
+  const parentRow = parentDirectory !== undefined ? (
     <Pressable
       onPress={() => onDirectoryPress(parentDirectory)}
+      disabled={navigationDisabled || Boolean(updatingPath)}
+      accessibilityState={{ disabled: navigationDisabled || Boolean(updatingPath) }}
       accessibilityRole="button"
       accessibilityLabel="Go to parent directory"
       className="flex-row items-center gap-3 border-b border-border px-3 py-4 active:bg-secondary"
@@ -60,26 +75,18 @@ export const ProjectFilesList = ({
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ ...contentPadding, paddingBottom: dockHeight + 24 }}
       scrollIndicatorInsets={{ bottom: dockHeight }}
+      keyboardShouldPersistTaps="handled"
       ListHeaderComponent={parentRow}
       renderItem={({ item }) => (
-        <Pressable
-          onPress={item.isDir ? () => {
-            if (item.path) onDirectoryPress(item.path);
-          } : undefined}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name}, ${item.isDir ? "folder" : "file"}`}
-          className="flex-row items-center gap-3 border-b border-border px-3 py-4 active:bg-secondary"
-          style={{ minHeight: 56 }}
-        >
-          <ProjectIcon name={item.path ?? item.name} isDirectory={item.isDir} />
-          <PText
-            className="flex-1 text-foreground text-lg font-medium"
-            numberOfLines={1}
-            ellipsizeMode="middle"
-          >
-            {item.name}
-          </PText>
-        </Pressable>
+        <ProjectFilesListItem
+          file={item}
+          existingNames={existingNames}
+          onDirectoryPress={onDirectoryPress}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          deleting={deletingPath === item.path}
+          disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
+        />
       )}
     />
   );

@@ -1,10 +1,10 @@
 import type { FileInfo } from "@daytona/sdk";
 
-export const getDirectoryFiles = (
-  files: readonly FileInfo[],
+export const getDirectoryFiles = <T extends Pick<FileInfo, "name" | "path" | "isDir">>(
+  files: readonly T[],
   directoryPath: string,
-): FileInfo[] => {
-  const prefix = `${directoryPath.replace(/\/+$/, "")}/`;
+): T[] => {
+  const prefix = directoryPath === "" ? "" : `${directoryPath.replace(/\/+$/, "")}/`;
 
   return files.filter((file) => {
     const path = file.path?.replace(/\/+$/, "");

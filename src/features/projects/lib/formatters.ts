@@ -1,10 +1,44 @@
 import type { ProjectAgentActivityKind, ProjectAgentActivityStatus } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
+import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 import type {
   ProjectSortField,
   ProjectSortOrder,
 } from "@/features/projects/lib/project-params";
+
+export const formatProjectFileKind = (kind: ProjectFileKind) => {
+  switch (kind) {
+    case "file":
+      return { inputLabel: "File name", placeholder: "new-file.ts", successMessage: "File created", updateSuccessMessage: "File updated", deleteSuccessMessage: "File deleted" };
+    case "folder":
+      return { inputLabel: "Folder name", placeholder: "new-folder", successMessage: "Folder created", updateSuccessMessage: "Folder updated", deleteSuccessMessage: "Folder deleted" };
+    default:
+      throw new Error(`Unsupported file kind: ${kind satisfies never}`);
+  }
+};
+
+export const formatProjectFileNameAction = (mode: "create" | "update") => {
+  switch (mode) {
+    case "create":
+      return { cancelLabel: "Cancel creation", pendingLabel: "Creating item", errorTitle: "Couldn't create this item" };
+    case "update":
+      return { cancelLabel: "Cancel update", pendingLabel: "Updating item", errorTitle: "Couldn't update this item" };
+    default:
+      throw new Error(`Unsupported file name action: ${mode satisfies never}`);
+  }
+};
+
+export const formatProjectFileDeletion = (kind: ProjectFileKind, name: string) => {
+  switch (kind) {
+    case "file":
+      return { title: "Delete file?", description: `Are you sure you want to delete "${name}"? This action cannot be undone.` };
+    case "folder":
+      return { title: "Delete folder?", description: `Are you sure you want to delete "${name}" and all files and folders inside it? This action cannot be undone.` };
+    default:
+      throw new Error(`Unsupported file kind: ${kind satisfies never}`);
+  }
+};
 
 export const formatProjectSource = (source: CreateProjectSchema["source"]): {
   value: CreateProjectSchema["source"];

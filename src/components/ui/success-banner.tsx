@@ -87,7 +87,7 @@ export const SuccessBanner = ({
           accessibilityRole="button"
           accessibilityLabel={message}
           accessibilityHint="Dismiss success message"
-          className="flex-row items-center gap-3 rounded-2xl border border-success-border bg-success px-4 py-4"
+          className="flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4"
           style={{
             boxShadow: [
               { offsetX: 0, offsetY: 8, blurRadius: 24, color: shadowColor },
@@ -95,23 +95,23 @@ export const SuccessBanner = ({
           }}
         >
           <Animated.View entering={checkEntrance} accessible={false}>
-            <View className="size-9 items-center justify-center rounded-full bg-success-foreground">
+            <View className="size-6 items-center justify-center rounded-full bg-primary">
               <Icon
                 family="Feather"
                 name="check"
-                size={20}
-                className="text-success"
+                size={14}
+                className="text-primary-foreground"
               />
             </View>
           </Animated.View>
-          <PText className="flex-1 font-semibold text-success-foreground text-lg">
+          <PText className="flex-1 font-semibold text-card-foreground text-lg">
             {message}
           </PText>
           <Icon
             family="Feather"
             name="x"
             size={18}
-            className="text-success-foreground/60"
+            className="text-muted-foreground"
             accessible={false}
           />
         </Pressable>

@@ -27,10 +27,11 @@ vi.mock("expo-router", () => ({
 }));
 vi.mock("@/lib/utils", () => ({ alert: mocks.alert }));
 vi.mock("@/services/github/hooks/use-github-connected", () => ({
-  useGitHubConnected: () => ({ isConnected: false }),
+  useGitHubConnected: () => ({ isConnected: true }),
 }));
 vi.mock("@/services/github/components/github-repositories-select-list", () => ({
-  GitHubRepositoriesSelectList: () => null,
+  GitHubRepositoriesSelectList: ({ onValueChange }: { onValueChange: (id: string) => void }) =>
+    createElement("button", { "data-repository": "123", onClick: () => onValueChange("123") }, "owner/repository"),
 }));
 vi.mock("@/components/app-wrapper", () => ({
   AppWrapper: ({ children }: { children: ReactNode }) => children,
@@ -45,7 +46,10 @@ vi.mock("@/components/ui/text", () => ({
     createElement("span", null, children),
 }));
 vi.mock("@/components/ui/input", () => ({ Input: () => null }));
-vi.mock("@/components/ui/radio-item", () => ({ RadioItem: () => null }));
+vi.mock("@/components/ui/radio-item", () => ({
+  RadioItem: ({ value, onValueChange }: { value: string; onValueChange: (value: string) => void }) =>
+    createElement("button", { "data-source": value, onClick: () => onValueChange(value) }, value),
+}));
 vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
@@ -130,11 +134,28 @@ afterEach(() => {
 });
 const submit = async () => {
   await act(async () => {
-    container.querySelector("button")!.click();
+    Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Create project")!.click();
   });
 };
 
 describe("project creation cache updates", () => {
+  it("submits the selected repository ID with the GitHub project form", async () => {
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="123"]')!.click(); });
+    await submit();
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({
+      name: "New project", source: "github", repositoryId: "123",
+    });
+  });
+
+  it("removes the repository selection when switching back to a new project", async () => {
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="123"]')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="new"]')!.click(); });
+    await submit();
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({ name: "New project", source: "new" });
+  });
+
   it("refreshes the mounted project list and invalidates inactive filters on success", async () => {
     await submit();
     expect(mocks.createProject).toHaveBeenCalledWith({

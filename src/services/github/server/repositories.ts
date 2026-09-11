@@ -3,6 +3,7 @@ import type {
   GitHubRepositoryPagination,
 } from "@/services/github/types";
 import { Octokit } from "octokit";
+import { gitHubRepositorySchema } from "@/services/github/schemas";
 import { GitHubAccessError } from "./access";
 import { paginateGitHubRepositories } from "./repository-pagination";
 
@@ -58,6 +59,7 @@ export const verifyGitHubRepositoryAccess = async (
   if (String(repository?.id) !== repositoryId || repository?.permissions?.pull !== true) {
     throw new GitHubAccessError("You do not have access to import this GitHub repository.");
   }
+  return gitHubRepositorySchema.parse(toGitHubRepository(repository));
 };
 
 export const listGitHubRepositoryPage = async (

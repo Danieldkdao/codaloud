@@ -66,7 +66,18 @@ beforeEach(() => {
   network.mockReset();
   network.mockImplementation(async (url) => String(url).startsWith("https://api.trigger.dev/")
     ? Response.json({ id: "run_sandbox" })
-    : Response.json({ id: 123456789, permissions: { pull: true } }));
+    : Response.json({
+        id: 123456789,
+        name: "selected-repository",
+        full_name: "owner/selected-repository",
+        description: null,
+        private: true,
+        archived: false,
+        default_branch: "main",
+        clone_url: "https://github.com/owner/selected-repository.git",
+        html_url: "https://github.com/owner/selected-repository",
+        permissions: { pull: true },
+      }));
   vi.stubGlobal("fetch", network);
   mocks.getCurrentUser.mockResolvedValue({ userId: "current-user" });
   mocks.insert.mockReturnValue({ values: mocks.values });
@@ -125,6 +136,9 @@ describe("project creation route and insert flow", () => {
     { source: "new", repositoryId: "123" },
     { source: "new", userId: "another-user" },
     { source: "github", repositoryId: "123", githubRepositoryId: "456" },
+    { source: "github", repositoryId: "123", accountId: "another-account" },
+    { source: "github", repositoryId: "123", cloneUrl: "https://example.com/repository.git" },
+    { source: "github", repositoryId: "123", accessToken: "client-token" },
   ])("rejects unexpected fields before inserting: %o", async (fields) => {
     const response = await POST(request({ name: "My project", ...fields }));
     expect(response.status).toBe(400);
@@ -192,6 +206,17 @@ describe("GitHub import access validation", () => {
     expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
     expect(options?.signal).toBe(req.signal);
     expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.insert.mock.invocationCallOrder[0]);
+  });
+
+  it("dispatches saved identifiers without putting GitHub credentials in the job payload", async () => {
+    const response = await POST(importRequest());
+    expect(response.status).toBe(201);
+    const [, options] = network.mock.calls.find(([url]) => String(url).startsWith("https://api.trigger.dev/"))!;
+    expect(JSON.parse(String(options?.body)).payload).toEqual({
+      projectId: "created-project", userId: "current-user", operationId: "created-operation",
+    });
+    expect(String(options?.body)).not.toMatch(/test-token|linked-account|clone_url/);
+    expect(await response.text()).not.toMatch(/test-token|linked-account/);
   });
 
   it.each([

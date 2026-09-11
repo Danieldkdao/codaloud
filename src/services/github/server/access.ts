@@ -1,4 +1,5 @@
 import { APIError } from "better-auth/api";
+import { and, eq } from "drizzle-orm";
 import { RequestError } from "octokit";
 
 import { auth } from "@/lib/auth/auth";
@@ -10,6 +11,23 @@ export class GitHubAccessError extends Error {
     this.name = "GitHubAccessError";
   }
 }
+
+const resolveGitHubCredentials = async (
+  body: { accountId: string; userId?: string },
+  headers?: Headers,
+) => {
+  const { accessToken } = await auth.api.getAccessToken({
+    body,
+    ...(headers ? { headers } : {}),
+  });
+  if (!accessToken) {
+    throw new GitHubAccessError(
+      "Reconnect GitHub to access your repositories.",
+      "GITHUB_RECONNECT_REQUIRED",
+    );
+  }
+  return { accountId: body.accountId, accessToken };
+};
 
 export const getGitHubCredentials = async (headers: Headers) => {
   // Select the linked account from the session, never from client input.
@@ -24,17 +42,41 @@ export const getGitHubCredentials = async (headers: Headers) => {
     );
   }
 
-  const { accessToken } = await auth.api.getAccessToken({
-    body: { accountId: githubAccount.id },
-    headers,
-  });
-  if (!accessToken) {
+  return resolveGitHubCredentials({ accountId: githubAccount.id }, headers);
+};
+
+// Worker callers must use the owner and linked account from their saved operation.
+export const getGitHubCredentialsForUser = async (
+  userId: string,
+  accountId: string | null,
+) => {
+  if (!accountId) {
     throw new GitHubAccessError(
       "Reconnect GitHub to access your repositories.",
       "GITHUB_RECONNECT_REQUIRED",
     );
   }
-  return { accountId: githubAccount.id, accessToken };
+
+  const [{ db }, { account }] = await Promise.all([
+    import("@/db/db"),
+    import("@/db/schemas/user"),
+  ]);
+  const [existingGitHubAccount] = await db
+    .select({ id: account.id, scope: account.scope })
+    .from(account)
+    .where(and(eq(account.id, accountId), eq(account.userId, userId), eq(account.providerId, "github")))
+    .limit(1);
+
+  // Better Auth stores provider scopes as a comma-separated string.
+  if (!existingGitHubAccount?.scope?.split(",").some((scope) => scope.trim() === "repo")) {
+    throw new GitHubAccessError(
+      "Connect GitHub and grant repository access first.",
+      "GITHUB_RECONNECT_REQUIRED",
+    );
+  }
+
+  // Let Better Auth decrypt and refresh tokens; never read token columns ourselves.
+  return resolveGitHubCredentials({ accountId: existingGitHubAccount.id, userId });
 };
 
 export const getGitHubAccessToken = async (headers: Headers) => {

@@ -1,11 +1,13 @@
 import type {
   GitHubRepository,
+  GitHubRepositoryBranchPage,
   GitHubRepositoryPagination,
 } from "@/services/github/types";
 import { Octokit } from "octokit";
-import { gitHubRepositorySchema } from "@/services/github/schemas";
+import { gitHubRepositoryRequestSchema, gitHubRepositorySchema } from "@/services/github/schemas";
 import { GitHubAccessError } from "./access";
 import { paginateGitHubRepositories } from "./repository-pagination";
+import { paginateGitHubSearch } from "./search-pagination";
 
 const repositoryOptions = {
   visibility: "all",
@@ -62,12 +64,46 @@ export const verifyGitHubRepositoryAccess = async (
   return gitHubRepositorySchema.parse(toGitHubRepository(repository));
 };
 
+// Server callers supply the user's resolved token; recheck access on every call.
+export const listGitHubRepositoryBranches = async (
+  accessToken: string,
+  repositoryId: string,
+  signal?: AbortSignal,
+  pagination: GitHubRepositoryPagination = {},
+): Promise<GitHubRepositoryBranchPage> => {
+  const validatedPagination = gitHubRepositoryRequestSchema.parse(pagination);
+  const repository = await verifyGitHubRepositoryAccess(accessToken, repositoryId, signal);
+  const [owner, repo] = repository.fullName.split("/");
+  const octokit = createGitHubClient(accessToken, signal);
+
+  const { items: branches, nextCursor } = await paginateGitHubSearch({
+    loadBatch: async (page, pageSize) => {
+      const { data, headers } = await octokit.rest.repos.listBranches({
+        owner, repo, page, per_page: pageSize,
+      });
+      return {
+        items: data.map((branch) => ({
+          name: branch.name,
+          commitSha: branch.commit.sha,
+          protected: branch.protected,
+        })),
+        hasNextPage: /;\s*rel="next"/.test(headers.link ?? ""),
+      };
+    },
+    matchesSearch: (branch, search) => branch.name.toLowerCase().includes(search),
+    pagination: validatedPagination,
+    signal,
+    scope: `branches:${repositoryId}`,
+  });
+  return { branches, nextCursor };
+};
+
 export const listGitHubRepositoryPage = async (
   accessToken: string,
   signal?: AbortSignal,
   pagination: GitHubRepositoryPagination = {},
 ) => {
-  const octokit = createGitHubClient(accessToken, signal);
+  const octokit = createGitHubClient(accessToken, signal); 
   return paginateGitHubRepositories(
     async (page, pageSize) => {
       const { data, headers } = await octokit.rest.repos.listForAuthenticatedUser({

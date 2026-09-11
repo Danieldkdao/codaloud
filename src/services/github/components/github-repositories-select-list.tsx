@@ -1,19 +1,23 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { ScrollFadeFlatList } from "@/components/ui/scroll-fade-flat-list";
 import { PText } from "@/components/ui/text";
-import type { GitHubRepository } from "@/services/github/types";
+import type { GitHubRepository, GitHubRepositoryPage } from "@/services/github/types";
+import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
 import { cn } from "@/lib/utils";
 import { GitHubRepositorySelectItem } from "@/services/github/components/github-repository-select-item";
 import { useGitHubRepositories } from "@/services/github/hooks/use-github-repositories";
 
+const getRepositories = (page: GitHubRepositoryPage) => page.repositories;
+const getRepositoryKey = (repository: GitHubRepository) => repository.id;
+
 export type GitHubRepositoriesSelectListProps = {
   className?: string;
   selectedRepositoryId: string | null;
-  onValueChange: (repositoryId: string | null) => void;
+  onValueChange: (repository: GitHubRepository | null) => void;
   onReconnect?: () => void;
   isReconnecting?: boolean;
   reconnectError?: string | null;
@@ -33,43 +37,18 @@ export const GitHubRepositoriesSelectList = ({
     isPending,
     isFetching,
     isFetchingNextPage,
-    isFetchNextPageError,
     fetchStatus,
     error,
     hasNextPage,
-    fetchNextPage,
-    refetch,
+    loadMore,
+    retry,
   } = useGitHubRepositories({ search });
-  const repositories = useMemo(() => {
-    // GitHub's updated sort can move a repository across pages between requests.
-    const unique = new Map<number, GitHubRepository>();
-    for (const page of data?.pages ?? []) {
-      for (const repository of page.repositories) {
-        if (!unique.has(repository.id)) unique.set(repository.id, repository);
-      }
-    }
-    return Array.from(unique.values());
-  }, [data?.pages]);
+  const repositories = useUniquePaginatedItems(data?.pages, getRepositories, getRepositoryKey);
   const selectedRepository = repositories.find(
     (repository) => String(repository.id) === selectedRepositoryId,
   );
   const needsReconnect =
     error && "code" in error && error.code === "GITHUB_RECONNECT_REQUIRED";
-
-  const loadMore = () => {
-    if (hasNextPage && !isFetching && !error && fetchStatus !== "paused") {
-      void fetchNextPage({ cancelRefetch: false });
-    }
-  };
-
-  const retry = () => {
-    if (isFetching) return;
-    if (isFetchNextPageError) {
-      void fetchNextPage({ cancelRefetch: false });
-    } else {
-      void refetch();
-    }
-  };
 
   return (
     <View
@@ -126,7 +105,7 @@ export const GitHubRepositoriesSelectList = ({
             renderItem={({ item }) => (
               <GitHubRepositorySelectItem
                 repository={item}
-                onPress={() => onValueChange(String(item.id))}
+                onPress={() => onValueChange(item)}
               />
             )}
             ItemSeparatorComponent={() => <View className="h-px bg-border" />}

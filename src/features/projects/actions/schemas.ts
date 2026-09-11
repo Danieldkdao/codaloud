@@ -59,13 +59,23 @@ const projectFields = {
 export const createProjectSchema = z.discriminatedUnion(
   "source",
   [
-    z.strictObject({ ...projectFields, source: z.literal("new") }),
+    z.strictObject({
+      ...projectFields,
+      source: z.literal("new"),
+      repositoryId: z.never().optional(),
+      branchName: z.never().optional(),
+    }),
     z.strictObject({
       ...projectFields,
       source: z.literal("github"),
       repositoryId: z
         .string({ error: "Select a GitHub repository." })
         .regex(/^[1-9]\d*$/, "Select a GitHub repository."),
+      // Accepted by the API now; sandbox setup does not use the selection yet.
+      branchName: z
+        .string({ error: "Select a GitHub branch." })
+        .trim()
+        .min(1, "Select a GitHub branch."),
     }),
   ],
   { error: "Choose how to start your project." },

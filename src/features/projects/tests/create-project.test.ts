@@ -89,10 +89,10 @@ beforeEach(() => {
 
 describe("project creation route and insert flow", () => {
   it.each([
-    { source: "new", repositoryId: undefined, githubRepositoryId: null },
-    { source: "github", repositoryId: "123456789", githubRepositoryId: "123456789" },
-  ])("inserts a $source project with the correct repository and session owner", async ({ source, repositoryId, githubRepositoryId }) => {
-    const response = await POST(request({ name: " My project ", source, repositoryId }));
+    { source: "new", repositoryId: undefined, branchName: undefined, githubRepositoryId: null },
+    { source: "github", branchName: "feature/import", repositoryId: "123456789", githubRepositoryId: "123456789" },
+  ])("inserts a $source project without persisting the branch selection", async ({ source, repositoryId, branchName, githubRepositoryId }) => {
+    const response = await POST(request({ name: " My project ", source, repositoryId, branchName }));
 
     expect(response.status).toBe(201);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
@@ -115,15 +115,21 @@ describe("project creation route and insert flow", () => {
     });
   });
 
-  it.each([undefined, null, "", "abc", "0", "-1", "1.5", 123])(
+  it.each([undefined, null, "", " ", "abc", "0", "-1", "1.5", 123])(
     "rejects a GitHub import with invalid repository ID %s before inserting",
     async (repositoryId) => {
-      const response = await POST(request({ name: "My project", source: "github", repositoryId }));
+      const response = await POST(request({ name: "My project", source: "github", branchName: "feature/import", repositoryId }));
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: true, message: "Select a GitHub repository." });
       expect(mocks.insert).not.toHaveBeenCalled();
     },
   );
+
+  it.each([undefined, null, "", "   "])("rejects a missing branch %s before inserting", async (branchName) => {
+    const response = await POST(request({ name: "Import", source: "github", repositoryId: "123", branchName }));
+    expect(response.status).toBe(400);
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
 
   it.each([undefined, "unknown"])("rejects missing or unsupported source %s", async (source) => {
     const response = await POST(request({ name: "My project", source }));
@@ -134,11 +140,12 @@ describe("project creation route and insert flow", () => {
 
   it.each([
     { source: "new", repositoryId: "123" },
+    { source: "new", branchName: "main" },
     { source: "new", userId: "another-user" },
-    { source: "github", repositoryId: "123", githubRepositoryId: "456" },
-    { source: "github", repositoryId: "123", accountId: "another-account" },
-    { source: "github", repositoryId: "123", cloneUrl: "https://example.com/repository.git" },
-    { source: "github", repositoryId: "123", accessToken: "client-token" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", githubRepositoryId: "456" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", accountId: "another-account" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", cloneUrl: "https://example.com/repository.git" },
+    { source: "github", branchName: "feature/import", repositoryId: "123", accessToken: "client-token" },
   ])("rejects unexpected fields before inserting: %o", async (fields) => {
     const response = await POST(request({ name: "My project", ...fields }));
     expect(response.status).toBe(400);
@@ -181,7 +188,7 @@ describe("project creation route and insert flow", () => {
 
 
 describe("GitHub import access validation", () => {
-  const importRequest = () => request({ name: "Import", source: "github", repositoryId: "123456789" });
+  const importRequest = () => request({ name: "Import", source: "github", branchName: "feature/import", repositoryId: "123456789" });
 
   it.each([
     { accounts: [] },

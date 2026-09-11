@@ -11,7 +11,7 @@ export const useGitHubRepositories = ({
   enabled?: boolean;
 } = {}) => {
   const normalizedSearch = search.trim().toLowerCase();
-  return useInfiniteQuery({
+  const query = useInfiniteQuery({
     // Separate the new page shape from older array-based cache entries.
     queryKey: [
       "github", "repositories", "infinite", "cursor",
@@ -29,4 +29,18 @@ export const useGitHubRepositories = ({
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled,
   });
+
+  const loadMore = () => {
+    if (query.hasNextPage && !query.isFetching && !query.error && query.fetchStatus !== "paused") {
+      return query.fetchNextPage({ cancelRefetch: false });
+    }
+  };
+  const retry = () => {
+    if (query.isFetching) return;
+    return query.isFetchNextPageError
+      ? query.fetchNextPage({ cancelRefetch: false })
+      : query.refetch();
+  };
+
+  return { ...query, loadMore, retry };
 };

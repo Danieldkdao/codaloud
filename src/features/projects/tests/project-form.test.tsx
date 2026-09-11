@@ -30,8 +30,19 @@ vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({ isConnected: true }),
 }));
 vi.mock("@/services/github/components/github-repositories-select-list", () => ({
-  GitHubRepositoriesSelectList: ({ onValueChange }: { onValueChange: (id: string) => void }) =>
-    createElement("button", { "data-repository": "123", onClick: () => onValueChange("123") }, "owner/repository"),
+  GitHubRepositoriesSelectList: ({ onValueChange }: { onValueChange: (repository: { id: number; defaultBranch: string } | null) => void }) =>
+    createElement("div", null,
+      createElement("button", { "data-repository": "123", onClick: () => onValueChange({ id: 123, defaultBranch: "main" }) }, "owner/repository"),
+      createElement("button", { "data-repository": "456", onClick: () => onValueChange({ id: 456, defaultBranch: "develop" }) }, "owner/other"),
+      createElement("button", { "data-clear-repository": true, onClick: () => onValueChange(null) }, "Clear repository"),
+    ),
+}));
+vi.mock("@/services/github/components/github-repository-branches-list", () => ({
+  GitHubRepositoryBranchesList: ({ repositoryId, selectedBranchName, onValueChange }: any) =>
+    createElement("section", { "data-branches-for": repositoryId, "data-selected-branch": selectedBranchName },
+      createElement("button", { "data-branch": "feature/import", onClick: () => onValueChange("feature/import") }, "feature/import"),
+      createElement("button", { "data-clear-branch": true, onClick: () => onValueChange(null) }, "Clear branch"),
+    ),
 }));
 vi.mock("@/components/app-wrapper", () => ({
   AppWrapper: ({ children }: { children: ReactNode }) => children,
@@ -139,19 +150,70 @@ const submit = async () => {
 };
 
 describe("project creation cache updates", () => {
+  it("shows branches only for the current selection and removes them when cleared", async () => {
+    expect(container.querySelector('[data-branches-for]')).toBeNull();
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
+    expect(container.querySelector('[data-branches-for]')).toBeNull();
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="123"]')!.click(); });
+    expect(container.querySelector('[data-branches-for]')?.getAttribute('data-branches-for')).toBe("123");
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="456"]')!.click(); });
+    expect(container.querySelector('[data-branches-for]')?.getAttribute('data-branches-for')).toBe("456");
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-clear-repository]')!.click(); });
+    expect(container.querySelector('[data-branches-for]')).toBeNull();
+  });
+
   it("submits the selected repository ID with the GitHub project form", async () => {
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="123"]')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-branch]')!.click(); });
     await submit();
     expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({
-      name: "New project", source: "github", repositoryId: "123",
+      name: "New project", source: "github", repositoryId: "123", branchName: "feature/import",
+    });
+  });
+
+  it("submits the default branch immediately after repository selection", async () => {
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="123"]')!.click(); });
+    expect(container.querySelector('[data-branches-for]')?.getAttribute('data-selected-branch')).toBe("main");
+    await submit();
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({
+      name: "New project", source: "github", repositoryId: "123", branchName: "main",
+    });
+  });
+
+  it("preserves manual choices and clearing, and applies defaults only when selecting a repository", async () => {
+    const click = async (selector: string) => act(async () => { container.querySelector<HTMLButtonElement>(selector)!.click(); });
+    const selectedBranch = () => container.querySelector('[data-branches-for]')?.getAttribute('data-selected-branch');
+    await click('[data-source="github"]');
+    await click('[data-repository="123"]');
+    await click('[data-branch]');
+    await click('[data-repository="123"]');
+    expect(selectedBranch()).toBe("feature/import");
+    await click('[data-clear-branch]');
+    await submit();
+    expect(mocks.createProject).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Select a GitHub branch.");
+    expect(selectedBranch()).toBeNull();
+    await click('[data-repository="456"]');
+    expect(selectedBranch()).toBe("develop");
+    expect(container.textContent).not.toContain("Select a GitHub branch.");
+    await click('[data-branch]');
+    await click('[data-clear-repository]');
+    await click('[data-repository="456"]');
+    expect(selectedBranch()).toBe("develop");
+    await submit();
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({
+      name: "New project", source: "github", repositoryId: "456", branchName: "develop",
     });
   });
 
   it("removes the repository selection when switching back to a new project", async () => {
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="123"]')!.click(); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-branch]')!.click(); });
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="new"]')!.click(); });
+    expect(container.querySelector('[data-branches-for]')).toBeNull();
     await submit();
     expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({ name: "New project", source: "new" });
   });

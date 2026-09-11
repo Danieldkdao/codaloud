@@ -1,5 +1,5 @@
 import { confirmUserProjectOwnership } from "./projects";
-import { createSandboxFile, deleteSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
 import { SandboxFilesError } from "@/services/daytona/api";
 import type { CreateProjectFileSchema, DeleteProjectFileSchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 
@@ -16,6 +16,9 @@ const getProjectFilesystem = async (userId: string, projectId: string) => {
 // Server tools can reuse these same operations with their verified user context.
 export const readUserProjectFiles = async (userId: string, projectId: string, path: string) =>
   readSandboxFiles(await getProjectFilesystem(userId, projectId), path);
+
+export const readUserProjectFileContent = async (userId: string, projectId: string, path: string) =>
+  readSandboxFileContent(await getProjectFilesystem(userId, projectId), path);
 
 export const createUserProjectFile = async (userId: string, projectId: string, input: CreateProjectFileSchema) =>
   createSandboxFile(await getProjectFilesystem(userId, projectId), input);

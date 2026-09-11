@@ -6,9 +6,37 @@ import {
   type ProjectFileEntrySchema,
   updateProjectFileSchema, updateProjectFileResponseSchema,
   type UpdateProjectFileSchema, type UpdateProjectFileResponseSchema,
+  projectFilePathSchema, projectFileContentErrorSchema, readProjectFileContentResponseSchema,
+  type ProjectFileContentSchema, type ProjectFileContentErrorSchema,
 } from "./file-schemas";
 import { isProjectFileResultValid } from "@/features/projects/utils/is-project-file-result-valid";
 import { createRequestHeaders, fetchBase, isValidIds } from "@/lib/utils";
+
+export const readProjectFileContentAction = async (
+  projectId: string, filePath: string, signal?: AbortSignal,
+  onFailure?: (failure: ProjectFileContentErrorSchema, retryAfter: string | null) => void,
+): Promise<ProjectFileContentSchema | null> => {
+  try {
+    if (!isValidIds(projectId)) return null;
+    const path = projectFilePathSchema.parse(filePath);
+    const headers = await createRequestHeaders();
+    if (!headers.has("Cookie")) return null;
+    const response = await fetchBase(`/api/projects/${projectId}/file-content?${new URLSearchParams({ path })}`, {
+      method: "GET", headers, credentials: "omit", signal,
+    });
+    if (!response.ok) {
+      // Queries can distinguish oversized files and restoration without changing
+      // the shared data-or-null read contract.
+      if (onFailure) {
+        const failure = projectFileContentErrorSchema.safeParse(await response.json());
+        if (failure.success) onFailure(failure.data, response.headers.get("Retry-After"));
+      }
+      return null;
+    }
+    const result = readProjectFileContentResponseSchema.parse(await response.json());
+    return result.data.path === path ? result.data : null;
+  } catch { return null; }
+};
 
 export const readProjectFilesAction = async (
   projectId: string, directoryPath = "", signal?: AbortSignal,

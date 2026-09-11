@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createSandboxFile, deleteSandboxFile, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "server-key" } }));
 const execute = promisify(exec);
@@ -13,6 +14,7 @@ const context = { sandboxId: "sandbox-id", projectId: "project-id", allowInitial
 let home: string;
 let state: string;
 let labels: Record<string, string>;
+let readHook: string | undefined;
 const network = vi.fn<typeof fetch>();
 
 beforeEach(async () => {
@@ -30,6 +32,7 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 `, { mode: 0o755 });
   }
   state = "started";
+  readHook = undefined;
   labels = { codaloudApp: "codaloud", codaloudProjectId: context.projectId };
   network.mockReset().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -42,7 +45,12 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
     if (url.pathname.endsWith("/process/execute")) {
       const body = JSON.parse(String(init?.body));
       try {
-        const { stdout } = await execute(body.command, { timeout: 10_000, env: { ...process.env, PATH: `${join(home, "bin")}:${process.env.PATH}` } });
+        if (readHook) await writeFile(join(home, "read-hook.cjs"), readHook);
+        const { stdout } = await execute(body.command, {
+          timeout: 10_000,
+          maxBuffer: 8 * 1024 * 1024,
+          env: { ...process.env, PATH: `${join(home, "bin")}:${process.env.PATH}`, ...(readHook ? { NODE_OPTIONS: `--require=${join(home, "read-hook.cjs")}` } : {}) },
+        });
         return Response.json({ exitCode: 0, result: stdout });
       } catch (error) {
         const failure = error as { stdout: string };
@@ -60,6 +68,94 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
 });
 
 afterEach(async () => { await rm(home, { recursive: true, force: true }); });
+
+it.each(["", "const greeting = '你好 👋';\r\n", "\uFEFFhello\r\n"])("reads complete UTF-8 contents without changing bytes: %j", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace/notes"), { recursive: true });
+  const path = "notes/hello ' $(echo unexpected).txt";
+  await writeFile(join(home, ".codaloud/workspace", path), content);
+  expect(await readSandboxFileContent(context, path)).toEqual({ path, content, size: Buffer.byteLength(content) });
+});
+
+it.each(["a", "é"])("accepts text exactly at the byte limit using %j", async (character) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const content = character.repeat(MAX_PROJECT_FILE_SIZE_BYTES / Buffer.byteLength(character));
+  await writeFile(join(home, ".codaloud/workspace/limit.txt"), content);
+  expect(await readSandboxFileContent(context, "limit.txt")).toEqual({ path: "limit.txt", content, size: MAX_PROJECT_FILE_SIZE_BYTES });
+});
+
+it("rejects an oversized file from metadata before reading any contents", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/large.txt"), "a".repeat(MAX_PROJECT_FILE_SIZE_BYTES + 1));
+  readHook = `require('node:fs').readSync = () => { throw new Error('Content must not be read'); };`;
+  await expect(readSandboxFileContent(context, "large.txt")).rejects.toMatchObject({ status: 413, code: "FILE_TOO_LARGE" });
+});
+
+it("stops at the limit plus one byte and closes the file if it grows after the size check", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const path = join(home, ".codaloud/workspace/growing.txt");
+  await writeFile(path, "small");
+  readHook = `
+    const fs = require('node:fs');
+    const stat = fs.fstatSync;
+    const read = fs.readSync;
+    const close = fs.closeSync;
+    let total = 0;
+    let target;
+    fs.fstatSync = (...args) => {
+      const info = stat(...args);
+      if (target === undefined && info.isFile()) {
+        target = args[0];
+        fs.appendFileSync(${JSON.stringify(path)}, 'é'.repeat(${MAX_PROJECT_FILE_SIZE_BYTES}));
+      }
+      return info;
+    };
+    fs.readSync = (...args) => {
+      const count = read(...args);
+      if (args[0] === target) total += count;
+      return count;
+    };
+    fs.closeSync = (fd) => {
+      close(fd);
+      if (fd === target) fs.writeFileSync(${JSON.stringify(join(home, "read-count.txt"))}, String(total));
+    };
+  `;
+  await expect(readSandboxFileContent(context, "growing.txt")).rejects.toMatchObject({ status: 413, code: "FILE_TOO_LARGE" });
+  expect(Number(await readFile(join(home, "read-count.txt"), "utf8"))).toBe(MAX_PROJECT_FILE_SIZE_BYTES + 1);
+});
+
+it.each([Buffer.from([0, 1, 2]), Buffer.from([0xc3, 0x28])])("rejects binary or invalid UTF-8 contents", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/data.bin"), content);
+  await expect(readSandboxFileContent(context, "data.bin")).rejects.toMatchObject({ status: 415, code: "UNSUPPORTED_FILE_ENCODING" });
+});
+
+it("rejects missing files, directories, and symlinks without reading outside the workspace", async () => {
+  await mkdir(join(home, ".codaloud/workspace/folder"), { recursive: true });
+  await writeFile(join(home, "outside.txt"), "private");
+  await symlink(join(home, "outside.txt"), join(home, ".codaloud/workspace/link"));
+  await symlink(home, join(home, ".codaloud/workspace/parent-link"));
+  for (const [path, code] of [["missing.txt", "FILE_NOT_FOUND"], ["folder", "NOT_A_FILE"], ["link", "INVALID_PATH"], ["parent-link/outside.txt", "INVALID_PATH"]]) {
+    await expect(readSandboxFileContent(context, path)).rejects.toMatchObject({ code });
+  }
+});
+
+it("validates content paths before contacting Daytona and never initializes a missing workspace", async () => {
+  for (const path of ["", "/etc/passwd", "../outside", "a/../outside", "a//b", "a\\b", "a/", "a\u0000b"]) {
+    await expect(readSandboxFileContent(context, path)).rejects.toThrow();
+  }
+  expect(network).not.toHaveBeenCalled();
+  await expect(readSandboxFileContent(context, "missing.txt")).rejects.toMatchObject({ code: "WORKSPACE_NOT_READY" });
+  await expect(lstat(join(home, ".codaloud"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("preserves workspace restoration and sandbox ownership checks for content reads", async () => {
+  state = "archived";
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ status: 503, code: "WORKSPACE_RESTORING" });
+  state = "started";
+  labels.codaloudProjectId = "another-project";
+  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ code: "SANDBOX_MISMATCH" });
+  expect(network.mock.calls.some(([url]) => String(url).includes("/toolbox/"))).toBe(false);
+});
 
 it.each(["file", "folder"] as const)("preserves a replacement %s created after the sandbox deletion command returns", async (kind) => {
   const input = { parentPath: "", name: "selected", kind };

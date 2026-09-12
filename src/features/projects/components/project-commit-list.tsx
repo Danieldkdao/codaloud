@@ -2,7 +2,7 @@ import { FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
-import { CodeText, HeadingText, PText } from "@/components/ui/text";
+import { CodeText, PText } from "@/components/ui/text";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import {
   formatCommitDate,
@@ -44,16 +44,6 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
         paddingBottom: dockHeight + 24,
       }}
       scrollIndicatorInsets={{ bottom: dockHeight }}
-      ListHeaderComponent={
-        <View className="pb-6">
-          <HeadingText
-            accessibilityRole="header"
-            className="text-2xl"
-          >
-            Commit history
-          </HeadingText>
-        </View>
-      }
       renderItem={({ item, index }) => (
         <Pressable
           onPress={() => {}}

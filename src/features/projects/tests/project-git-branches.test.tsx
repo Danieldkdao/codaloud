@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
-import { act, createElement, useImperativeHandle, useState, type ReactNode, type Ref } from "react";
+import { act, createElement, useImperativeHandle, useState, useRef, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
 import GitScreen from "@/app/projects/[projectId]/git";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
@@ -14,6 +15,19 @@ vi.mock("expo-router", () => ({ usePathname: () => `/projects/demo/${activeTab}`
 vi.mock("expo-router/ui", () => ({
   TabTrigger: ({ children }: { children: ReactNode }) => children,
   useTabTrigger: () => ({ switchTab }),
+}));
+vi.mock("react-native-reanimated", () => ({
+  default: { View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+    createElement("div", { style: Object.assign({}, ...([style].flat().filter(Boolean) as object[])) }, children) },
+  ReduceMotion: { System: "system" },
+  useSharedValue: (value: number) => useRef({ value }).current,
+  useAnimatedStyle: (callback: () => object) => callback(),
+  withSpring: (value: number) => value,
+  withTiming: (value: number) => value,
+}));
+vi.mock("@/components/ui/button", () => ({
+  Button: ({ children, onPress, disabled, accessibilityLabel }: { children: ReactNode; onPress?: () => void; disabled?: boolean; accessibilityLabel?: string }) =>
+    createElement("button", { onClick: onPress, disabled, "aria-label": accessibilityLabel }, children),
 }));
 vi.mock("@expo/vector-icons", () => ({ Feather: {}, Ionicons: {} }));
 const Workspace = () => (
@@ -60,8 +74,8 @@ vi.mock("@expo/ui/community/bottom-sheet", () => ({
   BottomSheetView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
 }));
 vi.mock("@/components/ui/input", () => ({
-  Input: ({ placeholder, accessibilityLabel }: { placeholder: string; accessibilityLabel: string }) =>
-    createElement("input", { placeholder, "aria-label": accessibilityLabel }),
+  Input: ({ placeholder, accessibilityLabel, value, onChangeText }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void }) =>
+    createElement("input", { placeholder, "aria-label": accessibilityLabel, value, onChange: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "var(--card)" }));
 vi.mock("react-native-svg", () => {
@@ -77,6 +91,7 @@ vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Bool
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
+  Keyboard: { dismiss: vi.fn() },
   PixelRatio: { get: () => 3 },
   KeyboardAvoidingView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
@@ -90,8 +105,8 @@ vi.mock("react-native", () => ({
   }) => createElement("div", null, ListHeaderComponent, data.map((item, index) =>
     createElement("div", { key: index }, renderItem({ item, index })))),
   Pressable: ({ children, onPress, accessibilityLabel, accessibilityState }: {
-    children?: ReactNode; onPress?: () => void; accessibilityLabel?: string; accessibilityState?: { checked?: boolean };
-  }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-checked": accessibilityState?.checked }, children),
+    children?: ReactNode; onPress?: () => void; accessibilityLabel?: string; accessibilityState?: { checked?: boolean | "mixed"; selected?: boolean };
+  }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-checked": accessibilityState?.checked, "aria-selected": accessibilityState?.selected }, children),
 }));
 vi.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children, actions, onPressAction }: {
@@ -146,6 +161,7 @@ it("switches workspace sections through the menu and reflects the active route",
 });
 
 it("updates the branch note and history when selecting a branch in the sheet", () => {
+  click("Commit History");
   expect(container.textContent).not.toContain("Demo history");
   expect(container.textContent).toContain("Polish the dashboard layout");
   selectBranch("feat/project-cards");
@@ -162,6 +178,7 @@ it("updates the branch note and history when selecting a branch in the sheet", (
 });
 
 it("keeps commit presses inert after changing branches", () => {
+  click("Commit History");
   selectBranch("fix/keyboard-navigation");
   const before = container.textContent;
   const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Restore focus after closing dialogs,"]');
@@ -175,7 +192,7 @@ it("shows only the active screen's controls in the lower bar", () => {
   const labels = () => [...container.querySelectorAll("button[aria-label]")]
     .map((button) => button.getAttribute("aria-label"));
   expect(labels()).toContain("Microphone");
-  expect(labels()).toContain("Search commits");
+  expect(labels()).toContain("Search Git");
   expect(labels()).not.toContain("Undo");
   for (const tab of ["files", "agent", "code"]) {
     activeTab = tab;
@@ -217,8 +234,44 @@ it("replaces the branch pill during search and restores it on dismissal", () => 
   const indicator = () => container.querySelector('[data-testid="branch-indicator"]');
   expect(indicator()?.textContent).toBe("main");
   expect(container.textContent).not.toContain("Current branch:");
-  click("Search commits");
+  click("Search Git");
   expect(indicator()).toBeNull();
   click("Dismiss search");
   expect(indicator()?.textContent).toBe("main");
+});
+
+
+it("shows changes immediately and keeps tracked and untracked selections without committing", () => {
+  expect(container.querySelector('[aria-label="Changes"]')?.getAttribute("aria-selected")).toBe("true");
+  expect(container.textContent).not.toContain("No uncommitted changes");
+  expect(container.textContent).not.toMatch(/demo|preview/i);
+  expect(container.querySelector('[aria-label="Show empty state"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Commit message"]')).not.toBeNull();
+  const checked = (label: string) => container.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-checked");
+  expect(checked("Select all changes")).toBe("false");
+  click("Select tracked changes");
+  expect(checked("Select tracked changes")).toBe("true");
+  expect(checked("Select untracked changes")).toBe("false");
+  expect(checked("Select all changes")).toBe("mixed");
+  click("Select all changes");
+  expect(checked("Select untracked changes")).toBe("true");
+  click("Include src/app/projects/[projectId]/git.tsx");
+  expect(checked("Select tracked changes")).toBe("mixed");
+  click("Commit History");
+  click("Changes");
+  expect(checked("Select tracked changes")).toBe("mixed");
+  const commit = container.querySelector<HTMLButtonElement>('[aria-label="Commit selected changes"]');
+  expect(commit?.disabled).toBe(true);
+  const before = container.textContent;
+  act(() => commit!.click());
+  expect(container.textContent).toBe(before);
+});
+
+it("renders the empty state from an empty changes list", () => {
+  act(() => root.render(createElement(ProjectWorkspaceDockHeightProvider, null,
+    createElement(ProjectChangesPanel, { changes: [] }))));
+  expect(container.textContent).toContain("No uncommitted changes");
+  expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
+  expect(container.textContent).not.toMatch(/demo|preview/i);
+  expect(container.querySelector('[aria-label="Show empty state"]')).toBeNull();
 });

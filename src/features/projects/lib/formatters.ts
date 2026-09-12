@@ -1,4 +1,4 @@
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectWorkspaceTab } from "@/features/projects/types";
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
@@ -165,6 +165,27 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
 
 export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
 
+export const formatProjectGitTab = (tab: ProjectGitTab) => {
+  switch (tab) {
+    case "changes": return "Changes";
+    case "history": return "Commit History";
+  }
+};
+
+export const formatProjectChangePath = (path: string) => {
+  const separator = path.lastIndexOf("/");
+  return { name: path.slice(separator + 1), directory: separator < 0 ? "Project root" : path.slice(0, separator) };
+};
+
+export const formatProjectChangeCount = (count: number) => `${count} file${count === 1 ? "" : "s"}`;
+
+export const formatProjectChangeSelection = (selected: number, total: number) => `${selected} of ${formatProjectChangeCount(total)} selected`;
+
+export const formatProjectChangeLines = (additions: number, deletions: number) => ({
+  additions: `+${additions}`,
+  deletions: `−${deletions}`,
+});
+
 export const formatCommitDate = (committedAt: string): string =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));
 
@@ -233,7 +254,7 @@ export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
 export const formatWorkspaceSearch = (tab: string | undefined) => {
   switch (tab) {
     case "git":
-      return { placeholder: "Search Commits", accessibilityLabel: "Search commits" };
+      return { placeholder: "Search Git", accessibilityLabel: "Search Git" };
     case "agent":
       return { placeholder: "Search Activity", accessibilityLabel: "Search activity" };
     default:

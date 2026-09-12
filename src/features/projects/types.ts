@@ -2,6 +2,15 @@ import type { ProjectSelectData } from "@/db/schemas/project";
 
 export type ProjectWorkspaceTab = "files" | "code" | "git" | "agent";
 
+export type ProjectGitTab = "changes" | "history";
+
+export type ProjectChangeData = {
+  path: string;
+  status: "modified" | "deleted" | "added" | "untracked";
+  additions: number;
+  deletions: number;
+};
+
 // The API serializes database timestamps as ISO strings.
 export type ProjectResponseData = Omit<
   ProjectSelectData,

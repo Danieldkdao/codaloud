@@ -52,11 +52,19 @@ vi.mock("react-native", () => ({
   }) => createElement("div", null, ListHeaderComponent, data.length ? data.map((item, index) =>
     createElement("div", { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
 }));
+vi.mock("@/features/projects/components/project-git-tabs", () => ({
+  ProjectGitTabs: () => null,
+  ProjectGitTabPanel: ({ children, active }: { children: ReactNode; active: boolean }) => active ? children : null,
+}));
+vi.mock("@/features/projects/components/project-changes-panel", () => ({
+  ProjectChangesPanel: ({ changes }: { changes: unknown[] }) => createElement("span", null, changes.length ? "Changes" : "No uncommitted changes"),
+}));
 vi.mock("@/features/projects/components/project-branch-select", () => ({ ProjectBranchSelect: () => null }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
 vi.mock("@/features/projects/data/demo-commits", () => ({
   get demoBranches() { return state.empty ? [] : [{ name: "main", commits: [] }]; },
 }));
+vi.mock("@/features/projects/data/demo-changes", () => ({ demoChanges: [] }));
 vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));
 
 let container: HTMLDivElement;
@@ -80,7 +88,7 @@ afterEach(() => {
 });
 
 it.each([
-  { name: "Git", Screen: GitScreen, loading: "Loading commits", empty: "No commits yet" },
+  { name: "Git", Screen: GitScreen, loading: "Loading changes", empty: "No uncommitted changes" },
   { name: "Agent", Screen: AgentScreen, loading: "Loading activity", empty: "No activity yet" },
 ])("previews loading for two seconds before showing empty content: $name", ({ Screen, loading, empty }) => {
   act(() => root.render(createElement(Screen)));
@@ -188,7 +196,7 @@ it("shows file errors with a retry and resumes loading while retrying", () => {
 });
 
 it.each([
-  { name: "Git", Screen: GitScreen, empty: "No commits yet" },
+  { name: "Git", Screen: GitScreen, empty: "No uncommitted changes" },
 ])("handles missing screen data after loading: $name", ({ Screen, empty }) => {
   state.empty = true;
   act(() => root.render(createElement(Screen)));

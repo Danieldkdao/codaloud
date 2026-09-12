@@ -1,21 +1,95 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { createProjectFileAction, deleteProjectFileAction, readProjectFileContentAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
+import { createProjectFileAction, deleteProjectFileAction, readProjectFileContentAction, readProjectFilesAction, saveProjectFileContentAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
 import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
-const mocks = vi.hoisted(() => ({ getCookie: vi.fn() }));
-vi.mock("@/lib/auth/auth-client", () => ({ authClient: { getCookie: mocks.getCookie } }));
+const mocks = vi.hoisted(() => ({ getCookie: vi.fn(), getSession: vi.fn() }));
+vi.mock("@/lib/auth/auth-client", () => ({ authClient: { getCookie: mocks.getCookie, getSession: mocks.getSession } }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("react-native", () => ({ Alert: {} }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 const entry = { name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 0, modifiedAt: "2026-09-10T00:00:00.000Z" };
 const network = vi.fn<typeof fetch>();
 beforeEach(() => {
+  mocks.getSession.mockReset().mockResolvedValue({ data: { user: { id: "current-user" } }, error: null });
   mocks.getCookie.mockReset().mockResolvedValue("session=mobile");
   network.mockReset().mockResolvedValue(Response.json({ error: false, message: "Files loaded.", data: [entry] }));
   vi.stubGlobal("fetch", network);
 });
 
 const updateInput = { parentPath: "notes", previousName: "old.txt", name: "hello.txt", kind: "file" as const };
+
+const saveInput = { path: "notes/hello #?&你好.txt", content: "你好\r\n", expectedContentHash: "a".repeat(64) };
+const savedFile = { path: saveInput.path, size: 8, contentHash: "b".repeat(64) };
+
+it.each([saveInput.content, ""])("sends authenticated validated file contents and returns confirmed save data: %j", async (content) => {
+  const input = { ...saveInput, content };
+  const result = { error: false, message: "File saved.", data: { ...savedFile, size: new TextEncoder().encode(content).byteLength } };
+  network.mockResolvedValue(Response.json(result));
+  expect(await saveProjectFileContentAction(projectId, input)).toEqual(result);
+  expect(mocks.getSession).toHaveBeenCalledOnce();
+  expect(network).toHaveBeenCalledOnce();
+  const [url, options] = network.mock.calls[0];
+  expect(url).toBe(`https://codaloud.test/api/projects/${projectId}/file-content`);
+  expect(options).toMatchObject({ method: "PUT", credentials: "omit" });
+  expect(JSON.parse(String(options?.body))).toEqual(input);
+  expect(new Headers(options?.headers).get("Cookie")).toBe("session=mobile");
+  expect(new Headers(options?.headers).get("Content-Type")).toBe("application/json");
+});
+
+it("verifies the session before validating save input or sending a request", async () => {
+  mocks.getSession.mockResolvedValue({ data: null, error: null });
+  expect(await saveProjectFileContentAction("invalid", saveInput)).toEqual({ error: true, message: "You must be signed in to save files." });
+  mocks.getSession.mockResolvedValue({ data: { user: { id: "current-user" } }, error: { message: "private session details" } });
+  expect(await saveProjectFileContentAction(projectId, saveInput)).toEqual({ error: true, message: "Unable to verify your session. Please try again." });
+  expect(mocks.getCookie).not.toHaveBeenCalled();
+  expect(network).not.toHaveBeenCalled();
+});
+
+it("rejects invalid save input and missing cookies without sending a request", async () => {
+  expect((await saveProjectFileContentAction("invalid", saveInput)).error).toBe(true);
+  for (const input of [
+    { ...saveInput, path: "../outside" }, { ...saveInput, content: "\0" },
+    { ...saveInput, content: "é".repeat(MAX_PROJECT_FILE_SIZE_BYTES) },
+    { ...saveInput, expectedContentHash: "invalid" }, { ...saveInput, sandboxId: "other" },
+  ]) {
+    expect((await saveProjectFileContentAction(projectId, input)).error).toBe(true);
+  }
+  expect(mocks.getCookie).not.toHaveBeenCalled();
+  mocks.getCookie.mockResolvedValue("");
+  expect((await saveProjectFileContentAction(projectId, saveInput)).error).toBe(true);
+  expect(network).not.toHaveBeenCalled();
+});
+
+it.each([[401, "UNAUTHENTICATED"], [409, "FILE_CHANGED"], [503, "WORKSPACE_RESTORING"]])("preserves save error %s %s without retrying", async (status, code) => {
+  const failure = { error: true, code, message: "Save was not confirmed." };
+  network.mockResolvedValue(Response.json(failure, { status: Number(status) }));
+  expect(await saveProjectFileContentAction(projectId, saveInput)).toEqual(failure);
+  expect(network).toHaveBeenCalledOnce();
+});
+
+it("does not confirm saves with malformed or mismatched metadata or unsuccessful HTTP status", async () => {
+  for (const data of [{ ...savedFile, path: "other.txt" }, { ...savedFile, size: saveInput.content.length }, { ...savedFile, contentHash: "invalid" }, {}]) {
+    network.mockResolvedValue(Response.json({ error: false, message: "File saved.", data }));
+    expect((await saveProjectFileContentAction(projectId, saveInput)).error).toBe(true);
+  }
+  network.mockResolvedValue(Response.json({ error: false, message: "File saved.", data: savedFile }, { status: 500 }));
+  expect((await saveProjectFileContentAction(projectId, saveInput)).error).toBe(true);
+  network.mockResolvedValue(new Response("not JSON"));
+  expect((await saveProjectFileContentAction(projectId, saveInput)).error).toBe(true);
+});
+
+it("returns safe error objects for save network and authentication failures", async () => {
+  const failure = { error: true, message: "Unable to confirm the save. Please try again." };
+  network.mockRejectedValue(new Error("private network details"));
+  expect(await saveProjectFileContentAction(projectId, saveInput)).toEqual(failure);
+  expect(network).toHaveBeenCalledOnce();
+  network.mockClear();
+  mocks.getCookie.mockRejectedValue(new Error("private cookie details"));
+  expect(await saveProjectFileContentAction(projectId, saveInput)).toEqual(failure);
+  mocks.getSession.mockRejectedValue(new Error("private session details"));
+  expect(await saveProjectFileContentAction(projectId, saveInput)).toEqual(failure);
+  expect(network).not.toHaveBeenCalled();
+});
 
 it("reads the selected file using encoded paths, native authentication, and cancellation", async () => {
   const data = { path: "notes/hello #?&你好.txt", content: "你好", size: 6 };

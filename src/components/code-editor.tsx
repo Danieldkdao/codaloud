@@ -30,6 +30,7 @@ type CodeEditorProps = {
   colorScheme?: "light" | "dark";
   /** Signals that CodeMirror has finished its initial layout. */
   onReady?: () => Promise<void>;
+  onChange?: (content: string) => Promise<void>;
   onRequestAnalysis?: CodeEditorAnalysisRequest;
   onAnalysis?: (analysis: CodeEditorAnalysis) => Promise<void>;
   analysisPanelRequest?: number;
@@ -78,6 +79,7 @@ const CodeEditor = ({
   bottomInset = 0,
   colorScheme,
   onReady,
+  onChange,
   onRequestAnalysis,
   onAnalysis,
   analysisPanelRequest = 0,
@@ -87,6 +89,8 @@ const CodeEditor = ({
   const inset = useRef(bottomInset);
   const readyCallback = useRef(onReady);
   readyCallback.current = onReady;
+  const changeCallback = useRef(onChange);
+  changeCallback.current = onChange;
   const analysisCallbacks = useRef({ onRequestAnalysis, onAnalysis });
   analysisCallbacks.current = { onRequestAnalysis, onAnalysis };
   const hasAnalysis = Boolean(onRequestAnalysis) && CODE_INTELLIGENCE_FILE_PATTERN.test(filename);
@@ -130,6 +134,15 @@ const CodeEditor = ({
         intelligence?.extensions ?? [],
         search({ top: true }),
         EditorState.tabSize.of(2),
+        // Preserve the file's newline convention when sending edits to native.
+        initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            void changeCallback.current?.(update.state.sliceDoc()).catch((error: unknown) => {
+              console.warn("Unable to report editor changes", error);
+            });
+          }
+        }),
         syntaxHighlighting(highlightStyle),
         language.of([]),
         EditorView.contentAttributes.of({

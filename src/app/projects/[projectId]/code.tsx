@@ -13,18 +13,17 @@ import { ProjectWorkspaceState } from "@/features/projects/components/project-wo
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useProjectFile } from "@/features/projects/hooks/use-project-file";
+import { ProjectFileSaveProvider, useProjectFileSave } from "@/features/projects/hooks/use-project-file-save";
 import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-shortcuts";
 import { useTheme } from "@/hooks/use-theme";
 
-const LoadedCodeEditor = ({ projectId, filePath, content, bottomInset }: {
+const LoadedCodeEditor = ({ projectId, filePath, bottomInset }: {
   projectId: string;
   filePath: string;
-  content: string;
   bottomInset: number;
 }) => {
   const { isDarkMode } = useTheme();
-  // Initialize once per opened file so query refreshes cannot overwrite local edits.
-  const [initialValue] = useState(content);
+  const save = useProjectFileSave()!;
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [analysis, setAnalysis] = useState<CodeEditorAnalysis>({ status: "checking", diagnostics: [] });
   const [analysisPanelRequest, setAnalysisPanelRequest] = useState(0);
@@ -37,7 +36,7 @@ const LoadedCodeEditor = ({ projectId, filePath, content, bottomInset }: {
 
   return (
     <View className="flex-1">
-      <ProjectCodeHeader filePath={filePath} analysis={analysis} onShowProblems={() => setAnalysisPanelRequest((value) => value + 1)} />
+      <ProjectCodeHeader filePath={filePath} fileStatus={isEditorReady ? undefined : "loading"} analysis={analysis} onShowProblems={() => setAnalysisPanelRequest((value) => value + 1)} />
       <View className="flex-1">
         <View
           className="flex-1"
@@ -52,7 +51,8 @@ const LoadedCodeEditor = ({ projectId, filePath, content, bottomInset }: {
             onAnalysis={handleAnalysis}
             analysisPanelRequest={analysisPanelRequest}
             filename={filePath}
-            initialValue={initialValue}
+            initialValue={save.initialValue}
+            onChange={save.onChange}
             bottomInset={bottomInset}
             dom={{
               onLoadStart: () => setIsEditorReady(false),
@@ -92,16 +92,17 @@ const CodeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      {!query.data ? <ProjectCodeHeader filePath={filePath} /> : null}
+      {!query.data ? <ProjectCodeHeader filePath={filePath} fileStatus={query.isError && !query.isFetching ? "error" : "loading"} /> : null}
       <View className="flex-1">
         {query.data ? (
-          <LoadedCodeEditor
+          <ProjectFileSaveProvider
             key={`${projectId}/${filePath}/${currentFile.version}`}
-            projectId={projectId}
             filePath={filePath}
-            content={query.data.content}
-            bottomInset={dockHeight}
-          />
+            version={currentFile.version}
+            initialValue={query.data.content}
+          >
+            <LoadedCodeEditor projectId={projectId} filePath={filePath} bottomInset={dockHeight} />
+          </ProjectFileSaveProvider>
         ) : query.isError ? (
           <View className="flex-1 items-center justify-center gap-4 px-6" style={{ paddingBottom: dockHeight }}>
             <HeadingText className="text-center text-2xl font-semibold">Couldn't open this file</HeadingText>

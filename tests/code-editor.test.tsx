@@ -37,6 +37,31 @@ afterEach(() => {
   container.remove();
 });
 
+it("reports document edits and undo through the native callback without reporting selection or initialization", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { filename: "notes.txt", initialValue: "original", onChange })));
+  const view = editor();
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => view.dispatch({ selection: { anchor: 2 } }));
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "你好\r\n" } }));
+  expect(onChange).toHaveBeenLastCalledWith("你好\n");
+  act(() => undo(view));
+  expect(onChange).toHaveBeenLastCalledWith("original");
+  const replacement = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { filename: "notes.txt", initialValue: "original", onChange: replacement })));
+  expect(editor()).toBe(view);
+  act(() => view.dispatch({ changes: { from: 0, insert: "edited " } }));
+  expect(replacement).toHaveBeenCalledExactlyOnceWith("edited original");
+});
+
+it("preserves an existing CRLF document's line endings when saving edits", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { filename: "notes.txt", initialValue: "first\r\nsecond\r\n", onChange })));
+  act(() => editor().dispatch({ changes: { from: 0, insert: "edited " } }));
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("edited first\r\nsecond\r\n");
+});
+
 it("offers TypeScript object members at the cursor", async () => {
   const onReady = vi.fn().mockResolvedValue(undefined);
   await act(async () => root.render(createElement(CodeEditor, {

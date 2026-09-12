@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ProjectSetupGate } from "@/features/projects/components/project-setup-gate";
@@ -75,7 +75,13 @@ beforeEach(() => {
   state.readFiles.mockReset().mockResolvedValue([]);
   Object.assign(state.query, { data: undefined, isError: false, isFetching: false });
 });
-afterEach(() => { act(() => root.unmount()); client.clear(); vi.useRealTimers(); });
+afterEach(() => {
+  act(() => root.unmount());
+  client.clear();
+  focusManager.setFocused(undefined);
+  onlineManager.setOnline(true);
+  vi.useRealTimers();
+});
 
 it("does not mount a requested child route before the project loads", async () => {
   await render();
@@ -145,22 +151,81 @@ it("verifies a cached workspace after pending setup becomes ready", async () => 
   expect(container.textContent).toBe("Requested workspace route");
 });
 
-it("offers a workspace retry after restoration times out, then opens on success", async () => {
+it.each([false, true])("opens a long restoration without leaving or pressing refresh (cached files: %s)", async (cached) => {
+  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  if (cached) client.setQueryData(["projects", "files", "user-one", "project-one", ""], []);
+  state.readFiles.mockImplementation(async (_project, _path, _signal, onRestoring) => {
+    onRestoring("3");
+    return null;
+  });
+  await render();
+  await advance(90_001);
+  expect(state.readFiles.mock.calls.length).toBeGreaterThan(21);
+  expect(state.renderWorkspace).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("We’re starting your sandbox");
+  state.readFiles.mockResolvedValue([]);
+  await advance(3_001);
+  expect(state.query.refetch).not.toHaveBeenCalled();
+  expect(container.textContent).toBe("Requested workspace route");
+  const completedReads = state.readFiles.mock.calls.length;
+  await advance(30_000);
+  expect(state.readFiles).toHaveBeenCalledTimes(completedReads);
+});
+
+it.each(["connectivity", "focus"])("resumes restoration automatically when %s returns", async (pause) => {
+  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.readFiles.mockImplementationOnce(async (_project, _path, _signal, onRestoring) => {
+    onRestoring("3");
+    return null;
+  });
+  await render();
+  await act(async () => {
+    if (pause === "connectivity") onlineManager.setOnline(false);
+    else focusManager.setFocused(false);
+  });
+  await advance(10_000);
+  expect(state.readFiles).toHaveBeenCalledOnce();
+  expect(state.renderWorkspace).not.toHaveBeenCalled();
+  await act(async () => {
+    if (pause === "connectivity") onlineManager.setOnline(true);
+    else focusManager.setFocused(true);
+  });
+  await advance();
+  expect(container.textContent).toBe("Requested workspace route");
+  expect(state.readFiles).toHaveBeenCalledTimes(2);
+});
+
+it("ends restoration checks on a real failure and allows an explicit retry", async () => {
+  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.readFiles.mockImplementationOnce(async (_project, _path, _signal, onRestoring) => {
+    onRestoring("3");
+    return null;
+  }).mockResolvedValue(null);
+  await render();
+  await advance(3_001);
+  expect(container.textContent).toContain("Unable to start your sandbox");
+  await advance(30_000);
+  expect(state.readFiles).toHaveBeenCalledTimes(2);
+  state.readFiles.mockResolvedValue([]);
+  await act(async () => container.querySelector("button")?.click());
+  await advance();
+  expect(container.textContent).toBe("Requested workspace route");
+});
+
+it("cancels long restoration checks when the workspace screen unmounts", async () => {
   state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
   state.readFiles.mockImplementation(async (_project, _path, _signal, onRestoring) => {
     onRestoring("3");
     return null;
   });
   await render();
-  await advance(60_001);
-  expect(state.readFiles).toHaveBeenCalledTimes(21);
-  expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Unable to start your sandbox");
-  state.readFiles.mockResolvedValue([]);
-  await act(async () => container.querySelector("button")?.click());
-  await advance();
-  expect(state.query.refetch).not.toHaveBeenCalled();
-  expect(container.textContent).toBe("Requested workspace route");
+  await advance(90_001);
+  const attempts = state.readFiles.mock.calls.length;
+  const signal = state.readFiles.mock.calls.at(-1)![2] as AbortSignal;
+  await act(async () => root.render(null));
+  await advance(30_000);
+  expect(signal.aborted).toBe(true);
+  expect(state.readFiles).toHaveBeenCalledTimes(attempts);
 });
 
 it("keeps terminal workspace errors outside the tabs without automatic retries", async () => {

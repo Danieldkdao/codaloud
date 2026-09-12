@@ -18,8 +18,10 @@ export const useProjectFile = (projectId: string, filePath: string | null) => {
     queryKey: ["projects", "file", userId, projectId, filePath],
     enabled: Boolean(userId && projectId && filePath),
     staleTime: 5_000,
-    retry: (failureCount, error) =>
-      error instanceof ProjectFileReadError && error.code === "WORKSPACE_RESTORING" && failureCount < 20,
+    // Archived workspaces can take longer than a fixed retry budget to start.
+    // Keep checking restoration, while surfacing all other failures normally.
+    retry: (_failureCount, error) =>
+      error instanceof ProjectFileReadError && error.code === "WORKSPACE_RESTORING",
     retryDelay: (_attempt, error) => error instanceof ProjectFileReadError ? error.retryAfterMs : 0,
     queryFn: async ({ signal }) => {
       if (!userId) throw new Error("Sign in to view project files.");

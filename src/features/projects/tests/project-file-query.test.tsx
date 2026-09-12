@@ -108,18 +108,22 @@ it.each([["3", 3000], [null, 3000], ["invalid", 3000], ["0", 3000], ["-1", 3000]
   expect(current.isSuccess).toBe(true);
 });
 
-it("bounds restoration retries and retains the server's final error", async () => {
+it("keeps checking long restorations until file contents load, then stops", async () => {
   read.mockImplementation(async (_project, _path, _signal, onFailure) => {
     onFailure?.({ error: true, code: "WORKSPACE_RESTORING", message: "Restoring your workspace." }, "3");
     return null;
   });
   await render();
-  await advance(60_001);
-  expect(read).toHaveBeenCalledTimes(21);
-  expect(current.isError).toBe(true);
-  expect(current.error?.message).toBe("Restoring your workspace.");
+  await advance(90_001);
+  expect(read.mock.calls.length).toBeGreaterThan(21);
+  expect(current.isPending).toBe(true);
+  read.mockResolvedValue(file);
+  await advance(3_001);
+  expect(current.data).toEqual(file);
+  expect(current.isSuccess).toBe(true);
+  const completedReads = read.mock.calls.length;
   await advance(30_000);
-  expect(read).toHaveBeenCalledTimes(21);
+  expect(read).toHaveBeenCalledTimes(completedReads);
 });
 
 it.each(["FILE_TOO_LARGE", "FILE_NOT_FOUND", "UNAUTHENTICATED", "UNSUPPORTED_FILE_ENCODING"])("surfaces %s without automatic retries", async (code) => {

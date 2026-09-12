@@ -1,7 +1,9 @@
 import { confirmUserProjectOwnership } from "./projects";
-import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, saveSandboxFileContent, updateSandboxFile } from "@/services/daytona/filesystem";
 import { SandboxFilesError } from "@/services/daytona/api";
-import type { CreateProjectFileSchema, DeleteProjectFileSchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import type { CreateProjectFileSchema, DeleteProjectFileSchema, SaveProjectFileContentSchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import type { CodeIntelligenceRequestSchema } from "@/features/projects/actions/code-intelligence-schemas";
+import { readSandboxCodeIntelligence } from "@/services/daytona/typescript";
 
 const getProjectFilesystem = async (userId: string, projectId: string) => {
   const existingProject = await confirmUserProjectOwnership(userId, projectId);
@@ -19,6 +21,12 @@ export const readUserProjectFiles = async (userId: string, projectId: string, pa
 
 export const readUserProjectFileContent = async (userId: string, projectId: string, path: string) =>
   readSandboxFileContent(await getProjectFilesystem(userId, projectId), path);
+
+export const saveUserProjectFileContent = async (userId: string, projectId: string, input: SaveProjectFileContentSchema) =>
+  saveSandboxFileContent(await getProjectFilesystem(userId, projectId), input);
+
+export const readUserProjectCodeIntelligence = async (userId: string, projectId: string, input: CodeIntelligenceRequestSchema) =>
+  readSandboxCodeIntelligence(await getProjectFilesystem(userId, projectId), input);
 
 export const createUserProjectFile = async (userId: string, projectId: string, input: CreateProjectFileSchema) =>
   createSandboxFile(await getProjectFilesystem(userId, projectId), input);

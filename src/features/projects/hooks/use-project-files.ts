@@ -39,7 +39,9 @@ export const useProjectFiles = (
     // setup finishes after this observer mounts. Cached files do not prove readiness.
     staleTime: verifyOnMount ? 0 : 5_000,
     refetchOnMount: verifyOnMount ? "always" : true,
-    retry: (failureCount, error) => error instanceof WorkspaceRestoringError && failureCount < 20,
+    // Restoration is ongoing work, not a terminal failure. Keep checking while
+    // this query is observed; success or a different error ends the retries.
+    retry: (_failureCount, error) => error instanceof WorkspaceRestoringError,
     retryDelay: (_attempt, error) => error instanceof WorkspaceRestoringError ? error.retryAfterMs : 0,
     queryFn: async ({ signal }) => {
       if (!userId) throw new Error("Sign in to view project files.");

@@ -1,11 +1,12 @@
 import { exec, execFile } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { chmod, lstat, mkdtemp, mkdir, readdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, updateSandboxFile } from "@/services/daytona/filesystem";
+import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandboxFiles, saveSandboxFileContent, updateSandboxFile } from "@/services/daytona/filesystem";
 import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "server-key" } }));
@@ -51,13 +52,15 @@ sys.exit(0 if result == 0 or ctypes.get_errno() == errno.EEXIST else 1)
       const body = JSON.parse(String(init?.body));
       try {
         if (readHook) await writeFile(join(home, "read-hook.cjs"), readHook);
+        const environmentFile = join(home, `command-env-${randomBytes(8).toString("hex")}`);
+        await writeFile(environmentFile, Object.entries(body.envs ?? {}).map(([key, value]) => `${key}=${value}`).join("\n"));
         const options = {
           timeout: 10_000,
           maxBuffer: 8 * 1024 * 1024,
-          env: { ...process.env, PATH: `${join(home, "bin")}:${process.env.PATH}`, ...(readHook ? { NODE_OPTIONS: `--require=${join(home, "read-hook.cjs")}` } : {}) },
+          env: { ...process.env, ...(sandboxContainer ? {} : body.envs), PATH: `${join(home, "bin")}:${process.env.PATH}`, ...(readHook ? { NODE_OPTIONS: `--require=${join(home, "read-hook.cjs")}` } : {}) },
         };
         const { stdout } = sandboxContainer
-          ? await executeFile("docker", ["exec", "--env", `NODE_OPTIONS=${readHook ? `--require=${join(home, "read-hook.cjs")}` : ""}`, sandboxContainer, "sh", "-c", body.command], options)
+          ? await executeFile("docker", ["exec", "--env-file", environmentFile, "--env", `NODE_OPTIONS=${readHook ? `--require=${join(home, "read-hook.cjs")}` : ""}`, sandboxContainer, "sh", "-c", body.command], options)
           : await execute(body.command, options);
         return Response.json({ exitCode: 0, result: stdout });
       } catch (error) {
@@ -149,8 +152,8 @@ contentTest("rejects missing files, directories, and symlinks without reading ou
 
 contentTest.each(
   [".codaloud", ".codaloud/workspace", ".codaloud/workspace/notes", ".codaloud/workspace/notes/nested"]
-    .flatMap((directory) => ["before-directory-open", "after-directory-open", "before-file-open"].map((timing) => ({ directory, timing }))),
-)("contains a $timing symlink swap at $directory, even when the path is restored", async ({ directory, timing }) => {
+    .flatMap((directory) => ["before-directory-open", "after-directory-open", "before-file-open"].flatMap((timing) => ["read", "save"].map((operation) => ({ directory, timing, operation })))),
+)("contains a $timing symlink swap at $directory during $operation, even when the path is restored", async ({ directory, timing, operation }) => {
   const relativeFile = ".codaloud/workspace/notes/nested/file.txt";
   const target = join(home, directory);
   const outside = join(home, "outside");
@@ -196,18 +199,21 @@ contentTest.each(
     };
     process.on('exit', () => fs.writeFileSync(${JSON.stringify(join(home, "attack-result.json"))}, JSON.stringify({ swapped, restored })));
   `;
-  const result = await readSandboxFileContent(context, "notes/nested/file.txt").catch((error: unknown) => error);
+  const result = await (operation === "read"
+    ? readSandboxFileContent(context, "notes/nested/file.txt")
+    : saveContent("saved", "workspace content", "notes/nested/file.txt")).catch((error: unknown) => error);
   // Either reject the changed path or finish reading the original anchored file.
   // Returning any contents from the replacement directory is a containment failure.
   if (result instanceof Error) expect(result).toMatchObject({ code: "INVALID_PATH" });
-  else expect(result).toEqual({ path: "notes/nested/file.txt", content: "workspace content", size: 17 });
+  else if (operation === "read") expect(result).toEqual({ path: "notes/nested/file.txt", content: "workspace content", size: 17 });
+  else expect(result).toEqual({ path: "notes/nested/file.txt", contentHash: contentHash("saved"), size: 5 });
   const attack = JSON.parse(await readFile(join(home, "attack-result.json"), "utf8"));
   expect(attack.swapped).toBe(true);
   if (!(result instanceof Error)) expect(attack.restored).toBe(true);
   expect(await readFile(join(outside, suffix), "utf8")).toBe("outside secret");
 });
 
-contentTest.each(["symlink", "fifo", "file"])("rejects a file replaced with a %s immediately before open", async (kind) => {
+contentTest.each(["symlink", "fifo", "file"].flatMap((kind) => ["read", "save"].map((operation) => ({ kind, operation }))))("rejects a file replaced with a $kind immediately before $operation", async ({ kind, operation }) => {
   await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
   const target = join(home, ".codaloud/workspace/file.txt");
   await writeFile(target, "workspace");
@@ -229,7 +235,8 @@ contentTest.each(["symlink", "fifo", "file"])("rejects a file replaced with a %s
       return open(path, ...args);
     };
   `;
-  await expect(readSandboxFileContent(context, "file.txt")).rejects.toMatchObject({ code: kind === "fifo" ? "NOT_A_FILE" : "INVALID_PATH" });
+  await expect(operation === "read" ? readSandboxFileContent(context, "file.txt") : saveContent("saved", "workspace"))
+    .rejects.toMatchObject({ code: kind === "fifo" ? "NOT_A_FILE" : "INVALID_PATH" });
 });
 
 contentTest.each(["success", "deep-path", "encoding", "changed", "missing-parent", "missing-proc"])("closes every opened descriptor on %s", async (outcome) => {
@@ -508,4 +515,116 @@ it("does not initialize a workspace for deletion and propagates provider failure
   network.mockImplementation((input, init) => String(input).endsWith("/process/execute") ? Promise.resolve(Response.json({}, { status: 500 })) : implementation(input, init));
   await expect(deleteSandboxFile(context, { parentPath: "", name: "source", kind: "file" })).rejects.toMatchObject({ code: "DAYTONA_REQUEST_FAILED" });
   expect((await lstat(join(home, ".codaloud/workspace/source"))).isFile()).toBe(true);
+});
+
+const contentHash = (content: string) => createHash("sha256").update(content).digest("hex");
+const saveContent = (content: string, previous = "original", path = "file.txt") =>
+  saveSandboxFileContent(context, { path, content, expectedContentHash: contentHash(previous) });
+
+contentTest.each(["", "short", "\uFEFF你好 👋\r\n", "' $(touch injected) `echo unsafe` \\ \n"])("saves exact UTF-8 bytes atomically: %j", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  await chmod(target, 0o755);
+  expect(await saveContent(content)).toEqual({ path: "file.txt", size: Buffer.byteLength(content), contentHash: contentHash(content) });
+  expect(await readFile(target, "utf8")).toBe(content);
+  expect((await lstat(target)).mode & 0o777).toBe(0o755);
+  expect(await readdir(join(home, ".codaloud/workspace"))).toEqual(["file.txt"]);
+});
+
+contentTest("saves an incompressible buffer at the editor limit without overflowing process arguments", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/file.txt"), "original");
+  const content = randomBytes(MAX_PROJECT_FILE_SIZE_BYTES).toString("base64").slice(0, MAX_PROJECT_FILE_SIZE_BYTES);
+  expect(await saveContent(content)).toMatchObject({ size: MAX_PROJECT_FILE_SIZE_BYTES, contentHash: contentHash(content) });
+  expect(await readFile(join(home, ".codaloud/workspace/file.txt"), "utf8")).toBe(content);
+});
+
+contentTest("rejects stale saves and serializes concurrent saves across sandbox processes", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  const results = await Promise.allSettled([saveContent("first"), saveContent("second")]);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { code: "FILE_CHANGED", status: 409 } });
+  const saved = await readFile(target, "utf8");
+  await expect(saveContent("stale")).rejects.toMatchObject({ code: "FILE_CHANGED" });
+  expect(await readFile(target, "utf8")).toBe(saved);
+  expect(await saveContent("next", saved)).toMatchObject({ contentHash: contentHash("next") });
+});
+
+contentTest.each(["", "saved"])("accepts an already committed retry for %j without accepting a conflicting write", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  await saveContent(content);
+  expect(await saveContent(content)).toEqual({ path: "file.txt", size: Buffer.byteLength(content), contentHash: contentHash(content) });
+  await writeFile(target, "external");
+  await expect(saveContent(content)).rejects.toMatchObject({ code: "FILE_CHANGED" });
+  expect(await readFile(target, "utf8")).toBe("external");
+});
+
+contentTest("retries a committed replacement after directory sync failure and still requires successful sync", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  readHook = `const fs = require('node:fs'); const sync = fs.fsyncSync; fs.fsyncSync = (fd) => {
+    if (fs.fstatSync(fd).isDirectory()) throw Object.assign(new Error('Directory sync failed'), { code: 'EIO' });
+    return sync(fd);
+  };`;
+  await expect(saveContent("saved")).rejects.toMatchObject({ code: "FILESYSTEM_ERROR" });
+  expect(await readFile(target, "utf8")).toBe("saved");
+  await expect(saveContent("saved")).rejects.toMatchObject({ code: "FILESYSTEM_ERROR" });
+  readHook = undefined;
+  expect(await saveContent("saved")).toEqual({ path: "file.txt", size: 5, contentHash: contentHash("saved") });
+  expect(await readdir(join(home, ".codaloud/workspace"))).toEqual(["file.txt"]);
+});
+
+contentTest("never creates missing files or follows file and directory symlinks when saving", async () => {
+  await mkdir(join(home, ".codaloud/workspace/folder"), { recursive: true });
+  await writeFile(join(home, "outside.txt"), "original");
+  await symlink(join(home, "outside.txt"), join(home, ".codaloud/workspace/link"));
+  await symlink(home, join(home, ".codaloud/workspace/parent-link"));
+  for (const [path, code] of [["missing", "FILE_NOT_FOUND"], ["folder", "NOT_A_FILE"], ["link", "INVALID_PATH"], ["parent-link/outside.txt", "INVALID_PATH"]]) {
+    await expect(saveContent("changed", "original", path)).rejects.toMatchObject({ code });
+  }
+  expect(await readFile(join(home, "outside.txt"), "utf8")).toBe("original");
+});
+
+contentTest.each(["ENOSPC", "EACCES"])("preserves the original and cleans temporary files after %s", async (code) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  readHook = `const fs = require('node:fs'); fs.writeFileSync = () => { const e = new Error(); e.code = '${code}'; throw e; };`;
+  await expect(saveContent("changed")).rejects.toMatchObject({ code: code === "ENOSPC" ? "WORKSPACE_FULL" : "FILESYSTEM_PERMISSION_DENIED" });
+  expect(await readFile(target, "utf8")).toBe("original");
+  expect(await readdir(join(home, ".codaloud/workspace"))).toEqual(["file.txt"]);
+});
+
+it("validates save input and preserves sandbox ownership and restoration checks", async () => {
+  await expect(saveContent("changed", "original", "../outside")).rejects.toThrow();
+  await expect(saveContent("é".repeat(MAX_PROJECT_FILE_SIZE_BYTES))).rejects.toThrow();
+  expect(network).not.toHaveBeenCalled();
+  state = "archived";
+  await expect(saveContent("changed")).rejects.toMatchObject({ code: "WORKSPACE_RESTORING" });
+  state = "started";
+  labels.codaloudProjectId = "another-project";
+  await expect(saveContent("changed")).rejects.toMatchObject({ code: "SANDBOX_MISMATCH" });
+  expect(network.mock.calls.some(([url]) => String(url).includes("/toolbox/"))).toBe(false);
+});
+
+contentTest("does not initialize a missing workspace during save", async () => {
+  await expect(saveContent("new")).rejects.toMatchObject({ code: "WORKSPACE_NOT_READY" });
+  await expect(lstat(join(home, ".codaloud"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+contentTest.each(["path", "size", "contentHash"])("rejects an unconfirmed save response with a mismatched %s", async (field) => {
+  const implementation = network.getMockImplementation()!;
+  network.mockImplementation((url, init) => String(url).endsWith("/process/execute")
+    ? Promise.resolve(Response.json({ exitCode: 0, result: JSON.stringify({
+      path: "file.txt", size: 3, contentHash: contentHash("new"),
+      [field]: field === "size" ? 5 : field === "path" ? "another.txt" : contentHash("other"),
+    }) }))
+    : implementation(url, init));
+  await expect(saveContent("new")).rejects.toMatchObject({ code: "FILESYSTEM_ERROR" });
 });

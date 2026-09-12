@@ -1,4 +1,5 @@
 import type { Sandbox } from "@daytona/sdk";
+import { prepareProjectDependencies } from "./prepare-project-dependencies";
 
 // Only pass an import source validated on the server. Never persist the token.
 type GitHubCloneInput = {
@@ -68,15 +69,18 @@ export const cloneGitHubRepository = async (sandbox: Sandbox, input: GitHubClone
       return JSON.parse(response.result) as { completed: boolean; stagingPath?: string };
     };
     const prepared = await prepare();
-    if (prepared.completed) return;
-    if (!prepared.stagingPath) throw new Error("Missing clone destination");
+    if (!prepared.completed) {
+      if (!prepared.stagingPath) throw new Error("Missing clone destination");
 
-    // Pass credentials in dedicated SDK fields, never the URL or a shell command.
-    await sandbox.git.clone(
-      input.cloneUrl, prepared.stagingPath, input.branchName, undefined,
-      "x-access-token", input.accessToken,
-    );
-    await prepare(prepared.stagingPath);
+      // Pass credentials in dedicated SDK fields, never the URL or a shell command.
+      await sandbox.git.clone(
+        input.cloneUrl, prepared.stagingPath, input.branchName, undefined,
+        "x-access-token", input.accessToken,
+      );
+      await prepare(prepared.stagingPath);
+    }
+    // A retry after dependency failure must reuse the published source files.
+    await prepareProjectDependencies(sandbox);
   } catch {
     // SDK errors can include the authenticated request body. Do not retain a cause.
     throw new Error("Unable to import the GitHub repository. Existing workspace files have been preserved.");

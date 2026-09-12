@@ -2,10 +2,47 @@ import type { ProjectAgentActivityKind, ProjectAgentActivityStatus } from "@/fea
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
+import type { DiagnosticSeverity } from "@/features/projects/actions/code-intelligence-schemas";
+import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
+import type { ProjectFileSaveStatus } from "@/features/projects/hooks/use-project-file-save";
 import type {
   ProjectSortField,
   ProjectSortOrder,
 } from "@/features/projects/lib/project-params";
+
+export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
+  switch (status) {
+    case "loading": return { label: "Loading file…", busy: true, icon: "cloud-sync-outline" as const, className: "text-muted-foreground" };
+    case "pending": return { label: "Changes waiting to save…", busy: true, icon: "cloud-sync-outline" as const, className: "text-muted-foreground" };
+    case "saving": return { label: "Saving file…", busy: true, icon: "cloud-sync-outline" as const, className: "text-muted-foreground" };
+    case "saved": return { label: "File saved", busy: false, icon: "cloud-check-outline" as const, className: "text-success-foreground" };
+    case "error": return { label: "Couldn't save file. Tap to retry.", busy: false, icon: "cloud-remove-outline" as const, className: "text-destructive" };
+  }
+};
+
+export const formatCodeDiagnostic = (severity: DiagnosticSeverity) => {
+  switch (severity) {
+    case "error": return { icon: "x-circle" as const, className: "text-destructive" };
+    case "warning": return { icon: "alert-triangle" as const, className: "text-warning" };
+    case "info": return { icon: "info" as const, className: "text-info" };
+  }
+};
+
+export const formatCodeDiagnosticCount = (count: number) => count > 99 ? "99+" : String(count);
+
+export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
+  switch (analysis.status) {
+    case "checking": return "Checking code…";
+    case "unavailable": return "Code analysis unavailable. Tap to retry.";
+    case "unsupported": return "Code analysis is not available for this language.";
+    case "ready": {
+      const errors = analysis.diagnostics.filter((item) => item.severity === "error").length;
+      const warnings = analysis.diagnostics.filter((item) => item.severity === "warning").length;
+      const information = analysis.diagnostics.filter((item) => item.severity === "info").length;
+      return `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}, ${information} information message${information === 1 ? "" : "s"}. Show problems.`;
+    }
+  }
+};
 
 export const formatProjectFileKind = (kind: ProjectFileKind) => {
   switch (kind) {

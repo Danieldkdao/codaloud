@@ -2,6 +2,7 @@
 import { act, createElement, Fragment, useEffect, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ProjectLayout from "@/app/projects/[projectId]/_layout";
 import FilesScreen from "@/app/projects/[projectId]/files";
@@ -11,7 +12,8 @@ import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-pr
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 
-const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
+const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
+const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {
@@ -35,12 +37,16 @@ vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending:
 vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFilesAction: async () => [], readProjectFileContentAction: mocks.readContent,
   createProjectFileAction: mocks.create, updateProjectFileAction: mocks.update, deleteProjectFileAction: mocks.delete,
+  saveProjectFileContentAction: mocks.save,
 }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, onReady }: { initialValue: string; onReady: () => Promise<void> }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, onReady, onChange }: { initialValue: string; onReady: () => Promise<void>; onChange: (value: string) => Promise<void> }) => {
+  mocks.change = onChange;
   useEffect(() => { void onReady(); }, [onReady]);
   return createElement("textarea", { defaultValue: initialValue });
 } }));
@@ -50,7 +56,10 @@ vi.mock("@/components/ui/text", () => {
   return { PText: Text, HeadingText: Text, CodeText: Text };
 });
 vi.mock("@/components/ui/button", () => ({ Button: (props: { children?: ReactNode }) => createElement(Children, props) }));
-vi.mock("react-native", () => ({ View: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));
+vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
+  lifecycle.listeners.add(listener);
+  return { remove: () => lifecycle.listeners.delete(listener) };
+} }, View: (props: { children?: ReactNode }) => createElement(Children, props), Pressable: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));
 
 let selection: ReturnType<typeof useProjectWorkspaceCurrentFile>;
 let creation: ReturnType<typeof useProjectWorkspaceFileCreation>;
@@ -77,12 +86,153 @@ beforeEach(async () => {
   mocks.projectId = "project-one";
   mocks.readContent.mockReset().mockImplementation(async (_project: string, path: string) => ({ path, content: "server contents", size: 15 }));
   mocks.update.mockReset(); mocks.delete.mockReset(); mocks.create.mockReset();
+  mocks.save.mockReset().mockImplementation(async (_project, input) => ({ error: false, message: "Saved.", data: { path: input.path, size: Buffer.byteLength(input.content), contentHash: createHash("sha256").update(input.content).digest("hex") } }));
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   container = document.createElement("div");
   root = createRoot(container);
   await render();
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); });
+
+it("waits for pending and subsequently queued edits before renaming", async () => {
+  await select("old.ts");
+  const save = mocks.save.getMockImplementation()!;
+  let finishFirst!: () => void;
+  let finishSecond!: () => void;
+  mocks.save.mockImplementationOnce((...args) => new Promise((resolve) => { finishFirst = () => resolve(save(...args)); }))
+    .mockImplementationOnce((...args) => new Promise((resolve) => { finishSecond = () => resolve(save(...args)); }));
+  mocks.update.mockResolvedValueOnce(result("new.ts"));
+  await act(async () => mocks.change!("first"));
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" }); });
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(mocks.save).toHaveBeenCalledTimes(1);
+  await act(async () => mocks.change!("second"));
+  await act(async () => finishFirst());
+  expect(mocks.save).toHaveBeenCalledTimes(2);
+  expect(mocks.update).not.toHaveBeenCalled();
+  await act(async () => { finishSecond(); await pending; });
+  expect(mocks.update).toHaveBeenCalledOnce();
+  expect(selection.filePath).toBe("new.ts");
+});
+
+it("keeps the path and draft when a save fails before rename", async () => {
+  await select("old.ts");
+  mocks.save.mockResolvedValue({ error: true, message: "Unable to save draft." });
+  mocks.update.mockResolvedValueOnce(result("new.ts"));
+  await act(async () => mocks.change!("draft"));
+  await act(async () => {
+    await expect(fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" })).rejects.toThrow("Unable to save draft.");
+  });
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(selection.filePath).toBe("old.ts");
+  await select("other.ts");
+  await select("old.ts");
+  expect(container.querySelector("textarea")?.value).toBe("draft");
+});
+
+it("waits for every dirty descendant before renaming a folder", async () => {
+  const save = mocks.save.getMockImplementation()!;
+  const finishes = new Map<string, () => void>();
+  mocks.save.mockImplementation((...args) => new Promise((resolve) => { finishes.set(args[1].path, () => resolve(save(...args))); }));
+  mocks.update.mockResolvedValueOnce(result("lib", true));
+  await select("src/first.ts");
+  await act(async () => mocks.change!("first draft"));
+  await select("src/second.ts");
+  await act(async () => mocks.change!("second draft"));
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "src", name: "lib", kind: "folder" }); });
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(finishes.size).toBe(2);
+  await act(async () => finishes.get("src/second.ts")!());
+  expect(mocks.update).not.toHaveBeenCalled();
+  await act(async () => { finishes.get("src/first.ts")!(); await pending; });
+  expect(selection.filePath).toBe("lib/second.ts");
+  expect(mocks.update).toHaveBeenCalledOnce();
+});
+
+it("retains late edits during rename and saves them only at the new path", async () => {
+  await select("old.ts");
+  let finish!: (value: unknown) => void;
+  mocks.update.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" }); });
+  await act(async () => mocks.change!("late draft"));
+  await act(async () => lifecycle.listeners.forEach((listener) => listener("background")));
+  expect(mocks.save).not.toHaveBeenCalled();
+  await act(async () => { finish(result("new.ts")); await pending; });
+  await flush();
+  expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "new.ts", content: "late draft", expectedContentHash: createHash("sha256").update("server contents").digest("hex") });
+  expect(container.querySelector("textarea")?.value).toBe("late draft");
+});
+
+it("retargets drafts opened while a folder rename is in progress", async () => {
+  await select("src/first.ts");
+  let finish!: (value: unknown) => void;
+  mocks.update.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "src", name: "lib", kind: "folder" }); });
+  await select("src/second.ts");
+  await act(async () => mocks.change!("new draft"));
+  await act(async () => lifecycle.listeners.forEach((listener) => listener("background")));
+  expect(mocks.save).not.toHaveBeenCalled();
+  await act(async () => { finish(result("lib", true)); await pending; });
+  await flush();
+  expect(selection.filePath).toBe("lib/second.ts");
+  expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "lib/second.ts", content: "new draft", expectedContentHash: createHash("sha256").update("server contents").digest("hex") });
+  expect(container.querySelector("textarea")?.value).toBe("new draft");
+});
+
+it("keeps the rename pause until all descendant saves settle after one fails", async () => {
+  const save = mocks.save.getMockImplementation()!;
+  let finish!: () => void;
+  mocks.save.mockImplementation((...args) => args[1].path === "src/first.ts"
+    ? Promise.resolve({ error: true, message: "Save failed." })
+    : new Promise((resolve) => { finish = () => resolve(save(...args)); }));
+  await select("src/first.ts");
+  await act(async () => mocks.change!("first draft"));
+  await select("src/second.ts");
+  await act(async () => mocks.change!("second draft"));
+  let settled = false;
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "src", name: "lib", kind: "folder" }).catch(() => { settled = true; }); });
+  expect(settled).toBe(false);
+  expect(mocks.update).not.toHaveBeenCalled();
+  await act(async () => { finish(); await pending; });
+  expect(settled).toBe(true);
+  expect(mocks.update).not.toHaveBeenCalled();
+});
+
+it("rejects a second rename while saves for the first one are pending", async () => {
+  await select("old.ts");
+  const save = mocks.save.getMockImplementation()!;
+  let finish!: () => void;
+  mocks.save.mockImplementationOnce((...args) => new Promise((resolve) => { finish = () => resolve(save(...args)); }));
+  mocks.update.mockResolvedValueOnce(result("new.ts"));
+  await act(async () => mocks.change!("draft"));
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" }); });
+  await act(async () => {
+    await expect(fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "other.ts", kind: "file" })).rejects.toThrow(/rename.*progress/i);
+  });
+  await act(async () => { finish(); await pending; });
+  expect(mocks.update).toHaveBeenCalledOnce();
+});
+
+it("resumes late edits at the original path after a failed rename", async () => {
+  await select("old.ts");
+  let finish!: (value: unknown) => void;
+  mocks.update.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  let pending!: Promise<void>;
+  await act(async () => { pending = fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" }); });
+  await act(async () => mocks.change!("late draft"));
+  await act(async () => {
+    finish({ error: true, message: "Rename failed." });
+    await expect(pending).rejects.toThrow("Rename failed.");
+  });
+  expect(selection.filePath).toBe("old.ts");
+  expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "old.ts", content: "late draft", expectedContentHash: createHash("sha256").update("server contents").digest("hex") });
+});
 
 it.each([
   { selected: "old.ts", source: "old.ts", destination: "new.ts", expected: "new.ts", kind: "file" as const },

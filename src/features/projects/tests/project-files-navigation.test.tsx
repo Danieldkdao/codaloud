@@ -9,6 +9,9 @@ import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwip
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 
 const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
+vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({
+  renameFiles: async (_previousPath: string, _nextPath: string, rename: () => Promise<unknown>) => rename(),
+}) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => fileCreation }));
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), selectFile: vi.fn(), confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));

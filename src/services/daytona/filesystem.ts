@@ -1,10 +1,12 @@
 import { z } from "zod";
 import {
   deleteProjectFileSchema, type DeleteProjectFileSchema,
+  saveProjectFileContentSchema, savedProjectFileContentSchema, type SaveProjectFileContentSchema,
   createProjectFileSchema, projectDirectoryPathSchema, projectFileEntrySchema, projectFilePathSchema, projectFileContentSchema,
   updateProjectFileSchema, type CreateProjectFileSchema, type UpdateProjectFileSchema,
 } from "@/features/projects/actions/file-schemas";
 import { getSandboxToolboxUrl, requestDaytona, SandboxFilesError } from "./api";
+import { createSandboxCommand, sandboxCommandInput } from "./create-command";
 import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 
 type SandboxFilesystemContext = { sandboxId: string; projectId: string; allowInitialize: boolean };
@@ -14,7 +16,7 @@ type SandboxFilesystemContext = { sandboxId: string; projectId: string; allowIni
 const filesystemCommand = String.raw`
 const fs = require("node:fs");
 const path = require("node:path").posix;
-const input = JSON.parse(Buffer.from(process.argv[1], "base64").toString("utf8"));
+${sandboxCommandInput}
 const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
 const validateName = (name) => {
   if (!name || name === "." || name === ".." || /[\/\\\x00-\x1f\x7f]/.test(name)) fail("INVALID_PATH");
@@ -37,7 +39,7 @@ const readContent = (target) => {
   if (existing.isSymbolicLink()) fail("INVALID_PATH");
   if (!existing.isFile()) fail("NOT_A_FILE");
   // Reject special files without blocking, including replacements after lstat.
-  const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  const fd = fs.openSync(target, (input.saveContent ? fs.constants.O_RDWR : fs.constants.O_RDONLY) | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
     const info = fs.fstatSync(fd);
     if (!info.isFile()) fail("NOT_A_FILE");
@@ -60,12 +62,49 @@ const readContent = (target) => {
     let content;
     try { content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data); }
     catch { fail("UNSUPPORTED_FILE_ENCODING"); }
-    return { path: [input.parentPath, input.name].filter(Boolean).join("/"), content, size };
+    return { path: [input.parentPath, input.name].filter(Boolean).join("/"), content, size, ...(input.saveContent ? { info: after } : {}) };
   } finally {
     fs.closeSync(fd);
   }
 };
-const readWorkspaceContent = () => {
+const saveContent = (parentFd, target) => {
+  // Lock the anchored directory, not the file inode that atomic rename replaces.
+  // The child inherits the same open description; closing parentFd releases it.
+  try {
+    require("node:child_process").execFileSync("flock", ["-x", "-w", "5", "3"], {
+      stdio: ["ignore", "pipe", "pipe", parentFd], timeout: 6000,
+    });
+  } catch (error) { fail(error.status === 1 ? "SAVE_BUSY" : "FILESYSTEM_UNAVAILABLE"); }
+  const current = readContent(target);
+  const hash = (content) => require("node:crypto").createHash("sha256").update(content).digest("hex");
+  if (hash(current.content) !== input.expectedContentHash) fail("FILE_CHANGED");
+  const bytes = Buffer.from(input.content, "utf8");
+  if (bytes.length > input.maxBytes) fail("FILE_TOO_LARGE");
+  if (bytes.includes(0) || bytes.toString("utf8") !== input.content) fail("UNSUPPORTED_FILE_ENCODING");
+  const temporary = "/proc/self/fd/" + parentFd + "/.codaloud-save-" + require("node:crypto").randomUUID();
+  let fd;
+  let committed = false;
+  try {
+    fd = fs.openSync(temporary, "wx", 0o600);
+    fs.writeFileSync(fd, bytes);
+    fs.fchmodSync(fd, current.info.mode & 0o777);
+    fs.fsyncSync(fd);
+    const latest = fs.lstatSync(target, { throwIfNoEntry: false });
+    if (!latest || latest.isSymbolicLink() || latest.dev !== current.info.dev || latest.ino !== current.info.ino
+      || latest.size !== current.info.size || latest.mtimeMs !== current.info.mtimeMs || latest.ctimeMs !== current.info.ctimeMs) fail("FILE_CHANGED");
+    // The original is untouched until the complete replacement is ready.
+    fs.renameSync(temporary, target);
+    committed = true;
+    fs.fsyncSync(parentFd);
+    return { path: current.path, size: bytes.length, contentHash: hash(bytes) };
+  } finally {
+    if (fd !== undefined) {
+      fs.closeSync(fd);
+      if (!committed) fs.unlinkSync(temporary);
+    }
+  }
+};
+const accessWorkspaceContent = () => {
   // Node has no openat API. Linux procfs lets us resolve each single component
   // relative to an open directory, even if another process renames that directory.
   // Never fall back to absolute pathname checks: an attacker can swap and restore
@@ -92,14 +131,15 @@ const readWorkspaceContent = () => {
       fs.closeSync(previousFd);
     }
     validateName(input.name);
-    return readContent("/proc/self/fd/" + parentFd + "/" + input.name);
+    const target = "/proc/self/fd/" + parentFd + "/" + input.name;
+    return input.saveContent ? saveContent(parentFd, target) : readContent(target);
   } finally {
     fs.closeSync(parentFd);
   }
 };
 try {
-  if (input.readContent) {
-    process.stdout.write(JSON.stringify(readWorkspaceContent()));
+  if (input.readContent || input.saveContent) {
+    process.stdout.write(JSON.stringify(accessWorkspaceContent()));
   } else {
     const home = fs.realpathSync(input.home);
     const base = directory(path.join(home, ".codaloud"), input.allowInitialize);
@@ -160,8 +200,9 @@ const throwFilesystemError = (code: unknown): never => {
   switch (code) {
     case "FILESYSTEM_UNAVAILABLE": throw new SandboxFilesError(502, "FILESYSTEM_UNAVAILABLE", "Secure file access is unavailable in this workspace. Please try again later.");
     case "FILE_NOT_FOUND": throw new SandboxFilesError(404, "FILE_NOT_FOUND", "The selected file or folder could not be found. Please refresh and try again.");
-    case "FILE_CHANGED": throw new SandboxFilesError(409, "FILE_CHANGED", "The selected item has changed. Please refresh the folder before trying again.");
-    case "FILE_TOO_LARGE": throw new SandboxFilesError(413, "FILE_TOO_LARGE", `This file is too large to open in the editor. The limit is ${MAX_PROJECT_FILE_SIZE_BYTES} bytes.`);
+    case "FILE_CHANGED": throw new SandboxFilesError(409, "FILE_CHANGED", "The selected item has changed. Reload it before trying again.");
+    case "SAVE_BUSY": throw new SandboxFilesError(409, "SAVE_BUSY", "Another save is in progress. Please try again.");
+    case "FILE_TOO_LARGE": throw new SandboxFilesError(413, "FILE_TOO_LARGE", `This file is too large for the editor. The limit is ${MAX_PROJECT_FILE_SIZE_BYTES} bytes.`);
     case "NOT_A_FILE": throw new SandboxFilesError(415, "NOT_A_FILE", "Choose a regular text file to open in the editor.");
     case "UNSUPPORTED_FILE_ENCODING": throw new SandboxFilesError(415, "UNSUPPORTED_FILE_ENCODING", "This file is binary or is not valid UTF-8 text.");
     case "EEXIST": throw new SandboxFilesError(409, "NAME_CONFLICT", "Conflicting filename. Please rename this file or folder.");
@@ -178,15 +219,12 @@ const throwFilesystemError = (code: unknown): never => {
 };
 
 const executeFilesystemOperation = async (
-  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, operation?: (CreateProjectFileSchema | UpdateProjectFileSchema) & { delete?: boolean; readContent?: boolean; maxBytes?: number },
+  toolboxUrl: string, context: SandboxFilesystemContext, parentPath: string, operation?: (CreateProjectFileSchema | UpdateProjectFileSchema) & { delete?: boolean; readContent?: boolean; saveContent?: boolean; content?: string; expectedContentHash?: string; maxBytes?: number },
 ) => {
   const { dir: home } = homeDirectorySchema.parse(await requestDaytona(`${toolboxUrl}/user-home-dir`));
-  const payload = JSON.stringify({ home, allowInitialize: context.allowInitialize, parentPath, ...operation });
-  const encoded = btoa(Array.from(new TextEncoder().encode(payload), (byte) => String.fromCharCode(byte)).join(""));
-  // Only the fixed script and base64 data enter the shell. Names remain data.
-  const command = `node -e '${filesystemCommand.replace(/'/g, "'\\''")}' '${encoded}'`;
+  const payload = { home, allowInitialize: context.allowInitialize, parentPath, ...operation };
   const response = executeResponseSchema.parse(await requestDaytona(`${toolboxUrl}/process/execute`, {
-    method: "POST", body: JSON.stringify({ command, timeout: 10 }),
+    method: "POST", body: JSON.stringify(createSandboxCommand(filesystemCommand, payload, 10)),
   }));
   const result: unknown = JSON.parse(response.result);
   if (response.exitCode !== 0) throwFilesystemError(z.object({ code: z.string() }).parse(result).code);
@@ -237,4 +275,22 @@ export const deleteSandboxFile = async (context: SandboxFilesystemContext, unsaf
   return projectFileEntrySchema.parse(
     await executeFilesystemOperation(toolboxUrl, { ...context, allowInitialize: false }, input.parentPath, { ...input, delete: true }),
   );
+};
+
+export const saveSandboxFileContent = async (context: SandboxFilesystemContext, unsafeInput: SaveProjectFileContentSchema) => {
+  const input = saveProjectFileContentSchema.parse(unsafeInput);
+  const separator = input.path.lastIndexOf("/");
+  const parentPath = separator === -1 ? "" : input.path.slice(0, separator);
+  const name = input.path.slice(separator + 1);
+  const toolboxUrl = await getSandboxToolboxUrl(context.sandboxId, context.projectId);
+  const savedFile = savedProjectFileContentSchema.parse(await executeFilesystemOperation(
+    toolboxUrl, { ...context, allowInitialize: false }, parentPath,
+    { parentPath, name, kind: "file", saveContent: true, content: input.content, expectedContentHash: input.expectedContentHash, maxBytes: MAX_PROJECT_FILE_SIZE_BYTES },
+  ));
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input.content));
+  const contentHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  if (savedFile.path !== input.path || savedFile.size !== new TextEncoder().encode(input.content).byteLength || savedFile.contentHash !== contentHash) {
+    throw new SandboxFilesError(502, "FILESYSTEM_ERROR", "Unable to confirm the saved file contents.");
+  }
+  return savedFile;
 };

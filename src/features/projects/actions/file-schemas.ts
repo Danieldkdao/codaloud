@@ -33,6 +33,29 @@ export const readProjectFileContentResponseSchema = z.object({
 });
 export type ReadProjectFileContentResponseSchema = z.infer<typeof readProjectFileContentResponseSchema>;
 
+export const saveProjectFileContentSchema = z.strictObject({
+  path: projectFilePathSchema,
+  content: z.string().max(MAX_PROJECT_FILE_SIZE_BYTES)
+    .refine((content) => new TextEncoder().encode(content).byteLength <= MAX_PROJECT_FILE_SIZE_BYTES, "File exceeds the editor size limit.")
+    .refine((content) => !content.includes("\0") && new TextDecoder("utf-8", { ignoreBOM: true }).decode(new TextEncoder().encode(content)) === content, "Use valid UTF-8 text without null bytes."),
+  // SHA-256 of the exact UTF-8 content last loaded or successfully saved.
+  expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type SaveProjectFileContentSchema = z.infer<typeof saveProjectFileContentSchema>;
+
+export const savedProjectFileContentSchema = z.object({
+  path: projectFilePathSchema,
+  size: z.number().int().nonnegative().max(MAX_PROJECT_FILE_SIZE_BYTES),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type SavedProjectFileContentSchema = z.infer<typeof savedProjectFileContentSchema>;
+
+export const saveProjectFileContentResponseSchema = z.discriminatedUnion("error", [
+  projectFileContentErrorSchema,
+  z.object({ error: z.literal(false), message: z.string(), data: savedProjectFileContentSchema }),
+]);
+export type SaveProjectFileContentResponseSchema = z.infer<typeof saveProjectFileContentResponseSchema>;
+
 export const createProjectFileSchema = z.strictObject({
   parentPath: projectDirectoryPathSchema,
   name: projectFileNameSchema,

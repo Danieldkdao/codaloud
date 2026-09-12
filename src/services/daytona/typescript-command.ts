@@ -1,4 +1,4 @@
-import { gzipSync } from "node:zlib";
+import { createSandboxCommand, sandboxCommandInput } from "./create-command";
 import type { CodeIntelligenceRequestSchema } from "@/features/projects/actions/code-intelligence-schemas";
 
 // This program runs in Daytona. Compiler dependencies and source files never
@@ -7,8 +7,7 @@ export const typescriptCommand = String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const encoded = Array.from({ length: Number(process.env.CODALOUD_ANALYSIS_CHUNKS) }, (_, index) => process.env["CODALOUD_ANALYSIS_" + index]).join("");
-const input = JSON.parse(require("node:zlib").gunzipSync(Buffer.from(encoded, "base64")).toString("utf8"));
+${sandboxCommandInput}
 try {
   const root = path.join(input.home, ".codaloud", "workspace");
   if ([path.join(input.home, ".codaloud"), root].some((folder) => fs.lstatSync(folder).isSymbolicLink())) throw new Error("INVALID_PATH");
@@ -109,12 +108,5 @@ try {
 }
 `;
 
-export const createTypescriptCommand = (input: CodeIntelligenceRequestSchema & { home: string }) => {
-  // Compress snapshots and split environment values to stay below Linux's
-  // per-argument limit, even for files near the editor's 1 MB size limit.
-  const payload = gzipSync(Buffer.from(JSON.stringify(input))).toString("base64");
-  const chunks = payload.match(/.{1,60000}/g) ?? [];
-  const envs: Record<string, string> = { CODALOUD_ANALYSIS_CHUNKS: String(chunks.length) };
-  chunks.forEach((chunk, index) => { envs[`CODALOUD_ANALYSIS_${index}`] = chunk; });
-  return { command: `node -e '${typescriptCommand.replace(/'/g, "'\\''")}'`, envs, timeout: 60 };
-};
+export const createTypescriptCommand = (input: CodeIntelligenceRequestSchema & { home: string }) =>
+  createSandboxCommand(typescriptCommand, input, 60);

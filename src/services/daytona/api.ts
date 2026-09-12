@@ -36,6 +36,25 @@ const sandboxDetailsSchema = z.object({
 });
 export type SandboxDetailsSchema = z.infer<typeof sandboxDetailsSchema>;
 
+// Share the same ownership and restoration rules across SDK and HTTP operations.
+export const ensureSandboxReady = async (details: unknown, sandboxId: string, projectId: string) => {
+  const sandbox = sandboxDetailsSchema.parse(details);
+  if (sandbox.id !== sandboxId || sandbox.labels.codaloudApp !== "codaloud" || sandbox.labels.codaloudProjectId !== projectId) {
+    throw new SandboxFilesError(409, "SANDBOX_MISMATCH", "The sandbox does not belong to this project.");
+  }
+  if (sandbox.state === "stopped" || sandbox.state === "archived") {
+    await requestDaytona(`https://app.daytona.io/api/sandbox/${encodeURIComponent(sandboxId)}/start`, { method: "POST" });
+    throw new SandboxFilesError(503, "WORKSPACE_RESTORING", "Restoring your workspace. Please try again in a moment.");
+  }
+  if (["starting", "restoring", "archiving", "stopping", "pending_build", "building", "creating", "pulling_snapshot"].includes(sandbox.state)) {
+    throw new SandboxFilesError(503, "WORKSPACE_RESTORING", "Your workspace is getting ready. Please try again in a moment.");
+  }
+  if (sandbox.state !== "started") {
+    throw new SandboxFilesError(409, "WORKSPACE_UNAVAILABLE", "Your workspace is unavailable. Please try reopening the project.");
+  }
+  return sandbox;
+};
+
 export const getSandboxToolboxUrl = async (sandboxId: string, projectId: string) => {
   const sandboxUrl = `https://app.daytona.io/api/sandbox/${encodeURIComponent(sandboxId)}`;
   let result: unknown;
@@ -47,20 +66,7 @@ export const getSandboxToolboxUrl = async (sandboxId: string, projectId: string)
     }
     throw error;
   }
-  const sandbox = sandboxDetailsSchema.parse(result);
-  if (sandbox.id !== sandboxId || sandbox.labels.codaloudApp !== "codaloud" || sandbox.labels.codaloudProjectId !== projectId) {
-    throw new SandboxFilesError(409, "SANDBOX_MISMATCH", "The sandbox does not belong to this project.");
-  }
-  if (sandbox.state === "stopped" || sandbox.state === "archived") {
-    await requestDaytona(`${sandboxUrl}/start`, { method: "POST" });
-    throw new SandboxFilesError(503, "WORKSPACE_RESTORING", "Restoring your workspace. Please try again in a moment.");
-  }
-  if (["starting", "restoring", "archiving", "stopping", "pending_build", "building", "creating", "pulling_snapshot"].includes(sandbox.state)) {
-    throw new SandboxFilesError(503, "WORKSPACE_RESTORING", "Your workspace is getting ready. Please try again in a moment.");
-  }
-  if (sandbox.state !== "started") {
-    throw new SandboxFilesError(409, "WORKSPACE_UNAVAILABLE", "Your workspace is unavailable. Please try reopening the project.");
-  }
+  const sandbox = await ensureSandboxReady(result, sandboxId, projectId);
   const proxy = sandbox.toolboxProxyUrl ?? z.object({ url: z.url() }).parse(
     await requestDaytona(`${sandboxUrl}/toolbox-proxy-url`),
   ).url;

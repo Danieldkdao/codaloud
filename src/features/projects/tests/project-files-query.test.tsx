@@ -58,18 +58,23 @@ it("keeps loading during restoration and retries after the server's delay", asyn
   expect(current.query.isError).toBe(false);
 });
 
-it("stops restoration retries after a bounded number of attempts", async () => {
+it("keeps checking long restorations until the folder loads, then stops", async () => {
   vi.useFakeTimers();
   mocks.read.mockImplementation(async (_project, _path, _signal, onRestoring) => {
     onRestoring("3");
     return null;
   });
   await renderWithTimers();
-  await act(async () => { await vi.advanceTimersByTimeAsync(60_001); });
-  expect(mocks.read).toHaveBeenCalledTimes(21);
-  expect(current.query.isError).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(90_001); });
+  expect(mocks.read.mock.calls.length).toBeGreaterThan(21);
+  expect(current.query.isPending).toBe(true);
+  mocks.read.mockResolvedValue([entry]);
+  await act(async () => { await vi.advanceTimersByTimeAsync(3_001); });
+  expect(current.query.data).toEqual([entry]);
+  expect(current.query.isSuccess).toBe(true);
+  const completedReads = mocks.read.mock.calls.length;
   await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-  expect(mocks.read).toHaveBeenCalledTimes(21);
+  expect(mocks.read).toHaveBeenCalledTimes(completedReads);
 });
 
 it("cancels the old folder's restoration retry when navigation changes", async () => {

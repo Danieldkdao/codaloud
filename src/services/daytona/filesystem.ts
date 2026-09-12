@@ -77,10 +77,14 @@ const saveContent = (parentFd, target) => {
   } catch (error) { fail(error.status === 1 ? "SAVE_BUSY" : "FILESYSTEM_UNAVAILABLE"); }
   const current = readContent(target);
   const hash = (content) => require("node:crypto").createHash("sha256").update(content).digest("hex");
-  if (hash(current.content) !== input.expectedContentHash) fail("FILE_CHANGED");
   const bytes = Buffer.from(input.content, "utf8");
   if (bytes.length > input.maxBytes) fail("FILE_TOO_LARGE");
   if (bytes.includes(0) || bytes.toString("utf8") !== input.content) fail("UNSUPPORTED_FILE_ENCODING");
+  const currentHash = hash(current.content);
+  const contentHash = hash(bytes);
+  if (currentHash !== input.expectedContentHash && currentHash !== contentHash) fail("FILE_CHANGED");
+  // A prior replacement may have succeeded without an acknowledgment. Repeat the
+  // atomic write even for matching bytes so success still requires both fsyncs.
   const temporary = "/proc/self/fd/" + parentFd + "/.codaloud-save-" + require("node:crypto").randomUUID();
   let fd;
   let committed = false;
@@ -96,7 +100,7 @@ const saveContent = (parentFd, target) => {
     fs.renameSync(temporary, target);
     committed = true;
     fs.fsyncSync(parentFd);
-    return { path: current.path, size: bytes.length, contentHash: hash(bytes) };
+    return { path: current.path, size: bytes.length, contentHash };
   } finally {
     if (fd !== undefined) {
       fs.closeSync(fd);

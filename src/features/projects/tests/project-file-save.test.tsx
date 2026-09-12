@@ -4,15 +4,22 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProjectFileSaveRegistryProvider, ProjectFileSaveProvider, useProjectFileSave } from "@/features/projects/hooks/use-project-file-save";
+import type { AppStateStatus } from "react-native";
+import { ProjectFileSaveRegistryProvider, ProjectFileSaveProvider, useProjectFileSave, useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 
-const mocks = vi.hoisted(() => ({ save: vi.fn() }));
-vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: mocks.save }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), read: vi.fn() }));
+const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: AppStateStatus) => void>() }));
+vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, listener: (state: AppStateStatus) => void) => {
+  lifecycle.listeners.add(listener);
+  return { remove: () => lifecycle.listeners.delete(listener) };
+} } }));
+vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: mocks.save, readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, data: { user: { id: "user-one" } } }) }));
 const hash = (content: string) => createHash("sha256").update(content).digest("hex");
 const success = (content: string, path = "one.ts") => ({ error: false, message: "Saved.", data: { path, size: Buffer.byteLength(content), contentHash: hash(content) } });
 let current: NonNullable<ReturnType<typeof useProjectFileSave>>;
-const Probe = () => { current = useProjectFileSave()!; return null; };
+let registry: ReturnType<typeof useProjectFileSaveRegistry>;
+const Probe = () => { current = useProjectFileSave()!; registry = useProjectFileSaveRegistry(); return null; };
 let root: Root;
 let client: QueryClient;
 const render = async (path = "one.ts", content = "original", version = 0, projectId = "project-one") => {
@@ -29,6 +36,7 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   root = createRoot(document.createElement("div"));
   mocks.save.mockReset().mockImplementation(async (_project, input) => success(input.content, input.path));
+  mocks.read.mockReset().mockResolvedValue({ path: "one.ts", content: "original", size: 8 });
 });
 afterEach(async () => { await act(async () => root.unmount()); client.clear(); vi.useRealTimers(); });
 
@@ -48,6 +56,169 @@ it("debounces only edits for three seconds, retaining exact text and confirmed c
   expect(current.status).toBe("saved");
   expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toEqual({ path: "one.ts", content: "你好\r\n", size: 8 });
   expect(current.initialValue).toBe("original");
+});
+
+it("releases each clean document after navigating away", async () => {
+  for (let index = 0; index < 25; index++) {
+    const path = `file-${index}.ts`;
+    await render(path);
+    const previous = registry.getDocument(path, 0, "original");
+    await render("other.ts");
+    expect(registry.getDocument(path, 0, "original")).not.toBe(previous);
+  }
+  expect(mocks.save).not.toHaveBeenCalled();
+});
+
+it("releases an unused document only after its entire save queue settles", async () => {
+  const finishes: ((value: unknown) => void)[] = [];
+  mocks.save.mockImplementation(() => new Promise((resolve) => finishes.push(resolve)));
+  await render();
+  const previous = registry.getDocument("one.ts", 0, "original");
+  await act(async () => current.onChange("first"));
+  await tick();
+  await act(async () => current.onChange("second"));
+  await render("two.ts");
+  expect(registry.getDocument("one.ts", 0, "original")).toBe(previous);
+  await act(async () => finishes[0](success("first")));
+  expect(registry.getDocument("one.ts", 0, "first")).toBe(previous);
+  await act(async () => finishes[1](success("second")));
+  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: "second" });
+  expect(registry.getDocument("one.ts", 0, "second")).not.toBe(previous);
+});
+
+it("retains an uncertain save even when the draft was undone to the confirmed text", async () => {
+  mocks.save.mockResolvedValue({ error: true, message: "Response lost." });
+  await render();
+  const previous = registry.getDocument("one.ts", 0, "original");
+  await act(async () => current.onChange("first"));
+  await tick();
+  await act(async () => current.onChange("original"));
+  await render("two.ts");
+  expect(registry.getDocument("one.ts", 0, "original")).toBe(previous);
+  await render();
+  expect(current.status).not.toBe("saved");
+  mocks.save.mockImplementation(async (_project, input) => success(input.content));
+  await act(async () => current.retry());
+  await render("two.ts");
+  expect(registry.getDocument("one.ts", 0, "original")).not.toBe(previous);
+});
+
+it("keeps a shared document until its last editor disconnects", async () => {
+  const shared = async (count: number) => {
+    await act(async () => root.render(createElement(QueryClientProvider, { client },
+      createElement(ProjectFileSaveRegistryProvider, { projectId: "project-one", children:
+        Array.from({ length: count }, (_, index) => createElement(ProjectFileSaveProvider, {
+          key: index, filePath: "one.ts", version: 0, initialValue: "original", children: createElement(Probe),
+        })),
+      }),
+    )));
+  };
+  await shared(2);
+  const previous = registry.getDocument("one.ts", 0, "original");
+  await shared(1);
+  expect(registry.getDocument("one.ts", 0, "original")).toBe(previous);
+  await act(async () => current.onChange("edited"));
+  await tick();
+  expect(current.status).toBe("saved");
+  await shared(0);
+  expect(registry.getDocument("one.ts", 0, "edited")).not.toBe(previous);
+});
+
+it("registers a released document again when its consumer reconnects", async () => {
+  await render();
+  const previous = registry.getDocument("one.ts", 0, "original");
+  await render("two.ts");
+  // A retained React tree can reconnect its external-store subscription later.
+  const disconnect = previous.subscribe(() => {});
+  try {
+    await act(async () => previous.edit("resumed draft"));
+    await act(async () => lifecycle.listeners.forEach((listener) => listener("background")));
+    expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "one.ts", content: "resumed draft", expectedContentHash: hash("original") });
+    expect(registry.getDocument("one.ts", 0, "resumed draft")).toBe(previous);
+  } finally {
+    disconnect();
+  }
+});
+
+it.each([true, false])("retains unused clean documents until rename settles (success: %s)", async (succeeds) => {
+  await render();
+  const previous = registry.getDocument("one.ts", 0, "original");
+  let finish!: () => void;
+  let pending!: Promise<unknown>;
+  await act(async () => {
+    pending = registry.renameFiles("one.ts", "renamed.ts", () => new Promise<void>((resolve, reject) => {
+      finish = () => succeeds ? resolve() : reject(new Error("Rename failed"));
+    })).catch(() => {});
+  });
+  await render("two.ts");
+  expect(registry.getDocument("one.ts", 0, "original")).toBe(previous);
+  await act(async () => { finish(); await pending; });
+  expect(registry.getDocument(succeeds ? "renamed.ts" : "one.ts", 0, "original")).not.toBe(previous);
+});
+
+it("does not remove a recreated path when the old document finishes saving", async () => {
+  let finish!: (value: unknown) => void;
+  mocks.save.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render();
+  await act(async () => current.onChange("old draft"));
+  await tick();
+  await render("one.ts", "replacement", 1);
+  const replacement = registry.getDocument("one.ts", 1, "replacement");
+  await act(async () => finish(success("old draft")));
+  expect(registry.getDocument("one.ts", 1, "replacement")).toBe(replacement);
+  await act(async () => current.onChange("new draft"));
+  await tick();
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: "new draft", expectedContentHash: hash("replacement") });
+});
+
+it.each(["inactive", "background"] as const)("flushes pending edits on %s without waiting for the debounce", async (state) => {
+  await render();
+  await act(async () => current.onChange("edited"));
+  expect(mocks.save).not.toHaveBeenCalled();
+  await act(async () => lifecycle.listeners.forEach((listener) => listener(state)));
+  expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "one.ts", content: "edited", expectedContentHash: hash("original") });
+  expect(current.status).toBe("saved");
+  await tick();
+  expect(mocks.save).toHaveBeenCalledOnce();
+});
+
+it("drains newer edits behind an in-flight save on repeated background events", async () => {
+  let finish!: (value: unknown) => void;
+  mocks.save.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render();
+  await act(async () => current.onChange("first"));
+  await tick();
+  await act(async () => current.onChange("second"));
+  await act(async () => {
+    lifecycle.listeners.forEach((listener) => listener("inactive"));
+    lifecycle.listeners.forEach((listener) => listener("background"));
+  });
+  expect(mocks.save).toHaveBeenCalledTimes(1);
+  await act(async () => finish(success("first")));
+  expect(mocks.save).toHaveBeenCalledTimes(2);
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: "second", expectedContentHash: hash("first") });
+  expect(current.status).toBe("saved");
+});
+
+it("keeps background save failures visible without retrying them on repeated events", async () => {
+  mocks.save.mockResolvedValue({ error: true, message: "Offline." });
+  await render();
+  await act(async () => current.onChange("draft"));
+  await act(async () => lifecycle.listeners.forEach((listener) => listener("background")));
+  expect(current.status).toBe("error");
+  await act(async () => lifecycle.listeners.forEach((listener) => listener("background")));
+  await tick();
+  expect(mocks.save).toHaveBeenCalledOnce();
+  await render("two.ts");
+  await render();
+  expect(current.initialValue).toBe("draft");
+});
+
+it("cleans up the AppState subscription when the registry unmounts", async () => {
+  await render();
+  expect(lifecycle.listeners.size).toBe(1);
+  await act(async () => root.render(null));
+  expect(lifecycle.listeners.size).toBe(0);
 });
 
 it("serializes edits during a save and uses the previous successful hash for the next write", async () => {
@@ -127,6 +298,92 @@ it("does not let a pending debounce retry a request that failed during newer edi
   expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: "second", expectedContentHash: hash("original") });
 });
 
+it.each([
+  { submitted: "first", latest: "second" },
+  { submitted: "first", latest: "original" },
+  { submitted: "first", latest: "" },
+  { submitted: "first", latest: "first" },
+  { submitted: "", latest: "second" },
+])("reconciles the lost response for '$submitted' before saving '$latest'", async ({ submitted, latest }) => {
+  let disk = "original";
+  let loseResponse = true;
+  mocks.read.mockImplementation(async () => ({ path: "one.ts", content: disk, size: Buffer.byteLength(disk) }));
+  mocks.save.mockImplementation(async (_project, input) => {
+    if (input.expectedContentHash !== hash(disk) && input.content !== disk)
+      return { error: true, code: "FILE_CHANGED", message: "Conflict." };
+    disk = input.content;
+    if (loseResponse) {
+      loseResponse = false;
+      throw new Error("Response lost after commit");
+    }
+    return success(disk);
+  });
+  await render();
+  await act(async () => current.onChange(submitted));
+  await tick();
+  expect(current.status).toBe("error");
+  expect(disk).toBe(submitted);
+  await act(async () => current.onChange(latest));
+  await act(async () => current.retry());
+  expect(disk).toBe(latest);
+  expect(current.status).toBe("saved");
+  expect(mocks.read).toHaveBeenCalledWith("project-one", "one.ts");
+  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: latest });
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: latest, expectedContentHash: hash(submitted) });
+});
+
+it("keeps genuine external changes and failed reconciliation from being overwritten", async () => {
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Response lost." });
+  await render();
+  await act(async () => current.onChange("local"));
+  await tick();
+  mocks.read.mockResolvedValueOnce(null);
+  await act(async () => current.retry());
+  expect(current.status).toBe("error");
+  expect(mocks.save).toHaveBeenCalledTimes(1);
+  mocks.read.mockResolvedValueOnce({ path: "one.ts", content: "external", size: 8 });
+  await act(async () => current.retry());
+  expect(current.status).toBe("error");
+  expect(current.message).toMatch(/changed/i);
+  expect(mocks.save).toHaveBeenCalledTimes(1);
+  await render("two.ts");
+  await render();
+  expect(current.initialValue).toBe("local");
+});
+
+it("retains the reconciled baseline when the next save also fails", async () => {
+  mocks.save.mockResolvedValue({ error: true, message: "Response lost." });
+  await render();
+  await act(async () => current.onChange("first"));
+  await tick();
+  mocks.read.mockResolvedValue({ path: "one.ts", content: "first", size: 5 });
+  await act(async () => current.onChange("second"));
+  await act(async () => current.retry());
+  expect(current.status).toBe("error");
+  mocks.save.mockImplementation(async (_project, input) => success(input.content));
+  await act(async () => current.retry());
+  expect(current.status).toBe("saved");
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: "second", expectedContentHash: hash("first") });
+});
+
+it("preserves edits made while reconciliation is in flight and waits for their debounce", async () => {
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Response lost." });
+  await render();
+  await act(async () => current.onChange("first"));
+  await tick();
+  let finish!: (value: unknown) => void;
+  mocks.read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await act(async () => current.retry());
+  expect(current.status).toBe("saving");
+  await act(async () => current.onChange("newest"));
+  await act(async () => finish({ path: "one.ts", content: "first", size: 5 }));
+  expect(current.status).toBe("pending");
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: "first", expectedContentHash: hash("first") });
+  await tick();
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: "newest", expectedContentHash: hash("first") });
+  expect(current.status).toBe("saved");
+});
+
 it("skips edits undone before a write, but saves an undo made during a write", async () => {
   await render();
   await act(async () => { await current.onChange("edit"); await current.onChange("original"); });
@@ -160,8 +417,10 @@ it("keeps the document active when React checks initializers twice in Strict Mod
       }),
     ),
   )));
+  const previous = registry.getDocument("one.ts", 0, "original");
   await act(async () => current.onChange("edited"));
   await tick();
   expect(mocks.save).toHaveBeenCalledOnce();
   expect(current.status).toBe("saved");
+  expect(registry.getDocument("one.ts", 0, "edited")).toBe(previous);
 });

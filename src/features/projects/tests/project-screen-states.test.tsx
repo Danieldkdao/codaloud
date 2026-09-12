@@ -15,7 +15,7 @@ vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({
 vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => ({ branch: state.empty ? undefined : { name: "main", commits: [] }, setBranch: vi.fn() }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const saveFile = vi.hoisted(() => vi.fn());
-vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile }));
+vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, data: { user: { id: "user-one" } } }) }));
 const readFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
@@ -42,6 +42,7 @@ vi.mock("@/components/app-wrapper", () => ({ AppWrapper: ({ children }: { childr
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   View: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   Pressable: ({ children, accessibilityLabel, onPress }: { children?: ReactNode; accessibilityLabel?: string; onPress?: () => void }) => createElement("button", { "aria-label": accessibilityLabel, onClick: onPress }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),

@@ -1,124 +1,29 @@
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
 import { useDebouncer } from "@tanstack/react-pacer";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { saveProjectFileContentAction } from "@/features/projects/actions/file-actions";
+import { AppState } from "react-native";
+import { isProjectFilePathWithin } from "@/features/projects/lib/files";
+import {
+  createFileSaveDocument,
+  type SaveSnapshot,
+} from "@/features/projects/lib/project-file-save-document";
 import { useAuthSession } from "@/hooks/use-auth-session";
-
-export type ProjectFileSaveStatus =
-  "loading" | "pending" | "saving" | "saved" | "error";
-type SaveSnapshot = { status: ProjectFileSaveStatus; message?: string };
-
-const createFileSaveDocument = (
-  projectId: string,
-  path: string,
-  initialValue: string,
-  onSaved: (content: string, size: number) => void,
-) => {
-  let content = initialValue;
-  let confirmedContent = initialValue;
-  let confirmedHash: string | undefined;
-  let snapshot: SaveSnapshot = { status: "saved" };
-  let inFlight: Promise<void> | null = null;
-  let queued = false;
-  let uncertain = false;
-  let active = true;
-  const listeners = new Set<() => void>();
-  const publish = (next: SaveSnapshot) => {
-    snapshot = next;
-    listeners.forEach((notify) => notify());
-  };
-  const save = (retry = false): Promise<void> => {
-    if (!active || (snapshot.status === "error" && !retry))
-      return Promise.resolve();
-    if (inFlight) {
-      queued = true;
-      return inFlight;
-    }
-    if (content === confirmedContent && !uncertain) {
-      publish({ status: "saved" });
-      return Promise.resolve();
-    }
-    queued = false;
-    const submittedContent = content;
-    uncertain = true;
-    publish({ status: "saving" });
-    inFlight = Promise.resolve().then(async () => {
-      try {
-        confirmedHash ??= bytesToHex(
-          sha256(new TextEncoder().encode(confirmedContent)),
-        );
-        const result = await saveProjectFileContentAction(projectId, {
-          path,
-          content: submittedContent,
-          expectedContentHash: confirmedHash,
-        });
-        if (!active) return;
-        if (result.error) {
-          publish({ status: "error", message: result.message });
-          return;
-        }
-        confirmedContent = submittedContent;
-        confirmedHash = result.data.contentHash;
-        uncertain = false;
-        onSaved(submittedContent, result.data.size);
-        publish({ status: content === confirmedContent ? "saved" : "pending" });
-      } catch {
-        if (active)
-          publish({
-            status: "error",
-            message: "Unable to confirm the save. Please try again.",
-          });
-      } finally {
-        inFlight = null;
-        // Only a debounce that has already elapsed may start the next write.
-        // A failed write keeps its original base hash and never retries itself.
-        if (queued && snapshot.status !== "error") void save();
-        queued = false;
-      }
-    });
-    return inFlight;
-  };
-  return {
-    getContent: () => content,
-    getSnapshot: () => snapshot,
-    shouldRetain: () =>
-      Boolean(inFlight) || content !== confirmedContent || uncertain,
-    subscribe: (notify: () => void) => {
-      listeners.add(notify);
-      return () => {
-        listeners.delete(notify);
-      };
-    },
-    edit: (value: string) => {
-      if (!active || value === content) return;
-      content = value;
-      queued = false;
-      publish({
-        status:
-          content === confirmedContent && !uncertain ? "saved" : "pending",
-      });
-    },
-    invalidate: () => {
-      active = false;
-      queued = false;
-    },
-    save,
-  };
-};
+export type { ProjectFileSaveStatus } from "@/features/projects/lib/project-file-save-document";
 
 type SaveDocument = ReturnType<typeof createFileSaveDocument>;
-const RegistryContext = createContext<
-  ((path: string, version: number, content: string) => SaveDocument) | null
->(null);
+type FileSaveRegistryState = {
+  getDocument: (path: string, version: number, content: string) => SaveDocument;
+  renameFiles: <T>(previousPath: string, nextPath: string, rename: () => Promise<T>) => Promise<T>;
+};
+const RegistryContext = createContext<FileSaveRegistryState | null>(null);
 type ProjectFileSaveState = SaveSnapshot & {
   initialValue: string;
   onChange: (value: string) => Promise<void>;
@@ -139,12 +44,25 @@ const FileSaveRegistry = ({
   const [documents] = useState(
     () => new Map<string, { version: number; document: SaveDocument }>(),
   );
+  const [renameOperation] = useState(() => ({
+    current: null as { previousPath: string; paused: Set<SaveDocument> } | null,
+  }));
+  const registerDocument = useCallback(
+    (path: string, version: number, document: SaveDocument) => {
+      if (renameOperation.current && isProjectFilePathWithin(path, renameOperation.current.previousPath)) {
+        document.pause();
+        renameOperation.current.paused.add(document);
+      }
+      documents.set(path, { version, document });
+    },
+    [documents, renameOperation],
+  );
   const getDocument = useCallback(
     (path: string, version: number, content: string) => {
       const existing = documents.get(path);
       if (
         existing?.version === version &&
-        (existing.document.shouldRetain() ||
+        (existing.document.isPaused() || existing.document.shouldRetain() ||
           existing.document.getContent() === content)
       )
         return existing.document;
@@ -153,23 +71,89 @@ const FileSaveRegistry = ({
         projectId,
         path,
         content,
-        (savedContent, size) => {
+        (savedPath, savedContent, size) => {
           // Cache only confirmed bytes; newer local edits remain in this document.
           queryClient.setQueryData(
-            ["projects", "file", userId, projectId, path],
-            { path, content: savedContent, size },
+            ["projects", "file", userId, projectId, savedPath],
+            { path: savedPath, content: savedContent, size },
           );
           void queryClient.invalidateQueries({
             queryKey: ["projects", "files", userId, projectId],
           });
         },
+        (documentPath, inUse) => {
+          // A retained React tree can reconnect after its clean entry was released.
+          if (inUse) {
+            if (!documents.has(documentPath)) registerDocument(documentPath, version, document);
+            return;
+          }
+          // Renames move the key; a recreated path may already own a replacement.
+          if (documents.get(documentPath)?.document !== document) return;
+          documents.delete(documentPath);
+        },
       );
-      documents.set(path, { version, document });
+      registerDocument(path, version, document);
       return document;
     },
-    [documents, projectId, queryClient, userId],
+    [documents, projectId, queryClient, registerDocument, userId],
   );
-  return <RegistryContext value={getDocument}>{children}</RegistryContext>;
+  const renameFiles = useCallback<FileSaveRegistryState["renameFiles"]>(
+    async (previousPath, nextPath, rename) => {
+      if (renameOperation.current) throw new Error("Another rename is in progress. Please try again.");
+      const operation = { previousPath, paused: new Set<SaveDocument>() };
+      renameOperation.current = operation;
+      const affected = () => [...documents].filter(([path]) => isProjectFilePathWithin(path, previousPath));
+      try {
+        for (const [path, entry] of documents) {
+          if (!isProjectFilePathWithin(path, previousPath) && isProjectFilePathWithin(path, nextPath) && entry.document.shouldRetain())
+            throw new Error("The destination has unsaved edits. Save them before renaming.");
+        }
+        // Recheck after each await: navigation can open another descendant while
+        // saves drain. New documents join the pause in getDocument above.
+        do {
+          const entries = affected();
+          for (const [, { document }] of entries) {
+            document.pause();
+            operation.paused.add(document);
+          }
+          const results = await Promise.allSettled(entries.map(([, { document }]) => document.flush(true)));
+          const failure = results.find((result) => result.status === "rejected");
+          if (failure) throw failure.reason;
+        } while (affected().some(([, { document }]) => document.shouldRetain()));
+
+        const result = await rename();
+        for (const [path, entry] of affected()) {
+          const destination = nextPath + path.slice(previousPath.length);
+          if (destination === path) continue;
+          documents.get(destination)?.document.invalidate();
+          documents.delete(path);
+          entry.document.move(destination);
+          documents.set(destination, entry);
+        }
+        return result;
+      } finally {
+        renameOperation.current = null;
+        // Late editor events remain drafts while writes are paused. Resume them
+        // at the confirmed new path, or the original path if rename failed.
+        for (const document of operation.paused) {
+          document.resume();
+          void document.flush().catch(() => {});
+        }
+      }
+    },
+    [documents, renameOperation],
+  );
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "inactive" && state !== "background") return;
+      for (const { document } of documents.values()) {
+        // The document publishes failures; repeated lifecycle events do not retry them.
+        void document.flush().catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, [documents]);
+  return <RegistryContext value={{ getDocument, renameFiles }}>{children}</RegistryContext>;
 };
 
 export const ProjectFileSaveRegistryProvider = ({
@@ -206,13 +190,13 @@ export const ProjectFileSaveProvider = ({
   initialValue: string;
   children: ReactNode;
 }) => {
-  const getDocument = useContext(RegistryContext);
-  if (!getDocument)
+  const registry = useContext(RegistryContext);
+  if (!registry)
     throw new Error(
       "ProjectFileSaveProvider requires ProjectFileSaveRegistryProvider",
     );
   const [document] = useState(() =>
-    getDocument(filePath, version, initialValue),
+    registry.getDocument(filePath, version, initialValue),
   );
   const [editorInitialValue] = useState(document.getContent);
   const snapshot = useSyncExternalStore(
@@ -252,3 +236,9 @@ export const ProjectFileSaveProvider = ({
 };
 
 export const useProjectFileSave = () => useContext(FileSaveContext);
+
+export const useProjectFileSaveRegistry = () => {
+  const registry = useContext(RegistryContext);
+  if (!registry) throw new Error("File operations require ProjectFileSaveRegistryProvider");
+  return registry;
+};

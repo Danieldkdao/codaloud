@@ -11,18 +11,22 @@ import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-pro
 import { formatProjectFileKind } from "@/features/projects/lib/formatters";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
+import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 import { getDirectoryFiles, isProjectFilePathWithin } from "@/features/projects/lib/files";
 
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
   const currentFile = useProjectWorkspaceCurrentFile();
+  const saves = useProjectFileSaveRegistry();
   const [currentDirectory, setCurrentDirectory] = useState("");
   const { query, creation, update, deletion } = useProjectFiles(projectId, currentDirectory);
   const fileCreation = useProjectWorkspaceFileCreation();
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const showSuccess = useSuccessFeedback();
   const deletionInFlight = useRef(false);
+  const renameInFlight = useRef(false);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const parentDirectory =
     currentDirectory === ""
       ? undefined
@@ -79,7 +83,7 @@ const FilesScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      {fileCreation.kind && !deletion.isPending && (
+      {fileCreation.kind && !deletion.isPending && renamingPath === null && (
         <ProjectFileCreateRow
           key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
           kind={fileCreation.kind}
@@ -105,15 +109,24 @@ const FilesScreen = () => {
           router.navigate({ pathname: "/projects/[projectId]/code", params: { projectId } });
         }}
         onUpdate={async (input) => {
-          const updatedFile = await update.mutateAsync(input);
+          if (renameInFlight.current) throw new Error("Another rename is in progress. Please try again.");
+          renameInFlight.current = true;
           const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
-          currentFile.setFilePath((path) => path !== null && isProjectFilePathWithin(path, previousPath)
-            ? updatedFile.path + path.slice(previousPath.length)
-            : path);
-          showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
+          const nextPath = [input.parentPath, input.name].filter(Boolean).join("/");
+          setRenamingPath(previousPath);
+          try {
+            const updatedFile = await saves.renameFiles(previousPath, nextPath, () => update.mutateAsync(input));
+            currentFile.setFilePath((path) => path !== null && isProjectFilePathWithin(path, previousPath)
+              ? updatedFile.path + path.slice(previousPath.length)
+              : path);
+            showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
+          } finally {
+            renameInFlight.current = false;
+            setRenamingPath(null);
+          }
         }}
         onDelete={async (input) => {
-          if (deletionInFlight.current) return;
+          if (deletionInFlight.current || renameInFlight.current) return;
           deletionInFlight.current = true;
           try {
             const deletedFile = await deletion.mutateAsync(input);
@@ -125,9 +138,9 @@ const FilesScreen = () => {
             deletionInFlight.current = false;
           }
         }}
-        updatingPath={update.isPending
+        updatingPath={renamingPath ?? (update.isPending
           ? [update.variables.parentPath, update.variables.previousName].filter(Boolean).join("/")
-          : undefined}
+          : undefined)}
         deletingPath={deletion.isPending
           ? [deletion.variables.parentPath, deletion.variables.name].filter(Boolean).join("/")
           : undefined}

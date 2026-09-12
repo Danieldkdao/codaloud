@@ -553,6 +553,33 @@ contentTest("rejects stale saves and serializes concurrent saves across sandbox 
   expect(await saveContent("next", saved)).toMatchObject({ contentHash: contentHash("next") });
 });
 
+contentTest.each(["", "saved"])("accepts an already committed retry for %j without accepting a conflicting write", async (content) => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  await saveContent(content);
+  expect(await saveContent(content)).toEqual({ path: "file.txt", size: Buffer.byteLength(content), contentHash: contentHash(content) });
+  await writeFile(target, "external");
+  await expect(saveContent(content)).rejects.toMatchObject({ code: "FILE_CHANGED" });
+  expect(await readFile(target, "utf8")).toBe("external");
+});
+
+contentTest("retries a committed replacement after directory sync failure and still requires successful sync", async () => {
+  await mkdir(join(home, ".codaloud/workspace"), { recursive: true });
+  const target = join(home, ".codaloud/workspace/file.txt");
+  await writeFile(target, "original");
+  readHook = `const fs = require('node:fs'); const sync = fs.fsyncSync; fs.fsyncSync = (fd) => {
+    if (fs.fstatSync(fd).isDirectory()) throw Object.assign(new Error('Directory sync failed'), { code: 'EIO' });
+    return sync(fd);
+  };`;
+  await expect(saveContent("saved")).rejects.toMatchObject({ code: "FILESYSTEM_ERROR" });
+  expect(await readFile(target, "utf8")).toBe("saved");
+  await expect(saveContent("saved")).rejects.toMatchObject({ code: "FILESYSTEM_ERROR" });
+  readHook = undefined;
+  expect(await saveContent("saved")).toEqual({ path: "file.txt", size: 5, contentHash: contentHash("saved") });
+  expect(await readdir(join(home, ".codaloud/workspace"))).toEqual(["file.txt"]);
+});
+
 contentTest("never creates missing files or follows file and directory symlinks when saving", async () => {
   await mkdir(join(home, ".codaloud/workspace/folder"), { recursive: true });
   await writeFile(join(home, "outside.txt"), "original");

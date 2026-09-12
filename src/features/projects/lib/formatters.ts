@@ -5,10 +5,18 @@ import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 import type { DiagnosticSeverity } from "@/features/projects/actions/code-intelligence-schemas";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import type { ProjectFileSaveStatus } from "@/features/projects/hooks/use-project-file-save";
+import type { ProjectBranchSource } from "@/features/projects/hooks/use-project-workspace-branch";
 import type {
   ProjectSortField,
   ProjectSortOrder,
 } from "@/features/projects/lib/project-params";
+
+export const formatProjectBranchSource = (source: ProjectBranchSource) => {
+  switch (source) {
+    case "local": return { title: "Local branches", icon: "git-branch" as const };
+    case "remote": return { title: "Remote branches", icon: "cloud" as const };
+  }
+};
 
 export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
   switch (status) {

@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth/helpers";
 import type { ApiResponse } from "@/lib/types";
 import { apiResponse, isValidIds } from "@/lib/utils";
 import { SandboxFilesError } from "@/services/daytona/api";
-import { getGitHubErrorResponse } from "@/services/github/server/access";
 
 const branchesResponse = (body: ApiResponse<ProjectBranchPageSchema>, status = 200) => {
   const response = apiResponse(body, status);
@@ -36,13 +35,12 @@ export const GET = async (request: Request, { projectId }: { projectId: string }
     if (!params.success) {
       return branchesResponse({ error: true, code: "INVALID_BRANCH_PARAMS", message: params.error.issues[0]?.message ?? "Invalid branch search or pagination." }, 400);
     }
-    const branches = await readUserProjectBranches(userId, params.data, request.headers, request.signal);
+    const branches = await readUserProjectBranches(userId, params.data);
     return branchesResponse({ error: false, message: "Project branches loaded.", data: branches });
   } catch (error) {
     if (error instanceof SandboxFilesError) {
       return branchesResponse({ error: true, code: error.code, message: error.message }, error.status);
     }
-    const { status, body } = getGitHubErrorResponse(error);
-    return branchesResponse(body, status);
+    return branchesResponse({ error: true, code: "BRANCHES_UNAVAILABLE", message: "Unable to load project branches. Please try again." }, 502);
   }
 };

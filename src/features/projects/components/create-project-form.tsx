@@ -19,7 +19,6 @@ import {
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
-import { GitHubRepositoryBranchesList } from "@/services/github/components/github-repository-branches-list";
 
 const projectSources = ["new", "github"] as const satisfies readonly CreateProjectFormSchema["source"][];
 
@@ -34,8 +33,6 @@ export const CreateProjectForm = () => {
   const {
     control,
     handleSubmit,
-    setValue,
-    clearErrors,
     formState: { isSubmitting },
   } = useForm<CreateProjectFormSchema>({
     resolver: zodResolver(createProjectFormSchema),
@@ -195,11 +192,6 @@ export const CreateProjectForm = () => {
                     selectedRepositoryId={value || null}
                     onValueChange={(repository) => {
                       const repositoryId = repository ? String(repository.id) : "";
-                      if (repositoryId !== value) {
-                        // Apply the default only on selection, preserving manual branch changes.
-                        setValue("branchName", repository?.defaultBranch ?? "", { shouldDirty: true });
-                        clearErrors("branchName");
-                      }
                       onChange(repositoryId);
                       onBlur();
                     }}
@@ -220,34 +212,6 @@ export const CreateProjectForm = () => {
                       </Button>
                     )}
                   </View>
-                )}
-                {/* Reset the search and viewport when the repository changes. */}
-                {isConnected && !isChecking && value && (
-                  <Controller
-                    control={control}
-                    name="branchName"
-                    defaultValue=""
-                    shouldUnregister
-                    render={({ field, fieldState: { error: branchError } }) => (
-                      <View className="min-h-0 shrink gap-2">
-                        <GitHubRepositoryBranchesList
-                          key={value}
-                          repositoryId={value}
-                          selectedBranchName={field.value || null}
-                          onValueChange={(branchName) => {
-                            field.onChange(branchName ?? "");
-                            field.onBlur();
-                          }}
-                          className={branchError ? "border-destructive" : undefined}
-                        />
-                        {branchError && (
-                          <PText selectable accessibilityRole="alert" className="text-destructive">
-                            {branchError.message}
-                          </PText>
-                        )}
-                      </View>
-                    )}
-                  />
                 )}
                 {error && (
                   <PText

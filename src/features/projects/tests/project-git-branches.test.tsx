@@ -12,12 +12,21 @@ import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-pr
 const live = vi.hoisted(() => ({
   projectId: "11111111-1111-4111-8111-111111111111",
   userId: "user-one",
+  repositoryId: "123" as string | null,
   query: vi.fn(),
   loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
 }));
+const remote = vi.hoisted(() => ({
+  query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
+  isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
+  hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
+  data: { pages: [{ branches: [{ name: "main" }, { name: "remote-only" }], nextCursor: null }] },
+}));
+vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => ({ data: { githubRepositoryId: live.repositoryId }, isPending: false, error: null }) }));
+vi.mock("@/services/github/hooks/use-github-repository-branches", () => ({ useGitHubRepositoryBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: { user: { id: live.userId } }, isPending: false, error: null }) }));
 vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
@@ -153,6 +162,9 @@ const selectBranch = (name: string) => {
 
 beforeEach(() => {
   activeTab = "git";
+  live.repositoryId = "123";
+  remote.query.mockClear(); remote.loadMore.mockClear(); remote.retry.mockClear();
+  Object.assign(remote, { isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
   live.projectId = "11111111-1111-4111-8111-111111111111";
   live.userId = "user-one";
   live.data = { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main", nextCursor: null }] };
@@ -383,4 +395,36 @@ it("distinguishes initial, continuation, and active refresh states", () => {
   live.data = undefined;
   act(() => root.render(createElement(Workspace)));
   expect(container.textContent).toContain(live.error.message);
+});
+
+
+it("shows separate local and remote lists, shares search, and distinguishes identical branch names", () => {
+  click("Branch: main");
+  expect(container.textContent).toContain("Local branches");
+  expect(container.textContent).toContain("Remote branches");
+  expect(remote.query).toHaveBeenLastCalledWith("123", { search: "", enabled: true });
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!;
+  act(() => { input.value = "MAIN"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(live.query).toHaveBeenLastCalledWith(live.projectId, { search: "MAIN" });
+  expect(remote.query).toHaveBeenLastCalledWith("123", { search: "MAIN", enabled: true });
+  click("Remote branch: main");
+  click("Branch: main");
+  expect(container.querySelector('[aria-label="Remote branch: main"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(container.querySelector('[aria-label="main"]')?.getAttribute("aria-checked")).toBe("false");
+  click("main");
+  click("Branch: main");
+  expect(container.querySelector('[aria-label="main"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(container.querySelector('[aria-label="Remote branch: main"]')?.getAttribute("aria-checked")).toBe("false");
+});
+
+it("keeps local selection usable when GitHub fails or no repository is connected", () => {
+  remote.error = new Error("GitHub is unavailable");
+  act(() => root.render(createElement(Workspace)));
+  selectBranch("feature/live");
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  click("Branch: feature/live");
+  expect(container.textContent).toContain("No GitHub repository connected.");
+  expect(container.querySelector('[aria-label="Remote branch: main"]')).toBeNull();
+  expect(remote.query).toHaveBeenLastCalledWith(undefined, { search: "", enabled: false });
 });

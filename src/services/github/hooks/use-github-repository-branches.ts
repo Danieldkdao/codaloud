@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 
+import { useAuthSession } from "@/hooks/use-auth-session";
 import { PAGE_SIZE } from "@/lib/constants";
 import { readGitHubRepositoryBranches } from "../actions/actions";
 import { gitHubRepositoryBranchesRequestSchema } from "../schemas";
@@ -15,16 +16,19 @@ export const useGitHubRepositoryBranches = (
     enabled?: boolean;
   } = {},
 ) => {
+  const session = useAuthSession();
+  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
   const normalizedSearch = search.trim().toLowerCase();
   const validatedId = gitHubRepositoryBranchesRequestSchema.shape.repositoryId.safeParse(repositoryId);
 
   const query = useInfiniteQuery({
     queryKey: [
-      "github", "repositories", repositoryId, "branches", "infinite", "cursor",
+      "github", "repositories", repositoryId, "branches", "infinite", "cursor", userId,
       { pageSize, search: normalizedSearch },
     ],
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch can run even when the query is disabled.
+      if (!userId) throw new Error("Sign in to view GitHub branches.");
       if (!validatedId.success) throw new Error("Select a valid GitHub repository.");
 
       const branches = await readGitHubRepositoryBranches(validatedId.data, {
@@ -41,16 +45,16 @@ export const useGitHubRepositoryBranches = (
     initialPageParam: null as string | null,
     // Sparse searches can return an empty page with more branches to scan.
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: enabled && validatedId.success,
+    enabled: enabled && Boolean(userId) && validatedId.success,
   });
 
   const loadMore = () => {
-    if (query.hasNextPage && !query.isFetching && !query.error && query.fetchStatus !== "paused") {
+    if (enabled && userId && validatedId.success && query.hasNextPage && !query.isFetching && !query.error && query.fetchStatus !== "paused") {
       return query.fetchNextPage({ cancelRefetch: false });
     }
   };
   const retry = () => {
-    if (query.isFetching) return;
+    if (!enabled || !userId || !validatedId.success || query.isFetching || query.fetchStatus === "paused") return;
     return query.isFetchNextPageError
       ? query.fetchNextPage({ cancelRefetch: false })
       : query.refetch();

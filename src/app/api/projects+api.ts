@@ -103,6 +103,7 @@ export const POST = async (request: Request) => {
     }
 
     let githubAccountId: string | null = null;
+    let githubBranchName: string | null = null;
 
     if (result.data.source === "github") {
       try {
@@ -117,10 +118,11 @@ export const POST = async (request: Request) => {
         await verifyGitHubRepositoryBranch(
           accessToken,
           repository,
-          result.data.branchName,
+          repository.defaultBranch,
           request.signal,
         );
         githubAccountId = accountId;
+        githubBranchName = repository.defaultBranch;
       } catch (error) {
         const { body, status } = getGitHubErrorResponse(error);
         return apiResponse(body, status);
@@ -146,7 +148,7 @@ export const POST = async (request: Request) => {
             userId,
             kind: "prepare",
             githubAccountId,
-            githubBranchName: result.data.source === "github" ? result.data.branchName : null,
+            githubBranchName,
           },
           tx,
         );

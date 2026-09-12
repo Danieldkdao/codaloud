@@ -37,7 +37,7 @@ export const useProjectBranches = (
 
   const query = useInfiniteQuery({
     queryKey: [
-      "projects", "branches", "infinite", "cursor", userId, projectId,
+      "projects", "branches", "infinite", "cursor", userId, projectId, "local",
       params.success ? params.data : filters,
     ],
     enabled: enabled && Boolean(userId) && params.success && validPageLimit,

@@ -1,11 +1,9 @@
-import BottomSheet, { BottomSheetView } from "@expo/ui/community/bottom-sheet";
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, View, useWindowDimensions } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { ScrollFadeFlatList } from "@/components/ui/scroll-fade-flat-list";
 import { PText } from "@/components/ui/text";
 import { useProjectBranches } from "@/features/projects/hooks/use-project-branches";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
@@ -13,35 +11,40 @@ import type { ProjectBranchPageSchema } from "@/features/projects/actions/branch
 import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
 import { useThemeColor } from "@/hooks/use-theme";
 
-const branchSheetSnapPoints = ["60%"];
+import { ProjectBranchSection } from "./project-branch-section";
+import { ProjectBranchSheet } from "./project-branch-sheet";
+import { useProject } from "../hooks/use-project";
+import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
+import type { GitHubRepositoryBranchPage, GitHubRepositoryBranch } from "@/services/github/types";
+
+const getRemoteBranches = (page: GitHubRepositoryBranchPage) => page.branches;
+const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
 
 const getBranches = (page: ProjectBranchPageSchema) => page.branches;
 const getBranchKey = (branch: string) => branch;
 
-const formatBranchLoadError = (message: string, hasData: boolean, isNextPageError: boolean) => {
-  if (isNextPageError) return "Couldn’t load more branches. Please try again.";
-  if (hasData) return "Couldn’t refresh branches. Showing previously loaded branches.";
-  return message;
-};
-
 export const ProjectBranchSelect = () => {
-  const { projectId, branch, setBranch } = useProjectWorkspaceBranch();
+  const { width } = useWindowDimensions();
+  const { projectId, branch, branchSource, setBranch } = useProjectWorkspaceBranch();
   const [search, setSearch] = useState("");
+  const projectQuery = useProject(projectId);
+  const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
   const query = useProjectBranches(projectId, { search });
+  const remoteQuery = useGitHubRepositoryBranches(repositoryId, { search, enabled: Boolean(repositoryId) });
+  const remoteBranches = useUniquePaginatedItems(remoteQuery.data?.pages, getRemoteBranches, getRemoteBranchKey);
   const branches = useUniquePaginatedItems(query.data?.pages, getBranches, getBranchKey);
   const currentBranch = query.data?.pages[0]?.currentBranch;
   useEffect(() => {
     if (branch === null && currentBranch) setBranch(currentBranch);
   }, [branch, currentBranch, setBranch]);
-  const sheetRef = useRef<BottomSheet>(null);
   const [open, setOpen] = useState(false);
   const card = useThemeColor("card");
-  const close = () => sheetRef.current?.close();
+  const close = () => setOpen(false);
 
   return (
     <>
       <Pressable
-        onPress={() => sheetRef.current?.present()}
+        onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={`Branch: ${branch ?? "Select branch"}`}
         accessibilityHint="Opens available branches"
@@ -50,18 +53,10 @@ export const ProjectBranchSelect = () => {
       >
         <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />
       </Pressable>
-      <BottomSheet
-        ref={sheetRef}
-        index={-1}
-        snapPoints={branchSheetSnapPoints}
-        enableDynamicSizing={false}
-        enablePanDownToClose
-        backgroundStyle={{ backgroundColor: card }}
-        onChange={(index) => setOpen(index >= 0)}
-        onClose={() => setOpen(false)}
-      >
-        <BottomSheetView style={{ height: "100%" }}>
-          <View className="flex-1 bg-card" accessibilityViewIsModal onAccessibilityEscape={close}>
+      <ProjectBranchSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
+        {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
+        <View style={{ width }}>
+          <View className="bg-card" accessibilityViewIsModal onAccessibilityEscape={close}>
             <View className="flex-row items-center justify-between border-b border-border px-5 py-2">
               <PText accessibilityRole="header" className="flex-1 text-lg font-medium">Branch</PText>
               <Pressable accessibilityRole="button" accessibilityLabel="Close Branch" onPress={close}
@@ -69,69 +64,27 @@ export const ProjectBranchSelect = () => {
                 <Icon family="Feather" name="x" size={22} className="text-foreground" accessible={false} />
               </Pressable>
             </View>
-            <View className="min-h-0 flex-1">
-              <ScrollFadeFlatList
-                key={`${projectId}:${search.trim().toLowerCase()}`}
-                accessibilityLabel="Project branches"
-                data={branches}
-                extraData={branch}
-                keyExtractor={(name) => name}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                onEndReached={() => { if (open) query.loadMore(); }}
-                onEndReachedThreshold={0.5}
-                contentContainerStyle={{ paddingBottom: 4 }}
-                ListHeaderComponent={
-                  <PText accessibilityRole="header" className="px-5 pt-4 pb-2">Branches</PText>
-                }
-                ListEmptyComponent={
-                  !query.error && query.fetchStatus !== "paused" ? (
-                    <View className="items-center gap-3 px-5 py-8">
-                      {query.isPending && <ActivityIndicator className="text-foreground" />}
-                      <PText accessibilityLiveRegion="polite" className="text-center text-base text-muted-foreground">
-                        {query.isPending ? "Loading branches…" : search.trim() ? "No matching branches found." : "No branches found."}
-                      </PText>
-                    </View>
-                  ) : null
-                }
-                ListFooterComponent={
-                  query.fetchStatus === "paused" ? (
-                    <PText accessibilityLiveRegion="polite" className="p-5 text-base text-muted-foreground">Waiting for a connection…</PText>
-                  ) : query.isFetching && query.data ? (
-                    <View className="flex-row items-center justify-center gap-3 p-5">
-                      <ActivityIndicator className="text-foreground" />
-                      <PText accessibilityLiveRegion="polite" className="text-base text-muted-foreground">
-                        {query.isFetchingNextPage ? "Loading more branches…" : "Refreshing branches…"}
-                      </PText>
-                    </View>
-                  ) : query.error ? (
-                    <View className="gap-3 p-5">
-                      <PText accessibilityRole="alert" className="text-base text-destructive">{formatBranchLoadError(query.error.message, Boolean(query.data), query.isFetchNextPageError)}</PText>
-                      <Button variant="outline" onPress={query.retry} loading={query.isFetching}>Try again</Button>
-                    </View>
-                  ) : query.hasNextPage ? (
-                    <View className="p-5">
-                      <Button variant="outline" onPress={query.loadMore} disabled={query.isFetching}>Load more branches</Button>
-                    </View>
-                  ) : null
-                }
-                renderItem={({ item: name }) => (
-                  <Pressable
-                    accessibilityRole="radio"
-                    accessibilityLabel={name}
-                    accessibilityState={{ checked: branch === name }}
-                    onPress={() => { close(); setBranch(name); }}
-                    className="min-h-14 flex-row items-center gap-3 px-5 py-4 active:bg-secondary"
-                  >
-                    <PText className="min-w-0 flex-1 text-base text-foreground">{name}</PText>
-                    {branch === name && (
-                      <Icon family="Feather" name="check" size={22} className="text-foreground" accessible={false} />
-                    )}
-                  </Pressable>
-                )}
-              />
+            <View>
+              <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
+                search={search} open={open} query={query} onSelect={(name) => { close(); setBranch(name, "local"); }} />
+              <View className="h-px shrink-0 bg-border" />
+              {repositoryId ? (
+                <ProjectBranchSection source="remote" branches={remoteBranches.map(({ name }) => name)} selectedBranch={branchSource === "remote" ? branch : null}
+                  search={search} open={open} query={remoteQuery} onSelect={(name) => { close(); setBranch(name, "remote"); }} />
+              ) : (
+                <View className="gap-3 px-5 py-4">
+                  <View className="flex-row items-center gap-2">
+                    <Icon family="Feather" name="cloud" size={18} className="text-muted-foreground" accessible={false} />
+                    <PText accessibilityRole="header" className="text-base font-medium">Remote branches</PText>
+                  </View>
+                  <PText className="text-base text-muted-foreground">
+                    {projectQuery.isPending ? "Loading repository…" : projectQuery.error ? "Unable to load the project’s repository." : "No GitHub repository connected."}
+                  </PText>
+                  {projectQuery.error && <Button variant="outline" onPress={() => { void projectQuery.refetch(); }}>Try again</Button>}
+                </View>
+              )}
             </View>
-            <View className="flex-row items-center gap-2 border-t border-border px-5 pt-1 pb-4">
+            <View className="flex-row items-center gap-2 border-t border-border px-5 py-1">
               <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
               <Input type="search" variant="ghost" size="sm" placeholder="Search branches"
                 accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
@@ -139,8 +92,8 @@ export const ProjectBranchSelect = () => {
                 containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
             </View>
           </View>
-        </BottomSheetView>
-      </BottomSheet>
+        </View>
+      </ProjectBranchSheet>
     </>
   );
 };

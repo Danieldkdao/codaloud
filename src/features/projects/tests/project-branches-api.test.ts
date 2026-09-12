@@ -4,7 +4,7 @@ import { GET } from "@/app/api/projects/[projectId]/branches+api";
 const mocks = vi.hoisted(() => ({
   user: vi.fn(), project: vi.fn(), getSandbox: vi.fn(), home: vi.fn(),
   branches: vi.fn(), start: vi.fn(), fetch: vi.fn(),
-  accounts: vi.fn(), token: vi.fn(), remoteBranches: vi.fn(),
+  accounts: vi.fn(), token: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
@@ -85,7 +85,6 @@ it("rejects cursors from another search or project before loading", async () => 
 beforeEach(() => {
   mocks.accounts.mockReset().mockResolvedValue([{ id: "linked-account", providerId: "github", scopes: ["repo"] }]);
   mocks.token.mockReset().mockResolvedValue({ accessToken: "github-token" });
-  mocks.remoteBranches.mockReset().mockResolvedValue(Response.json([]));
   mocks.user.mockReset().mockResolvedValue({ userId });
   mocks.project.mockReset().mockResolvedValue(project);
   mocks.getSandbox.mockReset().mockResolvedValue(sandbox);
@@ -99,60 +98,26 @@ beforeEach(() => {
     else if (url.pathname === "/api/sandbox/owned-sandbox/start") result = await mocks.start();
     else if (url.pathname === "/owned-sandbox/user-home-dir") result = { dir: await mocks.home() };
     else if (url.pathname === "/owned-sandbox/git/branches") result = await mocks.branches(url.searchParams.get("path"));
-    else if (url.origin === "https://api.github.com" && url.pathname === "/repositories/123") result = {
-      id: 123, name: "repo", full_name: "owner/repo", description: null, private: true, archived: false,
-      default_branch: "main", clone_url: "https://github.com/owner/repo.git", html_url: "https://github.com/owner/repo",
-      permissions: { pull: true, push: true, admin: true },
-    };
-    else if (url.origin === "https://api.github.com" && url.pathname === "/repos/owner/repo/branches") result = await mocks.remoteBranches(Number(url.searchParams.get("page")));
     else throw new Error("Unexpected Daytona request");
     return result instanceof Response ? result : Response.json(result);
   });
   vi.stubGlobal("fetch", mocks.fetch);
 });
 
-it("merges every remote page with local branches before search and cursor pagination", async () => {
-  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
-  mocks.branches.mockResolvedValue({ branches: ["main", "feature/local"], current: "main" });
-  mocks.remoteBranches.mockImplementation(async (page: number) => Response.json(
-    (page === 1 ? ["main", "feature/a", "feature/b"] : ["feature/c"]).map((name) => ({ name })),
-    { headers: page === 1 ? { link: '<https://api.github.com/repos/owner/repo/branches?page=2>; rel="next"' } : {} },
-  ));
-  const first = await readPage({ search: "FEATURE/", pageSize: "2" });
-  expect(first.body.data).toEqual({ branches: ["feature/a", "feature/b"], currentBranch: "main", nextCursor: expect.any(String) });
-  const next = await readPage({ search: "feature/", pageSize: "2", cursor: first.body.data.nextCursor });
-  expect(next.body.data).toEqual({ branches: ["feature/c", "feature/local"], currentBranch: "main", nextCursor: null });
-  expect((await readPage()).body.data.branches).toEqual(["feature/a", "feature/b", "feature/c", "feature/local", "main"]);
-  expect(mocks.token).toHaveBeenCalledWith({ body: { accountId: "linked-account" }, headers: expect.any(Headers) });
-});
-
-it("does not present a single-branch result as complete when GitHub access fails", async () => {
-  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
-  mocks.branches.mockResolvedValue({ branches: ["main"], current: "main" });
+it.each([null, "123"])("lists only workspace branches regardless of GitHub connection: %s", async (githubRepositoryId) => {
+  mocks.project.mockResolvedValue({ ...project, githubRepositoryId });
   mocks.accounts.mockResolvedValue([]);
-  const { response, body } = await readPage();
-  expect(response.status).toBe(403);
-  expect(body).toMatchObject({ error: true, code: "GITHUB_RECONNECT_REQUIRED" });
-  expect(body.data).toBeUndefined();
-});
-
-it("rejects a failed later GitHub page rather than returning an incomplete branch list", async () => {
-  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
-  mocks.remoteBranches.mockImplementation(async (page: number) => page === 1
-    ? Response.json([{ name: "feature/remote" }], { headers: { link: '<https://api.github.com/repos/owner/repo/branches?page=2>; rel="next"' } })
-    : Response.json({ message: "github-token private details" }, { status: 429 }));
-  const { response, body } = await readPage();
-  expect(response.status).toBe(429);
-  expect(body.data).toBeUndefined();
-  expect(JSON.stringify(body)).not.toMatch(/github-token|private details/);
-});
-
-it("validates remote branch names and keeps local-only projects independent of GitHub", async () => {
-  await readPage();
+  mocks.branches.mockResolvedValue({ branches: ["main", "feature/local"], current: "main" });
+  const first = await readPage({ pageSize: "1" });
+  expect(first.response.status).toBe(200);
+  expect(first.body.data).toEqual({ branches: ["feature/local"], currentBranch: "main", nextCursor: expect.any(String) });
+  const next = await readPage({ pageSize: "1", cursor: first.body.data.nextCursor });
+  expect(next.body.data).toEqual({ branches: ["main"], currentBranch: "main", nextCursor: null });
+  expect((await readPage({ search: "feature/" })).body.data.branches).toEqual(["feature/local"]);
   expect(mocks.accounts).not.toHaveBeenCalled();
-  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
-  mocks.remoteBranches.mockResolvedValue(Response.json([{ name: 42 }]));
-  expect((await readPage()).response.status).toBe(502);
+  expect(mocks.token).not.toHaveBeenCalled();
+  expect(mocks.fetch.mock.calls.every(([url]) => new URL(url).hostname.endsWith("daytona.test") ||
+    new URL(url).hostname === "app.daytona.io")).toBe(true);
 });
 
 it("reads the owned sandbox's branches without requiring GitHub credentials", async () => {

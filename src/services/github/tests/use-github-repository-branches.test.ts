@@ -9,6 +9,8 @@ import { readGitHubRepositoryBranches } from "@/services/github/actions/actions"
 import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
 import type { GitHubRepositoryBranchPage } from "@/services/github/types";
 
+const auth = vi.hoisted(() => ({ userId: "user-one" as string | null }));
+vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: auth.userId ? { user: { id: auth.userId } } : null, isPending: false, error: null }) }));
 vi.mock("@/services/github/actions/actions", () => ({ readGitHubRepositoryBranches: vi.fn() }));
 const read = vi.mocked(readGitHubRepositoryBranches);
 let client: QueryClient;
@@ -47,6 +49,7 @@ beforeEach(() => {
   root = createRoot(document.createElement("div"));
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   read.mockReset();
+  auth.userId = "user-one";
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -173,4 +176,17 @@ describe("useGitHubRepositoryBranches", () => {
     expect(read.mock.calls.map(([, options]) => options?.cursor)).toEqual([null, "old", null, "new"]);
     expect(current.data?.pages).toEqual([page(["three"], "new"), page(["four"], null)]);
   });
+});
+
+
+it("isolates remote branches by account and blocks signed-out requests", async () => {
+  read.mockResolvedValue(page(["private"], null));
+  await render({});
+  auth.userId = "user-two";
+  await render({});
+  expect(read).toHaveBeenCalledTimes(2);
+  auth.userId = null;
+  await render({});
+  await runQuery(() => current.refetch());
+  expect(read).toHaveBeenCalledTimes(2);
 });

@@ -222,3 +222,15 @@ it.each([401, 403, 429])("does not automatically retry HTTP %s", async (status) 
   expect(current.isError).toBe(true);
   expect(read).toHaveBeenCalledOnce();
 });
+
+
+it("does not reuse cached pages from the former combined local and remote list", async () => {
+  client.setQueryData([
+    "projects", "branches", "infinite", "cursor", "user-one", projectId,
+    { projectId, search: "", pageSize: 20, cursor: null },
+  ], { pages: [page(["main", "remote-only"])], pageParams: [null] });
+  read.mockResolvedValueOnce(page(["main"]));
+  await render();
+  expect(read).toHaveBeenCalledOnce();
+  expect(current.data?.pages).toEqual([page(["main"])]);
+});

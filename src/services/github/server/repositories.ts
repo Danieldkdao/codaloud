@@ -4,7 +4,7 @@ import type {
   GitHubRepositoryPagination,
 } from "@/services/github/types";
 import { Octokit } from "octokit";
-import { gitHubRepositoryBranchSchema, gitHubRepositoryRequestSchema, gitHubRepositorySchema } from "@/services/github/schemas";
+import { gitHubRepositoryRequestSchema, gitHubRepositorySchema } from "@/services/github/schemas";
 import { GitHubAccessError } from "./access";
 import { paginateGitHubRepositories } from "./repository-pagination";
 import { paginateGitHubSearch } from "./search-pagination";
@@ -112,27 +112,6 @@ export const listGitHubRepositoryBranches = async (
     scope: `branches:${repositoryId}`,
   });
   return { branches, nextCursor };
-};
-
-// Project pickers merge remote names with local-only branches before applying
-// their own ordering and cursor. Verify access once and read all upstream pages.
-export const listGitHubRepositoryBranchNames = async (
-  accessToken: string,
-  repositoryId: string,
-  signal?: AbortSignal,
-) => {
-  const timeout = AbortSignal.timeout(15_000);
-  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  const repository = await verifyGitHubRepositoryAccess(accessToken, repositoryId, requestSignal);
-  const [owner, repo] = repository.fullName.split("/");
-  const octokit = createGitHubClient(accessToken, requestSignal);
-  const names: string[] = [];
-  for (let page = 1; ; page++) {
-    requestSignal.throwIfAborted();
-    const { data, headers } = await octokit.rest.repos.listBranches({ owner, repo, page, per_page: 100 });
-    names.push(...gitHubRepositoryBranchSchema.pick({ name: true }).array().parse(data).map(({ name }) => name));
-    if (!/;\s*rel="next"/.test(headers.link ?? "")) return names;
-  }
 };
 
 export const listGitHubRepositoryPage = async (

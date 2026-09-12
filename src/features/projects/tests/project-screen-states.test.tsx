@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import AgentScreen from "@/app/projects/[projectId]/agent";
 import CodeScreen from "@/app/projects/[projectId]/code";
 import GitScreen from "@/app/projects/[projectId]/git";
+import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
 const selection = vi.hoisted(() => ({ filePath: null as string | null, version: 0, setFilePath: vi.fn(), refreshFile: vi.fn() }));
@@ -14,12 +15,14 @@ vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ 
 const readFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));
-const state = vi.hoisted(() => ({ empty: false, focus: 0, ready: undefined as (() => Promise<void>) | undefined }));
+const state = vi.hoisted(() => ({ empty: false, focus: 0, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
+vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/components/code-editor", () => ({ default: ({ onReady, colorScheme, initialValue }: { onReady: () => Promise<void>; colorScheme: string; initialValue: string }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ onReady, onAnalysis, colorScheme, initialValue }: { onReady: () => Promise<void>; onAnalysis: (value: CodeEditorAnalysis) => Promise<void>; colorScheme: string; initialValue: string }) => {
   state.ready = onReady;
+  state.analysis = onAnalysis;
   return createElement("textarea", { key: initialValue, defaultValue: initialValue, "data-theme": colorScheme });
 } }));
 vi.mock("@/components/code-editor-loading", () => ({ CodeEditorLoading: () => createElement("span", null, "Initializing your editor") }));
@@ -34,7 +37,7 @@ vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Bool
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
   View: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
-  Pressable: ({ children }: { children?: ReactNode }) => createElement("button", null, children),
+  Pressable: ({ children, accessibilityLabel, onPress }: { children?: ReactNode; accessibilityLabel?: string; onPress?: () => void }) => createElement("button", { "aria-label": accessibilityLabel, onClick: onPress }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent }: {
     data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode;
@@ -86,6 +89,24 @@ const renderCode = (path: string | null = "app/page.tsx") => {
 const finishLoading = (content = "const value = 1;", path = "app/page.tsx") => {
   Object.assign(fileQuery, { data: { path, content, size: content.length }, isPending: false, isFetching: false, isError: false });
 };
+
+it("shows severity counts beside the filename and resets them for another file", async () => {
+  finishLoading();
+  renderCode();
+  const previousAnalysis = state.analysis!;
+  const diagnostic = { from: 0, to: 1, message: "Problem", code: 1 };
+  await act(async () => state.analysis!({ status: "ready", diagnostics: [
+    { ...diagnostic, severity: "error" }, { ...diagnostic, severity: "warning" }, { ...diagnostic, severity: "info" },
+  ] }));
+  expect(container.querySelector('button[aria-label="1 error, 1 warning, 1 information message. Show problems."]')).not.toBeNull();
+  finishLoading("", "other.ts");
+  renderCode("other.ts");
+  await act(async () => previousAnalysis({ status: "ready", diagnostics: [{ ...diagnostic, severity: "error" }] }));
+  expect(container.querySelector('button[aria-label="Checking code…"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label^="1 error"]')).toBeNull();
+  await act(async () => state.analysis!({ status: "unavailable", diagnostics: [] }));
+  expect(container.querySelector('button[aria-label="Code analysis unavailable. Tap to retry."]')).not.toBeNull();
+});
 
 it("shows the same loading UI for fetching and editor startup, without a preview timer", async () => {
   renderCode();

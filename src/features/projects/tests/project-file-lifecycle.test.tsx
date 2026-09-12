@@ -38,6 +38,8 @@ vi.mock("@/features/projects/actions/file-actions", () => ({
 }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, onReady }: { initialValue: string; onReady: () => Promise<void> }) => {
@@ -50,7 +52,7 @@ vi.mock("@/components/ui/text", () => {
   return { PText: Text, HeadingText: Text, CodeText: Text };
 });
 vi.mock("@/components/ui/button", () => ({ Button: (props: { children?: ReactNode }) => createElement(Children, props) }));
-vi.mock("react-native", () => ({ View: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));
+vi.mock("react-native", () => ({ View: (props: { children?: ReactNode }) => createElement(Children, props), Pressable: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));
 
 let selection: ReturnType<typeof useProjectWorkspaceCurrentFile>;
 let creation: ReturnType<typeof useProjectWorkspaceFileCreation>;

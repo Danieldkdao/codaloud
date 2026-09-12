@@ -31,3 +31,28 @@ body { background: var(--background); }
 .code-editor-host .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }
 
 .code-editor-host .cm-textfield:focus { outline: 2px solid var(--ring); outline-offset: -2px; }
+
+.code-editor-host .cm-lintRange { background-image: none; text-decoration: none; }
+/* The active selection also has cm-lintRange and wraps the severity mark.
+ * Underlining that wrapper adds a second, foreground-colored stroke. */
+.code-editor-host .cm-lintRange-error,
+.code-editor-host .cm-lintRange-warning,
+.code-editor-host .cm-lintRange-info { text-decoration: underline wavy; text-decoration-thickness: 1px; text-underline-offset: 4px; text-decoration-skip-ink: none; }
+.code-editor-host .cm-lintRange-error { text-decoration-color: var(--destructive); }
+.code-editor-host .cm-lintRange-warning { text-decoration-color: var(--warning); }
+.code-editor-host .cm-lintRange-info { text-decoration-color: var(--info); }
+.code-editor-host .cm-lintRange-active { background-color: var(--secondary); }
+.code-editor-host .cm-lintPoint-error::after { border-bottom-color: var(--destructive); }
+.code-editor-host .cm-lintPoint-warning::after { border-bottom-color: var(--warning); }
+.code-editor-host .cm-lintPoint-info::after { border-bottom-color: var(--info); }
+.code-editor-host .cm-diagnostic { padding: 10px 12px; font-size: 16px; }
+.code-editor-host .cm-diagnostic-error { border-left-color: var(--destructive); }
+.code-editor-host .cm-diagnostic-warning { border-left-color: var(--warning); }
+.code-editor-host .cm-diagnostic-info { border-left-color: var(--info); }
+.code-editor-host .cm-diagnosticSource { color: var(--muted-foreground); font-size: 16px; }
+.code-editor-host .cm-panels-bottom { border-top: 1px solid var(--border); }
+.code-editor-host .cm-panel.cm-panel-lint { padding-bottom: var(--editor-bottom-inset); }
+.code-editor-host .cm-panel-lint ul { max-height: min(30vh, 240px); }
+.code-editor-host .cm-panel-lint li { min-height: 44px; }
+.code-editor-host .cm-panel-lint [aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }
+.code-editor-host .cm-panel-lint button[name=close] { min-width: 44px; min-height: 44px; color: var(--foreground); font-size: 20px; }

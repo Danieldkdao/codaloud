@@ -15,7 +15,7 @@ export const requestDaytona = async (url: string, init?: RequestInit): Promise<u
   if (init?.body) headers.set("Content-Type", "application/json");
   try {
     const response = await fetch(url, {
-      ...init, headers, redirect: "error", signal: AbortSignal.timeout(15_000),
+      ...init, headers, redirect: "error", signal: init?.signal ?? AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
       throw new SandboxFilesError(response.status === 404 ? 404 : 502, "DAYTONA_REQUEST_FAILED", "Unable to access your workspace. Please try again.");

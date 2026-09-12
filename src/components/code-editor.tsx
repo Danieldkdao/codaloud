@@ -9,6 +9,9 @@ import {
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { search } from "@codemirror/search";
+import { forceLinting, openLintPanel } from "@codemirror/lint";
+import { createCodeEditorIntelligence, refreshCodeAnalysis, type CodeEditorAnalysis, type CodeEditorAnalysisRequest } from "./code-editor-intelligence";
+import { CODE_INTELLIGENCE_FILE_PATTERN } from "@/features/projects/constants";
 import { tags } from "@lezer/highlight";
 import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400Regular";
 import { Outfit_400Regular } from "@expo-google-fonts/outfit/400Regular";
@@ -27,6 +30,9 @@ type CodeEditorProps = {
   colorScheme?: "light" | "dark";
   /** Signals that CodeMirror has finished its initial layout. */
   onReady?: () => Promise<void>;
+  onRequestAnalysis?: CodeEditorAnalysisRequest;
+  onAnalysis?: (analysis: CodeEditorAnalysis) => Promise<void>;
+  analysisPanelRequest?: number;
   dom?: import("expo/dom").DOMProps;
 };
 
@@ -55,7 +61,7 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strong, fontWeight: "600" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.invalid, color: "var(--destructive)", textDecoration: "underline" },
+  { tag: tags.invalid, color: "var(--destructive)" },
 ]);
 
 const formatEditorThemeClassName = (colorScheme: CodeEditorProps["colorScheme"]) => {
@@ -72,12 +78,20 @@ const CodeEditor = ({
   bottomInset = 0,
   colorScheme,
   onReady,
+  onRequestAnalysis,
+  onAnalysis,
+  analysisPanelRequest = 0,
 }: CodeEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const inset = useRef(bottomInset);
   const readyCallback = useRef(onReady);
   readyCallback.current = onReady;
+  const analysisCallbacks = useRef({ onRequestAnalysis, onAnalysis });
+  analysisCallbacks.current = { onRequestAnalysis, onAnalysis };
+  const hasAnalysis = Boolean(onRequestAnalysis) && CODE_INTELLIGENCE_FILE_PATTERN.test(filename);
+  const analysisStatus = useRef<CodeEditorAnalysis["status"]>("checking");
+  const pendingProblemsPanel = useRef(false);
   const notifiedEditor = useRef<EditorView | null>(null);
   const [preparedEditor, setPreparedEditor] = useState<EditorView | null>(null);
   const [languageError, setLanguageError] = useState(false);
@@ -94,11 +108,26 @@ const CodeEditor = ({
     if (!host.current) return;
     const language = new Compartment();
     let disposed = false;
+    analysisStatus.current = hasAnalysis ? "checking" : "unsupported";
+    pendingProblemsPanel.current = false;
+    const intelligence = hasAnalysis ? createCodeEditorIntelligence(
+      filename,
+      async (input) => analysisCallbacks.current.onRequestAnalysis?.(input) ?? null,
+      (analysis) => {
+        analysisStatus.current = analysis.status;
+        void analysisCallbacks.current.onAnalysis?.(analysis).catch(() => {});
+        if (analysis.status === "ready" && pendingProblemsPanel.current) {
+          pendingProblemsPanel.current = false;
+          requestAnimationFrame(() => { if (!disposed && view.current === editor) openLintPanel(editor); });
+        }
+      },
+    ) : null;
     const editor = new EditorView({
       parent: host.current,
       doc: initialValue,
       extensions: [
         basicSetup,
+        intelligence?.extensions ?? [],
         search({ top: true }),
         EditorState.tabSize.of(2),
         syntaxHighlighting(highlightStyle),
@@ -113,6 +142,7 @@ const CodeEditor = ({
       ],
     });
     view.current = editor;
+    if (!hasAnalysis) void analysisCallbacks.current.onAnalysis?.({ status: "unsupported", diagnostics: [] }).catch(() => {});
     const description = LanguageDescription.matchFilename(languages, filename);
     setLanguageError(false);
     const languageSetup = description
@@ -131,10 +161,22 @@ const CodeEditor = ({
     });
     return () => {
       disposed = true;
+      intelligence?.destroy();
       editor.destroy();
       view.current = null;
     };
-  }, [filename, initialValue]);
+  }, [filename, initialValue, hasAnalysis]);
+
+  useEffect(() => {
+    if (analysisPanelRequest && view.current && hasAnalysis) {
+      if (analysisStatus.current === "ready") openLintPanel(view.current);
+      else {
+        pendingProblemsPanel.current = true;
+        view.current.dispatch({ effects: refreshCodeAnalysis.of(null) });
+        forceLinting(view.current);
+      }
+    }
+  }, [analysisPanelRequest, hasAnalysis]);
 
   useEffect(() => {
     if (

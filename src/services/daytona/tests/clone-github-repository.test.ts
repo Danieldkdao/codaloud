@@ -7,6 +7,9 @@ import type { Sandbox } from "@daytona/sdk";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { cloneGitHubRepository } from "@/services/daytona/clone-github-repository";
+import { prepareProjectDependencies } from "@/services/daytona/prepare-project-dependencies";
+
+vi.mock("@/services/daytona/prepare-project-dependencies", () => ({ prepareProjectDependencies: vi.fn() }));
 
 const execute = promisify(exec);
 let home: string;
@@ -30,11 +33,22 @@ const sandbox = () => ({
 const root = () => join(home, ".codaloud", "workspace");
 
 beforeEach(async () => {
+  vi.mocked(prepareProjectDependencies).mockReset().mockResolvedValue(undefined);
   home = await mkdtemp(join(tmpdir(), "codaloud-import-"));
   clone.mockReset().mockImplementation(async (_url: string, path: string) => {
     await mkdir(join(path, ".git"), { recursive: true });
     await writeFile(join(path, "readme.md"), "repository files");
   });
+});
+
+it("prepares declarations before completing imports and retries setup without replacing user files", async () => {
+  vi.mocked(prepareProjectDependencies).mockRejectedValueOnce(new Error("Dependency setup failed"));
+  await expect(cloneGitHubRepository(sandbox(), input)).rejects.toThrow();
+  await writeFile(join(root(), "readme.md"), "user edits");
+  await cloneGitHubRepository(sandbox(), input);
+  expect(prepareProjectDependencies).toHaveBeenCalledTimes(2);
+  expect(clone).toHaveBeenCalledOnce();
+  expect(await readFile(join(root(), "readme.md"), "utf8")).toBe("user edits");
 });
 afterEach(async () => { await rm(home, { recursive: true, force: true }); });
 

@@ -1,10 +1,7 @@
-import { MenuView } from "@expo/ui/community/menu";
+import { MenuView, type MenuAction } from "@expo/ui/community/menu";
 import type { ReactNode } from "react";
-import { View } from "react-native";
 
-import { Icon } from "@/components/ui/icon";
-import { PText } from "@/components/ui/text";
-import { cn } from "@/lib/utils";
+import { NativeSelectTrigger } from "@/components/ui/native-select-trigger";
 
 export type NativeSelectProps = {
   label: string;
@@ -17,16 +14,13 @@ export type NativeSelectProps = {
     options: readonly {
       value: string;
       label: string;
+      image?: MenuAction["image"];
       onSelect: () => void;
     }[];
   }[];
 };
 
 export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectProps) => {
-  const selectedLabels = sections.map((section) =>
-    section.options.find((option) => option.value === section.value)?.label,
-  ).filter(Boolean).join(", ");
-
   return (
     <MenuView
       shouldOpenOnLongPress={false}
@@ -37,6 +31,7 @@ export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectPro
         subactions: section.options.map((option) => ({
           id: `${sectionIndex}:${option.value}`,
           title: option.label,
+          image: option.image,
           state: option.value === section.value ? "on" : "off",
         })),
       }))}
@@ -52,23 +47,7 @@ export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectPro
         }
       }}
     >
-      <View
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={`${label}: ${selectedLabels}`}
-        accessibilityHint="Opens available options"
-        className={trigger ? "min-h-12 justify-center" : cn(
-          "min-h-12 flex-row items-center justify-center gap-2 rounded-lg border border-input bg-card",
-          icon ? "size-12" : "px-3",
-        )}
-      >
-        {trigger ?? icon ?? (
-          <>
-            <PText className="font-medium">{label}</PText>
-            <Icon family="Feather" name="chevron-down" size={18} className="text-muted-foreground" accessible={false} />
-          </>
-        )}
-      </View>
+      <NativeSelectTrigger label={label} icon={icon} trigger={trigger} sections={sections} />
     </MenuView>
   );
 };

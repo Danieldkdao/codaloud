@@ -18,6 +18,8 @@
   --success-foreground: oklch(0.36 0.075 157);
   --success-border: oklch(0.86 0.055 157);
   --navigation-shadow: rgb(27 45 35 / 0.14);
+  /* Match the system menu's primary text rather than the app's tinted foreground. */
+  --native-menu-foreground: #000000;
   --background: oklch(0.9643 0.0111 89.7224);
   --foreground: oklch(0.2836 0.0144 157.9253);
   --card: oklch(0.9967 0.0054 95.0974);
@@ -68,6 +70,7 @@
   --success-foreground: oklch(0.91 0.06 157);
   --success-border: oklch(0.46 0.065 157);
   --navigation-shadow: rgb(0 0 0 / 0.3);
+  --native-menu-foreground: #ffffff;
   --background: oklch(0.2836 0.0144 157.9253);
   --foreground: oklch(0.9643 0.0111 89.7224);
   --card: oklch(0.3163 0.0193 157.1933);

@@ -1,4 +1,4 @@
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus } from "@/features/projects/types";
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
@@ -219,6 +219,16 @@ export const formatAgentActivityDate = (createdAt: string): string =>
     minute: "2-digit",
   }).format(new Date(createdAt));
 
+
+export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
+  switch (tab) {
+    case "files": return { label: "Files", icon: { family: "Feather", name: "folder" } } as const;
+    case "code": return { label: "Code", icon: { family: "Ionicons", name: "document-text-outline" } } as const;
+    case "git": return { label: "Git", icon: { family: "Feather", name: "git-branch" } } as const;
+    case "agent": return { label: "Agent", icon: { family: "Ionicons", name: "sparkles-outline" } } as const;
+    default: throw new Error(`Unsupported workspace tab: ${tab satisfies never}`);
+  }
+};
 
 export const formatWorkspaceSearch = (tab: string | undefined) => {
   switch (tab) {

@@ -9,10 +9,13 @@ import { ProjectWorkspaceDock } from "@/features/projects/components/project-wor
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 
 let activeTab = "git";
+const switchTab = vi.fn((name: string) => { activeTab = name; });
 vi.mock("expo-router", () => ({ usePathname: () => `/projects/demo/${activeTab}` }));
 vi.mock("expo-router/ui", () => ({
   TabTrigger: ({ children }: { children: ReactNode }) => children,
+  useTabTrigger: () => ({ switchTab }),
 }));
+vi.mock("@expo/vector-icons", () => ({ Feather: {}, Ionicons: {} }));
 const Workspace = () => (
   <ProjectWorkspaceDockHeightProvider>
     <ProjectWorkspaceBranchProvider>
@@ -74,13 +77,14 @@ vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Bool
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
+  PixelRatio: { get: () => 3 },
   KeyboardAvoidingView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   Modal: ({ children, onRequestClose }: { children: ReactNode; onRequestClose: () => void }) =>
     createElement("div", { role: "dialog" }, children, createElement("button", { onClick: onRequestClose, "aria-label": "System back" })),
   ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   StyleSheet: { absoluteFill: {} },
-  View: ({ children, testID }: { children?: ReactNode; testID?: string }) => createElement("div", { "data-testid": testID }, children),
+  View: ({ children, testID, accessibilityLabel }: { children?: ReactNode; testID?: string; accessibilityLabel?: string }) => createElement("div", { "data-testid": testID, "aria-label": accessibilityLabel }, children),
   FlatList: ({ data, renderItem, ListHeaderComponent }: {
     data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode; ListHeaderComponent?: ReactNode;
   }) => createElement("div", null, ListHeaderComponent, data.map((item, index) =>
@@ -120,12 +124,26 @@ const selectBranch = (name: string) => {
 
 beforeEach(() => {
   activeTab = "git";
+  switchTab.mockClear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
   act(() => root.render(createElement(Workspace)));
 });
 afterEach(() => act(() => root.unmount()));
+
+it("switches workspace sections through the menu and reflects the active route", () => {
+  for (const [name, label] of [["files", "Files"], ["code", "Code"], ["agent", "Agent"], ["git", "Git"]]) {
+    const option = container.querySelector<HTMLButtonElement>(`[data-branch="${label}"]`);
+    expect(option).not.toBeNull();
+    act(() => option!.click());
+    expect(switchTab).toHaveBeenLastCalledWith(name, { resetOnFocus: false });
+    act(() => root.render(createElement(Workspace)));
+    expect(container.querySelector(`[aria-label="Workspace: ${label}"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-branch="${label}"]`)?.getAttribute("aria-checked")).toBe("true");
+    expect(container.querySelectorAll('[data-branch][aria-checked="true"]')).toHaveLength(1);
+  }
+});
 
 it("updates the branch note and history when selecting a branch in the sheet", () => {
   expect(container.textContent).not.toContain("Demo history");

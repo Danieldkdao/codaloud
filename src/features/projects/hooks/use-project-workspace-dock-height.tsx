@@ -8,7 +8,7 @@ type ProjectWorkspaceDockHeightState = {
 const ProjectWorkspaceDockHeightContext = createContext<ProjectWorkspaceDockHeightState | null>(null);
 
 export const ProjectWorkspaceDockHeightProvider = ({ children }: { children: ReactNode }) => {
-  // Includes both floating surfaces and their bottom safe-area spacing.
+  // Includes the action bar, navigation button, contextual controls, and safe area.
   const [dockHeight, setDockHeight] = useState(0);
 
   return (

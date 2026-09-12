@@ -8,9 +8,10 @@ import { ProjectWorkspaceSearch } from "@/features/projects/components/project-w
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { demoBranches } from "@/features/projects/data/demo-commits";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
+import type { ProjectWorkspaceTab } from "@/features/projects/types";
 
 type ProjectActionButtonsProps = {
-  tab: "files" | "code" | "git" | "agent";
+  tab: ProjectWorkspaceTab;
 };
 
 export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => {

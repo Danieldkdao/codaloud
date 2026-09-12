@@ -14,6 +14,7 @@ type ThemeColor =
   | "destructive"
   | "foreground"
   | "navigation-shadow"
+  | "native-menu-foreground"
   | "primary"
   | "primary-foreground"
   | "secondary"

@@ -1,5 +1,7 @@
 import type { ProjectSelectData } from "@/db/schemas/project";
 
+export type ProjectWorkspaceTab = "files" | "code" | "git" | "agent";
+
 // The API serializes database timestamps as ISO strings.
 export type ProjectResponseData = Omit<
   ProjectSelectData,

@@ -146,3 +146,29 @@ it.each(["session", "headers", "network", "abort"])("catches %s failures", async
 
   expect(await readProjectBranchesAction(projectId)).toBeNull();
 });
+
+
+it("reports restoration metadata while preserving the data-or-null contract", async () => {
+  const onFailure = vi.fn();
+  network.mockResolvedValueOnce(Response.json({ error: true, code: "WORKSPACE_RESTORING" }, {
+    status: 503, headers: { "Retry-After": "3" },
+  }));
+  expect(await readProjectBranchesAction(projectId, {}, undefined, onFailure)).toBeNull();
+  expect(onFailure).toHaveBeenCalledExactlyOnceWith(503, "3", "WORKSPACE_RESTORING");
+});
+
+it("reports HTTP and network failures without retrying invalid response data or cancellations", async () => {
+  const onFailure = vi.fn();
+  network.mockResolvedValueOnce(new Response("gateway unavailable", { status: 502 }));
+  await readProjectBranchesAction(projectId, {}, undefined, onFailure);
+  expect(onFailure).toHaveBeenLastCalledWith(502, null, undefined);
+  network.mockRejectedValueOnce(new TypeError("private request details"));
+  await readProjectBranchesAction(projectId, {}, undefined, onFailure);
+  expect(onFailure).toHaveBeenLastCalledWith(0, null);
+  onFailure.mockClear();
+  network.mockResolvedValueOnce(Response.json(success({ branches: [42] })));
+  await readProjectBranchesAction(projectId, {}, undefined, onFailure);
+  network.mockRejectedValueOnce(new DOMException("Aborted", "AbortError"));
+  await readProjectBranchesAction(projectId, {}, undefined, onFailure);
+  expect(onFailure).not.toHaveBeenCalled();
+});

@@ -9,9 +9,20 @@ import GitScreen from "@/app/projects/[projectId]/git";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 
+const live = vi.hoisted(() => ({
+  projectId: "11111111-1111-4111-8111-111111111111",
+  userId: "user-one",
+  query: vi.fn(),
+  loadMore: vi.fn(), retry: vi.fn(),
+  isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
+  hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
+  data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
+}));
+vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: { user: { id: live.userId } }, isPending: false, error: null }) }));
+vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
 const switchTab = vi.fn((name: string) => { activeTab = name; });
-vi.mock("expo-router", () => ({ usePathname: () => `/projects/demo/${activeTab}` }));
+vi.mock("expo-router", () => ({ usePathname: () => `/projects/${live.projectId}/${activeTab}`, useLocalSearchParams: () => ({ projectId: live.projectId }) }));
 vi.mock("expo-router/ui", () => ({
   TabTrigger: ({ children }: { children: ReactNode }) => children,
   useTabTrigger: () => ({ switchTab }),
@@ -75,7 +86,7 @@ vi.mock("@expo/ui/community/bottom-sheet", () => ({
 }));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ placeholder, accessibilityLabel, value, onChangeText }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void }) =>
-    createElement("input", { placeholder, "aria-label": accessibilityLabel, value, onChange: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
+    createElement("input", { placeholder, "aria-label": accessibilityLabel, value, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "var(--card)" }));
 vi.mock("react-native-svg", () => {
@@ -90,6 +101,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   Platform: { OS: "ios" },
   Keyboard: { dismiss: vi.fn() },
   PixelRatio: { get: () => 3 },
@@ -100,10 +112,12 @@ vi.mock("react-native", () => ({
   ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   StyleSheet: { absoluteFill: {} },
   View: ({ children, testID, accessibilityLabel }: { children?: ReactNode; testID?: string; accessibilityLabel?: string }) => createElement("div", { "data-testid": testID, "aria-label": accessibilityLabel }, children),
-  FlatList: ({ data, renderItem, ListHeaderComponent }: {
-    data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode; ListHeaderComponent?: ReactNode;
-  }) => createElement("div", null, ListHeaderComponent, data.map((item, index) =>
-    createElement("div", { key: index }, renderItem({ item, index })))),
+  FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent, ListFooterComponent, onEndReached }: {
+    data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode;
+    ListHeaderComponent?: ReactNode; ListEmptyComponent?: ReactNode; ListFooterComponent?: ReactNode; onEndReached?: () => void;
+  }) => createElement("div", null, ListHeaderComponent, data.length ? data.map((item, index) =>
+    createElement("div", { key: index }, renderItem({ item, index }))) : ListEmptyComponent, ListFooterComponent,
+    onEndReached && createElement("button", { "aria-label": "Reach end", onClick: onEndReached })),
   Pressable: ({ children, onPress, accessibilityLabel, accessibilityState }: {
     children?: ReactNode; onPress?: () => void; accessibilityLabel?: string; accessibilityState?: { checked?: boolean | "mixed"; selected?: boolean };
   }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-checked": accessibilityState?.checked, "aria-selected": accessibilityState?.selected }, children),
@@ -139,6 +153,12 @@ const selectBranch = (name: string) => {
 
 beforeEach(() => {
   activeTab = "git";
+  live.projectId = "11111111-1111-4111-8111-111111111111";
+  live.userId = "user-one";
+  live.data = { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main", nextCursor: null }] };
+  live.query.mockClear();
+  live.loadMore.mockClear(); live.retry.mockClear();
+  Object.assign(live, { isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
   switchTab.mockClear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
@@ -160,28 +180,40 @@ it("switches workspace sections through the menu and reflects the active route",
   }
 });
 
-it("updates the branch note and history when selecting a branch in the sheet", () => {
+it("selects real branches while keeping the demo history unchanged", () => {
   click("Commit History");
-  expect(container.textContent).not.toContain("Demo history");
+  const commits = () => [...container.querySelectorAll('[aria-label*="Alex Morgan"], [aria-label*="Sam Chen"]')].map((node) => node.getAttribute("aria-label"));
+  const before = commits();
+  expect(before).toHaveLength(9);
   expect(container.textContent).toContain("Polish the dashboard layout");
-  selectBranch("feat/project-cards");
-  expect(container.textContent).toContain("Add project cards and empty states");
-  expect(container.textContent).not.toContain("Polish the dashboard layout");
-  expect(container.textContent).not.toContain("Merge branch");
-  selectBranch("fix/keyboard-navigation");
-  expect(container.textContent).toContain("Restore focus after closing dialogs");
-  expect(container.textContent).not.toContain("Add project cards and empty states");
-  expect(container.textContent).toContain("Initial commit");
-  selectBranch("main");
+  selectBranch("feature/live");
   expect(container.textContent).toContain("Polish the dashboard layout");
-  expect(container.textContent).not.toContain("Restore focus after closing dialogs");
+  expect(commits()).toEqual(before);
+  selectBranch("fix/live");
+  expect(container.textContent).toContain("Polish the dashboard layout");
+  expect(commits()).toEqual(before);
+  expect(live.query).toHaveBeenCalledWith(live.projectId, expect.any(Object));
+});
+
+it("keeps a manual selection across server updates and resets it for another project or account", () => {
+  selectBranch("feature/live");
+  live.data = { pages: [{ branches: ["release"], currentBranch: "release", nextCursor: null }] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
+  live.projectId = "22222222-2222-4222-8222-222222222222";
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("release");
+  live.userId = "user-two";
+  live.data = { pages: [{ branches: ["account-branch"], currentBranch: "account-branch", nextCursor: null }] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("account-branch");
 });
 
 it("keeps commit presses inert after changing branches", () => {
   click("Commit History");
-  selectBranch("fix/keyboard-navigation");
+  selectBranch("fix/live");
   const before = container.textContent;
-  const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Restore focus after closing dialogs,"]');
+  const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Polish the dashboard layout,"]');
   expect(commit).not.toBeNull();
   act(() => commit!.click());
   expect(container.textContent).toBe(before);
@@ -274,4 +306,81 @@ it("renders the empty state from an empty changes list", () => {
   expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
   expect(container.textContent).not.toMatch(/demo|preview/i);
   expect(container.querySelector('[aria-label="Show empty state"]')).toBeNull();
+});
+
+it("passes search to the live query, renders its pages, and preserves the selection", () => {
+  click("Branch: main");
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!;
+  act(() => { input.value = "FIX"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(live.query).toHaveBeenLastCalledWith(live.projectId, { search: "FIX" });
+  live.data = { pages: [{ branches: ["server-result"], currentBranch: "main", nextCursor: "next" }, { branches: ["server-result", "next-result"], currentBranch: "main", nextCursor: null }] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelectorAll('[aria-label="server-result"]')).toHaveLength(1);
+  expect(container.querySelector('[aria-label="next-result"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="feature/live"]')).toBeNull();
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
+  click("Reach end");
+  expect(live.loadMore).toHaveBeenCalledOnce();
+});
+
+it("shows initial loading, no results, and continuation loading states", () => {
+  live.data = undefined;
+  live.isPending = true;
+  act(() => root.render(createElement(Workspace)));
+  click("Branch: main");
+  expect(container.textContent).toContain("Loading branches…");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+  live.data = { pages: [{ branches: [], currentBranch: null, nextCursor: null }] };
+  live.isPending = false;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("No branches found.");
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!;
+  act(() => { input.value = "missing"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(container.textContent).toContain("No matching branches found.");
+  live.isFetchingNextPage = true;
+  live.isFetching = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Loading more branches…");
+});
+
+it("offers retry on failure while preserving loaded rows and shows offline status", () => {
+  click("Branch: main");
+  live.error = new Error("Unable to load project branches. Please try again.");
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Couldn’t refresh branches. Showing previously loaded branches.");
+  expect(container.textContent).not.toContain(live.error.message);
+  expect(container.querySelector('[aria-label="feature/live"]')).not.toBeNull();
+  const retry = [...container.querySelectorAll('button')].find((button) => button.textContent === "Try again")!;
+  act(() => retry.click());
+  expect(live.retry).toHaveBeenCalledOnce();
+  live.error = null; live.fetchStatus = "paused";
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Waiting for a connection…");
+});
+
+it("does not invent a default branch for detached HEAD", () => {
+  live.data = { pages: [{ branches: ["release"], currentBranch: null, nextCursor: null }] };
+  act(() => root.render(createElement(Workspace, { key: "detached" })));
+  click("Branch: Select branch");
+  expect(container.querySelector('[aria-checked="true"][aria-label="release"]')).toBeNull();
+  click("release");
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("release");
+});
+
+
+it("distinguishes initial, continuation, and active refresh states", () => {
+  click("Branch: main");
+  live.error = new Error("Unable to load project branches. Please try again.");
+  live.isFetching = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Refreshing branches…");
+  expect(container.textContent).not.toContain(live.error.message);
+  live.isFetching = false;
+  live.isFetchNextPageError = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Couldn’t load more branches. Please try again.");
+  live.isFetchNextPageError = false;
+  live.data = undefined;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain(live.error.message);
 });

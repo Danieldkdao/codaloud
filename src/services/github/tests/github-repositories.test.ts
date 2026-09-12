@@ -68,6 +68,30 @@ beforeEach(() => {
 });
 
 describe("repository API authorization and pagination", () => {
+  it.each(["read:user, user:email", "public_repo", ""])(
+    "requests reconnection when the live token lacks repo access despite saved scopes: %s",
+    async (scopes) => {
+      network.mockResolvedValue(Response.json([{ ...githubRepository(1), private: false }], {
+        headers: { "x-oauth-scopes": scopes },
+      }));
+      const response = await GET(request());
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: true, code: "GITHUB_RECONNECT_REQUIRED" });
+    },
+  );
+
+  it("returns public and private repositories when the live token has repo access", async () => {
+    network.mockResolvedValue(Response.json([
+      { ...githubRepository(1), private: false }, githubRepository(2),
+    ], { headers: { "x-oauth-scopes": "read:user, repo, user:email" } }));
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.repositories.map(({ private: isPrivate }: { private: boolean }) => isPrivate)).toEqual([false, true]);
+    const query = new URL(String(network.mock.calls[0][0])).searchParams;
+    expect(query.get("visibility")).toBe("all");
+    expect(query.get("affiliation")).toBe("owner,collaborator,organization_member");
+  });
+
   it("requires a session before reading accounts or contacting GitHub", async () => {
     mocks.getCurrentUser.mockResolvedValue({ userId: null });
     const response = await GET(request());

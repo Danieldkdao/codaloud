@@ -51,12 +51,6 @@ export type ProjectCommitData = {
 };
 
 
-export type ProjectBranchData = {
-  name: string;
-  commits: ProjectCommitData[];
-};
-
-
 export type ProjectAgentActivityKind =
   | "voice"
   | "text"

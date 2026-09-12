@@ -12,7 +12,6 @@ import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
 const selection = vi.hoisted(() => ({ filePath: null as string | null, version: 0, setFilePath: vi.fn(), refreshFile: vi.fn() }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => selection }));
-vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => ({ branch: state.empty ? undefined : { name: "main", commits: [] }, setBranch: vi.fn() }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const saveFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
@@ -62,7 +61,7 @@ vi.mock("@/features/projects/components/project-changes-panel", () => ({
 vi.mock("@/features/projects/components/project-branch-select", () => ({ ProjectBranchSelect: () => null }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
 vi.mock("@/features/projects/data/demo-commits", () => ({
-  get demoBranches() { return state.empty ? [] : [{ name: "main", commits: [] }]; },
+  demoCommits: [],
 }));
 vi.mock("@/features/projects/data/demo-changes", () => ({ demoChanges: [] }));
 vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));

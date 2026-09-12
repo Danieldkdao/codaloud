@@ -1,19 +1,29 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { demoBranches } from "@/features/projects/data/demo-commits";
-import type { ProjectBranchData } from "@/features/projects/types";
+import { useLocalSearchParams } from "expo-router";
+import { useAuthSession } from "@/hooks/use-auth-session";
 
 type ProjectWorkspaceBranchState = {
-  branch: ProjectBranchData;
-  setBranch: (branch: ProjectBranchData) => void;
+  projectId: string;
+  branch: string | null;
+  setBranch: (branch: string) => void;
 };
 
 const ProjectWorkspaceBranchContext = createContext<ProjectWorkspaceBranchState | null>(null);
 
 export const ProjectWorkspaceBranchProvider = ({ children }: { children: ReactNode }) => {
-  const [branch, setBranch] = useState(demoBranches[0]);
+  const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const session = useAuthSession();
+  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
+  const [selection, setSelection] = useState<{ projectId: string; userId: string; branch: string } | null>(null);
+  const branch = selection?.projectId === projectId && selection.userId === userId ? selection.branch : null;
 
   return (
-    <ProjectWorkspaceBranchContext value={{ branch, setBranch }}>
+    <ProjectWorkspaceBranchContext value={{
+      projectId,
+      branch,
+      // Selection is local UI state; it never checks out a Git branch.
+      setBranch: (name) => { if (userId) setSelection({ projectId, userId, branch: name }); },
+    }}>
       {children}
     </ProjectWorkspaceBranchContext>
   );

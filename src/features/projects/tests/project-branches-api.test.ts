@@ -3,21 +3,18 @@ import { GET } from "@/app/api/projects/[projectId]/branches+api";
 
 const mocks = vi.hoisted(() => ({
   user: vi.fn(), project: vi.fn(), getSandbox: vi.fn(), home: vi.fn(),
-  branches: vi.fn(), configure: vi.fn(), fetch: vi.fn(),
+  branches: vi.fn(), start: vi.fn(), fetch: vi.fn(),
+  accounts: vi.fn(), token: vi.fn(), remoteBranches: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
+vi.mock("@/lib/auth/auth", () => ({ auth: { api: { listUserAccounts: mocks.accounts, getAccessToken: mocks.token } } }));
 vi.mock("@/features/projects/server/projects", () => ({ confirmUserProjectOwnership: mocks.project }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "server-key", DAYTONA_TARGET: "us" } }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@daytona/sdk", () => ({
-  Daytona: class {
-    constructor(options: unknown) { mocks.configure(options); }
-    get = mocks.getSandbox;
-  },
-  DaytonaNotFoundError: class extends Error {},
-}));
+// The SDK's transitive ESM dependencies fail to initialize in Expo's API runtime.
+vi.mock("@daytona/sdk", () => { throw new Error("Branch routes must not import the Daytona SDK."); });
 
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 const userId = "abcdef00-0000-4000-8000-000000000002";
@@ -25,7 +22,7 @@ const project = { id: projectId, sandboxId: "owned-sandbox", setupStatus: "ready
 const sandbox = {
   id: "owned-sandbox", state: "started",
   labels: { codaloudApp: "codaloud", codaloudProjectId: projectId },
-  getUserHomeDir: mocks.home, git: { branches: mocks.branches },
+  toolboxProxyUrl: "https://toolbox.daytona.test",
 };
 const request = () => new Request(`https://codaloud.test/api/projects/${projectId}/branches`, {
   headers: { Cookie: "session=valid" },
@@ -86,14 +83,76 @@ it("rejects cursors from another search or project before loading", async () => 
 });
 
 beforeEach(() => {
+  mocks.accounts.mockReset().mockResolvedValue([{ id: "linked-account", providerId: "github", scopes: ["repo"] }]);
+  mocks.token.mockReset().mockResolvedValue({ accessToken: "github-token" });
+  mocks.remoteBranches.mockReset().mockResolvedValue(Response.json([]));
   mocks.user.mockReset().mockResolvedValue({ userId });
   mocks.project.mockReset().mockResolvedValue(project);
   mocks.getSandbox.mockReset().mockResolvedValue(sandbox);
   mocks.home.mockReset().mockResolvedValue("/home/daytona");
   mocks.branches.mockReset().mockResolvedValue({ branches: ["main", "feature/voice"], current: "main" });
-  mocks.configure.mockClear();
-  mocks.fetch.mockReset().mockResolvedValue(Response.json({}));
+  mocks.start.mockReset().mockResolvedValue({});
+  mocks.fetch.mockReset().mockImplementation(async (input: string) => {
+    const url = new URL(input);
+    let result: unknown;
+    if (url.pathname === "/api/sandbox/owned-sandbox") result = await mocks.getSandbox("owned-sandbox");
+    else if (url.pathname === "/api/sandbox/owned-sandbox/start") result = await mocks.start();
+    else if (url.pathname === "/owned-sandbox/user-home-dir") result = { dir: await mocks.home() };
+    else if (url.pathname === "/owned-sandbox/git/branches") result = await mocks.branches(url.searchParams.get("path"));
+    else if (url.origin === "https://api.github.com" && url.pathname === "/repositories/123") result = {
+      id: 123, name: "repo", full_name: "owner/repo", description: null, private: true, archived: false,
+      default_branch: "main", clone_url: "https://github.com/owner/repo.git", html_url: "https://github.com/owner/repo",
+      permissions: { pull: true, push: true, admin: true },
+    };
+    else if (url.origin === "https://api.github.com" && url.pathname === "/repos/owner/repo/branches") result = await mocks.remoteBranches(Number(url.searchParams.get("page")));
+    else throw new Error("Unexpected Daytona request");
+    return result instanceof Response ? result : Response.json(result);
+  });
   vi.stubGlobal("fetch", mocks.fetch);
+});
+
+it("merges every remote page with local branches before search and cursor pagination", async () => {
+  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
+  mocks.branches.mockResolvedValue({ branches: ["main", "feature/local"], current: "main" });
+  mocks.remoteBranches.mockImplementation(async (page: number) => Response.json(
+    (page === 1 ? ["main", "feature/a", "feature/b"] : ["feature/c"]).map((name) => ({ name })),
+    { headers: page === 1 ? { link: '<https://api.github.com/repos/owner/repo/branches?page=2>; rel="next"' } : {} },
+  ));
+  const first = await readPage({ search: "FEATURE/", pageSize: "2" });
+  expect(first.body.data).toEqual({ branches: ["feature/a", "feature/b"], currentBranch: "main", nextCursor: expect.any(String) });
+  const next = await readPage({ search: "feature/", pageSize: "2", cursor: first.body.data.nextCursor });
+  expect(next.body.data).toEqual({ branches: ["feature/c", "feature/local"], currentBranch: "main", nextCursor: null });
+  expect((await readPage()).body.data.branches).toEqual(["feature/a", "feature/b", "feature/c", "feature/local", "main"]);
+  expect(mocks.token).toHaveBeenCalledWith({ body: { accountId: "linked-account" }, headers: expect.any(Headers) });
+});
+
+it("does not present a single-branch result as complete when GitHub access fails", async () => {
+  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
+  mocks.branches.mockResolvedValue({ branches: ["main"], current: "main" });
+  mocks.accounts.mockResolvedValue([]);
+  const { response, body } = await readPage();
+  expect(response.status).toBe(403);
+  expect(body).toMatchObject({ error: true, code: "GITHUB_RECONNECT_REQUIRED" });
+  expect(body.data).toBeUndefined();
+});
+
+it("rejects a failed later GitHub page rather than returning an incomplete branch list", async () => {
+  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
+  mocks.remoteBranches.mockImplementation(async (page: number) => page === 1
+    ? Response.json([{ name: "feature/remote" }], { headers: { link: '<https://api.github.com/repos/owner/repo/branches?page=2>; rel="next"' } })
+    : Response.json({ message: "github-token private details" }, { status: 429 }));
+  const { response, body } = await readPage();
+  expect(response.status).toBe(429);
+  expect(body.data).toBeUndefined();
+  expect(JSON.stringify(body)).not.toMatch(/github-token|private details/);
+});
+
+it("validates remote branch names and keeps local-only projects independent of GitHub", async () => {
+  await readPage();
+  expect(mocks.accounts).not.toHaveBeenCalled();
+  mocks.project.mockResolvedValue({ ...project, githubRepositoryId: "123" });
+  mocks.remoteBranches.mockResolvedValue(Response.json([{ name: 42 }]));
+  expect((await readPage()).response.status).toBe(502);
 });
 
 it("reads the owned sandbox's branches without requiring GitHub credentials", async () => {
@@ -101,7 +160,6 @@ it("reads the owned sandbox's branches without requiring GitHub credentials", as
   const response = await GET(input, { projectId });
   expect(mocks.user).toHaveBeenCalledExactlyOnceWith(input.headers);
   expect(mocks.project).toHaveBeenCalledExactlyOnceWith(userId, projectId);
-  expect(mocks.configure).toHaveBeenCalledExactlyOnceWith({ apiKey: "server-key", target: "us", otelEnabled: false, requestTimeoutMs: 15_000 });
   expect(mocks.getSandbox).toHaveBeenCalledExactlyOnceWith("owned-sandbox");
   expect(mocks.branches).toHaveBeenCalledExactlyOnceWith("/home/daytona/.codaloud/workspace");
   expect(response.status).toBe(200);
@@ -111,7 +169,11 @@ it("reads the owned sandbox's branches without requiring GitHub credentials", as
     error: false, message: "Project branches loaded.",
     data: { branches: ["feature/voice", "main"], currentBranch: "main", nextCursor: null },
   });
-  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  for (const [, options] of mocks.fetch.mock.calls) {
+    expect(new Headers(options.headers).get("Authorization")).toBe("Bearer server-key");
+    expect(options.method ?? "GET").toBe("GET");
+  }
 });
 
 it("rejects missing sessions and invalid IDs before project or sandbox access", async () => {
@@ -158,16 +220,15 @@ it.each(["stopped", "archived", "starting", "restoring"])("preserves restoration
   expect(response.headers.get("Retry-After")).toBe("3");
   expect(await response.json()).toMatchObject({ error: true, code: "WORKSPACE_RESTORING" });
   if (state === "stopped" || state === "archived") {
-    expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith("https://app.daytona.io/api/sandbox/owned-sandbox/start", expect.objectContaining({ method: "POST" }));
-    const headers = new Headers(mocks.fetch.mock.calls[0][1].headers);
+    expect(mocks.fetch).toHaveBeenCalledWith("https://app.daytona.io/api/sandbox/owned-sandbox/start", expect.objectContaining({ method: "POST" }));
+    const headers = new Headers(mocks.fetch.mock.calls.at(-1)![1].headers);
     expect(headers.get("Authorization")).toBe("Bearer server-key");
-  } else expect(mocks.fetch).not.toHaveBeenCalled();
+  } else expect(mocks.start).not.toHaveBeenCalled();
   expect(mocks.branches).not.toHaveBeenCalled();
 });
 
 it("reports a missing sandbox without replacing it", async () => {
-  const { DaytonaNotFoundError } = await import("@daytona/sdk");
-  mocks.getSandbox.mockRejectedValue(new DaytonaNotFoundError("private details"));
+  mocks.getSandbox.mockResolvedValueOnce(Response.json({ message: "private details" }, { status: 404 }));
   const response = await GET(request(), { projectId });
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: true, code: "SANDBOX_MISSING" });
@@ -206,7 +267,7 @@ it.each([undefined, "", "relative/home"])("rejects invalid sandbox home paths: %
   expect(mocks.branches).not.toHaveBeenCalled();
 });
 
-it("hides SDK and server errors and marks failure responses private", async () => {
+it("hides provider and server errors and marks failure responses private", async () => {
   for (const operation of [mocks.user, mocks.project, mocks.getSandbox, mocks.home, mocks.branches]) {
     operation.mockRejectedValueOnce(new Error("server-key private-provider-details"));
     const response = await GET(request(), { projectId });

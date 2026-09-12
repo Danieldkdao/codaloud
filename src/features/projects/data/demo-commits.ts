@@ -1,7 +1,7 @@
-import type { ProjectBranchData, ProjectCommitData } from "@/features/projects/types";
+import type { ProjectCommitData } from "@/features/projects/types";
 
 // Illustrative history for the mock Next.js project, newest first.
-const demoCommits: ProjectCommitData[] = [
+export const demoCommits: ProjectCommitData[] = [
   {
     hash: "a7e3c91b42d8f6019a8c7b6d5e4f3210a9b8c7d6",
     message: "Polish the dashboard layout",
@@ -60,47 +60,4 @@ const demoCommits: ProjectCommitData[] = [
     author: "Alex Morgan",
     committedAt: "2026-09-06T14:00:00Z",
   },
-];
-
-
-// These lists share the same ancestor commits. Selecting a branch reviews its
-// history; it does not move HEAD away from the checked-out main branch.
-export const demoBranches: ProjectBranchData[] = [
-  { name: "main", commits: demoCommits },
-  { name: "feat/project-cards", commits: demoCommits.slice(2) },
-  {
-    name: "fix/keyboard-navigation",
-    commits: [
-      {
-        hash: "4c8d2a107e93b5f604d18a2c9f0b7e635a4d8291",
-        message: "Restore focus after closing dialogs",
-        author: "Sam Chen",
-        committedAt: "2026-09-09T11:10:00Z",
-        refs: ["fix/keyboard-navigation"],
-      },
-      {
-        hash: "5e2b7f901c4a6d830b9e12f7a0c5d6483e9b210a",
-        message: "Keep tab navigation inside the active panel",
-        author: "Sam Chen",
-        committedAt: "2026-09-09T10:20:00Z",
-      },
-      ...demoCommits.slice(3),
-    ],
-  },
-  // Additional demo refs exercise scrolling and long branch names in the picker.
-  { name: "develop", commits: demoCommits.slice(2) },
-  { name: "staging", commits: demoCommits.slice(3) },
-  { name: "release/1.0", commits: demoCommits.slice(4) },
-  { name: "feat/voice-commands", commits: demoCommits.slice(5) },
-  { name: "feat/project-search", commits: demoCommits.slice(6) },
-  { name: "feat/editor-autocomplete", commits: demoCommits.slice(2) },
-  { name: "feat/offline-drafts", commits: demoCommits.slice(3) },
-  { name: "feat/branch-comparison", commits: demoCommits.slice(4) },
-  { name: "feat/workspace-settings", commits: demoCommits.slice(5) },
-  { name: "fix/safe-area-insets", commits: demoCommits.slice(6) },
-  { name: "fix/search-keyboard-dismissal", commits: demoCommits.slice(2) },
-  { name: "fix/preserve-editor-selection-after-switching-between-projects", commits: demoCommits.slice(3) },
-  { name: "refactor/shared-workspace-controls", commits: demoCommits.slice(4) },
-  { name: "chore/update-dependencies", commits: demoCommits.slice(5) },
-  { name: "docs/getting-started", commits: demoCommits.slice(6) },
 ];

@@ -50,7 +50,7 @@ export const ProjectWorkspaceDock = () => {
                 <Icon family="Feather" name="git-branch" size={18} className="text-secondary-foreground" accessible={false} />
                 <CodeText className="min-w-0 shrink text-center text-lg font-medium text-secondary-foreground"
                   numberOfLines={1} ellipsizeMode="middle">
-                  {branchSelection.branch.name}
+                  {branchSelection.branch ?? "Select branch"}
                 </CodeText>
               </View>
             ) : null}

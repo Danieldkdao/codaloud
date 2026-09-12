@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
 import { ProjectCommitList } from "@/features/projects/components/project-commit-list";
 import { ProjectGitTabPanel, ProjectGitTabs } from "@/features/projects/components/project-git-tabs";
-import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
+import { demoCommits } from "@/features/projects/data/demo-commits";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { useWorkspaceLoadingPreview } from "@/features/projects/hooks/use-workspace-loading-preview";
 import { demoChanges } from "@/features/projects/data/demo-changes";
@@ -15,7 +15,6 @@ const GitScreen = () => {
   const [tab, setTab] = useState<ProjectGitTab>("changes");
   const insets = useSafeAreaInsets();
   const isLoading = useWorkspaceLoadingPreview();
-  const { branch: selectedBranch } = useProjectWorkspaceBranch();
 
   if (isLoading) {
     return (
@@ -34,13 +33,10 @@ const GitScreen = () => {
         <ProjectGitTabs tab={tab} onTabChange={setTab} />
       </View>
       <ProjectGitTabPanel active={tab === "changes"}>
-        <ProjectChangesPanel key={selectedBranch?.name} changes={selectedBranch ? demoChanges : []} />
+        <ProjectChangesPanel changes={demoChanges} />
       </ProjectGitTabPanel>
       <ProjectGitTabPanel active={tab === "history"}>
-        <ProjectCommitList
-          key={selectedBranch?.name}
-          commits={selectedBranch?.commits ?? []}
-        />
+        <ProjectCommitList commits={demoCommits} />
       </ProjectGitTabPanel>
     </View>
   );

@@ -10,6 +10,7 @@ export const readProjectBranchesAction = async (
   projectId: string,
   params: Partial<Omit<ProjectBranchParamsSchema, "projectId">> = {},
   signal?: AbortSignal,
+  onFailure?: (status: number, retryAfter: string | null, code?: string) => void,
 ): Promise<ProjectBranchPageSchema | null> => {
   try {
     const { userId, error: sessionError } = await getCurrentUserClient();
@@ -22,13 +23,29 @@ export const readProjectBranchesAction = async (
 
     const { search, cursor, pageSize } = input.data;
     const query = createSearchParams({ search, cursor, pageSize });
-    const response = await fetchBase(`/api/projects/${projectId}/branches?${query}`, {
-      method: "GET",
-      headers,
-      credentials: "omit",
-      signal,
-    });
-    if (!response.ok) return null;
+    let response: Response;
+    try {
+      response = await fetchBase(`/api/projects/${projectId}/branches?${query}`, {
+        method: "GET",
+        headers,
+        credentials: "omit",
+        signal,
+      });
+    } catch (error) {
+      if (!signal?.aborted && !(error instanceof Error && error.name === "AbortError")) {
+        onFailure?.(0, null);
+      }
+      return null;
+    }
+    if (!response.ok) {
+      // Keep the read action's data-or-null contract while allowing the query to
+      // distinguish temporary outages/restoration from failures needing user action.
+      const failure: unknown = await response.json().catch(() => null);
+      const code = failure !== null && typeof failure === "object" && "code" in failure &&
+        failure.code === "WORKSPACE_RESTORING" ? failure.code : undefined;
+      onFailure?.(response.status, response.headers.get("Retry-After"), code);
+      return null;
+    }
 
     const payload: unknown = await response.json();
     const result = readProjectBranchesResponseSchema.safeParse(payload);

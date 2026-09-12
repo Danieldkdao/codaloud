@@ -1,5 +1,5 @@
 import { Daytona, DaytonaNotFoundError, type Sandbox } from "@daytona/sdk";
-import { AbortTaskRunError, schemaTask } from "@trigger.dev/sdk";
+import { AbortTaskRunError, logger, schemaTask } from "@trigger.dev/sdk";
 import { z } from "zod";
 import type { getGitHubImportSource } from "@/services/github/server/import-source";
 
@@ -129,6 +129,19 @@ export const handleProjectSandbox = schemaTask({
         cloneUrl: importSource.repository.cloneUrl,
         accessToken: importSource.accessToken,
       });
+      // Import must remain usable even when the repository's package setup is
+      // broken: users need access to its files to repair it. This only enriches
+      // editor completion; a clone or workspace publication failure still throws.
+      const { prepareProjectDependencies } = await import("@/services/daytona/prepare-project-dependencies");
+      try {
+        await prepareProjectDependencies(sandbox);
+      } catch {
+        // Never log package-manager output, which may contain registry tokens.
+        logger.warn(
+          "Repository imported, but editor dependency setup failed. Dependency-based completions may be unavailable until packages are installed.",
+          { projectId, code: "EDITOR_DEPENDENCIES_UNAVAILABLE" },
+        );
+      }
     }
 
     const completedProjectOperation = await transitionProjectSandboxDb(lifecycle, {

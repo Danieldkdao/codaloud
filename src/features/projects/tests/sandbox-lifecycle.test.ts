@@ -7,7 +7,7 @@ import { updateProjectOperationRunDb } from "@/features/projects/server/project-
 
 const mocks = vi.hoisted(() => ({
   pg: undefined as unknown as PGlite,
-  importSource: vi.fn(), clone: vi.fn(),
+  importSource: vi.fn(), clone: vi.fn(), prepareDependencies: vi.fn(), warn: vi.fn(),
   get: vi.fn(), create: vi.fn(), start: vi.fn(), waitUntilStarted: vi.fn(), logQuery: vi.fn(),
 }));
 vi.mock("@/db/db", async () => {
@@ -22,6 +22,7 @@ vi.mock("@daytona/sdk", () => ({
   DaytonaNotFoundError: class extends Error {},
 }));
 vi.mock("@trigger.dev/sdk", () => ({
+  logger: { warn: mocks.warn },
   schemaTask: (options: unknown) => options,
   AbortTaskRunError: class extends Error {},
 }));
@@ -31,6 +32,7 @@ vi.mock("@/services/github/server/access", () => ({
   getGitHubErrorResponse: () => ({ status: 403, body: { message: "Reconnect GitHub." } }),
 }));
 vi.mock("@/services/daytona/clone-github-repository", () => ({ cloneGitHubRepository: mocks.clone }));
+vi.mock("@/services/daytona/prepare-project-dependencies", () => ({ prepareProjectDependencies: mocks.prepareDependencies }));
 
 const userId = "00000000-0000-4000-8000-000000000001";
 const projectId = "00000000-0000-4000-8000-000000000002";
@@ -77,6 +79,7 @@ beforeEach(async () => {
   mocks.logQuery.mockReset();
   mocks.importSource.mockReset().mockResolvedValue({ repository: { id: 123456, cloneUrl: "https://github.com/owner/repo.git" }, accessToken: "fresh-token", branchName: "feature/import" });
   mocks.clone.mockReset().mockResolvedValue(undefined);
+  mocks.prepareDependencies.mockReset().mockResolvedValue(undefined);
   await mocks.pg.exec("truncate projects, project_operations");
   await mocks.pg.query("insert into projects (id, user_id, name) values ($1, $2, 'Lifecycle')", [projectId, userId]);
   await mocks.pg.query("insert into project_operations (id, project_id, user_id, kind) values ($1, $2, $3, 'prepare')", [operationId, projectId, userId]);
@@ -303,4 +306,18 @@ it("does not resolve credentials or clone for an empty project", async () => {
   await run();
   expect(mocks.importSource).not.toHaveBeenCalled();
   expect(mocks.clone).not.toHaveBeenCalled();
+});
+
+it("marks a cloned repository ready when editor dependency setup fails and logs a safe warning", async () => {
+  await mocks.pg.query("update projects set github_repository_id = '123456'");
+  mocks.prepareDependencies.mockRejectedValue(new Error("registry private-token secret details"));
+  await run();
+  expect(mocks.prepareDependencies).toHaveBeenCalledOnce();
+  expect(mocks.clone.mock.invocationCallOrder[0]).toBeLessThan(mocks.prepareDependencies.mock.invocationCallOrder[0]);
+  expect(await state()).toMatchObject({ setup_status: "ready", status: "succeeded", phase: "complete" });
+  expect(mocks.warn).toHaveBeenCalledWith(
+    "Repository imported, but editor dependency setup failed. Dependency-based completions may be unavailable until packages are installed.",
+    { projectId, code: "EDITOR_DEPENDENCIES_UNAVAILABLE" },
+  );
+  expect(JSON.stringify(mocks.warn.mock.calls)).not.toMatch(/private-token|secret details/);
 });

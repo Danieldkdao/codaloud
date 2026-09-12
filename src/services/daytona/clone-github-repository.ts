@@ -1,5 +1,4 @@
 import type { Sandbox } from "@daytona/sdk";
-import { prepareProjectDependencies } from "./prepare-project-dependencies";
 
 // Only pass an import source validated on the server. Never persist the token.
 type GitHubCloneInput = {
@@ -79,8 +78,6 @@ export const cloneGitHubRepository = async (sandbox: Sandbox, input: GitHubClone
       );
       await prepare(prepared.stagingPath);
     }
-    // A retry after dependency failure must reuse the published source files.
-    await prepareProjectDependencies(sandbox);
   } catch {
     // SDK errors can include the authenticated request body. Do not retain a cause.
     throw new Error("Unable to import the GitHub repository. Existing workspace files have been preserved.");

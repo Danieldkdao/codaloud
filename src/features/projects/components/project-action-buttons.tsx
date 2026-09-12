@@ -6,7 +6,6 @@ import { ProjectBranchSelect } from "@/features/projects/components/project-bran
 import { ProjectFilesAdd } from "@/features/projects/components/project-files-add";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
-import { demoBranches } from "@/features/projects/data/demo-commits";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 import type { ProjectWorkspaceTab } from "@/features/projects/types";
 
@@ -15,7 +14,7 @@ type ProjectActionButtonsProps = {
 };
 
 export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => {
-  const branchSelection = useProjectWorkspaceBranch();
+  const { projectId } = useProjectWorkspaceBranch();
 
   switch (tab) {
     case "files":
@@ -34,16 +33,7 @@ export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => 
         </>
       );
     case "git":
-      return (
-        <ProjectBranchSelect
-          branch={branchSelection.branch}
-          branches={demoBranches.map((branch) => branch.name)}
-          onBranchChange={(name) => {
-            const branch = demoBranches.find((branch) => branch.name === name);
-            if (branch) branchSelection.setBranch(branch);
-          }}
-        />
-      );
+      return <ProjectBranchSelect key={projectId} />;
     case "agent":
       return null;
     default:

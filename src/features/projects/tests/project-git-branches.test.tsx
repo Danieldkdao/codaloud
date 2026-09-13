@@ -364,7 +364,7 @@ it("dismisses the branch sheet without changing the branch", () => {
   click("Branch: main");
   expect(container.querySelector('[data-native-sheet]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Search branches"]')).not.toBeNull();
-  click("Close Branch");
+  click("Swipe down");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
   click("Branch: main");

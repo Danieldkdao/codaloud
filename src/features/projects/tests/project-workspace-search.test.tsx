@@ -84,12 +84,13 @@ it("opens an editable ghost search bar and dismisses through the outside-tap sur
   expect(container.querySelector("input")?.value).toBe("layout.tsx");
 });
 
-it("supports system dismissal and the explicit close control", () => {
+it("supports system dismissal without an explicit close control", () => {
   click("Search files");
+  expect(container.querySelector('[aria-label="Close search"]')).toBeNull();
   click("System back");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Search files");
-  click("Close search");
+  click("Dismiss search");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
@@ -159,7 +160,7 @@ it("replaces a supplied anchor and reports closure through each dismissal path",
     anchorPlacement: "replace",
     onOpenChange,
   })));
-  for (const dismiss of ["Dismiss search", "Close search", "System back"]) {
+  for (const dismiss of ["Dismiss search", "System back"]) {
     click("Search files");
     expect(onOpenChange).toHaveBeenLastCalledWith(true);
     expect(container.querySelector("[data-search-top]")?.getAttribute("data-search-top")).toBe("480");

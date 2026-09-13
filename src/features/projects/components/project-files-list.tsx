@@ -1,6 +1,8 @@
 import type { DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
+import { useMemo, type ReactNode } from "react";
 import { FlatList, Pressable, View } from "react-native";
+import Animated, { Easing, FadeInUp, ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ProjectIcon } from "@/components/project-icon";
@@ -8,6 +10,18 @@ import { PText } from "@/components/ui/text";
 import { ProjectWorkspacePlaceholder } from "@/features/projects/components/project-workspace-placeholder";
 import { SandboxFiles } from "@/features/projects/components/sandbox-files";
 import { ProjectFilesListItem } from "@/features/projects/components/project-files-list-item";
+
+const ProjectFileEntrance = ({ index, children }: { index: number; children: ReactNode }) => {
+  const entering = useMemo(() => FadeInUp
+    .duration(220)
+    // Bound the waterfall so large directories never accumulate seconds of delay.
+    .delay(Math.min(index, 8) * 18)
+    .easing(Easing.out(Easing.quad))
+    .withInitialValues({ opacity: 0, translateY: -6 })
+    .reduceMotion(ReduceMotion.System), [index]);
+
+  return <Animated.View entering={entering}>{children}</Animated.View>;
+};
 
 type ProjectFilesListProps = {
   files: ProjectFileEntrySchema[];
@@ -78,17 +92,19 @@ export const ProjectFilesList = ({
       scrollIndicatorInsets={{ bottom: dockHeight }}
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={parentRow}
-      renderItem={({ item }) => (
-        <ProjectFilesListItem
-          file={item}
-          existingNames={existingNames}
-          onDirectoryPress={onDirectoryPress}
-          onFilePress={onFilePress}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-          deleting={deletingPath === item.path}
-          disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
-        />
+      renderItem={({ item, index }) => (
+        <ProjectFileEntrance index={index}>
+          <ProjectFilesListItem
+            file={item}
+            existingNames={existingNames}
+            onDirectoryPress={onDirectoryPress}
+            onFilePress={onFilePress}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            deleting={deletingPath === item.path}
+            disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
+          />
+        </ProjectFileEntrance>
       )}
     />
   );

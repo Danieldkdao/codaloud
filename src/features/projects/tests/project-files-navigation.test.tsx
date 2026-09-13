@@ -28,6 +28,22 @@ vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
     props.renderRightActions?.({ value: 1 } as never, { value: -120 } as never, {} as never)),
 }));
 
+vi.mock("react-native-reanimated", () => {
+  const entrance = {
+    duration: () => entrance,
+    delay: () => entrance,
+    easing: () => entrance,
+    withInitialValues: () => entrance,
+    reduceMotion: () => entrance,
+  };
+  return {
+    default: { View: ({ children }: { children: ReactNode }) => createElement("div", null, children) },
+    FadeInUp: entrance,
+    Easing: { out: (easing: unknown) => easing, quad: vi.fn() },
+    ReduceMotion: { System: "system" },
+  };
+});
+
 const files = [
   { name: "app", path: "app", isDir: true, size: 0 },
   { name: "package.json", path: "package.json", isDir: false, size: 0 },
@@ -61,9 +77,9 @@ vi.mock("react-native", () => ({
     "data-pointer-events": pointerEvents, "data-accessibility-hidden": accessibilityElementsHidden,
     "data-important-for-accessibility": importantForAccessibility,
   }, children),
-  FlatList: ({ data, renderItem, ListHeaderComponent }: { data: unknown[]; renderItem: (info: { item: unknown }) => ReactNode; ListHeaderComponent?: ReactNode }) =>
+  FlatList: ({ data, renderItem, ListHeaderComponent }: { data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode; ListHeaderComponent?: ReactNode }) =>
     createElement("div", null, ListHeaderComponent, data.map((item, index) =>
-      createElement("div", { key: index }, renderItem({ item })))),
+      createElement("div", { key: index }, renderItem({ item, index })))),
   Pressable: ({ children, onPress, accessibilityLabel, disabled }: {
     children: ReactNode; onPress?: () => void; accessibilityLabel?: string; disabled?: boolean;
   }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }, children),

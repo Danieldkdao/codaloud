@@ -1,5 +1,5 @@
 import { useDebouncer } from "@tanstack/react-pacer";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Keyboard,
   Modal,
@@ -36,6 +36,8 @@ type ProjectWorkspaceSearchProps = {
   value?: string;
   // Receives the final input after a 250 ms typing pause.
   onChangeText?: (value: string) => void;
+  accessory?: ReactNode;
+  children?: ReactNode;
 };
 
 export const ProjectWorkspaceSearch = ({
@@ -46,6 +48,8 @@ export const ProjectWorkspaceSearch = ({
   accessibilityLabel = "Search files",
   value,
   onChangeText,
+  accessory,
+  children,
 }: ProjectWorkspaceSearchProps) => {
   const insets = useSafeAreaInsets();
   const shadow = useThemeColor("navigation-shadow");
@@ -253,6 +257,7 @@ export const ProjectWorkspaceSearch = ({
                     height: buttonSize,
                     flexDirection: "row",
                     alignItems: "center",
+                    paddingRight: accessory ? 6 : 20,
                     overflow: "hidden",
                     borderRadius: 28,
                   }}
@@ -291,26 +296,12 @@ export const ProjectWorkspaceSearch = ({
                       className="border-0 px-0 focus:border-transparent focus:outline-0"
                     />
                   </Animated.View>
-                  <Animated.View style={labelStyle}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Close search"
-                      onPress={close}
-                      className="items-center justify-center rounded-full active:bg-secondary"
-                      style={{ width: 44, height: 44, marginRight: 6 }}
-                    >
-                      <Icon
-                        family="Feather"
-                        name="x"
-                        size={20}
-                        accessible={false}
-                        className="text-muted-foreground"
-                      />
-                    </Pressable>
-                  </Animated.View>
+                  {accessory ? <Animated.View style={labelStyle}>{accessory}</Animated.View> : null}
                 </View>
               </View>
             </Animated.View>
+            {/* Present native accessory sheets from this modal's view hierarchy. */}
+            {children}
           </View>
         </Modal>
       ) : null}

@@ -66,7 +66,7 @@ const FilesScreen = () => {
 
   if (fileSearch.isSearching) {
     const canFetch =
-      !isDebouncing && !search.isFetching && search.fetchStatus !== "paused";
+      !search.validationError && !isDebouncing && !search.isFetching && search.fetchStatus !== "paused";
     return (
       <ProjectFileSearchResults
         key={`${projectId}:${fileSearch.query}:${fileSearch.scope}`}
@@ -74,11 +74,11 @@ const FilesScreen = () => {
         scope={fileSearch.scope}
         results={searchResults}
         totalCount={search.data?.pages[0]?.totalCount ?? 0}
-        isLoading={isDebouncing || search.isPending}
+        isLoading={!search.validationError && (isDebouncing || search.isPending)}
         isFetching={search.isFetching}
         isFetchingNextPage={search.isFetchingNextPage}
         isPaused={search.fetchStatus === "paused"}
-        error={search.error?.message}
+        error={search.validationError ?? search.error?.message}
         onFilePress={(filePath) => router.push({
           pathname: "/projects/[projectId]/files/preview",
           params: {
@@ -93,7 +93,7 @@ const FilesScreen = () => {
         onRefresh={() => {
           if (canFetch) void search.refetch();
         }}
-        onRetry={() => {
+        onRetry={search.validationError ? undefined : () => {
           if (!canFetch) return;
           if (search.isFetchNextPageError)
             void search.fetchNextPage({ cancelRefetch: false });

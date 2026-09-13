@@ -6,7 +6,11 @@ export const projectFileSearchScopes = ["all", "title", "content"] as const;
 export type ProjectFileSearchScope = (typeof projectFileSearchScopes)[number];
 
 export const projectFileSearchQuerySchema = z.strictObject({
-  search: z.string().min(1).max(256).refine((value) => value.trim().length > 0 && !value.includes("\0")),
+  search: z.string()
+    .min(1, "Enter a search term.")
+    .max(256, "Shorten your search to 256 characters or fewer.")
+    .refine((value) => value.trim().length > 0, "Enter a search term.")
+    .refine((value) => !value.includes("\0"), "Remove unsupported characters from your search."),
   scope: z.enum(projectFileSearchScopes).default("all"),
   path: projectDirectoryPathSchema.default(""),
   pageSize: z.coerce.number().int().min(1).max(projectFileSearchLimits.maxPageSize).default(projectFileSearchLimits.pageSize),

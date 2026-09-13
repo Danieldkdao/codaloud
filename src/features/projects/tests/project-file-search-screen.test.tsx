@@ -99,6 +99,38 @@ it("shows pending saves as loading, then surfaces their failure and allows searc
   expect(mocks.read).toHaveBeenCalledOnce();
 });
 
+it("keeps overlong input editable, shows validation without a spinner, and searches after shortening it", async () => {
+  const overlong = "x".repeat(257);
+  await applySearch(overlong);
+  expect(search.query).toBe(overlong);
+  expect(container.textContent).toContain("Shorten your search to 256 characters or fewer.");
+  expect(container.querySelector('[aria-label="Searching files"]')).toBeNull();
+  expect(container.textContent).not.toContain("No matching files");
+  expect(container.textContent).not.toContain("Try again");
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.flushSaves).not.toHaveBeenCalled();
+  await applySearch(overlong.slice(0, 256));
+  expect(mocks.read).toHaveBeenCalledOnce();
+  expect(mocks.read.mock.lastCall?.[1].search).toBe(overlong.slice(0, 256));
+  expect(container.textContent).not.toContain("Shorten your search");
+  expect(container.textContent).toContain("live.ts");
+});
+
+it("replaces old results with unsupported-character feedback and returns to browsing when cleared", async () => {
+  await applySearch("live");
+  expect(container.textContent).toContain("live.ts");
+  await applySearch("live\0");
+  expect(container.textContent).toContain("Remove unsupported characters from your search.");
+  expect(container.textContent).not.toContain("live.ts");
+  expect(container.querySelector('[aria-label="Searching files"]')).toBeNull();
+  expect(container.textContent).not.toContain("Try again");
+  expect(mocks.read).toHaveBeenCalledOnce();
+  await applySearch("   ");
+  expect(container.textContent).toContain("Original directory");
+  expect(container.textContent).not.toContain("Remove unsupported characters");
+  expect(mocks.read).toHaveBeenCalledOnce();
+});
+
 it("shows the folder without searching, then replaces it with loading and live results", async () => {
   expect(container.textContent).toContain("Original directory");
   expect(mocks.read).not.toHaveBeenCalled();

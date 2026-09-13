@@ -130,6 +130,38 @@ it.each(["", "   ", "\0", "x".repeat(257)])("does not request an invalid search 
   expect(mocks.read).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["x".repeat(257), "Shorten your search to 256 characters or fewer."],
+  ["text\0", "Remove unsupported characters from your search."],
+  ["   ", "Enter a search term."],
+])("exposes actionable validation for %j without a request", async (search, message) => {
+  await render({ search });
+  expect(current.validationError).toBe(message);
+  expect(current.fetchStatus).toBe("idle");
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.flushSaves).not.toHaveBeenCalled();
+  await act(async () => { await current.refetch(); });
+  await flush();
+  expect(current.error?.message).toBe(message);
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+
+it("clears validation when input is corrected and preserves the 256-character literal", async () => {
+  await render({ search: "x".repeat(257) });
+  expect(current.validationError).not.toBeNull();
+  const search = " " + "x".repeat(254) + " ";
+  await render({ search });
+  expect(current.validationError).toBeNull();
+  expect(current.isSuccess).toBe(true);
+  expect(mocks.read.mock.lastCall?.[1].search).toBe(search);
+});
+
+it("does not expose validation for the disabled empty query used during typing", async () => {
+  await render({ search: "", enabled: false });
+  expect(current.validationError).toBeNull();
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+
 it("requires a valid project, verified session and enabled observer", async () => {
   await render({ search: "needle" }, null);
   await render({ search: "needle" }, "invalid");

@@ -49,6 +49,9 @@ export const useProjectFileSearch = (
     pageSize,
   });
   const validProject = z.uuid().safeParse(projectId);
+  const validationError = params.success
+    ? null
+    : (params.error.issues[0]?.message ?? "Invalid project file search or pagination.");
   const canSearch =
     enabled && Boolean(userId) && validProject.success && params.success;
   const queryKey = useMemo(
@@ -85,9 +88,10 @@ export const useProjectFileSearch = (
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch bypasses enabled, so validate again before sending a request.
       if (!userId) throw new Error("Sign in to search project files.");
-      if (!validProject.success || !params.success) {
+      if (!validProject.success) {
         throw new Error("Invalid project file search or pagination.");
       }
+      if (!params.success) throw new Error(validationError!);
       // A new snapshot must include pending editor writes. Continuations keep
       // their existing snapshot and use the server's workspace-change recovery.
       if (pageParam === null) await flushPendingSaves();
@@ -146,5 +150,7 @@ export const useProjectFileSearch = (
     }
   }, [canSearch, query.error, queryClient, queryKey]);
 
-  return query;
+  // Disabled queries can stay pending without making a request. Keep input
+  // validation separate so the screen can show feedback instead of a spinner.
+  return { ...query, validationError: enabled ? validationError : null };
 };

@@ -36,7 +36,7 @@ type ProjectFileSearchResultsProps = {
   onFilePress: (path: string) => void;
   onLoadMore: () => void;
   onRefresh: () => void;
-  onRetry: () => void;
+  onRetry?: () => void;
 };
 
 export const ProjectFileSearchResults = ({
@@ -92,9 +92,11 @@ export const ProjectFileSearchResults = ({
       >
         {error}
       </PText>
-      <Button variant="outline" onPress={onRetry}>
-        Try again
-      </Button>
+      {onRetry ? (
+        <Button variant="outline" onPress={onRetry}>
+          Try again
+        </Button>
+      ) : null}
     </View>
   ) : null;
 

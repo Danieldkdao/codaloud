@@ -25,7 +25,7 @@ vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/app-wrapper", () => ({ AppWrapper: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("react-native", () => ({
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  ActivityIndicator: () => <span role="progressbar" />,
+  ActivityIndicator: ({ accessibilityLabel }: { accessibilityLabel?: string }) => <span role="progressbar" aria-label={accessibilityLabel} />,
 }));
 vi.mock("@/components/ui/text", () => ({
   PText: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -76,6 +76,63 @@ it("fetches the selected file through the shared hook and renders a read-only ed
   expect(container.querySelector('[role="progressbar"]')).toBeNull();
   act(() => container.querySelector<HTMLButtonElement>('[aria-label="Back to files"]')!.click());
   expect(mocks.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/files", params: { projectId: "project-one" } });
+});
+
+it("refreshes recently cached content on every preview mount and replaces it with confirmed bytes", async () => {
+  const cached = { path: mocks.params.filePath, content: "old bytes", size: 9 };
+  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], cached);
+  let finish!: (value: unknown) => void;
+  mocks.read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render();
+  expect(mocks.read).toHaveBeenCalledOnce();
+  expect(editorProps().initialValue).toBe("old bytes");
+  expect(container.querySelector('[aria-label="Refreshing file"]')).not.toBeNull();
+  await act(async () => finish({ ...cached, content: "new bytes" }));
+  await flush();
+  expect(editorProps()).toMatchObject({ initialValue: "new bytes", readOnly: true });
+  expect(container.textContent).not.toContain("old bytes");
+  expect(container.querySelector('[aria-label="Refreshing file"]')).toBeNull();
+  await act(async () => root.render(null));
+  mocks.read.mockResolvedValueOnce({ ...cached, content: "newer bytes", size: 11 });
+  await render();
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+  expect(editorProps().initialValue).toBe("newer bytes");
+});
+
+it.each(["FILE_NOT_FOUND", undefined])("shows a failed fresh read instead of presenting cached content (%s)", async (code) => {
+  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
+    path: mocks.params.filePath, content: "cached bytes", size: 12,
+  });
+  mocks.read.mockImplementationOnce(async (_project, _path, _signal, onFailure) => {
+    if (code) onFailure({ error: true, code, message: "This file no longer exists." }, null);
+    return null;
+  });
+  await render();
+  expect(mocks.read).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain("Couldn't open this file");
+  expect(container.textContent).not.toContain("cached bytes");
+  expect(container.querySelector('[data-testid="editor"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Open in editor"]')).toBeNull();
+  if (code) expect(container.textContent).toContain("This file no longer exists.");
+  const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
+  await act(async () => retry.click());
+  await flush();
+  expect(editorProps().initialValue).toBe("export const answer = 42;");
+});
+
+it("shows reconnect feedback when a cached preview cannot be refreshed offline", async () => {
+  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
+    path: mocks.params.filePath, content: "cached bytes", size: 12,
+  });
+  onlineManager.setOnline(false);
+  await render();
+  expect(container.textContent).toContain("Reconnect to the internet");
+  expect(container.querySelector('[data-testid="editor"]')).toBeNull();
+  expect(mocks.read).not.toHaveBeenCalled();
+  await act(async () => onlineManager.setOnline(true));
+  await flush();
+  expect(mocks.read).toHaveBeenCalledOnce();
+  expect(editorProps().initialValue).toBe("export const answer = 42;");
 });
 
 it("opens the previewed file in Code only when the floating action is pressed", async () => {

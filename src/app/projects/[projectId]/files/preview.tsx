@@ -24,7 +24,7 @@ const FilePreviewScreen = () => {
   const search = parsedSearch.success ? parsedSearch.data : null;
   const parsedPath = projectFilePathSchema.safeParse(pathParam);
   const filePath = parsedPath.success ? parsedPath.data : null;
-  const query = useProjectFile(projectId, filePath);
+  const query = useProjectFile(projectId, filePath, { freshOnMount: true });
   const currentFile = useProjectWorkspaceCurrentFile();
   const router = useRouter();
   const { dockHeight } = useProjectWorkspaceDockHeight();
@@ -60,7 +60,7 @@ const FilePreviewScreen = () => {
             <HeadingText className="text-center text-2xl">No file selected</HeadingText>
             <PText className="text-center">Return to Files and choose a search result to preview.</PText>
           </View>
-        ) : query.fetchStatus === "paused" && !query.data ? (
+        ) : query.fetchStatus === "paused" ? (
           <View className="flex-1 items-center justify-center px-6" style={{ paddingBottom: dockHeight }}>
             <PText className="text-center" accessibilityLiveRegion="polite">Reconnect to the internet to load this file.</PText>
           </View>

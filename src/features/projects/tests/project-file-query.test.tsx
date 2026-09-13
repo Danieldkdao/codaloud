@@ -20,16 +20,16 @@ const file = { path: "src/main.ts", content: "", size: 0 };
 let client: QueryClient;
 let root: Root;
 let current: ReturnType<typeof useProjectFile>;
-const Probe = ({ projectId, path }: { projectId: string; path: string | null }) => {
-  current = { ...useProjectFile(projectId, path) };
+const Probe = ({ projectId, path, freshOnMount }: { projectId: string; path: string | null; freshOnMount?: boolean }) => {
+  current = { ...useProjectFile(projectId, path, { freshOnMount }) };
   return null;
 };
 const advance = async (milliseconds: number) => {
   await act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
 };
-const render = async (projectId = "project-one", path: string | null = file.path) => {
+const render = async (projectId = "project-one", path: string | null = file.path, freshOnMount?: boolean) => {
   await act(async () => {
-    root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { projectId, path })));
+    root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { projectId, path, freshOnMount })));
   });
   await advance(1);
 };
@@ -57,6 +57,14 @@ it("returns the query result with empty file contents and forwards cancellation"
   expect(current.refetch).toEqual(expect.any(Function));
   expect(read).toHaveBeenCalledExactlyOnceWith("project-one", file.path, expect.any(AbortSignal), expect.any(Function));
   expect(client.getQueryData(["projects", "file", "user-one", "project-one", file.path])).toEqual(file);
+});
+
+it.each([undefined, false, true])("refreshes a recently cached file only when freshOnMount is enabled (%s)", async (freshOnMount) => {
+  const cached = { ...file, content: "old", size: 3 };
+  client.setQueryData(["projects", "file", "user-one", "project-one", file.path], cached);
+  await render("project-one", file.path, freshOnMount);
+  expect(read).toHaveBeenCalledTimes(freshOnMount ? 1 : 0);
+  expect(current.data).toEqual(freshOnMount ? file : cached);
 });
 
 it.each(["pending", "signed-out", "error"])("waits for authentication when %s, including manual refetch", async (state) => {

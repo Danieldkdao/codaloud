@@ -10,7 +10,11 @@ class ProjectFileReadError extends Error {
   }
 }
 
-export const useProjectFile = (projectId: string, filePath: string | null) => {
+export const useProjectFile = (
+  projectId: string,
+  filePath: string | null,
+  { freshOnMount = false }: { freshOnMount?: boolean } = {},
+) => {
   const session = useAuthSession();
   const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
 
@@ -18,6 +22,8 @@ export const useProjectFile = (projectId: string, filePath: string | null) => {
     queryKey: ["projects", "file", userId, projectId, filePath],
     enabled: Boolean(userId && projectId && filePath),
     staleTime: 5_000,
+    // Search previews must recheck sandbox bytes even after a recent cached read.
+    refetchOnMount: freshOnMount ? "always" : true,
     // Archived workspaces can take longer than a fixed retry budget to start.
     // Keep checking restoration, while surfacing all other failures normally.
     retry: (_failureCount, error) =>

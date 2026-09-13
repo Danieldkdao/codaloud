@@ -40,6 +40,71 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); client.clear(); vi.useRealTimers(); });
 
+it("flushes all pending documents, including edits and documents added while waiting", async () => {
+  let finish!: (value: unknown) => void;
+  mocks.save.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render();
+  await act(async () => current.onChange("first"));
+  let pending!: Promise<void>;
+  const completed = vi.fn();
+  await act(async () => { pending = registry.flushPendingSaves().then(completed); });
+  expect(mocks.save).toHaveBeenCalledOnce();
+  expect(completed).not.toHaveBeenCalled();
+  await act(async () => {
+    current.onChange("second");
+    registry.getDocument("two.ts", 0, "original").edit("another file");
+  });
+  await act(async () => { finish(success("first")); await pending; });
+  expect(completed).toHaveBeenCalledOnce();
+  expect(mocks.save.mock.calls.map((call) => [call[1].path, call[1].content])).toEqual([
+    ["one.ts", "first"], ["one.ts", "second"], ["two.ts", "another file"],
+  ]);
+  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: "second" });
+  await tick();
+  expect(mocks.save).toHaveBeenCalledTimes(3);
+});
+
+it("retains save failures and requires an explicit editor retry before a flush can succeed", async () => {
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Connection failed." });
+  await render();
+  await act(async () => current.onChange("draft"));
+  await act(async () => { await expect(registry.flushPendingSaves()).rejects.toThrow("Connection failed."); });
+  await act(async () => { await expect(registry.flushPendingSaves()).rejects.toThrow("Code"); });
+  expect(mocks.save).toHaveBeenCalledOnce();
+  expect(current.status).toBe("error");
+  await act(async () => current.retry());
+  await act(async () => { await expect(registry.flushPendingSaves()).resolves.toBeUndefined(); });
+  expect(current.status).toBe("saved");
+  expect(mocks.save).toHaveBeenCalledTimes(2);
+});
+
+it.each([false, true])("rejects a flush when a rename is active (started during flush: %s)", async (duringFlush) => {
+  await render();
+  let finishSave!: (value: unknown) => void;
+  let finishRename!: () => void;
+  let rename!: Promise<void>;
+  let pending: Promise<void> | undefined;
+  if (duringFlush) {
+    mocks.save.mockImplementationOnce(() => new Promise((resolve) => { finishSave = resolve; }));
+    await act(async () => current.onChange("first"));
+    await act(async () => {
+      pending = expect(registry.flushPendingSaves()).rejects.toThrow("rename");
+    });
+  }
+  await act(async () => {
+    rename = registry.renameFiles("one.ts", "renamed.ts", () => new Promise<void>((resolve) => { finishRename = resolve; }));
+  });
+  if (duringFlush) {
+    await act(async () => { finishSave(success("first")); await pending; });
+  }
+  await act(async () => current.onChange("paused edit"));
+  await act(async () => { await expect(registry.flushPendingSaves()).rejects.toThrow("rename"); });
+  expect(mocks.save).toHaveBeenCalledTimes(duringFlush ? 1 : 0);
+  await act(async () => { finishRename(); await rename; });
+  await act(async () => { await registry.flushPendingSaves(); });
+  expect(mocks.save).toHaveBeenLastCalledWith("project-one", expect.objectContaining({ path: "renamed.ts", content: "paused edit" }));
+});
+
 it("debounces only edits for three seconds, retaining exact text and confirmed cache contents", async () => {
   await render();
   await tick();

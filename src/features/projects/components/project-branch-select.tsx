@@ -12,7 +12,7 @@ import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
 import { useThemeColor } from "@/hooks/use-theme";
 
 import { ProjectBranchSection } from "./project-branch-section";
-import { ProjectBranchSheet } from "./project-branch-sheet";
+import { ContentSheet } from "@/components/ui/content-sheet";
 import { useProject } from "../hooks/use-project";
 import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
 import type { GitHubRepositoryBranchPage, GitHubRepositoryBranch } from "@/services/github/types";
@@ -58,17 +58,10 @@ export const ProjectBranchSelect = () => {
       >
         <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />
       </Pressable>
-      <ProjectBranchSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
+      <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
         <View style={{ width }}>
           <View className="bg-card" accessibilityViewIsModal onAccessibilityEscape={close}>
-            <View className="flex-row items-center justify-between border-b border-border px-5 py-2">
-              <PText accessibilityRole="header" className="flex-1 text-lg font-medium">Branch</PText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close Branch" onPress={close}
-                className="size-12 items-center justify-center rounded-full active:bg-secondary">
-                <Icon family="Feather" name="x" size={22} className="text-foreground" accessible={false} />
-              </Pressable>
-            </View>
             <View>
               <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
                 search={search} open={open} query={query} onSelect={(name) => { close(); setBranch(name, "local"); }} />
@@ -98,7 +91,7 @@ export const ProjectBranchSelect = () => {
             </View>
           </View>
         </View>
-      </ProjectBranchSheet>
+      </ContentSheet>
     </>
   );
 };

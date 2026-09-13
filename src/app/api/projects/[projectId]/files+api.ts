@@ -1,12 +1,32 @@
 import { apiResponse, getContentType } from "@/lib/utils";
 import { createProjectFileSchema, deleteProjectFileSchema, projectDirectoryPathSchema, updateProjectFileSchema } from "@/features/projects/actions/file-schemas";
-import { createUserProjectFile, deleteUserProjectFile, readUserProjectFiles, updateUserProjectFile } from "@/features/projects/server/project-files";
+import { createUserProjectFile, deleteUserProjectFile, readUserProjectFiles, searchUserProjectFiles, updateUserProjectFile } from "@/features/projects/server/project-files";
 import { authenticateProjectFilesRequest, projectFilesFailureResponse } from "@/features/projects/server/file-api";
+import { projectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
+import { SandboxFilesError } from "@/services/daytona/api";
 
 export const GET = async (request: Request, { projectId }: { projectId: string }) => {
   try {
     const userId = await authenticateProjectFilesRequest(request, projectId);
-    const path = projectDirectoryPathSchema.safeParse(new URL(request.url).searchParams.get("path") ?? "");
+    const params = new URL(request.url).searchParams;
+    if (params.has("search")) {
+      const fields = ["search", "scope", "path", "pageSize", "cursor"];
+      const input = projectFileSearchQuerySchema.safeParse(Object.fromEntries(
+        fields.filter((field) => params.has(field)).map((field) => [field, params.get(field)]),
+      ));
+      if (!input.success || fields.some((field) => params.getAll(field).length > 1)
+        || (params.has("pageSize") && !/^[0-9]+$/.test(params.get("pageSize")!))) {
+        throw new SandboxFilesError(400, "INVALID_FILE_SEARCH", "Invalid file search or pagination parameters.");
+      }
+      const data = await searchUserProjectFiles(userId, projectId, input.data, request.signal);
+      const response = apiResponse({ error: false, message: "Search results loaded.", data });
+      response.headers.set("Cache-Control", "private, no-store");
+      return response;
+    }
+    if (["scope", "pageSize", "cursor"].some((field) => params.has(field))) {
+      throw new SandboxFilesError(400, "INVALID_FILE_SEARCH", "Include a search query when requesting search pages.");
+    }
+    const path = projectDirectoryPathSchema.safeParse(params.get("path") ?? "");
     if (!path.success) return apiResponse({ error: true, message: "Invalid folder path." }, 400);
     const files = await readUserProjectFiles(userId, projectId, path.data);
     const response = apiResponse({ error: false, message: "Files loaded.", data: files });

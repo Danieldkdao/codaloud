@@ -75,6 +75,9 @@ const Workspace = () => (
 );
 
 vi.mock("@/features/projects/hooks/use-workspace-loading-preview", () => ({ useWorkspaceLoadingPreview: () => false }));
+vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => ({
+  query: "", setQuery: vi.fn(), title: false, setTitle: vi.fn(), content: false, setContent: vi.fn(),
+}) }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: ({ accessibilityLabel, onOpenChange, value, onChangeText }: { accessibilityLabel: string; onOpenChange?: (open: boolean) => void; value?: string; onChangeText?: (value: string) => void }) => {
   const [open, setOpen] = useState(false);
   return createElement("div", null, createElement("button", {
@@ -364,7 +367,7 @@ it("dismisses the branch sheet without changing the branch", () => {
   click("Branch: main");
   expect(container.querySelector('[data-native-sheet]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Search branches"]')).not.toBeNull();
-  click("Close Branch");
+  click("Swipe down");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
   click("Branch: main");

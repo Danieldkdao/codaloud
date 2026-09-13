@@ -8,6 +8,7 @@ import { PText } from "@/components/ui/text";
 import { ProjectWorkspacePlaceholder } from "@/features/projects/components/project-workspace-placeholder";
 import { SandboxFiles } from "@/features/projects/components/sandbox-files";
 import { ProjectFilesListItem } from "@/features/projects/components/project-files-list-item";
+import { ProjectFileEntrance } from "@/features/projects/components/project-file-entrance";
 
 type ProjectFilesListProps = {
   files: ProjectFileEntrySchema[];
@@ -78,17 +79,19 @@ export const ProjectFilesList = ({
       scrollIndicatorInsets={{ bottom: dockHeight }}
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={parentRow}
-      renderItem={({ item }) => (
-        <ProjectFilesListItem
-          file={item}
-          existingNames={existingNames}
-          onDirectoryPress={onDirectoryPress}
-          onFilePress={onFilePress}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-          deleting={deletingPath === item.path}
-          disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
-        />
+      renderItem={({ item, index }) => (
+        <ProjectFileEntrance index={index}>
+          <ProjectFilesListItem
+            file={item}
+            existingNames={existingNames}
+            onDirectoryPress={onDirectoryPress}
+            onFilePress={onFilePress}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            deleting={deletingPath === item.path}
+            disabled={navigationDisabled || Boolean(updatingPath && updatingPath !== item.path)}
+          />
+        </ProjectFileEntrance>
       )}
     />
   );

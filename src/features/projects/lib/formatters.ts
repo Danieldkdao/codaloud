@@ -1,4 +1,5 @@
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
+import type { CodeEditorMatchState } from "@/components/code-editor-matches";
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
@@ -274,4 +275,83 @@ export const formatWorkspaceSearch = (tab: string | undefined) => {
     default:
       return { placeholder: "Search Files", accessibilityLabel: "Search files" };
   }
+};
+
+export const formatProjectFileSearchError = (code: string | undefined) => {
+  switch (code) {
+    case "SEARCH_LIMIT_EXCEEDED":
+      return "This search is too large. Use a more specific search.";
+    case "SEARCH_SESSION_EXPIRED":
+      return "These search results expired. Try again to refresh them.";
+    case "INVALID_SEARCH_CURSOR":
+      return "These search results are no longer valid. Try again to refresh them.";
+    case "SEARCH_WORKSPACE_CHANGED":
+      return "Workspace files changed. Try again to refresh the search.";
+    case "WORKSPACE_NOT_READY":
+      return "Your workspace is not ready yet. Reopen the project, then try again.";
+    case "WORKSPACE_RESTORING":
+      return "Restoring your workspace. Please wait.";
+    case "INVALID_FILE_SEARCH":
+      return "This search could not be accepted. Change your search and try again.";
+    case "INVALID_PATH":
+      return "The search folder is unavailable. Reopen the project and try again.";
+    case "SEARCH_BUSY":
+      return "File search is busy. Please try again shortly.";
+    case "SEARCH_UNAVAILABLE":
+      return "File search is temporarily unavailable. Please try again.";
+    default:
+      return "Unable to search project files. Please try again.";
+  }
+};
+
+export const formatProjectFileSearchScope = (scope: ProjectFileSearchScope) => {
+  switch (scope) {
+    case "all": return "Title & content";
+    case "title": return "File title";
+    case "content": return "File content";
+  }
+};
+
+export const formatProjectFileMatchCount = (count: number) => {
+  if (count >= 100) return "100+ matches found in this file";
+  return `${count} ${count === 1 ? "match" : "matches"} found in this file`;
+};
+
+export const formatProjectFileSearchCount = (count: number) => `${count} ${count === 1 ? "file" : "files"}`;
+
+export const formatProjectFileSearchCoverage = (scope: ProjectFileSearchScope, skippedContentFiles: number) => {
+  const hasSkippedContent = scope !== "title" && skippedContentFiles > 0;
+  return {
+    notice: hasSkippedContent
+      ? `Contents of ${formatProjectFileSearchCount(skippedContentFiles)} could not be searched.`
+      : null,
+    emptyTitle: hasSkippedContent ? "No matches in searched files" : "No matching files",
+  };
+};
+
+export const formatProjectFileSearchPath = (path: string) => {
+  const separator = path.lastIndexOf("/");
+  return { name: path.slice(separator + 1), directory: separator < 0 ? "Workspace" : path.slice(0, separator) };
+};
+
+export const formatProjectFileSearchTitle = (name: string, query: string, scope: ProjectFileSearchScope) => {
+  const search = query.trim();
+  if (scope === "content" || !search) return [{ text: name, highlighted: false }];
+
+  // Escape the literal query so filenames such as [id].tsx are not regex patterns.
+  const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return name.split(new RegExp(`(${escapedSearch})`, "gi")).map((text, index) => ({
+    text,
+    highlighted: index % 2 === 1,
+  }));
+};
+
+
+export const formatProjectFilePreviewMatches = (state: CodeEditorMatchState | null) => {
+  if (state === null) return { label: "…", accessibilityLabel: "Finding matches" };
+  if (state.activeIndex === null || state.total === 0) return { label: "No matches", accessibilityLabel: "No matches in this file" };
+  return {
+    label: `${state.activeIndex + 1} / ${state.total}`,
+    accessibilityLabel: `Match ${state.activeIndex + 1} of ${state.total}`,
+  };
 };

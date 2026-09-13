@@ -16,15 +16,29 @@ import { tags } from "@lezer/highlight";
 import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400Regular";
 import { Outfit_400Regular } from "@expo-google-fonts/outfit/400Regular";
 import { useFonts } from "expo-font";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
+
+import { useDOMImperativeHandle, type DOMImperativeFactory } from "expo/dom";
+import { codeEditorMatches, getCodeEditorMatchState, moveCodeEditorMatch, scrollToActiveCodeEditorMatch, setCodeEditorMatches, type CodeEditorMatchState } from "./code-editor-matches";
 
 import "@/global.css";
 import "@/styles/code-editor.css";
 
+export interface CodeEditorRef extends DOMImperativeFactory {
+  nextMatch: () => void;
+  previousMatch: () => void;
+}
+
 type CodeEditorProps = {
+  ref?: Ref<CodeEditorRef>;
+  /** Literal, case-insensitive search terms. Matching runs against the live document. */
+  matches?: string[];
+  onMatchesChange?: (state: CodeEditorMatchState) => Promise<void>;
   filename: string;
   /** Initial text for this document. Live edits stay inside CodeMirror. */
   initialValue: string;
+  /** Disables user edits while preserving selection, copying, and navigation. */
+  readOnly?: boolean;
   bottomInset?: number;
   /** DOM components have a separate React tree, so appearance crosses as a prop. */
   colorScheme?: "light" | "dark";
@@ -74,8 +88,12 @@ const formatEditorThemeClassName = (colorScheme: CodeEditorProps["colorScheme"])
 };
 
 const CodeEditor = ({
+  ref,
+  matches,
+  onMatchesChange,
   filename,
   initialValue,
+  readOnly = false,
   bottomInset = 0,
   colorScheme,
   onReady,
@@ -85,7 +103,14 @@ const CodeEditor = ({
   analysisPanelRequest = 0,
 }: CodeEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
+  const matchesKey = JSON.stringify(matches ?? []);
+  const matchesCallback = useRef(onMatchesChange);
+  matchesCallback.current = onMatchesChange;
+  const reportedMatches = useRef<CodeEditorMatchState | null>(null);
   const view = useRef<EditorView | null>(null);
+  const [editability] = useState(() => new Compartment());
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const inset = useRef(bottomInset);
   const readyCallback = useRef(onReady);
   readyCallback.current = onReady;
@@ -107,6 +132,20 @@ const CodeEditor = ({
   });
   const effectiveInset = keyboardVisible ? 12 : bottomInset + 16;
   inset.current = effectiveInset;
+
+  useDOMImperativeHandle(ref ?? null, () => ({
+    nextMatch: () => { if (view.current) moveCodeEditorMatch(view.current, 1); },
+    previousMatch: () => { if (view.current) moveCodeEditorMatch(view.current, -1); },
+  }), []);
+
+  const reportMatches = (editor: EditorView) => {
+    const summary = getCodeEditorMatchState(editor);
+    if (summary.total === reportedMatches.current?.total && summary.activeIndex === reportedMatches.current?.activeIndex) return;
+    reportedMatches.current = summary;
+    void matchesCallback.current?.(summary).catch((error: unknown) => {
+      console.warn("Unable to report editor matches", error);
+    });
+  };
 
   useEffect(() => {
     if (!host.current) return;
@@ -131,12 +170,18 @@ const CodeEditor = ({
       doc: initialValue,
       extensions: [
         basicSetup,
+        codeEditorMatches,
+        editability.of([
+          EditorState.readOnly.of(readOnlyRef.current),
+          EditorView.editable.of(!readOnlyRef.current),
+        ]),
         intelligence?.extensions ?? [],
         search({ top: true }),
         EditorState.tabSize.of(2),
         // Preserve the file's newline convention when sending edits to native.
         initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
         EditorView.updateListener.of((update) => {
+          if (update.startState.field(codeEditorMatches) !== update.state.field(codeEditorMatches)) reportMatches(update.view);
           if (update.docChanged) {
             void changeCallback.current?.(update.state.sliceDoc()).catch((error: unknown) => {
               console.warn("Unable to report editor changes", error);
@@ -145,16 +190,20 @@ const CodeEditor = ({
         }),
         syntaxHighlighting(highlightStyle),
         language.of([]),
-        EditorView.contentAttributes.of({
+        EditorView.contentAttributes.of((editor) => ({
           "aria-label": `${filename} code editor`,
+          "aria-readonly": String(editor.state.readOnly),
+          // Keep selection and hardware-keyboard navigation available without contenteditable.
+          tabindex: "0",
           autocapitalize: "off",
           autocorrect: "off",
           spellcheck: "false",
-        }),
+        })),
         EditorView.scrollMargins.of(() => ({ bottom: inset.current })),
       ],
     });
     view.current = editor;
+    reportedMatches.current = null;
     if (!hasAnalysis) void analysisCallbacks.current.onAnalysis?.({ status: "unsupported", diagnostics: [] }).catch(() => {});
     const description = LanguageDescription.matchFilename(languages, filename);
     setLanguageError(false);
@@ -178,7 +227,25 @@ const CodeEditor = ({
       editor.destroy();
       view.current = null;
     };
-  }, [filename, initialValue, hasAnalysis]);
+  }, [filename, initialValue, hasAnalysis, editability]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    editor.dispatch({ effects: setCodeEditorMatches.of(JSON.parse(matchesKey) as string[]) });
+    reportMatches(editor);
+    scrollToActiveCodeEditorMatch(editor);
+  }, [matchesKey, filename, initialValue, hasAnalysis]);
+
+  useEffect(() => {
+    // Reconfigure in place so switching modes preserves document and undo state.
+    view.current?.dispatch({
+      effects: editability.reconfigure([
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
+      ]),
+    });
+  }, [readOnly, editability]);
 
   useEffect(() => {
     if (analysisPanelRequest && view.current && hasAnalysis) {
@@ -204,6 +271,9 @@ const CodeEditor = ({
       write: () => {
         if (disposed || notifiedEditor.current === preparedEditor) return;
         notifiedEditor.current = preparedEditor;
+        requestAnimationFrame(() => {
+          if (!disposed && view.current === preparedEditor) scrollToActiveCodeEditorMatch(preparedEditor);
+        });
         void readyCallback.current?.().catch((error: unknown) => {
           console.warn("Unable to report editor readiness", error);
         });
@@ -258,7 +328,7 @@ const CodeEditor = ({
     >
       {languageError ? (
         <div role="status" className="code-editor-notice">
-          Highlighting unavailable. You can still edit this file.
+          Highlighting unavailable.
         </div>
       ) : null}
       <div ref={host} className="code-editor-host" />

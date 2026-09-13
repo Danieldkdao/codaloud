@@ -2,14 +2,14 @@ import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { ColorValue } from "react-native";
 
-export type ProjectBranchSheetProps = {
+export type ContentSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   backgroundColor: ColorValue;
   children: ReactNode;
 };
 
-export const ProjectBranchSheet = ({ open, onOpenChange, backgroundColor, children }: ProjectBranchSheetProps) => {
+export const ContentSheet = ({ open, onOpenChange, backgroundColor, children }: ContentSheetProps) => {
   const ref = useRef<BottomSheet>(null);
   useEffect(() => {
     if (open) ref.current?.present();

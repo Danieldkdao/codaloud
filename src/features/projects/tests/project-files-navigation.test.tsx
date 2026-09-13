@@ -9,6 +9,12 @@ import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwip
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 
 const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
+const fileSearch = vi.hoisted(() => ({ query: "", debouncedQuery: "", scope: "all", isSearching: false }));
+vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => fileSearch }));
+vi.mock("@/features/projects/hooks/use-project-file-search", () => ({ useProjectFileSearch: () => ({
+  data: { pages: [{ files: [{ path: "docs/guide.md", titleMatches: false, contentMatchCount: 1, contentSearched: true }], totalCount: 1 }] },
+  isPending: false, isFetching: false, isFetchingNextPage: false, fetchStatus: "idle", error: null,
+}) }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({
   renameFiles: async (_previousPath: string, _nextPath: string, rename: () => Promise<unknown>) => rename(),
 }) }));
@@ -27,6 +33,22 @@ vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
   default: (props: SwipeableProps) => createElement("div", { "data-swipe-enabled": String(props.enabled) }, props.children,
     props.renderRightActions?.({ value: 1 } as never, { value: -120 } as never, {} as never)),
 }));
+
+vi.mock("react-native-reanimated", () => {
+  const entrance = {
+    duration: () => entrance,
+    delay: () => entrance,
+    easing: () => entrance,
+    withInitialValues: () => entrance,
+    reduceMotion: () => entrance,
+  };
+  return {
+    default: { View: ({ children }: { children: ReactNode }) => createElement("div", null, children) },
+    FadeInUp: entrance,
+    Easing: { out: (easing: unknown) => easing, quad: vi.fn() },
+    ReduceMotion: { System: "system" },
+  };
+});
 
 const files = [
   { name: "app", path: "app", isDir: true, size: 0 },
@@ -61,9 +83,9 @@ vi.mock("react-native", () => ({
     "data-pointer-events": pointerEvents, "data-accessibility-hidden": accessibilityElementsHidden,
     "data-important-for-accessibility": importantForAccessibility,
   }, children),
-  FlatList: ({ data, renderItem, ListHeaderComponent }: { data: unknown[]; renderItem: (info: { item: unknown }) => ReactNode; ListHeaderComponent?: ReactNode }) =>
+  FlatList: ({ data, renderItem, ListHeaderComponent }: { data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode; ListHeaderComponent?: ReactNode }) =>
     createElement("div", null, ListHeaderComponent, data.map((item, index) =>
-      createElement("div", { key: index }, renderItem({ item })))),
+      createElement("div", { key: index }, renderItem({ item, index })))),
   Pressable: ({ children, onPress, accessibilityLabel, disabled }: {
     children: ReactNode; onPress?: () => void; accessibilityLabel?: string; disabled?: boolean;
   }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }, children),
@@ -90,6 +112,8 @@ const click = (label: string) => {
 };
 
 beforeEach(() => {
+  fileSearch.query = "";
+  fileSearch.isSearching = false;
   fileCreation.kind = null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.update.mockReset().mockResolvedValue(undefined);
@@ -102,6 +126,23 @@ beforeEach(() => {
   act(() => root.render(createElement(FilesScreen)));
 });
 afterEach(() => act(() => root.unmount()));
+
+it("replaces directory content with search results and restores it after clearing", () => {
+  expect(container.textContent).toContain("package.json");
+  fileSearch.query = "result";
+  fileSearch.debouncedQuery = "result";
+  fileSearch.isSearching = true;
+  act(() => root.render(createElement(FilesScreen)));
+  expect(container.textContent).toContain("guide.md");
+  expect(container.textContent).not.toContain("package.json");
+  expect(container.textContent).not.toMatch(/Mock preview|Title & content/);
+  fileSearch.query = "";
+  fileSearch.debouncedQuery = "";
+  fileSearch.isSearching = false;
+  act(() => root.render(createElement(FilesScreen)));
+  expect(container.textContent).toContain("package.json");
+  expect(container.textContent).not.toContain("guide.md");
+});
 
 it("replaces the current directory and supports drilling into nested folders", () => {
   expect(container.textContent).toContain("package.json");

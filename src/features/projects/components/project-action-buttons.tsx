@@ -5,6 +5,7 @@ import { Icon } from "@/components/ui/icon";
 import { ProjectBranchSelect } from "@/features/projects/components/project-branch-select";
 import { ProjectFilesAdd } from "@/features/projects/components/project-files-add";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
+import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
@@ -54,6 +55,7 @@ export const ProjectActionButtonsRight = ({
   branchIndicatorRef,
   onGitSearchOpenChange,
 }: ProjectActionButtonsRightProps) => {
+  const { projectId } = useProjectWorkspaceBranch();
   switch (tab) {
     case "code":
       return (
@@ -76,6 +78,7 @@ export const ProjectActionButtonsRight = ({
         />
       );
     case "files":
+      return <ProjectWorkspaceFileSearch key={projectId} anchorRef={dockRef} />;
     case "agent":
       return <ProjectWorkspaceSearch key={tab} anchorRef={dockRef} {...formatWorkspaceSearch(tab)} />;
     default:

@@ -14,6 +14,8 @@ import type { ProjectFileCreateRow } from "@/features/projects/components/projec
 
 const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
+vi.mock("@/features/projects/components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children) }));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {

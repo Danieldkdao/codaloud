@@ -1,10 +1,11 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import { ProjectSandboxState } from "@/features/projects/components/project-sandbox-state";
 import { useProject } from "@/features/projects/hooks/use-project";
@@ -13,6 +14,7 @@ import { useThemeColor } from "@/hooks/use-theme";
 
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const verticalPadding = Math.max(insets.top, insets.bottom) + 24;
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
@@ -47,8 +49,18 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
             fontSize: 22,
             fontFamily: "Fraunces_500Medium",
           },
-          headerBackButtonDisplayMode: "minimal",
-          headerBackTitleStyle: {},
+          headerBackVisible: false,
+          headerLeft: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Home"
+              accessibilityHint="Returns to your projects"
+              onPress={() => router.dismissTo("/(main)")}
+              className="size-11 items-center justify-center rounded-full active:bg-secondary"
+            >
+              <Icon family="Feather" name="home" size={22} accessible={false} className="text-foreground" />
+            </Pressable>
+          ),
         }}
       />
       {setupReady && (ready || openedProjectId === projectId) && (

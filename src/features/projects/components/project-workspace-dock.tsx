@@ -20,7 +20,8 @@ export const ProjectWorkspaceDock = () => {
   const branchIndicatorRef = useRef<View>(null);
   const [isGitSearchOpen, setIsGitSearchOpen] = useState(false);
   const pathname = usePathname();
-  const routeName = pathname.split("/").at(-1);
+  // The workspace tab precedes any nested screens, such as files/preview.
+  const routeName = pathname.split("/")[3];
   const activeTab = routeName === "code" || routeName === "git" || routeName === "agent" ? routeName : "files";
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";

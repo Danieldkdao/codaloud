@@ -8,6 +8,7 @@ export const serverEnv = createEnv({
     DAYTONA_TARGET: z.string().min(1).default("us"),
     BETTER_AUTH_URL: z.url().min(1),
     BETTER_AUTH_SECRET: z.string().min(32),
+    COMMIT_CURSOR_SIGNING_SECRET: z.string().min(32),
     GITHUB_CLIENT_ID: z.string().min(1),
     GITHUB_CLIENT_SECRET: z.string().min(1),
     APPLE_CLIENT_ID: z.string().min(1),

@@ -38,7 +38,7 @@ const toGitHubRepository = (repository: GitHubApiRepository): GitHubRepository =
   },
 });
 
-const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
+export const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
   new Octokit({
     auth: accessToken,
     request: { signal, timeout: 15_000 },

@@ -228,6 +228,39 @@ it.each([401, 403, 413])("does not retry terminal failure %s", async (status) =>
   expect(current.isError).toBe(true);
 });
 
+it.each([
+  [413, "SEARCH_LIMIT_EXCEEDED", "This search is too large. Use a more specific search."],
+  [410, "SEARCH_SESSION_EXPIRED", "These search results expired. Try again to refresh them."],
+  [400, "INVALID_SEARCH_CURSOR", "These search results are no longer valid. Try again to refresh them."],
+  [409, "SEARCH_WORKSPACE_CHANGED", "Workspace files changed. Try again to refresh the search."],
+  [409, "WORKSPACE_NOT_READY", "Your workspace is not ready yet. Reopen the project, then try again."],
+  [400, "INVALID_FILE_SEARCH", "This search could not be accepted. Change your search and try again."],
+  [400, "INVALID_PATH", "The search folder is unavailable. Reopen the project and try again."],
+] as const)("shows recovery guidance for %s %s without automatic retries", async (status, code, message) => {
+  mocks.read.mockImplementation(fail(status, code));
+  await render();
+  await flush(30_000);
+  expect(current.error?.message).toBe(message);
+  expect(mocks.read).toHaveBeenCalledOnce();
+});
+
+it.each([
+  [503, "SEARCH_BUSY", "File search is busy. Please try again shortly."],
+  [502, "SEARCH_UNAVAILABLE", "File search is temporarily unavailable. Please try again."],
+] as const)("retains bounded retries before showing %s %s guidance", async (status, code, message) => {
+  mocks.read.mockImplementation(fail(status, code));
+  await render();
+  await flush(30_000);
+  expect(mocks.read).toHaveBeenCalledTimes(3);
+  expect(current.error?.message).toBe(message);
+});
+
+it.each([undefined, "UNRECOGNIZED_CODE"])("uses a safe fallback for an unknown error code (%s)", async (code) => {
+  mocks.read.mockImplementation(fail(400, code));
+  await render();
+  expect(current.error?.message).toBe("Unable to search project files. Please try again.");
+});
+
 it.each([[410, "SEARCH_SESSION_EXPIRED"], [409, "SEARCH_WORKSPACE_CHANGED"], [400, "INVALID_SEARCH_CURSOR"]])("replaces the whole result set when a continuation fails with %s %s", async (status, code) => {
   await render();
   mocks.read.mockImplementationOnce(fail(status, code)).mockResolvedValueOnce(page("fresh.ts"));

@@ -277,6 +277,33 @@ export const formatWorkspaceSearch = (tab: string | undefined) => {
   }
 };
 
+export const formatProjectFileSearchError = (code: string | undefined) => {
+  switch (code) {
+    case "SEARCH_LIMIT_EXCEEDED":
+      return "This search is too large. Use a more specific search.";
+    case "SEARCH_SESSION_EXPIRED":
+      return "These search results expired. Try again to refresh them.";
+    case "INVALID_SEARCH_CURSOR":
+      return "These search results are no longer valid. Try again to refresh them.";
+    case "SEARCH_WORKSPACE_CHANGED":
+      return "Workspace files changed. Try again to refresh the search.";
+    case "WORKSPACE_NOT_READY":
+      return "Your workspace is not ready yet. Reopen the project, then try again.";
+    case "WORKSPACE_RESTORING":
+      return "Restoring your workspace. Please wait.";
+    case "INVALID_FILE_SEARCH":
+      return "This search could not be accepted. Change your search and try again.";
+    case "INVALID_PATH":
+      return "The search folder is unavailable. Reopen the project and try again.";
+    case "SEARCH_BUSY":
+      return "File search is busy. Please try again shortly.";
+    case "SEARCH_UNAVAILABLE":
+      return "File search is temporarily unavailable. Please try again.";
+    default:
+      return "Unable to search project files. Please try again.";
+  }
+};
+
 export const formatProjectFileSearchScope = (scope: ProjectFileSearchScope) => {
   switch (scope) {
     case "all": return "Title & content";

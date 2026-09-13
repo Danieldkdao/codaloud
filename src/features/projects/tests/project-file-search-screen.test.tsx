@@ -230,6 +230,29 @@ it("offers retry after initial and next-page failures without claiming no matche
   expect(container.textContent).toContain("retry.ts");
 });
 
+it.each([false, true])("explains search limits and allows recovery with a narrower query (next page: %s)", async (nextPage) => {
+  if (nextPage) await applySearch("live");
+  mocks.read.mockImplementationOnce(async (_id, _input, _signal, _restoring, onFailure) => {
+    onFailure(413, null, "SEARCH_LIMIT_EXCEEDED");
+    return null;
+  });
+  if (nextPage) await click("List end");
+  else await applySearch("live");
+  const attempts = mocks.read.mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(mocks.read).toHaveBeenCalledTimes(attempts);
+  expect(container.textContent).toContain("This search is too large. Use a more specific search.");
+  expect(container.textContent).not.toContain("No matching files");
+  expect(container.textContent).not.toContain("folder");
+  expect(container.textContent?.includes("live.ts")).toBe(nextPage);
+  expect(container.textContent).toContain("Try again");
+  mocks.read.mockResolvedValueOnce(page("src/narrow.ts"));
+  await applySearch("more specific text");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "more specific text", cursor: undefined });
+  expect(container.textContent).toContain("narrow.ts");
+  expect(container.textContent).not.toContain("This search is too large");
+});
+
 it("shows the empty state only after a successful empty search", async () => {
   mocks.read.mockResolvedValue({ ...page("unused"), files: [], totalCount: 0 });
   await applySearch("absent");

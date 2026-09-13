@@ -8,6 +8,7 @@ import {
   type ProjectFileSearchQuerySchema,
 } from "../actions/file-search-schemas";
 import { projectFileSearchLimits } from "../constants";
+import { formatProjectFileSearchError } from "../lib/formatters";
 import { useProjectFileSaveRegistry } from "./use-project-file-save";
 
 class ProjectFileSearchRequestError extends Error {
@@ -17,7 +18,7 @@ class ProjectFileSearchRequestError extends Error {
     readonly code: string | undefined,
     readonly isContinuation: boolean,
   ) {
-    super("Unable to search project files. Please try again.");
+    super(formatProjectFileSearchError(code));
     this.name = "ProjectFileSearchRequestError";
   }
 }
@@ -123,7 +124,7 @@ export const useProjectFileSearch = (
       if (result === null) {
         throw (
           requestError ??
-          new Error("Unable to search project files. Please try again.")
+          new Error(formatProjectFileSearchError(undefined))
         );
       }
       return result;

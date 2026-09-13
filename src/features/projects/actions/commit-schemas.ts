@@ -42,3 +42,10 @@ export const projectCommitPageSchema = z.object({
   isShallow: z.boolean(),
 });
 export type ProjectCommitPageSchema = z.infer<typeof projectCommitPageSchema>;
+
+export const readProjectCommitsResponseSchema = z.object({
+  error: z.literal(false),
+  message: z.string(),
+  data: projectCommitPageSchema,
+});
+export type ReadProjectCommitsResponseSchema = z.infer<typeof readProjectCommitsResponseSchema>;

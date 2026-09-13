@@ -8,6 +8,19 @@ import { ProjectChangesPanel } from "@/features/projects/components/project-chan
 import GitScreen from "@/app/projects/[projectId]/git";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
+import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit-schemas";
+
+const history = vi.hoisted(() => ({
+  query: vi.fn(), onLoadMore: vi.fn(), retry: vi.fn(),
+  isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
+  hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
+  data: undefined as { pages: ProjectCommitPageSchema[] } | undefined,
+}));
+vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: (...args: unknown[]) => { history.query(...args); return history; } }));
+const commitPage = (message = "Live commit"): ProjectCommitPageSchema => ({
+  commits: [{ hash: "a".repeat(40), message, author: "Ada", authorEmail: "ada@example.com", committedAt: "2026-09-12T12:00:00Z", parentHashes: [], isMerge: false }],
+  snapshotSha: "a".repeat(40), nextCursor: null, isShallow: false,
+});
 
 const live = vi.hoisted(() => ({
   projectId: "11111111-1111-4111-8111-111111111111",
@@ -62,12 +75,12 @@ const Workspace = () => (
 );
 
 vi.mock("@/features/projects/hooks/use-workspace-loading-preview", () => ({ useWorkspaceLoadingPreview: () => false }));
-vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: ({ accessibilityLabel, onOpenChange }: { accessibilityLabel: string; onOpenChange?: (open: boolean) => void }) => {
+vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: ({ accessibilityLabel, onOpenChange, value, onChangeText }: { accessibilityLabel: string; onOpenChange?: (open: boolean) => void; value?: string; onChangeText?: (value: string) => void }) => {
   const [open, setOpen] = useState(false);
-  return createElement("button", {
+  return createElement("div", null, createElement("button", {
     "aria-label": open ? "Dismiss search" : accessibilityLabel,
     onClick: () => { setOpen(!open); onOpenChange?.(!open); },
-  });
+  }), open && createElement("input", { "aria-label": "Commit search", value: value ?? "", onInput: (event) => onChangeText?.(event.currentTarget.value) }));
 } }));
 vi.mock("@/components/ui/glass-surface", () => ({
   GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children),
@@ -161,6 +174,9 @@ const selectBranch = (name: string) => {
 };
 
 beforeEach(() => {
+  Object.assign(history, { data: { pages: [commitPage()] }, isPending: false, isFetching: false, isFetchingNextPage: false,
+    isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
+  history.query.mockClear(); history.onLoadMore.mockClear(); history.retry.mockClear();
   activeTab = "git";
   live.repositoryId = "123";
   remote.query.mockClear(); remote.loadMore.mockClear(); remote.retry.mockClear();
@@ -192,19 +208,16 @@ it("switches workspace sections through the menu and reflects the active route",
   }
 });
 
-it("selects real branches while keeping the demo history unchanged", () => {
+it("reads history for the selected local or remote branch without changing workspace files", () => {
   click("Commit History");
-  const commits = () => [...container.querySelectorAll('[aria-label*="Alex Morgan"], [aria-label*="Sam Chen"]')].map((node) => node.getAttribute("aria-label"));
-  const before = commits();
-  expect(before).toHaveLength(9);
-  expect(container.textContent).toContain("Polish the dashboard layout");
+  expect(container.textContent).toContain("Live commit");
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "local", branch: "main", enabled: true }));
   selectBranch("feature/live");
-  expect(container.textContent).toContain("Polish the dashboard layout");
-  expect(commits()).toEqual(before);
-  selectBranch("fix/live");
-  expect(container.textContent).toContain("Polish the dashboard layout");
-  expect(commits()).toEqual(before);
-  expect(live.query).toHaveBeenCalledWith(live.projectId, expect.any(Object));
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "local", branch: "feature/live" }));
+  click("Branch: feature/live");
+  click("Remote branch: remote-only");
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "remote", branch: "remote-only" }));
+  expect(container.textContent).not.toContain("Polish the dashboard layout");
 });
 
 it("keeps a manual selection across server updates and resets it for another project or account", () => {
@@ -225,10 +238,101 @@ it("keeps commit presses inert after changing branches", () => {
   click("Commit History");
   selectBranch("fix/live");
   const before = container.textContent;
-  const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Polish the dashboard layout,"]');
+  const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Live commit,"]');
   expect(commit).not.toBeNull();
   act(() => commit!.click());
   expect(container.textContent).toBe(before);
+});
+
+it.each(["18: video call stream\n", "18: video call stream\n\nLong commit body", "18: video call stream\r\n"])(
+  "renders a compact commit subject without blank lines from the full Git message: %j", (message) => {
+    history.data = { pages: [commitPage(message)] };
+    click("Commit History");
+    const row = container.querySelector('[aria-label^="18: video call stream"]')!;
+    const title = [...row.querySelectorAll("span")].find((node) => node.textContent?.startsWith("18: video call stream"));
+    expect(title?.textContent).toBe("18: video call stream");
+  },
+);
+
+it("shows branch loading until the current branch resolves, then preserves selection while refreshing", () => {
+  live.data = undefined; live.isPending = true; live.isFetching = true;
+  act(() => root.render(createElement(Workspace, { key: "loading-branch" })));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("Loading branches…");
+  expect(container.querySelector('[aria-label="Branch: Loading branches…"]')).not.toBeNull();
+  click("Commit History");
+  expect(container.textContent).not.toContain("Select a branch");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+  live.data = { pages: [{ branches: ["main"], currentBranch: "main", nextCursor: null }] };
+  live.isPending = false; live.isFetching = false;
+  act(() => root.render(createElement(Workspace, { key: "loading-branch" })));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
+  live.isFetching = true;
+  act(() => root.render(createElement(Workspace, { key: "loading-branch" })));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
+});
+
+it.each(["empty", "failed"])("stops indicating branch loading when the request is %s without a selection", (state) => {
+  live.data = state === "empty" ? { pages: [{ branches: [], currentBranch: null, nextCursor: null }] } : undefined;
+  live.isPending = false; live.isFetching = false;
+  live.error = state === "failed" ? new Error("Unavailable") : null;
+  act(() => root.render(createElement(Workspace, { key: state })));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("Select branch");
+  click("Commit History");
+  expect(container.textContent).toContain("Select a branch");
+  expect(container.textContent).not.toContain("Loading branches…");
+});
+
+it("shares commit search with the dock, switches to history, and resets it across projects", () => {
+  click("Search Git");
+  expect(container.querySelector('[aria-label="Commit History"]')?.getAttribute("aria-selected")).toBe("true");
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Commit search"]')!;
+  act(() => { input.value = "ADA"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ search: "ADA", enabled: true }));
+  click("Dismiss search"); click("Search Git");
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Commit search"]')?.value).toBe("ADA");
+  live.projectId = "22222222-2222-4222-8222-222222222222";
+  act(() => root.render(createElement(Workspace)));
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ search: "" }));
+});
+
+it("shows real loading, preserves rows during pagination errors, and wires load-more and retry", () => {
+  history.data = undefined; history.isPending = true; history.isFetching = true;
+  click("Commit History");
+  expect(container.textContent).toContain("Loading commits");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+  history.data = { pages: [commitPage(), commitPage()] };
+  history.isPending = false; history.isFetching = false; history.hasNextPage = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelectorAll('[aria-label^="Live commit,"]')).toHaveLength(1);
+  click("Reach end");
+  expect(history.onLoadMore).toHaveBeenCalledOnce();
+  history.error = new Error("Unable to load more commits."); history.isFetchNextPageError = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Live commit");
+  click("Retry commit history");
+  expect(history.retry).toHaveBeenCalledOnce();
+  history.isFetching = true; history.isFetchingNextPage = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelector('[aria-label="Retry commit history"]')).toBeNull();
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+});
+
+it("distinguishes an unfinished empty search from exhausted history and offline status", () => {
+  history.data = { pages: [{ ...commitPage(), commits: [], nextCursor: "more" }] }; history.hasNextPage = true;
+  click("Commit History");
+  expect(container.textContent).not.toContain("No commits yet");
+  click("Continue searching commits");
+  expect(history.onLoadMore).toHaveBeenCalledOnce();
+  history.hasNextPage = false;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("No commits yet");
+  click("Search Git");
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Commit search"]')!;
+  act(() => { input.value = "missing"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(container.textContent).toContain("No matching commits");
+  history.fetchStatus = "paused";
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Waiting for a connection");
 });
 
 
@@ -331,7 +435,7 @@ it("passes search to the live query, renders its pages, and preserves the select
   expect(container.querySelector('[aria-label="next-result"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="feature/live"]')).toBeNull();
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
-  click("Reach end");
+  act(() => container.querySelector<HTMLButtonElement>('[role="dialog"] [aria-label="Reach end"]')!.click());
   expect(live.loadMore).toHaveBeenCalledOnce();
 });
 

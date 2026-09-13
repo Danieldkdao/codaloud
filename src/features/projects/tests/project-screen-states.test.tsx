@@ -60,9 +60,10 @@ vi.mock("@/features/projects/components/project-changes-panel", () => ({
 }));
 vi.mock("@/features/projects/components/project-branch-select", () => ({ ProjectBranchSelect: () => null }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
-vi.mock("@/features/projects/data/demo-commits", () => ({
-  demoCommits: [],
+vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({
+  useProjectWorkspaceBranch: () => ({ gitTab: "changes", setGitTab: vi.fn() }),
 }));
+vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: vi.fn() }));
 vi.mock("@/features/projects/data/demo-changes", () => ({ demoChanges: [] }));
 vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));
 
@@ -87,7 +88,6 @@ afterEach(() => {
 });
 
 it.each([
-  { name: "Git", Screen: GitScreen, loading: "Loading changes", empty: "No uncommitted changes" },
   { name: "Agent", Screen: AgentScreen, loading: "Loading activity", empty: "No activity yet" },
 ])("previews loading for two seconds before showing empty content: $name", ({ Screen, loading, empty }) => {
   act(() => root.render(createElement(Screen)));
@@ -199,8 +199,6 @@ it.each([
 ])("handles missing screen data after loading: $name", ({ Screen, empty }) => {
   state.empty = true;
   act(() => root.render(createElement(Screen)));
-  expect(container.textContent).not.toContain(empty);
-  act(() => vi.advanceTimersByTime(2000));
   expect(container.textContent).toContain(empty);
   expect(container.querySelector("textarea")).toBeNull();
 });

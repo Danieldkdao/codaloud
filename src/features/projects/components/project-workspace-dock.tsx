@@ -11,7 +11,7 @@ import { ProjectWorkspaceTabSelect } from "@/features/projects/components/projec
 import { ProjectActionButtonsLeft, ProjectActionButtonsRight } from "@/features/projects/components/project-action-buttons";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
-import { formatProjectBranchSource } from "@/features/projects/lib/formatters";
+import { formatProjectBranchLabel, formatProjectBranchSource } from "@/features/projects/lib/formatters";
 
 export const ProjectWorkspaceDock = () => {
   const { setDockHeight } = useProjectWorkspaceDockHeight();
@@ -51,7 +51,7 @@ export const ProjectWorkspaceDock = () => {
                 <Icon family="Feather" name={formatProjectBranchSource(branchSelection.branchSource ?? "local").icon} size={18} className="text-secondary-foreground" accessible={false} />
                 <CodeText className="min-w-0 shrink text-center text-lg font-medium text-secondary-foreground"
                   numberOfLines={1} ellipsizeMode="middle">
-                  {branchSelection.branch ?? "Select branch"}
+                  {formatProjectBranchLabel(branchSelection.branch, branchSelection.isBranchLoading)}
                 </CodeText>
               </View>
             ) : null}

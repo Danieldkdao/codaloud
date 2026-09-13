@@ -1,9 +1,13 @@
 // @vitest-environment happy-dom
-import { act, createElement, useEffect, useImperativeHandle, useRef, type ReactNode, type Ref } from "react";
+import { act, createElement, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import type { View } from "react-native";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
+
+const workspace = vi.hoisted(() => ({ projectId: "project-one", commitSearch: "", setCommitSearch: vi.fn(), setGitTab: vi.fn() }));
+vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => workspace }));
 
 vi.mock("react-native", () => ({
   View: ({ children, ref, className }: { children?: ReactNode; ref?: Ref<unknown>; className?: string }) => {
@@ -52,12 +56,16 @@ const click = (label: string) => {
   act(() => button!.click());
 };
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
   act(() => root.render(createElement(ProjectWorkspaceSearch)));
 });
-afterEach(() => act(() => root.unmount()));
+afterEach(() => {
+  act(() => root.unmount());
+  vi.useRealTimers();
+});
 
 it("opens an editable ghost search bar and dismisses through the outside-tap surface", () => {
   expect(container.querySelector('[role="dialog"]')).toBeNull();
@@ -83,6 +91,21 @@ it("supports system dismissal and the explicit close control", () => {
   click("Search files");
   click("Close search");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("supports externally controlled text and updates when workspace state changes", () => {
+  const onChangeText = vi.fn();
+  act(() => root.render(createElement(ProjectWorkspaceSearch, { value: "existing", onChangeText })));
+  click("Search files");
+  const input = container.querySelector("input")!;
+  expect(input.value).toBe("existing");
+  act(() => { input.value = "updated"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(input.value).toBe("updated");
+  expect(onChangeText).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(250));
+  expect(onChangeText).toHaveBeenCalledExactlyOnceWith("updated");
+  act(() => root.render(createElement(ProjectWorkspaceSearch, { value: "new project", onChangeText })));
+  expect(input.value).toBe("new project");
 });
 
 it("reuses the same editable search and dismissal behavior for commit history", () => {
@@ -143,4 +166,94 @@ it("replaces a supplied anchor and reports closure through each dismissal path",
     click(dismiss);
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
   }
+});
+
+
+const typeSearch = (text: string) => {
+  const input = container.querySelector("input")!;
+  act(() => { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  return input;
+};
+
+it("keeps typing immediate and only applies the final search after a 250 ms pause", () => {
+  const onSearch = vi.fn();
+  const Search = () => {
+    const [search, setSearch] = useState("");
+    return createElement(ProjectWorkspaceSearch, {
+      value: search,
+      onChangeText: (text) => { setSearch(text); onSearch(text); },
+    });
+  };
+  act(() => root.render(createElement(Search)));
+  click("Search files");
+  expect(onSearch).not.toHaveBeenCalled();
+  typeSearch("a");
+  act(() => vi.advanceTimersByTime(200));
+  typeSearch("ad");
+  act(() => vi.advanceTimersByTime(200));
+  const input = typeSearch("ada");
+  expect(input.value).toBe("ada");
+  act(() => vi.advanceTimersByTime(249));
+  expect(onSearch).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(1));
+  expect(onSearch).toHaveBeenCalledExactlyOnceWith("ada");
+  expect(input.value).toBe("ada");
+  typeSearch("");
+  expect(input.value).toBe("");
+  act(() => vi.advanceTimersByTime(250));
+  expect(onSearch.mock.calls).toEqual([["ada"], [""]]);
+});
+
+it("cancels a pending search when the parent resets the value", () => {
+  const onChangeText = vi.fn();
+  act(() => root.render(createElement(ProjectWorkspaceSearch, { value: "existing", onChangeText })));
+  click("Search files");
+  typeSearch("pending");
+  act(() => root.render(createElement(ProjectWorkspaceSearch, { value: "", onChangeText })));
+  expect(container.querySelector("input")?.value).toBe("");
+  act(() => vi.advanceTimersByTime(250));
+  expect(onChangeText).not.toHaveBeenCalled();
+});
+
+it("cancels pending searches when leaving the component", () => {
+  const onChangeText = vi.fn();
+  act(() => root.render(createElement(ProjectWorkspaceSearch, { onChangeText })));
+  click("Search files");
+  typeSearch("pending");
+  act(() => root.render(null));
+  act(() => vi.advanceTimersByTime(250));
+  expect(onChangeText).not.toHaveBeenCalled();
+});
+
+it("keeps the pending search when dismissing and reopening the floating input", () => {
+  const onChangeText = vi.fn();
+  act(() => root.render(createElement(ProjectWorkspaceSearch, { value: "", onChangeText })));
+  click("Search files");
+  typeSearch("latest");
+  click("Dismiss search");
+  click("Search files");
+  expect(container.querySelector("input")?.value).toBe("latest");
+  expect(onChangeText).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(250));
+  expect(onChangeText).toHaveBeenCalledExactlyOnceWith("latest");
+});
+
+
+it("discards an unfinished Git search when moving to another project with the same saved search", () => {
+  workspace.projectId = "project-one";
+  workspace.commitSearch = "";
+  workspace.setCommitSearch.mockClear();
+  const props = { branchIndicatorRef: { current: null }, onOpenChange: () => {} };
+  act(() => root.render(createElement(ProjectWorkspaceGitSearch, props)));
+  click("Search Git");
+  typeSearch("old project search");
+  workspace.projectId = "project-two";
+  act(() => root.render(createElement(ProjectWorkspaceGitSearch, props)));
+  act(() => vi.advanceTimersByTime(250));
+  expect(workspace.setCommitSearch).not.toHaveBeenCalled();
+  click("Search Git");
+  expect(container.querySelector("input")?.value).toBe("");
+  typeSearch("new project search");
+  act(() => vi.advanceTimersByTime(250));
+  expect(workspace.setCommitSearch).toHaveBeenCalledExactlyOnceWith("new project search");
 });

@@ -173,6 +173,12 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
 
 export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
 
+// Full Git messages include a body and often a trailing newline. List titles use only the subject.
+export const formatCommitSubject = (message: string): string => message.split(/\r?\n/, 1)[0].trim();
+
+export const formatProjectBranchLabel = (branch: string | null, isLoading: boolean): string =>
+  branch ?? (isLoading ? "Loading branches…" : "Select branch");
+
 export const formatProjectGitTab = (tab: ProjectGitTab) => {
   switch (tab) {
     case "changes": return "Changes";

@@ -16,6 +16,7 @@ import { ProjectBranchSheet } from "./project-branch-sheet";
 import { useProject } from "../hooks/use-project";
 import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
 import type { GitHubRepositoryBranchPage, GitHubRepositoryBranch } from "@/services/github/types";
+import { formatProjectBranchLabel } from "../lib/formatters";
 
 const getRemoteBranches = (page: GitHubRepositoryBranchPage) => page.branches;
 const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
@@ -25,7 +26,7 @@ const getBranchKey = (branch: string) => branch;
 
 export const ProjectBranchSelect = () => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch } = useProjectWorkspaceBranch();
+  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading } = useProjectWorkspaceBranch();
   const [search, setSearch] = useState("");
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
@@ -34,6 +35,10 @@ export const ProjectBranchSelect = () => {
   const remoteBranches = useUniquePaginatedItems(remoteQuery.data?.pages, getRemoteBranches, getRemoteBranchKey);
   const branches = useUniquePaginatedItems(query.data?.pages, getBranches, getBranchKey);
   const currentBranch = query.data?.pages[0]?.currentBranch;
+  const loadingInitialBranches = !query.data && (query.isPending || query.isFetching);
+  useEffect(() => {
+    setIsBranchLoading(loadingInitialBranches);
+  }, [loadingInitialBranches, setIsBranchLoading]);
   useEffect(() => {
     if (branch === null && currentBranch) setBranch(currentBranch);
   }, [branch, currentBranch, setBranch]);
@@ -46,7 +51,7 @@ export const ProjectBranchSelect = () => {
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
-        accessibilityLabel={`Branch: ${branch ?? "Select branch"}`}
+        accessibilityLabel={`Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
         accessibilityHint="Opens available branches"
         accessibilityState={{ expanded: open }}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"

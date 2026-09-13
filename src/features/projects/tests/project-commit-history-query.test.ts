@@ -1,0 +1,240 @@
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { readProjectCommitsAction } from "../actions/git-actions";
+import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
+import type { ProjectCommitPageSchema } from "../actions/commit-schemas";
+
+const session = vi.hoisted(() => ({
+  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
+  isPending: false, error: null as Error | null,
+}));
+vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("../actions/git-actions", () => ({ readProjectCommitsAction: vi.fn() }));
+
+const read = vi.mocked(readProjectCommitsAction);
+const projectId = "11111111-1111-4111-8111-111111111111";
+const otherProjectId = "22222222-2222-4222-8222-222222222222";
+const page = (message: string, nextCursor: string | null = null): ProjectCommitPageSchema => ({
+  commits: [{ hash: "a".repeat(40), message, author: "Ada", authorEmail: "ada@example.com",
+    committedAt: "2026-09-12T12:00:00Z", parentHashes: [], isMerge: false }],
+  snapshotSha: "a".repeat(40), isShallow: false, nextCursor,
+});
+type Options = NonNullable<Parameters<typeof useProjectCommitHistory>[1]>;
+let client: QueryClient;
+let root: Root;
+let current: ReturnType<typeof useProjectCommitHistory>;
+const Probe = ({ id, options }: { id: string | null; options: Options }) => {
+  current = useProjectCommitHistory(id, options);
+  return null;
+};
+const flush = async () => {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+};
+const render = async (options: Options = {}, id: string | null = projectId) => {
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client }, createElement(Probe, {
+      id, options: { source: "local", branch: "main", ...options },
+    })));
+  });
+  await flush();
+};
+const run = async (operation: () => unknown) => {
+  await act(async () => { await operation(); });
+  await flush();
+};
+
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+  root = createRoot(document.createElement("div"));
+  session.data = { user: { id: "user-one" } };
+  session.isPending = false;
+  session.error = null;
+  read.mockReset().mockResolvedValue(page("first"));
+});
+afterEach(() => {
+  act(() => root.unmount());
+  client.clear();
+  onlineManager.setOnline(true);
+  vi.unstubAllGlobals();
+});
+
+it("returns query results and loads through empty search pages until the cursor is exhausted", async () => {
+  const empty = { ...page("unused", "cursor-two"), commits: [] };
+  read.mockResolvedValueOnce(page("first", "cursor-one")).mockResolvedValueOnce(empty).mockResolvedValueOnce(page("last"));
+  await render();
+  expect(read).toHaveBeenCalledWith(projectId, { source: "local", branch: "main", search: "", author: "", pageSize: 20, cursor: null }, expect.any(AbortSignal), expect.any(Function));
+  await run(() => current.onLoadMore());
+  expect(current.hasNextPage).toBe(true);
+  await run(() => current.onLoadMore());
+  expect(current.data?.pages).toEqual([page("first", "cursor-one"), empty, page("last")]);
+  expect(current.data?.pageParams).toEqual([null, "cursor-one", "cursor-two"]);
+  expect(current.hasNextPage).toBe(false);
+  expect(current.onLoadMore()).toBeUndefined();
+  expect(read).toHaveBeenCalledTimes(3);
+});
+
+it("normalizes filters and starts each branch, source, author, search and page-size change from page one", async () => {
+  await render({ search: " FIX ", author: " ADA " });
+  await render({ search: "fix", author: "ada" });
+  expect(read).toHaveBeenCalledOnce();
+  await render({ branch: "feature" });
+  await render({ source: "remote" });
+  await render({ author: "bob" });
+  await render({ search: "different" });
+  await render({ pageSize: 5 });
+  expect(read).toHaveBeenCalledTimes(6);
+  expect(read.mock.calls.every(([, params]) => params.cursor === null)).toBe(true);
+  expect(read.mock.calls[0][1]).toMatchObject({ search: "fix", author: "ada" });
+  expect(client.getQueryCache().getAll()).toHaveLength(6);
+});
+
+it("isolates projects and accounts in the cache", async () => {
+  read.mockResolvedValueOnce(page("one")).mockResolvedValueOnce(page("two")).mockResolvedValueOnce(page("three"));
+  await render();
+  await render({}, otherProjectId);
+  expect(current.data?.pages).toEqual([page("two")]);
+  session.data = { user: { id: "user-two" } };
+  await render();
+  expect(current.data?.pages).toEqual([page("three")]);
+  expect(client.getQueryCache().getAll()).toHaveLength(3);
+});
+
+it.each(["pending", "signed-out", "error"])("blocks reads and manual refetch when authentication is %s", async (state) => {
+  if (state === "pending") session.isPending = true;
+  if (state === "signed-out") session.data = null;
+  if (state === "error") session.error = new Error("Unavailable");
+  await render();
+  await run(() => current.refetch());
+  expect(current.onLoadMore()).toBeUndefined();
+  expect(current.retry()).toBeUndefined();
+  expect(read).not.toHaveBeenCalled();
+});
+
+it.each<Options>([{ branch: undefined }, { source: undefined }, { branch: "main..private" },
+  { pageSize: 0 }, { search: "x".repeat(201) }, { author: "x".repeat(201) }, { maxPages: -1 }, { maxPages: 1.5 }])(
+  "validates options even for manual refetch: %j", async (options) => {
+    await render(options);
+    await run(() => current.refetch());
+    expect(read).not.toHaveBeenCalled();
+  },
+);
+it.each([null, "invalid"])("rejects invalid project %s", async (id) => {
+  await render({}, id);
+  await run(() => current.refetch());
+  expect(read).not.toHaveBeenCalled();
+});
+
+it("supports enabled and guards callbacks while disabled", async () => {
+  await render({ enabled: false });
+  expect(current.onLoadMore()).toBeUndefined();
+  expect(current.retry()).toBeUndefined();
+  expect(read).not.toHaveBeenCalled();
+  await render({ enabled: true });
+  expect(current.isSuccess).toBe(true);
+});
+
+it("limits retained pages with maxPages", async () => {
+  read.mockResolvedValueOnce(page("one", "next")).mockResolvedValueOnce(page("two"));
+  await render({ maxPages: 1 });
+  await run(() => current.onLoadMore());
+  expect(current.data?.pages).toEqual([page("two")]);
+  expect(current.data?.pageParams).toEqual(["next"]);
+});
+
+it("exposes null as an error without automatic retries and retries the failed continuation", async () => {
+  read.mockResolvedValueOnce(page("one", "next")).mockResolvedValueOnce(null).mockResolvedValueOnce(page("two"));
+  await render();
+  await run(() => current.onLoadMore());
+  expect(current.isFetchNextPageError).toBe(true);
+  expect(current.data?.pages).toEqual([page("one", "next")]);
+  expect(current.onLoadMore()).toBeUndefined();
+  await run(() => current.retry());
+  expect(read.mock.calls.map(([, params]) => params.cursor)).toEqual([null, "next", "next"]);
+  expect(current.isSuccess).toBe(true);
+});
+
+it.each(["INVALID_COMMIT_CURSOR", "HISTORY_SNAPSHOT_UNAVAILABLE"])("restarts from page one when retrying %s after retained pages were trimmed", async (code) => {
+  read.mockResolvedValueOnce(page("old-one", "next")).mockResolvedValueOnce(page("old-two", "expired"))
+    .mockImplementationOnce(async (_id, _params, _signal, onFailure) => { onFailure?.(409, null, code); return null; })
+    .mockResolvedValueOnce(page("fresh"));
+  await render({ maxPages: 1 });
+  await run(() => current.onLoadMore());
+  await run(() => current.onLoadMore());
+  expect(current.isFetchNextPageError).toBe(true);
+  await run(() => current.retry());
+  expect(read.mock.calls.map(([, params]) => params.cursor)).toEqual([null, "next", "expired", null]);
+  expect(current.data?.pages).toEqual([page("fresh")]);
+});
+
+it("guards callbacks during an active fetch and avoids duplicate load-more calls", async () => {
+  let finish: ((value: ProjectCommitPageSchema) => void) | undefined;
+  read.mockResolvedValueOnce(page("one", "next")).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render();
+  act(() => { void current.onLoadMore(); void current.onLoadMore(); });
+  await flush();
+  expect(current.onLoadMore()).toBeUndefined();
+  expect(current.retry()).toBeUndefined();
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => { finish?.(page("two")); });
+  await flush();
+});
+
+it("does not load more or retry while offline", async () => {
+  onlineManager.setOnline(false);
+  await render();
+  expect(current.fetchStatus).toBe("paused");
+  expect(current.onLoadMore()).toBeUndefined();
+  expect(current.retry()).toBeUndefined();
+  expect(read).not.toHaveBeenCalled();
+});
+
+it("forwards cancellation without showing an error", async () => {
+  let signal: AbortSignal | undefined;
+  read.mockImplementation((_id, _params, requestSignal) => new Promise((resolve) => {
+    signal = requestSignal;
+    requestSignal?.addEventListener("abort", () => resolve(null), { once: true });
+  }));
+  await render();
+  await run(() => client.cancelQueries());
+  expect(signal?.aborted).toBe(true);
+  expect(current.error).toBeNull();
+});
+
+it("recovers a remounted cached history while the workspace is restoring", async () => {
+  client.setDefaultOptions({ queries: { staleTime: 0 } });
+  await render();
+  await act(async () => { root.render(null); });
+  read.mockImplementationOnce(async (_id, _params, _signal, onFailure) => {
+    onFailure?.(503, "1", "WORKSPACE_RESTORING"); return null;
+  }).mockResolvedValueOnce(page("restored"));
+  await render();
+  expect(current.data?.pages).toEqual([page("first")]);
+  expect(current.error).toBeNull();
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1100)); });
+  await flush();
+  expect(current.data?.pages).toEqual([page("restored")]);
+  expect(current.isSuccess).toBe(true);
+});
+
+it("limits transient server retries and supports retry after the initial failure", async () => {
+  read.mockImplementation(async (_id, _params, _signal, onFailure) => { onFailure?.(502, null); return null; });
+  await render();
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 3200)); });
+  await flush();
+  expect(current.isError).toBe(true);
+  expect(read).toHaveBeenCalledTimes(3);
+  read.mockResolvedValueOnce(page("recovered"));
+  await run(() => current.retry());
+  expect(current.isSuccess).toBe(true);
+});
+
+it.each([401, 403, 404, 409, 429])("does not automatically retry HTTP %s", async (status) => {
+  read.mockImplementation(async (_id, _params, _signal, onFailure) => { onFailure?.(status, null); return null; });
+  await render();
+  expect(current.isError).toBe(true);
+  expect(read).toHaveBeenCalledOnce();
+});

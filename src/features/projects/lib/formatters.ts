@@ -1,14 +1,22 @@
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectWorkspaceTab } from "@/features/projects/types";
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 import type { DiagnosticSeverity } from "@/features/projects/actions/code-intelligence-schemas";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import type { ProjectFileSaveStatus } from "@/features/projects/hooks/use-project-file-save";
+import type { ProjectBranchSource } from "@/features/projects/hooks/use-project-workspace-branch";
 import type {
   ProjectSortField,
   ProjectSortOrder,
 } from "@/features/projects/lib/project-params";
+
+export const formatProjectBranchSource = (source: ProjectBranchSource) => {
+  switch (source) {
+    case "local": return { title: "Local branches", icon: "git-branch" as const };
+    case "remote": return { title: "Remote branches", icon: "cloud" as const };
+  }
+};
 
 export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
   switch (status) {
@@ -165,6 +173,33 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
 
 export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
 
+// Full Git messages include a body and often a trailing newline. List titles use only the subject.
+export const formatCommitSubject = (message: string): string => message.split(/\r?\n/, 1)[0].trim();
+
+export const formatProjectBranchLabel = (branch: string | null, isLoading: boolean): string =>
+  branch ?? (isLoading ? "Loading branches…" : "Select branch");
+
+export const formatProjectGitTab = (tab: ProjectGitTab) => {
+  switch (tab) {
+    case "changes": return "Changes";
+    case "history": return "Commit History";
+  }
+};
+
+export const formatProjectChangePath = (path: string) => {
+  const separator = path.lastIndexOf("/");
+  return { name: path.slice(separator + 1), directory: separator < 0 ? "Project root" : path.slice(0, separator) };
+};
+
+export const formatProjectChangeCount = (count: number) => `${count} file${count === 1 ? "" : "s"}`;
+
+export const formatProjectChangeSelection = (selected: number, total: number) => `${selected} of ${formatProjectChangeCount(total)} selected`;
+
+export const formatProjectChangeLines = (additions: number, deletions: number) => ({
+  additions: `+${additions}`,
+  deletions: `−${deletions}`,
+});
+
 export const formatCommitDate = (committedAt: string): string =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));
 
@@ -233,7 +268,7 @@ export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
 export const formatWorkspaceSearch = (tab: string | undefined) => {
   switch (tab) {
     case "git":
-      return { placeholder: "Search Commits", accessibilityLabel: "Search commits" };
+      return { placeholder: "Search Git", accessibilityLabel: "Search Git" };
     case "agent":
       return { placeholder: "Search Activity", accessibilityLabel: "Search activity" };
     default:

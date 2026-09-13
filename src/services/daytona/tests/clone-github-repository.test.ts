@@ -41,12 +41,12 @@ beforeEach(async () => {
   });
 });
 
-it("prepares declarations before completing imports and retries setup without replacing user files", async () => {
-  vi.mocked(prepareProjectDependencies).mockRejectedValueOnce(new Error("Dependency setup failed"));
-  await expect(cloneGitHubRepository(sandbox(), input)).rejects.toThrow();
+it("finishes cloning independently of optional dependency preparation", async () => {
+  vi.mocked(prepareProjectDependencies).mockRejectedValueOnce(new Error("Unable to prepare project dependencies. Please retry the project import."));
+  await expect(cloneGitHubRepository(sandbox(), input)).resolves.toBeUndefined();
   await writeFile(join(root(), "readme.md"), "user edits");
   await cloneGitHubRepository(sandbox(), input);
-  expect(prepareProjectDependencies).toHaveBeenCalledTimes(2);
+  expect(prepareProjectDependencies).not.toHaveBeenCalled();
   expect(clone).toHaveBeenCalledOnce();
   expect(await readFile(join(root(), "readme.md"), "utf8")).toBe("user edits");
 });

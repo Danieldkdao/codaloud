@@ -67,7 +67,7 @@ beforeEach(() => {
   network.mockImplementation(async (url) => String(url).startsWith("https://api.trigger.dev/")
     ? Response.json({ id: "run_sandbox" })
     : String(url).includes("/branches/")
-    ? Response.json({ name: "feature/import", commit: { sha: "abc123" } })
+    ? Response.json({ name: "develop", commit: { sha: "abc123" } })
     : Response.json({
         id: 123456789,
         name: "selected-repository",
@@ -75,7 +75,7 @@ beforeEach(() => {
         description: null,
         private: true,
         archived: false,
-        default_branch: "main",
+        default_branch: "develop",
         clone_url: "https://github.com/owner/selected-repository.git",
         html_url: "https://github.com/owner/selected-repository",
         permissions: { pull: true },
@@ -91,10 +91,10 @@ beforeEach(() => {
 
 describe("project creation route and insert flow", () => {
   it.each([
-    { source: "new", repositoryId: undefined, branchName: undefined, githubRepositoryId: null },
-    { source: "github", branchName: "feature/import", repositoryId: "123456789", githubRepositoryId: "123456789" },
-  ])("inserts a $source project and saves its import branch on the operation", async ({ source, repositoryId, branchName, githubRepositoryId }) => {
-    const response = await POST(request({ name: " My project ", source, repositoryId, branchName }));
+    { source: "new", repositoryId: undefined, githubRepositoryId: null },
+    { source: "github", repositoryId: "123456789", githubRepositoryId: "123456789" },
+  ])("inserts a $source project and saves its import branch on the operation", async ({ source, repositoryId, githubRepositoryId }) => {
+    const response = await POST(request({ name: " My project ", source, repositoryId }));
 
     expect(response.status).toBe(201);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
@@ -109,7 +109,7 @@ describe("project creation route and insert flow", () => {
       userId: "current-user",
       kind: "prepare",
       githubAccountId: source === "github" ? "linked-account" : null,
-      githubBranchName: source === "github" ? branchName : null,
+      githubBranchName: source === "github" ? "develop" : null,
     });
     expect(await response.json()).toEqual({
       error: false,
@@ -121,14 +121,14 @@ describe("project creation route and insert flow", () => {
   it.each([undefined, null, "", " ", "abc", "0", "-1", "1.5", 123])(
     "rejects a GitHub import with invalid repository ID %s before inserting",
     async (repositoryId) => {
-      const response = await POST(request({ name: "My project", source: "github", branchName: "feature/import", repositoryId }));
+      const response = await POST(request({ name: "My project", source: "github", repositoryId }));
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: true, message: "Select a GitHub repository." });
       expect(mocks.insert).not.toHaveBeenCalled();
     },
   );
 
-  it.each([undefined, null, "", "   "])("rejects a missing branch %s before inserting", async (branchName) => {
+  it.each([null, "", "   ", "feature/import"])("rejects a client-supplied branch %s before inserting", async (branchName) => {
     const response = await POST(request({ name: "Import", source: "github", repositoryId: "123", branchName }));
     expect(response.status).toBe(400);
     expect(mocks.insert).not.toHaveBeenCalled();
@@ -145,10 +145,10 @@ describe("project creation route and insert flow", () => {
     { source: "new", repositoryId: "123" },
     { source: "new", branchName: "main" },
     { source: "new", userId: "another-user" },
-    { source: "github", branchName: "feature/import", repositoryId: "123", githubRepositoryId: "456" },
-    { source: "github", branchName: "feature/import", repositoryId: "123", accountId: "another-account" },
-    { source: "github", branchName: "feature/import", repositoryId: "123", cloneUrl: "https://example.com/repository.git" },
-    { source: "github", branchName: "feature/import", repositoryId: "123", accessToken: "client-token" },
+    { source: "github", repositoryId: "123", githubRepositoryId: "456" },
+    { source: "github", repositoryId: "123", accountId: "another-account" },
+    { source: "github", repositoryId: "123", cloneUrl: "https://example.com/repository.git" },
+    { source: "github", repositoryId: "123", accessToken: "client-token" },
   ])("rejects unexpected fields before inserting: %o", async (fields) => {
     const response = await POST(request({ name: "My project", ...fields }));
     expect(response.status).toBe(400);
@@ -191,7 +191,7 @@ describe("project creation route and insert flow", () => {
 
 
 describe("GitHub import access validation", () => {
-  const importRequest = () => request({ name: "Import", source: "github", branchName: "feature/import", repositoryId: "123456789" });
+  const importRequest = () => request({ name: "Import", source: "github", repositoryId: "123456789" });
 
   it.each([
     { accounts: [] },
@@ -218,11 +218,11 @@ describe("GitHub import access validation", () => {
     expect(network.mock.invocationCallOrder[0]).toBeLessThan(mocks.insert.mock.invocationCallOrder[0]);
   });
 
-  it("verifies the selected branch with the authorized repository before starting the transaction", async () => {
+  it("verifies the repository default branch with the authorized repository before starting the transaction", async () => {
     const req = importRequest();
     expect((await POST(req)).status).toBe(201);
     const [url, options] = network.mock.calls[1];
-    expect(String(url)).toBe("https://api.github.com/repos/owner/selected-repository/branches/feature%2Fimport");
+    expect(String(url)).toBe("https://api.github.com/repos/owner/selected-repository/branches/develop");
     expect(new Headers(options?.headers).get("authorization")).toBe("token test-token");
     expect(options?.signal).toBe(req.signal);
     expect(network.mock.invocationCallOrder[1]).toBeLessThan(mocks.transaction.mock.invocationCallOrder[0]);

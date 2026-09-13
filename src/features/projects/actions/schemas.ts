@@ -63,7 +63,6 @@ export const createProjectSchema = z.discriminatedUnion(
       ...projectFields,
       source: z.literal("new"),
       repositoryId: z.never().optional(),
-      branchName: z.never().optional(),
     }),
     z.strictObject({
       ...projectFields,
@@ -71,10 +70,6 @@ export const createProjectSchema = z.discriminatedUnion(
       repositoryId: z
         .string({ error: "Select a GitHub repository." })
         .regex(/^[1-9]\d*$/, "Select a GitHub repository."),
-      branchName: z
-        .string({ error: "Select a GitHub branch." })
-        .trim()
-        .min(1, "Select a GitHub branch."),
     }),
   ],
   { error: "Choose how to start your project." },

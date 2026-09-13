@@ -11,6 +11,7 @@ import { ProjectWorkspaceTabSelect } from "@/features/projects/components/projec
 import { ProjectActionButtonsLeft, ProjectActionButtonsRight } from "@/features/projects/components/project-action-buttons";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
+import { formatProjectBranchLabel, formatProjectBranchSource } from "@/features/projects/lib/formatters";
 
 export const ProjectWorkspaceDock = () => {
   const { setDockHeight } = useProjectWorkspaceDockHeight();
@@ -47,10 +48,10 @@ export const ProjectWorkspaceDock = () => {
             {!isGitSearchOpen ? (
               <View testID="branch-indicator" accessibilityLiveRegion="polite"
                 className="max-w-full flex-row items-center justify-center gap-2 rounded-full border border-border bg-secondary px-3 py-1.5">
-                <Icon family="Feather" name="git-branch" size={18} className="text-secondary-foreground" accessible={false} />
+                <Icon family="Feather" name={formatProjectBranchSource(branchSelection.branchSource ?? "local").icon} size={18} className="text-secondary-foreground" accessible={false} />
                 <CodeText className="min-w-0 shrink text-center text-lg font-medium text-secondary-foreground"
                   numberOfLines={1} ellipsizeMode="middle">
-                  {branchSelection.branch.name}
+                  {formatProjectBranchLabel(branchSelection.branch, branchSelection.isBranchLoading)}
                 </CodeText>
               </View>
             ) : null}

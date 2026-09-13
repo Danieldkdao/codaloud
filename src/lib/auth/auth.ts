@@ -23,6 +23,9 @@ export const auth = betterAuth({
   ],
   account: {
     encryptOAuthTokens: true,
+    // Sign-in only requests identity scopes. Preserve the repo token granted by
+    // explicit connection; linkSocial still replaces it when users reconnect.
+    updateAccountOnSignIn: false,
     accountLinking: { enabled: true, disableImplicitLinking: true },
   },
   socialProviders: {

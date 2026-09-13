@@ -101,5 +101,6 @@
     "generate:icons": "node scripts/generate-material-icons.mjs",
     "check:icons": "node scripts/generate-material-icons.mjs --check"
   },
-  "private": true
+  "private": true,
+  "packageManager": "pnpm@12.4.1"
 }

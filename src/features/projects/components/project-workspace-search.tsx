@@ -1,7 +1,22 @@
+import { useDebouncer } from "@tanstack/react-pacer";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { Keyboard, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions, type TextInput } from "react-native";
+import {
+  Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type TextInput,
+} from "react-native";
 import Animated, {
-  cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
@@ -18,6 +33,9 @@ type ProjectWorkspaceSearchProps = {
   onOpenChange?: (open: boolean) => void;
   placeholder?: string;
   accessibilityLabel?: string;
+  value?: string;
+  // Receives the final input after a 250 ms typing pause.
+  onChangeText?: (value: string) => void;
 };
 
 export const ProjectWorkspaceSearch = ({
@@ -26,6 +44,8 @@ export const ProjectWorkspaceSearch = ({
   onOpenChange,
   placeholder = "Search Files",
   accessibilityLabel = "Search files",
+  value,
+  onChangeText,
 }: ProjectWorkspaceSearchProps) => {
   const insets = useSafeAreaInsets();
   const shadow = useThemeColor("navigation-shadow");
@@ -33,18 +53,38 @@ export const ProjectWorkspaceSearch = ({
   const reducedMotion = useReducedMotion();
   const buttonRef = useRef<View>(null);
   const inputRef = useRef<TextInput>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(value ?? "");
+  const { maybeExecute: handleDebouncedSearch, cancel } = useDebouncer(
+    (text: string) => onChangeText?.(text),
+    { wait: 1000 },
+  );
+
+  useEffect(() => {
+    // Parent resets replace the draft and discard any search still waiting to run.
+    cancel();
+    setQuery(value ?? "");
+  }, [value, cancel]);
   const keyboardOffset = useSharedValue(0);
-  const [anchor, setAnchor] = useState<{ right: number; top: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ right: number; top: number } | null>(
+    null,
+  );
   const progress = useSharedValue(0);
   const availableWidth = width - insets.left - insets.right - 32;
   const barWidth = Math.min(availableWidth, 440);
-  const rightInset = 16 + insets.right + Math.max(0, (availableWidth - 440) / 2);
+  const rightInset =
+    16 + insets.right + Math.max(0, (availableWidth - 440) / 2);
   const closing = useRef(false);
   const isOpen = anchor !== null;
 
-  useEffect(() => { onOpenChange?.(isOpen); }, [isOpen, onOpenChange]);
-  useEffect(() => () => { onOpenChange?.(false); }, [onOpenChange]);
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
+  useEffect(
+    () => () => {
+      onOpenChange?.(false);
+    },
+    [onOpenChange],
+  );
 
   // A resized window needs a fresh native anchor measurement before reopening.
   useEffect(() => {
@@ -59,14 +99,21 @@ export const ProjectWorkspaceSearch = ({
       Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow",
       (event) => {
         keyboardOffset.value = withTiming(
-          Math.max(0, anchor.top + buttonSize + 12 - event.endCoordinates.screenY),
+          Math.max(
+            0,
+            anchor.top + buttonSize + 12 - event.endCoordinates.screenY,
+          ),
           { duration: reducedMotion ? 0 : event.duration || 250 },
         );
       },
     );
     const hide = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => { keyboardOffset.value = withTiming(0, { duration: reducedMotion ? 0 : 250 }); },
+      () => {
+        keyboardOffset.value = withTiming(0, {
+          duration: reducedMotion ? 0 : 250,
+        });
+      },
     );
     return () => {
       show.remove();
@@ -85,7 +132,13 @@ export const ProjectWorkspaceSearch = ({
       closing.current = false;
       progress.value = 0;
       keyboardOffset.value = 0;
-      setAnchor({ right: rightInset, top: Math.max(insets.top + 8, anchorPlacement === "replace" ? y : y - buttonSize - 4) });
+      setAnchor({
+        right: rightInset,
+        top: Math.max(
+          insets.top + 8,
+          anchorPlacement === "replace" ? y : y - buttonSize - 4,
+        ),
+      });
     });
   };
 
@@ -94,18 +147,28 @@ export const ProjectWorkspaceSearch = ({
     if (closing.current) return;
     closing.current = true;
     Keyboard.dismiss();
-    progress.value = withTiming(0, {
-      duration: reducedMotion ? 0 : 260,
-      easing: Easing.out(Easing.cubic),
-    }, (finished) => {
-      if (finished) scheduleOnRN(finishClosing);
-    });
+    progress.value = withTiming(
+      0,
+      {
+        duration: reducedMotion ? 0 : 260,
+        easing: Easing.out(Easing.cubic),
+      },
+      (finished) => {
+        if (finished) scheduleOnRN(finishClosing);
+      },
+    );
+    onChangeText?.("");
   };
 
   const morphStyle = useAnimatedStyle(() => ({
     width: buttonSize + (barWidth - buttonSize) * progress.value,
     opacity: progress.value,
-    transform: [{ translateY: 12 * (1 - progress.value) - keyboardOffset.value * progress.value }],
+    transform: [
+      {
+        translateY:
+          12 * (1 - progress.value) - keyboardOffset.value * progress.value,
+      },
+    ],
   }));
   const labelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -115,56 +178,134 @@ export const ProjectWorkspaceSearch = ({
   return (
     <>
       <View ref={buttonRef} collapsable={false}>
-        <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+        <Pressable
+          onPress={open}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
           accessibilityHint="Opens the search input"
           className="items-center justify-center rounded-full active:bg-secondary"
-          style={{ width: 48, height: 48 }}>
-          <Icon family="Feather" name="search" size={22} accessible={false} className="text-foreground" />
+          style={{ width: 48, height: 48 }}
+        >
+          <Icon
+            family="Feather"
+            name="search"
+            size={22}
+            accessible={false}
+            className="text-foreground"
+          />
         </Pressable>
       </View>
 
       {anchor ? (
         // Covers the native header and sibling dock as well as the active list.
-        <Modal transparent animationType="none" presentationStyle="overFullScreen"
-          statusBarTranslucent navigationBarTranslucent onRequestClose={close}
+        <Modal
+          transparent
+          animationType="none"
+          presentationStyle="overFullScreen"
+          statusBarTranslucent
+          navigationBarTranslucent
+          onRequestClose={close}
           onShow={() => {
             if (!closing.current) {
-              progress.value = withTiming(1, {
-                duration: reducedMotion ? 0 : 340,
-                easing: Easing.out(Easing.cubic),
-              }, (finished) => {
-                if (finished) scheduleOnRN(focusInput);
-              });
+              progress.value = withTiming(
+                1,
+                {
+                  duration: reducedMotion ? 0 : 340,
+                  easing: Easing.out(Easing.cubic),
+                },
+                (finished) => {
+                  if (finished) scheduleOnRN(focusInput);
+                },
+              );
             }
-          }}>
-          <View style={{ flex: 1 }} accessibilityViewIsModal onAccessibilityEscape={close}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss search"
-              onPress={close} style={StyleSheet.absoluteFill} />
-            <Animated.View style={[
-              { position: "absolute", top: anchor.top, right: anchor.right }, morphStyle,
-            ]}>
+          }}
+        >
+          <View
+            style={{ flex: 1 }}
+            accessibilityViewIsModal
+            onAccessibilityEscape={close}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss search"
+              onPress={close}
+              style={StyleSheet.absoluteFill}
+            />
+            <Animated.View
+              style={[
+                { position: "absolute", top: anchor.top, right: anchor.right },
+                morphStyle,
+              ]}
+            >
               {/* Native glass can stop rendering under a parent animated from opacity zero.
                   A solid card keeps search readable throughout every opening. */}
-              <View className="bg-card border border-border" style={{
-                borderRadius: 28,
-                boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow }],
-              }}>
-                <View style={{ height: buttonSize, flexDirection: "row", alignItems: "center", overflow: "hidden", borderRadius: 28 }}>
-                  <View style={{ width: buttonSize, height: buttonSize, alignItems: "center", justifyContent: "center" }}>
-                    <Icon family="Feather" name="search" size={22} accessible={false} className="text-foreground" />
+              <View
+                className="bg-card border border-border"
+                style={{
+                  borderRadius: 28,
+                  boxShadow: [
+                    { offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow },
+                  ],
+                }}
+              >
+                <View
+                  style={{
+                    height: buttonSize,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    overflow: "hidden",
+                    borderRadius: 28,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: buttonSize,
+                      height: buttonSize,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Icon
+                      family="Feather"
+                      name="search"
+                      size={22}
+                      accessible={false}
+                      className="text-foreground"
+                    />
                   </View>
                   <Animated.View style={[{ flex: 1, minWidth: 0 }, labelStyle]}>
-                    <Input ref={inputRef} type="search" variant="ghost"
-                      placeholder={placeholder} accessibilityLabel={placeholder}
-                      value={query} onChangeText={setQuery}
-                      autoCapitalize="none" autoCorrect={false} submitBehavior="submit"
-                      className="border-0 px-0 focus:border-transparent focus:outline-0" />
+                    <Input
+                      ref={inputRef}
+                      type="search"
+                      variant="ghost"
+                      placeholder={placeholder}
+                      accessibilityLabel={placeholder}
+                      value={query}
+                      onChangeText={(text) => {
+                        setQuery(text);
+                        handleDebouncedSearch(text);
+                      }}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      submitBehavior="submit"
+                      className="border-0 px-0 focus:border-transparent focus:outline-0"
+                    />
                   </Animated.View>
                   <Animated.View style={labelStyle}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Close search" onPress={close}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Close search"
+                      onPress={close}
                       className="items-center justify-center rounded-full active:bg-secondary"
-                      style={{ width: 44, height: 44, marginRight: 6 }}>
-                      <Icon family="Feather" name="x" size={20} accessible={false} className="text-muted-foreground" />
+                      style={{ width: 44, height: 44, marginRight: 6 }}
+                    >
+                      <Icon
+                        family="Feather"
+                        name="x"
+                        size={20}
+                        accessible={false}
+                        className="text-muted-foreground"
+                      />
                     </Pressable>
                   </Animated.View>
                 </View>

@@ -12,7 +12,6 @@ import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
 const selection = vi.hoisted(() => ({ filePath: null as string | null, version: 0, setFilePath: vi.fn(), refreshFile: vi.fn() }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => selection }));
-vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => ({ branch: state.empty ? undefined : { name: "main", commits: [] }, setBranch: vi.fn() }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const saveFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
@@ -52,11 +51,20 @@ vi.mock("react-native", () => ({
   }) => createElement("div", null, ListHeaderComponent, data.length ? data.map((item, index) =>
     createElement("div", { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
 }));
+vi.mock("@/features/projects/components/project-git-tabs", () => ({
+  ProjectGitTabs: () => null,
+  ProjectGitTabPanel: ({ children, active }: { children: ReactNode; active: boolean }) => active ? children : null,
+}));
+vi.mock("@/features/projects/components/project-changes-panel", () => ({
+  ProjectChangesPanel: ({ changes }: { changes: unknown[] }) => createElement("span", null, changes.length ? "Changes" : "No uncommitted changes"),
+}));
 vi.mock("@/features/projects/components/project-branch-select", () => ({ ProjectBranchSelect: () => null }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
-vi.mock("@/features/projects/data/demo-commits", () => ({
-  get demoBranches() { return state.empty ? [] : [{ name: "main", commits: [] }]; },
+vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({
+  useProjectWorkspaceBranch: () => ({ gitTab: "changes", setGitTab: vi.fn() }),
 }));
+vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: vi.fn() }));
+vi.mock("@/features/projects/data/demo-changes", () => ({ demoChanges: [] }));
 vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));
 
 let container: HTMLDivElement;
@@ -80,7 +88,6 @@ afterEach(() => {
 });
 
 it.each([
-  { name: "Git", Screen: GitScreen, loading: "Loading commits", empty: "No commits yet" },
   { name: "Agent", Screen: AgentScreen, loading: "Loading activity", empty: "No activity yet" },
 ])("previews loading for two seconds before showing empty content: $name", ({ Screen, loading, empty }) => {
   act(() => root.render(createElement(Screen)));
@@ -188,12 +195,10 @@ it("shows file errors with a retry and resumes loading while retrying", () => {
 });
 
 it.each([
-  { name: "Git", Screen: GitScreen, empty: "No commits yet" },
+  { name: "Git", Screen: GitScreen, empty: "No uncommitted changes" },
 ])("handles missing screen data after loading: $name", ({ Screen, empty }) => {
   state.empty = true;
   act(() => root.render(createElement(Screen)));
-  expect(container.textContent).not.toContain(empty);
-  act(() => vi.advanceTimersByTime(2000));
   expect(container.textContent).toContain(empty);
   expect(container.querySelector("textarea")).toBeNull();
 });

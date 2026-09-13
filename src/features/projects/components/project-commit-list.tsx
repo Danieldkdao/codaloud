@@ -1,31 +1,95 @@
-import { FlatList, Pressable, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
-import { CodeText, HeadingText, PText } from "@/components/ui/text";
+import { Button } from "@/components/ui/button";
+import { CodeText, PText } from "@/components/ui/text";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import {
   formatCommitDate,
   formatCommitHash,
+  formatCommitSubject,
 } from "@/features/projects/lib/formatters";
 import type { ProjectCommitData } from "@/features/projects/types";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
+import { useProjectWorkspaceBranch } from "../hooks/use-project-workspace-branch";
+import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
+import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
+import type { ProjectCommitPageSchema } from "../actions/commit-schemas";
+
+const getCommits = (page: ProjectCommitPageSchema): ProjectCommitData[] =>
+  page.commits;
+const getCommitKey = (commit: ProjectCommitData) => commit.hash;
 
 type ProjectCommitListProps = {
-  commits: ProjectCommitData[];
+  active: boolean;
 };
 
-export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
+export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
+  const { projectId, branch, branchSource, commitSearch, isBranchLoading } =
+    useProjectWorkspaceBranch();
+  const query = useProjectCommitHistory(projectId, {
+    branch: branch ?? undefined,
+    source: branchSource ?? undefined,
+    search: commitSearch,
+    enabled: active,
+  });
+  const commits = useUniquePaginatedItems(
+    query.data?.pages,
+    getCommits,
+    getCommitKey,
+  );
 
-  if (commits.length === 0) {
+  if (!branch || !branchSource) {
+    if (isBranchLoading) {
+      return (
+        <ProjectWorkspaceState
+          isLoading
+          icon="git-commit"
+          title="Loading branches…"
+          description="Finding your workspace’s current branch."
+        />
+      );
+    }
+    return (
+      <ProjectWorkspaceState
+        icon="git-commit"
+        title="Select a branch"
+        description="Choose a local or remote branch to view its commit history."
+      />
+    );
+  }
+
+  if (query.isPending && query.fetchStatus !== "paused" && !query.error) {
+    return (
+      <ProjectWorkspaceState
+        isLoading
+        icon="git-commit"
+        title="Loading commits…"
+        description="Getting this branch’s history."
+      />
+    );
+  }
+
+  if (
+    commits.length === 0 &&
+    !query.hasNextPage &&
+    !query.isFetching &&
+    !query.error &&
+    query.fetchStatus !== "paused"
+  ) {
     return (
       <View className="flex-1">
         <ProjectWorkspaceState
           icon="git-commit"
-          title="No commits yet"
-          description="Your commits will appear here once you save changes to Git."
+          title={commitSearch.trim() ? "No matching commits" : "No commits yet"}
+          description={
+            commitSearch.trim()
+              ? "Try another commit message, author, or hash."
+              : "Your commits will appear here once you save changes to Git."
+          }
         />
       </View>
     );
@@ -33,7 +97,14 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
 
   return (
     <FlatList
+      key={JSON.stringify([
+        projectId,
+        branchSource,
+        branch,
+        commitSearch.trim().toLowerCase(),
+      ])}
       className="flex-1 bg-background"
+      accessibilityLabel="Commit history"
       data={commits}
       keyExtractor={(commit) => commit.hash}
       contentInsetAdjustmentBehavior="automatic"
@@ -44,30 +115,82 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
         paddingBottom: dockHeight + 24,
       }}
       scrollIndicatorInsets={{ bottom: dockHeight }}
-      ListHeaderComponent={
-        <View className="pb-6">
-          <HeadingText
-            accessibilityRole="header"
-            className="text-2xl"
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      onEndReached={() => {
+        if (active) query.onLoadMore();
+      }}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={
+        query.fetchStatus === "paused" ? (
+          <PText
+            accessibilityLiveRegion="polite"
+            className="py-5 text-center text-base text-muted-foreground"
           >
-            Commit history
-          </HeadingText>
-        </View>
+            Waiting for a connection…
+          </PText>
+        ) : query.isFetching ? (
+          <View
+            className="items-center py-5"
+            accessibilityRole="progressbar"
+            accessibilityLabel={
+              query.isFetchingNextPage
+                ? "Loading more commits"
+                : "Refreshing commits"
+            }
+          >
+            <ActivityIndicator className="text-primary" />
+          </View>
+        ) : query.error ? (
+          <View className="gap-3 py-5">
+            <PText
+              accessibilityRole="alert"
+              className="text-base text-destructive"
+            >
+              {query.error.message}
+            </PText>
+            <Button
+              variant="outline"
+              accessibilityLabel="Retry commit history"
+              onPress={() => {
+                query.retry();
+              }}
+            >
+              Try again
+            </Button>
+          </View>
+        ) : query.hasNextPage ? (
+          <View className="py-5">
+            <Button
+              variant="outline"
+              accessibilityLabel={
+                commits.length
+                  ? "Load more commits"
+                  : "Continue searching commits"
+              }
+              onPress={() => {
+                query.onLoadMore();
+              }}
+              disabled={!active}
+            >
+              {commits.length ? "Load more commits" : "Continue searching"}
+            </Button>
+          </View>
+        ) : null
       }
       renderItem={({ item, index }) => (
         <Pressable
           onPress={() => {}}
           accessibilityRole="button"
-          accessibilityLabel={`${item.message}, ${item.author}, ${formatCommitDate(item.committedAt)}, ${formatCommitHash(item.hash)}`}
+          accessibilityLabel={`${formatCommitSubject(item.message)}, ${item.author}, ${formatCommitDate(item.committedAt)}, ${formatCommitHash(item.hash)}`}
           className="flex-row gap-3 rounded-xl active:bg-secondary"
-          style={{ minHeight: 104 }}
         >
           <View
-            className="w-8 items-center pt-3"
+            className="w-8 items-center pt-1.5 gap-1.5"
             accessible={false}
             importantForAccessibility="no-hide-descendants"
           >
-            <View className="h-7 w-8 items-center justify-center rounded-full bg-background">
+            <View className="h-7 w-8 items-center justify-center rounded-full">
               <Icon
                 family="Feather"
                 name={item.isMerge ? "git-merge" : "git-commit"}
@@ -79,13 +202,13 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
               <View className="w-px flex-1 bg-primary/20" />
             ) : null}
           </View>
-          <View className="min-w-0 flex-1 flex-row items-center gap-3 first:border-t last:border-b-0 border-b border-border py-3">
+          <View className="min-w-0 flex-1 flex-row items-center gap-3 first:border-t last:border-b-0 border-b border-border pb-2.5 pt-1.5">
             <View className="min-w-0 flex-1 gap-2">
               <PText
                 className="min-w-0 font-medium text-foreground text-lg"
                 numberOfLines={2}
               >
-                {item.message}
+                {formatCommitSubject(item.message)}
               </PText>
               <View className="flex-row flex-wrap items-center gap-2">
                 <CodeText className="text-muted-foreground font-medium">
@@ -109,10 +232,7 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
                     className="text-muted-foreground"
                     accessible={false}
                   />
-                  <PText
-                    className="min-w-0"
-                    numberOfLines={1}
-                  >
+                  <PText className="min-w-0" numberOfLines={1}>
                     {item.author}
                   </PText>
                 </View>
@@ -123,9 +243,7 @@ export const ProjectCommitList = ({ commits }: ProjectCommitListProps) => {
                   className="text-muted-foreground"
                   accessible={false}
                 />
-                <PText>
-                  {formatCommitDate(item.committedAt)}
-                </PText>
+                <PText>{formatCommitDate(item.committedAt)}</PText>
               </View>
             </View>
             <Icon

@@ -38,7 +38,7 @@ const toGitHubRepository = (repository: GitHubApiRepository): GitHubRepository =
   },
 });
 
-const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
+export const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
   new Octokit({
     auth: accessToken,
     request: { signal, timeout: 15_000 },
@@ -127,6 +127,15 @@ export const listGitHubRepositoryPage = async (
         page,
         per_page: pageSize,
       });
+      // Saved scopes can outlive a token replacement or a revoked grant. GitHub
+      // returns public-only results with HTTP 200 when an OAuth token lacks repo.
+      const grantedScopes = headers["x-oauth-scopes"];
+      if (grantedScopes !== undefined && !grantedScopes.split(",").some((scope) => scope.trim() === "repo")) {
+        throw new GitHubAccessError(
+          "Reconnect GitHub to grant access to public and private repositories.",
+          "GITHUB_RECONNECT_REQUIRED",
+        );
+      }
       return {
         repositories: data.map(toGitHubRepository),
         hasNextPage: /;\s*rel="next"/.test(headers.link ?? ""),

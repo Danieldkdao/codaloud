@@ -35,10 +35,6 @@ vi.mock("@/features/projects/actions/actions", () => ({
 vi.mock("@/services/github/hooks/use-github-repositories", () => ({
   useGitHubRepositories: () => mocks.query,
 }));
-vi.mock("@/services/github/components/github-repository-branches-list", () => ({
-  GitHubRepositoryBranchesList: ({ onValueChange }: { onValueChange: (name: string) => void }) =>
-    createElement("button", { onClick: () => onValueChange("main") }, "Select main"),
-}));
 vi.mock("@/lib/utils", () => ({
   cn: (...values: Parameters<typeof clsx>) => twMerge(clsx(...values)),
   alert: mocks.alert,
@@ -511,7 +507,6 @@ describe("project form repository validation", () => {
       name: "My project",
       source: "github",
       repositoryId: "1",
-      branchName: "main",
     });
 
     await press(container, "owner/private-repo");
@@ -718,9 +713,6 @@ it("refreshes repository authorization when the import itself requires reconnect
       .find((button) => button.textContent?.includes("owner/private-repo"))!
       .click(),
   );
-  await act(async () => {
-    Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Select main")!.click();
-  });
   await act(async () =>
     Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent === "Create project")!

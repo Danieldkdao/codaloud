@@ -74,3 +74,16 @@ export type ProjectAgentActivityData = {
   createdAt: string;
   target?: string;
 };
+
+export type ProjectFileSearchScope = "all" | "title" | "content";
+
+export type ProjectFileSearchDocument = {
+  path: string;
+  content: string;
+};
+
+export type ProjectFileSearchResult = {
+  file: ProjectFileSearchDocument;
+  titleMatches: boolean;
+  contentMatchCount: number;
+};

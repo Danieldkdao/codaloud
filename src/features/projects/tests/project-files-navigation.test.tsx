@@ -9,6 +9,10 @@ import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwip
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 
 const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
+const fileSearch = vi.hoisted(() => ({ query: "", scope: "all", isSearching: false,
+  results: [{ file: { path: "docs/guide.md", content: "Search result contents" }, titleMatches: false, contentMatchCount: 1 }],
+}));
+vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => fileSearch }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({
   renameFiles: async (_previousPath: string, _nextPath: string, rename: () => Promise<unknown>) => rename(),
 }) }));
@@ -106,6 +110,8 @@ const click = (label: string) => {
 };
 
 beforeEach(() => {
+  fileSearch.query = "";
+  fileSearch.isSearching = false;
   fileCreation.kind = null;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.update.mockReset().mockResolvedValue(undefined);
@@ -118,6 +124,21 @@ beforeEach(() => {
   act(() => root.render(createElement(FilesScreen)));
 });
 afterEach(() => act(() => root.unmount()));
+
+it("replaces directory content with search results and restores it after clearing", () => {
+  expect(container.textContent).toContain("package.json");
+  fileSearch.query = "result";
+  fileSearch.isSearching = true;
+  act(() => root.render(createElement(FilesScreen)));
+  expect(container.textContent).toContain("guide.md");
+  expect(container.textContent).not.toContain("package.json");
+  expect(container.textContent).not.toMatch(/Mock preview|Title & content/);
+  fileSearch.query = "";
+  fileSearch.isSearching = false;
+  act(() => root.render(createElement(FilesScreen)));
+  expect(container.textContent).toContain("package.json");
+  expect(container.textContent).not.toContain("guide.md");
+});
 
 it("replaces the current directory and supports drilling into nested folders", () => {
   expect(container.textContent).toContain("package.json");

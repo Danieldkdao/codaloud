@@ -5,11 +5,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
+import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
+import { ProjectFileSearchResults } from "@/features/projects/components/project-file-search-results";
+import { ProjectWorkspaceFileSearchProvider, useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-project-workspace-file-search";
 
 const workspace = vi.hoisted(() => ({ projectId: "project-one", commitSearch: "", setCommitSearch: vi.fn(), setGitTab: vi.fn() }));
 vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => workspace }));
 
 vi.mock("react-native", () => ({
+  ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+  Switch: ({ value, onValueChange, accessibilityLabel }: { value: boolean; onValueChange: (value: boolean) => void; accessibilityLabel: string }) =>
+    createElement("button", { role: "switch", "aria-label": accessibilityLabel, "aria-checked": value, onClick: () => onValueChange(!value) }),
+  FlatList: ({ data, renderItem, ListEmptyComponent }: { data: { file: { path: string } }[]; renderItem: (info: { item: unknown }) => ReactNode; ListEmptyComponent: ReactNode }) =>
+    createElement("div", null, data.length ? data.map((item) => createElement("div", { key: item.file.path }, renderItem({ item }))) : ListEmptyComponent),
   View: ({ children, ref, className }: { children?: ReactNode; ref?: Ref<unknown>; className?: string }) => {
     useImperativeHandle(ref, () => ({ measureInWindow: (callback: (...values: number[]) => void) => callback(320, 600, 56, 56) }));
     return createElement("div", { className }, children);
@@ -39,7 +47,12 @@ vi.mock("react-native-reanimated", () => ({
 vi.mock("react-native-worklets", () => ({ scheduleOnRN: (callback: () => void) => callback() }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "shadow" }));
+vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0 }) }));
+vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children) }));
+vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", null, children) : null }));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ ref, value, onChangeText, placeholder, variant }: { ref?: Ref<unknown>; value: string; onChangeText: (text: string) => void; placeholder: string; variant: string }) => {
     useImperativeHandle(ref, () => ({ focus: () => {} }));
@@ -50,6 +63,16 @@ vi.mock("@/components/ui/input", () => ({
 
 let container: HTMLDivElement;
 let root: Root;
+const FileSearchScreen = () => {
+  const search = useProjectWorkspaceFileSearch();
+  return <>
+    <div data-files-screen>{search.isSearching
+      ? <ProjectFileSearchResults key={`${search.query}:${search.scope}`} results={search.results} />
+      : <span>Original directory</span>}</div>
+    <ProjectWorkspaceFileSearch anchorRef={{ current: null }} />
+  </>;
+};
+const FileSearchWorkspace = () => <ProjectWorkspaceFileSearchProvider><FileSearchScreen /></ProjectWorkspaceFileSearchProvider>;
 const click = (label: string) => {
   const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
   expect(button).not.toBeNull();
@@ -84,6 +107,25 @@ it("opens an editable ghost search bar and dismisses through the outside-tap sur
   expect(container.querySelector("input")?.value).toBe("layout.tsx");
 });
 
+it("updates local preview results immediately and preserves the draft after dismissal", () => {
+  const Preview = () => {
+    const [draft, setDraft] = useState("");
+    return <>{createElement(ProjectWorkspaceSearch, {
+      value: draft,
+      onDraftChange: setDraft,
+    })}<span data-preview>{draft}</span></>;
+  };
+  act(() => root.render(createElement(Preview)));
+  click("Search files");
+  const input = container.querySelector("input")!;
+  act(() => { input.value = "project"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(container.querySelector("[data-preview]")?.textContent).toBe("project");
+  click("Dismiss search");
+  click("Search files");
+  expect(container.querySelector("input")?.value).toBe("project");
+  expect(container.querySelector("[data-preview]")?.textContent).toBe("project");
+});
+
 it("supports system dismissal without an explicit close control", () => {
   click("Search files");
   expect(container.querySelector('[aria-label="Close search"]')).toBeNull();
@@ -92,6 +134,57 @@ it("supports system dismissal without an explicit close control", () => {
   click("Search files");
   click("Dismiss search");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("applies both file filters immediately and retains selections when search reopens", () => {
+  act(() => root.render(createElement(FileSearchWorkspace)));
+  click("Search files");
+  const input = container.querySelector("input")!;
+  act(() => { input.value = "project"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(container.textContent).toContain("6 files");
+  expect(container.querySelector('[role="dialog"]')?.textContent).not.toContain("6 files");
+  expect(container.querySelector('[data-files-screen]')?.textContent).not.toContain("Original directory");
+  expect(container.textContent).not.toMatch(/Mock preview|Title & content/);
+  expect(container.textContent).toContain("10+ matches found in this file");
+  click("Search filters");
+  const titleSwitch = () => container.querySelector('[aria-label="File title"]');
+  const contentSwitch = () => container.querySelector('[aria-label="File content"]');
+  expect(titleSwitch()?.getAttribute("aria-checked")).toBe("false");
+  expect(contentSwitch()?.getAttribute("aria-checked")).toBe("false");
+  click("File title");
+  expect(container.textContent).toContain("4 files");
+  expect(container.textContent).not.toContain("workspace-guide.md");
+  click("File content");
+  expect(container.textContent).toContain("6 files");
+  click("File title");
+  expect(container.textContent).toContain("4 files");
+  expect(container.textContent).not.toContain("project-card.tsx");
+  click("Dismiss search");
+  click("Search files");
+  expect(container.querySelector("input")?.value).toBe("project");
+  expect(container.textContent).toContain("4 files");
+  click("Search filters");
+  expect(titleSwitch()?.getAttribute("aria-checked")).toBe("false");
+  expect(contentSwitch()?.getAttribute("aria-checked")).toBe("true");
+});
+
+it("opens mock contents, returns to results, and handles no matches and clearing", () => {
+  act(() => root.render(createElement(FileSearchWorkspace)));
+  click("Search files");
+  const input = container.querySelector("input")!;
+  const type = (value: string) => act(() => { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  type("project");
+  click("docs/workspace-guide.md");
+  expect(container.textContent).not.toContain("Mock file");
+  expect(container.textContent).toContain("12. Open the project workspace");
+  click("Back to search results");
+  expect(container.textContent).toContain("6 files");
+  type("no-such-file");
+  expect(container.textContent).toContain("No matching files");
+  type("");
+  expect(container.textContent).toContain("Original directory");
+  expect(container.textContent).not.toContain("Mock preview");
+  expect(container.textContent).not.toContain("No matching files");
 });
 
 it("supports externally controlled text and updates when workspace state changes", () => {

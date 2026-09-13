@@ -1,5 +1,11 @@
 import { useDebouncer } from "@tanstack/react-pacer";
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Keyboard,
   Modal,
@@ -36,6 +42,8 @@ type ProjectWorkspaceSearchProps = {
   value?: string;
   // Receives the final input after a 250 ms typing pause.
   onChangeText?: (value: string) => void;
+  // Immediate updates for local previews; network search keeps its debounced callback.
+  onDraftChange?: (value: string) => void;
   accessory?: ReactNode;
   children?: ReactNode;
 };
@@ -48,6 +56,7 @@ export const ProjectWorkspaceSearch = ({
   accessibilityLabel = "Search files",
   value,
   onChangeText,
+  onDraftChange,
   accessory,
   children,
 }: ProjectWorkspaceSearchProps) => {
@@ -161,7 +170,6 @@ export const ProjectWorkspaceSearch = ({
         if (finished) scheduleOnRN(finishClosing);
       },
     );
-    onChangeText?.("");
   };
 
   const morphStyle = useAnimatedStyle(() => ({
@@ -288,7 +296,8 @@ export const ProjectWorkspaceSearch = ({
                       value={query}
                       onChangeText={(text) => {
                         setQuery(text);
-                        handleDebouncedSearch(text);
+                        onDraftChange?.(text);
+                        if (onChangeText) handleDebouncedSearch(text);
                       }}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -296,7 +305,11 @@ export const ProjectWorkspaceSearch = ({
                       className="border-0 px-0 focus:border-transparent focus:outline-0"
                     />
                   </Animated.View>
-                  {accessory ? <Animated.View style={labelStyle}>{accessory}</Animated.View> : null}
+                  {accessory ? (
+                    <Animated.View style={labelStyle}>
+                      {accessory}
+                    </Animated.View>
+                  ) : null}
                 </View>
               </View>
             </Animated.View>

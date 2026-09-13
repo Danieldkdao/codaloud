@@ -16,6 +16,7 @@ import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { ProjectWorkspaceSearch } from "./project-workspace-search";
+import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-project-workspace-file-search";
 
 type SearchFilterRowProps = {
   label: string;
@@ -62,9 +63,7 @@ export const ProjectWorkspaceFileSearch = ({
   anchorRef: RefObject<View | null>;
 }) => {
   const [open, setOpen] = useState(false);
-  // Preview state only: neither option changes workspace requests yet.
-  const [title, setTitle] = useState(false);
-  const [content, setContent] = useState(false);
+  const { query, setQuery, title, setTitle, content, setContent } = useProjectWorkspaceFileSearch();
   const card = useThemeColor("card");
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -77,6 +76,8 @@ export const ProjectWorkspaceFileSearch = ({
     <ProjectWorkspaceSearch
       anchorRef={anchorRef}
       onOpenChange={onSearchOpenChange}
+      value={query}
+      onDraftChange={setQuery}
       {...formatWorkspaceSearch("files")}
       accessory={
         <Pressable

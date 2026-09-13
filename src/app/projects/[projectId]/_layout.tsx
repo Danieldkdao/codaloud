@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceCurrentFileProvider } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
+import { ProjectWorkspaceFileSearchProvider } from "@/features/projects/hooks/use-project-workspace-file-search";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectFileSaveRegistryProvider } from "@/features/projects/hooks/use-project-file-save";
 
@@ -22,19 +23,21 @@ const ProjectLayout = () => {
           <ProjectWorkspaceDockHeightProvider>
             <ProjectSetupGate>
               <ProjectFileSaveRegistryProvider projectId={projectId}>
-                <Tabs key={projectId} asChild options={{ backBehavior: "none" }}>
-                  <View className="flex-1 bg-background">
-                    <TabSlot style={{ flex: 1 }} />
-                    <TabList style={{ display: "none" }}>
-                      <TabTrigger name="project-index" href={{ pathname: "/projects/[projectId]", params: { projectId } }} />
-                      <TabTrigger name="files" href={{ pathname: "/projects/[projectId]/files", params: { projectId } }} />
-                      <TabTrigger name="code" href={{ pathname: "/projects/[projectId]/code", params: { projectId } }} />
-                      <TabTrigger name="git" href={{ pathname: "/projects/[projectId]/git", params: { projectId } }} />
-                      <TabTrigger name="agent" href={{ pathname: "/projects/[projectId]/agent", params: { projectId } }} />
-                    </TabList>
-                    <ProjectWorkspaceDock />
-                  </View>
-                </Tabs>
+                <ProjectWorkspaceFileSearchProvider key={projectId}>
+                  <Tabs key={projectId} asChild options={{ backBehavior: "none" }}>
+                    <View className="flex-1 bg-background">
+                      <TabSlot style={{ flex: 1 }} />
+                      <TabList style={{ display: "none" }}>
+                        <TabTrigger name="project-index" href={{ pathname: "/projects/[projectId]", params: { projectId } }} />
+                        <TabTrigger name="files" href={{ pathname: "/projects/[projectId]/files", params: { projectId } }} />
+                        <TabTrigger name="code" href={{ pathname: "/projects/[projectId]/code", params: { projectId } }} />
+                        <TabTrigger name="git" href={{ pathname: "/projects/[projectId]/git", params: { projectId } }} />
+                        <TabTrigger name="agent" href={{ pathname: "/projects/[projectId]/agent", params: { projectId } }} />
+                      </TabList>
+                      <ProjectWorkspaceDock />
+                    </View>
+                  </Tabs>
+                </ProjectWorkspaceFileSearchProvider>
               </ProjectFileSaveRegistryProvider>
             </ProjectSetupGate>
           </ProjectWorkspaceDockHeightProvider>

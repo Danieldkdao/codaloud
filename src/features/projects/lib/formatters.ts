@@ -1,4 +1,4 @@
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
@@ -274,4 +274,24 @@ export const formatWorkspaceSearch = (tab: string | undefined) => {
     default:
       return { placeholder: "Search Files", accessibilityLabel: "Search files" };
   }
+};
+
+export const formatProjectFileSearchScope = (scope: ProjectFileSearchScope) => {
+  switch (scope) {
+    case "all": return "Title & content";
+    case "title": return "File title";
+    case "content": return "File content";
+  }
+};
+
+export const formatProjectFileMatchCount = (count: number) => {
+  if (count >= 10) return "10+ matches found in this file";
+  return `${count} ${count === 1 ? "match" : "matches"} found in this file`;
+};
+
+export const formatProjectFileSearchCount = (count: number) => `${count} ${count === 1 ? "file" : "files"}`;
+
+export const formatProjectFileSearchPath = (path: string) => {
+  const separator = path.lastIndexOf("/");
+  return { name: path.slice(separator + 1), directory: separator < 0 ? "Workspace" : path.slice(0, separator) };
 };

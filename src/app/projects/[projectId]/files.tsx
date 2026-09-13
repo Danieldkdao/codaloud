@@ -10,6 +10,8 @@ import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-pr
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { formatProjectFileKind } from "@/features/projects/lib/formatters";
 import { ProjectFilesList } from "@/features/projects/components/project-files-list";
+import { ProjectFileSearchResults } from "@/features/projects/components/project-file-search-results";
+import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-project-workspace-file-search";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 import { getDirectoryFiles, isProjectFilePathWithin } from "@/features/projects/lib/files";
@@ -18,6 +20,7 @@ const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
   const currentFile = useProjectWorkspaceCurrentFile();
+  const fileSearch = useProjectWorkspaceFileSearch();
   const saves = useProjectFileSaveRegistry();
   const [currentDirectory, setCurrentDirectory] = useState("");
   const { query, creation, update, deletion } = useProjectFiles(projectId, currentDirectory);
@@ -34,6 +37,10 @@ const FilesScreen = () => {
           0,
           Math.max(0, currentDirectory.lastIndexOf("/")),
         );
+
+  if (fileSearch.isSearching) {
+    return <ProjectFileSearchResults key={`${fileSearch.query}:${fileSearch.scope}`} results={fileSearch.results} />;
+  }
 
   if (query.isPending) {
     return (

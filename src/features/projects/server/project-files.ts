@@ -3,10 +3,15 @@ import { createSandboxFile, deleteSandboxFile, readSandboxFileContent, readSandb
 import type { CreateProjectFileSchema, DeleteProjectFileSchema, SaveProjectFileContentSchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
 import type { CodeIntelligenceRequestSchema } from "@/features/projects/actions/code-intelligence-schemas";
 import { readSandboxCodeIntelligence } from "@/services/daytona/typescript";
+import { searchSandboxFiles } from "@/services/daytona/file-search";
+import type { ProjectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
 
 // Server tools can reuse these same operations with their verified user context.
 export const readUserProjectFiles = async (userId: string, projectId: string, path: string) =>
   readSandboxFiles(await getUserProjectWorkspace(userId, projectId), path);
+
+export const searchUserProjectFiles = async (userId: string, projectId: string, input: ProjectFileSearchQuerySchema, signal?: AbortSignal) =>
+  searchSandboxFiles(await getUserProjectWorkspace(userId, projectId), userId, input, signal);
 
 export const readUserProjectFileContent = async (userId: string, projectId: string, path: string) =>
   readSandboxFileContent(await getUserProjectWorkspace(userId, projectId), path);

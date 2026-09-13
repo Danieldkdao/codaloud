@@ -285,7 +285,7 @@ export const formatProjectFileSearchScope = (scope: ProjectFileSearchScope) => {
 };
 
 export const formatProjectFileMatchCount = (count: number) => {
-  if (count >= 10) return "10+ matches found in this file";
+  if (count >= 100) return "100+ matches found in this file";
   return `${count} ${count === 1 ? "match" : "matches"} found in this file`;
 };
 

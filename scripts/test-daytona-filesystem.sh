@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 if [[ "$(uname -s)" == "Linux" ]]; then
-  exec pnpm exec vitest run src/services/daytona/tests/filesystem.test.ts
+  exec pnpm exec vitest run "${@:-src/services/daytona/tests/filesystem.test.ts}"
 fi
 
 # Run the real Node command on Linux; mocking procfs on macOS cannot establish
@@ -25,4 +25,4 @@ container_id=$(docker run --rm -d --name "$container_name" \
   node:24-bookworm-slim sleep infinity)
 
 TMPDIR="$fixture_dir" CODALOUD_TEST_SANDBOX_CONTAINER="$container_name" \
-  pnpm exec vitest run src/services/daytona/tests/filesystem.test.ts
+  pnpm exec vitest run "${@:-src/services/daytona/tests/filesystem.test.ts}"

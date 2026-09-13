@@ -75,7 +75,7 @@ export type ProjectAgentActivityData = {
   target?: string;
 };
 
-export type ProjectFileSearchScope = "all" | "title" | "content";
+export type { ProjectFileSearchScope } from "./actions/file-search-schemas";
 
 export type ProjectFileSearchDocument = {
   path: string;

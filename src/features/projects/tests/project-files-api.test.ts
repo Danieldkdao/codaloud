@@ -2,10 +2,11 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { DELETE, GET, PATCH, POST } from "@/app/api/projects/[projectId]/files+api";
 import { SandboxFilesError } from "@/services/daytona/api";
 
-const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), read: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
+const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), read: vi.fn(), search: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/features/projects/server/projects", () => ({ confirmUserProjectOwnership: mocks.project }));
 vi.mock("@/services/daytona/filesystem", () => ({ readSandboxFiles: mocks.read, createSandboxFile: mocks.create, updateSandboxFile: mocks.update, deleteSandboxFile: mocks.delete }));
+vi.mock("@/services/daytona/file-search", () => ({ searchSandboxFiles: mocks.search }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "test-key" } }));
@@ -18,10 +19,72 @@ const request = (body = input) => new Request("https://codaloud.test/api/files",
   method: "POST", headers: { "Content-Type": "application/json", Cookie: "session=valid" }, body: JSON.stringify(body),
 });
 
+const searchRequest = (query = "search=needle") => new Request(`https://codaloud.test/api/files?${query}`);
+const searchCursor = "12345678-1234-4123-8123-123456789abc:10:" + "a".repeat(64);
+
+it("routes search through the owned workspace with default scope and ten-file pages", async () => {
+  const request = searchRequest();
+  const response = await GET(request, params);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(mocks.project).toHaveBeenCalledWith(userId, projectId);
+  expect(mocks.search).toHaveBeenCalledWith(
+    { projectId, sandboxId: "sandbox-id", allowInitialize: true }, userId,
+    { search: "needle", scope: "all", path: "", pageSize: 10 }, request.signal,
+  );
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect((await response.json()).data).toMatchObject({ files: [], nextCursor: null, totalCount: 0 });
+});
+
+it("passes search scope, folder and cursor together and preserves the page envelope", async () => {
+  mocks.search.mockResolvedValue({ files: [{ path: "src/test.ts", titleMatches: false, contentMatchCount: 150, contentSearched: true }],
+    nextCursor: searchCursor, totalCount: 20, skippedContentFiles: 0,
+    searchedAt: "2026-09-13T00:00:00.000Z", expiresAt: "2026-09-13T00:02:00.000Z" });
+  const query = new URLSearchParams({ search: "literal [x]", scope: "content", path: "src", pageSize: "5", cursor: searchCursor });
+  const response = await GET(searchRequest(query.toString()), params);
+  expect(mocks.search.mock.calls[0][2]).toEqual({ search: "literal [x]", scope: "content", path: "src", pageSize: 5, cursor: searchCursor });
+  expect((await response.json()).data).toMatchObject({ nextCursor: searchCursor, totalCount: 20, files: [{ contentMatchCount: 150 }] });
+});
+
+it("rejects invalid or ambiguous search parameters without provider work", async () => {
+  for (const query of ["search=", "search=%20", "search=x&scope=invalid", "search=x&pageSize=0", "search=x&pageSize=101",
+    "search=x&pageSize=1.5", "search=x&cursor=bad", "search=x&path=../outside", "search=x&search=y", "cursor=bad", "scope=content", "pageSize=10"]) {
+    const response = await GET(searchRequest(query), params);
+    expect(response.status, query).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  }
+  expect(mocks.search).not.toHaveBeenCalled();
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+
+it("enforces authentication and ownership for every search page", async () => {
+  mocks.user.mockResolvedValue({ userId: null });
+  expect((await GET(searchRequest(), params)).status).toBe(401);
+  expect(mocks.project).not.toHaveBeenCalled();
+  mocks.user.mockResolvedValue({ userId });
+  for (const [value, status] of [[null, 404], [{ ...project, deletionRequested: true }, 409], [{ ...project, setupStatus: "pending" }, 409]] as const) {
+    mocks.project.mockResolvedValue(value);
+    expect((await GET(searchRequest("search=x&cursor=" + searchCursor), params)).status).toBe(status);
+  }
+  expect(mocks.search).not.toHaveBeenCalled();
+});
+
+it("returns actionable search session failures without caching them", async () => {
+  for (const [status, code] of [[410, "SEARCH_SESSION_EXPIRED"], [409, "SEARCH_WORKSPACE_CHANGED"], [413, "SEARCH_LIMIT_EXCEEDED"]] as const) {
+    mocks.search.mockRejectedValue(new SandboxFilesError(status, code, "Restart the search."));
+    const response = await GET(searchRequest(), params);
+    expect(response.status).toBe(status);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect((await response.json()).code).toBe(code);
+  }
+});
+
 beforeEach(() => {
   mocks.user.mockReset().mockResolvedValue({ userId });
   mocks.project.mockReset().mockResolvedValue(project);
   mocks.read.mockReset().mockResolvedValue([]);
+  mocks.search.mockReset().mockResolvedValue({ files: [], nextCursor: null, totalCount: 0, skippedContentFiles: 0,
+    searchedAt: "2026-09-13T00:00:00.000Z", expiresAt: "2026-09-13T00:02:00.000Z" });
   mocks.create.mockReset().mockResolvedValue({ name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 0, modifiedAt: "2026-09-10T00:00:00.000Z" });
   mocks.delete.mockReset().mockResolvedValue({ name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 12 });
   mocks.update.mockReset().mockResolvedValue({ name: "hello.txt", path: "notes/hello.txt", isDir: false, size: 12 });

@@ -145,7 +145,7 @@ it("applies both file filters immediately and retains selections when search reo
   expect(container.querySelector('[role="dialog"]')?.textContent).not.toContain("6 files");
   expect(container.querySelector('[data-files-screen]')?.textContent).not.toContain("Original directory");
   expect(container.textContent).not.toMatch(/Mock preview|Title & content/);
-  expect(container.textContent).toContain("10+ matches found in this file");
+  expect(container.textContent).toContain("12 matches found in this file");
   click("Search filters");
   const titleSwitch = () => container.querySelector('[aria-label="File title"]');
   const contentSwitch = () => container.querySelector('[aria-label="File content"]');

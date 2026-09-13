@@ -38,10 +38,13 @@ describe("mock workspace search", () => {
     expect(searchProjectFiles(files, "[a-z]", "content")[0]?.file.path).toBe("project/unrelated.ts");
   });
 
-  it("shows exact counts below ten and a compact cap at ten", () => {
+  it("shows exact counts below 100 and a compact cap at 100", () => {
     expect(formatProjectFileMatchCount(1)).toBe("1 match found in this file");
     expect(formatProjectFileMatchCount(9)).toBe("9 matches found in this file");
-    expect(formatProjectFileMatchCount(10)).toBe("10+ matches found in this file");
-    expect(formatProjectFileMatchCount(12)).toBe("10+ matches found in this file");
+    expect(formatProjectFileMatchCount(10)).toBe("10 matches found in this file");
+    expect(formatProjectFileMatchCount(12)).toBe("12 matches found in this file");
+    expect(formatProjectFileMatchCount(99)).toBe("99 matches found in this file");
+    expect(formatProjectFileMatchCount(100)).toBe("100+ matches found in this file");
+    expect(formatProjectFileMatchCount(150)).toBe("100+ matches found in this file");
   });
 });

@@ -74,6 +74,8 @@ const FilesScreen = () => {
         scope={fileSearch.scope}
         results={searchResults}
         totalCount={search.data?.pages[0]?.totalCount ?? 0}
+        // Every page repeats snapshot-wide coverage; use it once, not a sum.
+        skippedContentFiles={search.data?.pages[0]?.skippedContentFiles ?? 0}
         isLoading={!search.validationError && (isDebouncing || search.isPending)}
         isFetching={search.isFetching}
         isFetchingNextPage={search.isFetchingNextPage}

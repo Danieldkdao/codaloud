@@ -319,6 +319,16 @@ export const formatProjectFileMatchCount = (count: number) => {
 
 export const formatProjectFileSearchCount = (count: number) => `${count} ${count === 1 ? "file" : "files"}`;
 
+export const formatProjectFileSearchCoverage = (scope: ProjectFileSearchScope, skippedContentFiles: number) => {
+  const hasSkippedContent = scope !== "title" && skippedContentFiles > 0;
+  return {
+    notice: hasSkippedContent
+      ? `Contents of ${formatProjectFileSearchCount(skippedContentFiles)} could not be searched.`
+      : null,
+    emptyTitle: hasSkippedContent ? "No matches in searched files" : "No matching files",
+  };
+};
+
 export const formatProjectFileSearchPath = (path: string) => {
   const separator = path.lastIndexOf("/");
   return { name: path.slice(separator + 1), directory: separator < 0 ? "Workspace" : path.slice(0, separator) };

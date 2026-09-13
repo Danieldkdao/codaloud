@@ -13,6 +13,7 @@ import { PText } from "@/components/ui/text";
 import {
   formatProjectFileMatchCount,
   formatProjectFileSearchCount,
+  formatProjectFileSearchCoverage,
   formatProjectFileSearchPath,
   formatProjectFileSearchTitle,
 } from "@/features/projects/lib/formatters";
@@ -28,6 +29,7 @@ type ProjectFileSearchResultsProps = {
   scope: ProjectFileSearchScope;
   results: ProjectFileSearchEntrySchema[];
   totalCount: number;
+  skippedContentFiles: number;
   isLoading: boolean;
   isFetching: boolean;
   isFetchingNextPage: boolean;
@@ -44,6 +46,7 @@ export const ProjectFileSearchResults = ({
   scope,
   results,
   totalCount,
+  skippedContentFiles,
   isLoading,
   isFetching,
   isFetchingNextPage,
@@ -56,6 +59,7 @@ export const ProjectFileSearchResults = ({
 }: ProjectFileSearchResultsProps) => {
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
+  const coverage = formatProjectFileSearchCoverage(scope, skippedContentFiles);
   const screenStyle = {
     paddingTop: 8,
     paddingLeft: 16 + insets.left,
@@ -113,13 +117,18 @@ export const ProjectFileSearchResults = ({
 
   return (
     <View className="flex-1 bg-background" style={screenStyle}>
-      <View className="border-b border-border px-3 pb-3">
+      <View className="gap-2 border-b border-border px-3 pb-3">
         <PText
           className="text-base font-semibold"
           accessibilityLiveRegion="polite"
         >
           {formatProjectFileSearchCount(totalCount)}
         </PText>
+        {coverage.notice ? (
+          <PText className="text-base text-muted-foreground" accessibilityLiveRegion="polite">
+            {coverage.notice}
+          </PText>
+        ) : null}
       </View>
       <FlatList
         data={results}
@@ -145,7 +154,7 @@ export const ProjectFileSearchResults = ({
               className="text-muted-foreground"
               accessible={false}
             />
-            <PText className="text-lg font-medium">No matching files</PText>
+            <PText className="text-center text-lg font-medium">{coverage.emptyTitle}</PText>
             <PText className="text-center text-base text-muted-foreground">
               Try another search or change the filters.
             </PText>

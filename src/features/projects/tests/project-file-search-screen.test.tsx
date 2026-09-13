@@ -258,6 +258,51 @@ it("shows the empty state only after a successful empty search", async () => {
   await applySearch("absent");
   expect(container.textContent).toContain("No matching files");
   expect(container.textContent).toContain("0 files");
+  expect(container.textContent).not.toContain("could not be searched");
+  expect(container.textContent).not.toContain("No matches in searched files");
+});
+
+it.each([false, true])("discloses incomplete coverage for empty results (content only: %s)", async (contentOnly) => {
+  if (contentOnly) act(() => search.setContent(true));
+  mocks.read.mockResolvedValueOnce({ ...page("unused"), files: [], totalCount: 0, skippedContentFiles: 1 });
+  await applySearch("absent");
+  expect(mocks.read.mock.lastCall?.[1].scope).toBe(contentOnly ? "content" : "all");
+  expect(container.textContent).toContain("Contents of 1 file could not be searched.");
+  expect(container.textContent).toContain("No matches in searched files");
+  expect(container.textContent).not.toContain("No matching files");
+  expect(container.textContent).toContain("0 files");
+});
+
+it("counts skipped content once across pages, keeps title matches, and updates coverage on refresh", async () => {
+  mocks.read.mockResolvedValueOnce({
+    ...page("src/live.ts", cursor),
+    files: [{ path: "src/live.ts", titleMatches: true, contentMatchCount: 0, contentSearched: false }],
+    skippedContentFiles: 3,
+  });
+  await applySearch("live");
+  expect(container.textContent).toContain("live.ts");
+  expect(container.textContent).toContain("Contents of 3 files could not be searched.");
+  mocks.read.mockResolvedValueOnce({ ...page("src/second.ts"), skippedContentFiles: 3 });
+  await click("List end");
+  expect(container.textContent).toContain("live.ts");
+  expect(container.textContent).toContain("second.ts");
+  expect(container.textContent?.match(/Contents of 3 files could not be searched\./g)).toHaveLength(1);
+  expect(container.textContent).not.toContain("Contents of 6 files");
+  mocks.read.mockResolvedValueOnce(page("src/fresh.ts"));
+  await click("Pull to refresh");
+  expect(container.textContent).toContain("fresh.ts");
+  expect(container.textContent).not.toContain("second.ts");
+  expect(container.textContent).not.toContain("could not be searched");
+});
+
+it("omits content coverage feedback for title-only searches", async () => {
+  act(() => search.setTitle(true));
+  mocks.read.mockResolvedValueOnce({ ...page("unused"), files: [], totalCount: 0, skippedContentFiles: 3 });
+  await applySearch("absent");
+  expect(mocks.read.mock.lastCall?.[1].scope).toBe("title");
+  expect(container.textContent).toContain("No matching files");
+  expect(container.textContent).not.toContain("could not be searched");
+  expect(container.textContent).not.toContain("No matches in searched files");
 });
 
 it("shows a reconnect message when the initial request is paused offline", async () => {

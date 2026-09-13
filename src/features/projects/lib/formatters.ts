@@ -1,5 +1,5 @@
 import type { CodeEditorMatchState } from "@/components/code-editor-matches";
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
+import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectChangeData, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
@@ -200,6 +200,30 @@ export const formatProjectChangeLines = (additions: number, deletions: number) =
   additions: `+${additions}`,
   deletions: `−${deletions}`,
 });
+
+export const formatProjectChangeStatus = (status: ProjectChangeData["status"]) => {
+  switch (status) {
+    case "modified": return "Modified";
+    case "deleted": return "Deleted";
+    case "added": return "Added";
+    case "untracked": return "New file";
+  }
+};
+
+export const formatProjectDiffLine = (line: string) => {
+  switch (line[0]) {
+    case "+": return { className: "bg-success text-success-foreground", label: `Added: ${line.slice(1)}` };
+    case "-": return { className: "bg-destructive/10 text-destructive", label: `Removed: ${line.slice(1)}` };
+    default: return { className: "bg-card/25 text-foreground", label: line };
+  }
+};
+
+export const formatProjectDiffAccessibility = (additions: number, deletions: number) => ({
+  additions: `${additions} added lines`,
+  deletions: `${deletions} removed lines`,
+});
+
+export const formatProjectDiffLabel = (path: string) => `Diff for ${path}`;
 
 export const formatCommitDate = (committedAt: string): string =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));

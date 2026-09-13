@@ -13,6 +13,10 @@ export type ProjectChangeData = {
   deletions: number;
 };
 
+export type ProjectWorkspaceDiffFile = ProjectChangeData & {
+  patch: string;
+};
+
 // The API serializes database timestamps as ISO strings.
 export type ProjectResponseData = Omit<
   ProjectSelectData,

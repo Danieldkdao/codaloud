@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: state.projectId }),
+  useSegments: () => ["projects", "[projectId]", "files"],
   useRouter: () => ({ dismissTo: state.dismissTo }),
   Stack: { Screen: ({ options }: { options: typeof state.headerOptions }) => { state.headerOptions = options; return null; } },
 }));

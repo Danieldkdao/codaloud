@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useSegments } from "expo-router";
 import { TabList, TabSlot, Tabs, TabTrigger } from "expo-router/ui";
 import { View } from "react-native";
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
@@ -15,6 +15,8 @@ export const unstable_settings = { initialRouteName: "files" };
 
 const ProjectLayout = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const segments = useSegments();
+  const isWorkspaceDiff = segments[2] === "git" && segments[3] === "workspace-diff";
 
   return (
     <ProjectWorkspaceCurrentFileProvider projectId={projectId}>
@@ -34,7 +36,7 @@ const ProjectLayout = () => {
                         <TabTrigger name="git" href={{ pathname: "/projects/[projectId]/git", params: { projectId } }} />
                         <TabTrigger name="agent" href={{ pathname: "/projects/[projectId]/agent", params: { projectId } }} />
                       </TabList>
-                      <ProjectWorkspaceDock />
+                      {!isWorkspaceDiff ? <ProjectWorkspaceDock /> : null}
                     </View>
                   </Tabs>
                 </ProjectWorkspaceFileSearchProvider>

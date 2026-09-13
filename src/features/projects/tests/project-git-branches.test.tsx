@@ -5,7 +5,7 @@ import { act, createElement, useImperativeHandle, useState, useRef, type ReactNo
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
-import GitScreen from "@/app/projects/[projectId]/git";
+import GitScreen from "@/app/projects/[projectId]/git/index";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit-schemas";
@@ -43,8 +43,9 @@ vi.mock("@/services/github/hooks/use-github-repository-branches", () => ({ useGi
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: { user: { id: live.userId } }, isPending: false, error: null }) }));
 vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const switchTab = vi.fn((name: string) => { activeTab = name; });
-vi.mock("expo-router", () => ({ usePathname: () => `/projects/${live.projectId}/${activeTab}`, useLocalSearchParams: () => ({ projectId: live.projectId }) }));
+vi.mock("expo-router", () => ({ useRouter: () => navigation, usePathname: () => `/projects/${live.projectId}/${activeTab}`, useLocalSearchParams: () => ({ projectId: live.projectId }) }));
 vi.mock("expo-router/ui", () => ({
   TabTrigger: ({ children }: { children: ReactNode }) => children,
   useTabTrigger: () => ({ switchTab }),
@@ -406,7 +407,7 @@ it("shows changes immediately and keeps tracked and untracked selections without
   expect(checked("Select all changes")).toBe("mixed");
   click("Select all changes");
   expect(checked("Select untracked changes")).toBe("true");
-  click("Include src/app/projects/[projectId]/git.tsx");
+  click("Include src/app/projects/[projectId]/git/index.tsx");
   expect(checked("Select tracked changes")).toBe("mixed");
   click("Commit History");
   click("Changes");
@@ -416,6 +417,19 @@ it("shows changes immediately and keeps tracked and untracked selections without
   const before = container.textContent;
   act(() => commit!.click());
   expect(container.textContent).toBe(before);
+});
+
+it("opens the full workspace diff separately without changing commit selection", () => {
+  expect(container.textContent).not.toContain("Workspace diff");
+  expect(container.textContent).not.toContain("Include in commit");
+  expect(container.textContent).not.toContain("Hide workspace diff");
+  click("Select tracked changes");
+  click("View Full Diff");
+  expect(navigation.push).toHaveBeenCalledWith({
+    pathname: "/projects/[projectId]/git/workspace-diff", params: { projectId: live.projectId },
+  });
+  expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(container.querySelector('[aria-label="Select untracked changes"]')?.getAttribute("aria-checked")).toBe("false");
 });
 
 it("renders the empty state from an empty changes list", () => {

@@ -14,7 +14,9 @@ import {
   formatProjectFileMatchCount,
   formatProjectFileSearchCount,
   formatProjectFileSearchPath,
+  formatProjectFileSearchTitle,
 } from "@/features/projects/lib/formatters";
+import type { ProjectFileSearchScope } from "@/features/projects/types";
 import type { ProjectFileSearchEntrySchema } from "@/features/projects/actions/file-search-schemas";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +24,8 @@ import { ProjectFileEntrance } from "@/features/projects/components/project-file
 import { projectFileSearchLimits } from "@/features/projects/constants";
 
 type ProjectFileSearchResultsProps = {
+  query: string;
+  scope: ProjectFileSearchScope;
   results: ProjectFileSearchEntrySchema[];
   totalCount: number;
   isLoading: boolean;
@@ -36,6 +40,8 @@ type ProjectFileSearchResultsProps = {
 };
 
 export const ProjectFileSearchResults = ({
+  query,
+  scope,
   results,
   totalCount,
   isLoading,
@@ -147,7 +153,9 @@ export const ProjectFileSearchResults = ({
           const { name, directory } = formatProjectFileSearchPath(item.path);
           return (
             // Restart the stagger for each page without delaying later pages longer.
-            <ProjectFileEntrance index={index % projectFileSearchLimits.pageSize}>
+            <ProjectFileEntrance
+              index={index % projectFileSearchLimits.pageSize}
+            >
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={item.path}
@@ -167,7 +175,19 @@ export const ProjectFileSearchResults = ({
                     numberOfLines={1}
                     ellipsizeMode="middle"
                   >
-                    {name}
+                    {formatProjectFileSearchTitle(name, query, scope).map(
+                      (part, index) =>
+                        part.highlighted ? (
+                          <PText
+                            key={index}
+                            className="text-lg font-medium bg-primary/75 text-primary-foreground"
+                          >
+                            {part.text}
+                          </PText>
+                        ) : (
+                          part.text
+                        ),
+                    )}
                   </PText>
                   <PText
                     className="text-base text-muted-foreground"

@@ -1,10 +1,10 @@
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { ProjectIcon } from "@/components/project-icon";
 import { Icon } from "@/components/ui/icon";
-import { CodeText, PText } from "@/components/ui/text";
+import { PText } from "@/components/ui/text";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import { diagnosticSeverities } from "@/features/projects/actions/code-intelligence-schemas";
-import { formatCodeAnalysisLabel, formatCodeDiagnostic, formatCodeDiagnosticCount, formatProjectFileSaveStatus } from "@/features/projects/lib/formatters";
+import { formatCodeAnalysisLabel, formatCodeDiagnostic, formatCodeDiagnosticCount, formatProjectFileSaveStatus, formatProjectFileSearchPath } from "@/features/projects/lib/formatters";
 import { useProjectFileSave, type ProjectFileSaveStatus } from "@/features/projects/hooks/use-project-file-save";
 
 export const ProjectCodeHeader = ({ filePath, fileStatus, analysis, onShowProblems }: {
@@ -16,12 +16,16 @@ export const ProjectCodeHeader = ({ filePath, fileStatus, analysis, onShowProble
   const save = useProjectFileSave();
   const status = fileStatus ?? save?.status ?? "loading";
   const presentation = formatProjectFileSaveStatus(status);
+  const { name, directory } = formatProjectFileSearchPath(filePath);
   const canRetry = !fileStatus && status === "error" && Boolean(save);
   const IndicatorContainer = canRetry ? Pressable : View;
   return (
-    <View className="min-h-14 flex-row items-center gap-2.5 border-b border-border px-4">
+    <View className="min-h-18 flex-row items-center gap-2.5 border-b border-border px-4 py-2">
       <ProjectIcon name={filePath} isDirectory={false} />
-      <CodeText className="min-w-0 flex-1 text-foreground" numberOfLines={1} ellipsizeMode="middle">{filePath}</CodeText>
+      <View className="min-w-0 flex-1">
+        <PText className="text-lg font-medium text-foreground" numberOfLines={1} ellipsizeMode="middle">{name}</PText>
+        <PText className="text-base text-muted-foreground" numberOfLines={1} ellipsizeMode="middle">{directory}</PText>
+      </View>
       {analysis && analysis.status !== "unsupported" ? (
         <Pressable
           accessibilityRole="button"

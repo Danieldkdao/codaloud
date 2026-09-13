@@ -1,3 +1,4 @@
+import type { CodeEditorMatchState } from "@/components/code-editor-matches";
 import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
@@ -294,4 +295,26 @@ export const formatProjectFileSearchCount = (count: number) => `${count} ${count
 export const formatProjectFileSearchPath = (path: string) => {
   const separator = path.lastIndexOf("/");
   return { name: path.slice(separator + 1), directory: separator < 0 ? "Workspace" : path.slice(0, separator) };
+};
+
+export const formatProjectFileSearchTitle = (name: string, query: string, scope: ProjectFileSearchScope) => {
+  const search = query.trim();
+  if (scope === "content" || !search) return [{ text: name, highlighted: false }];
+
+  // Escape the literal query so filenames such as [id].tsx are not regex patterns.
+  const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return name.split(new RegExp(`(${escapedSearch})`, "gi")).map((text, index) => ({
+    text,
+    highlighted: index % 2 === 1,
+  }));
+};
+
+
+export const formatProjectFilePreviewMatches = (state: CodeEditorMatchState | null) => {
+  if (state === null) return { label: "…", accessibilityLabel: "Finding matches" };
+  if (state.activeIndex === null || state.total === 0) return { label: "No matches", accessibilityLabel: "No matches in this file" };
+  return {
+    label: `${state.activeIndex + 1} / ${state.total}`,
+    accessibilityLabel: `Match ${state.activeIndex + 1} of ${state.total}`,
+  };
 };

@@ -9,6 +9,8 @@ import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 
 const state = vi.hoisted(() => ({
   projectId: "project-one",
+  dismissTo: vi.fn(),
+  headerOptions: {} as { headerBackVisible?: boolean; headerLeft?: () => ReactNode },
   readFiles: vi.fn(),
   query: {
     data: undefined as { name: string; setupStatus: string; sandboxId: string | null } | undefined,
@@ -20,11 +22,14 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: state.projectId }),
-  Stack: { Screen: () => null },
+  useRouter: () => ({ dismissTo: state.dismissTo }),
+  Stack: { Screen: ({ options }: { options: typeof state.headerOptions }) => { state.headerOptions = options; return null; } },
 }));
 vi.mock("react-native", () => ({
   View: ({ children, style }: { children?: ReactNode; style?: Record<string, unknown> }) => createElement("div", { style }, children),
+  Pressable: ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress: () => void; accessibilityLabel?: string }) => <button aria-label={accessibilityLabel} onClick={onPress}>{children}</button>,
 }));
+vi.mock("@/components/ui/icon", () => ({ Icon: ({ name }: { name: string }) => <span data-icon={name} /> }));
 vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 60, bottom: 34, left: 0, right: 0 }),
 }));
@@ -72,8 +77,19 @@ beforeEach(() => {
   root = createRoot(container);
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   state.projectId = "project-one";
+  state.dismissTo.mockClear();
   state.readFiles.mockReset().mockResolvedValue([]);
   Object.assign(state.query, { data: undefined, isError: false, isFetching: false });
+});
+
+it("provides an explicit home action while the workspace is loading", async () => {
+  await render();
+  expect(state.headerOptions.headerBackVisible).toBe(false);
+  act(() => root.render(state.headerOptions.headerLeft?.()));
+  const home = container.querySelector<HTMLButtonElement>('[aria-label="Home"]');
+  expect(home?.querySelector('[data-icon="home"]')).not.toBeNull();
+  act(() => home!.click());
+  expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
 });
 afterEach(() => {
   act(() => root.unmount());

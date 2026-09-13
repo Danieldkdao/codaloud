@@ -1,16 +1,19 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
+import { act, createElement, createRef } from "react";
 import { readFileSync } from "node:fs";
 import { createRoot, type Root } from "react-dom/client";
 import { EditorView } from "codemirror";
-import { undo } from "@codemirror/commands";
-import { LanguageDescription, type LanguageSupport } from "@codemirror/language";
+import { deleteCharBackward, selectAll, undo } from "@codemirror/commands";
+import { LanguageDescription, foldEffect, foldedRanges, type LanguageSupport } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import { acceptCompletion, currentCompletions, startCompletion } from "@codemirror/autocomplete";
 import { forceLinting, forEachDiagnostic, openLintPanel } from "@codemirror/lint";
 import type { CodeEditorAnalysis, CodeEditorAnalysisRequest } from "@/components/code-editor-intelligence";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import CodeEditor from "@/components/code-editor";
+import { codeEditorMatches } from "@/components/code-editor-matches";
+import CodeEditor, { type CodeEditorRef } from "@/components/code-editor";
+
+vi.mock("expo/dom", async () => ({ useDOMImperativeHandle: (await import("react")).useImperativeHandle }));
 
 const fontState = vi.hoisted(() => ({ loaded: true, error: null as Error | null }));
 vi.mock("expo-font", () => ({ useFonts: () => [fontState.loaded, fontState.error] }));
@@ -60,6 +63,45 @@ it("preserves an existing CRLF document's line endings when saving edits", async
   await act(async () => root.render(createElement(CodeEditor, { filename: "notes.txt", initialValue: "first\r\nsecond\r\n", onChange })));
   act(() => editor().dispatch({ changes: { from: 0, insert: "edited " } }));
   expect(onChange).toHaveBeenCalledExactlyOnceWith("edited first\r\nsecond\r\n");
+});
+
+it("keeps read-only contents selectable while blocking editing commands", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    filename: "notes.txt", initialValue: "original", readOnly: true, onChange,
+  })));
+  const view = editor();
+  expect(view.contentDOM.getAttribute("contenteditable")).toBe("false");
+  expect(view.contentDOM.getAttribute("aria-readonly")).toBe("true");
+  expect(view.contentDOM.tabIndex).toBe(0);
+  act(() => { selectAll(view); });
+  expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("original");
+  act(() => { expect(deleteCharBackward(view)).toBe(false); });
+  expect(view.state.doc.toString()).toBe("original");
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+it("toggles read-only without resetting the document, selection, or undo history", async () => {
+  const renderMode = async (readOnly?: boolean) => {
+    await act(async () => root.render(createElement(CodeEditor, {
+      filename: "notes.txt", initialValue: "original", readOnly,
+    })));
+  };
+  await renderMode();
+  const view = editor();
+  expect(view.contentDOM.getAttribute("contenteditable")).toBe("true");
+  act(() => view.dispatch({ changes: { from: 0, insert: "edited " }, selection: { anchor: 7 } }));
+  await renderMode(true);
+  expect(editor()).toBe(view);
+  expect(view.state.doc.toString()).toBe("edited original");
+  expect(view.state.selection.main.head).toBe(7);
+  act(() => { expect(undo(view)).toBe(false); });
+  await renderMode(false);
+  expect(editor()).toBe(view);
+  expect(view.contentDOM.getAttribute("contenteditable")).toBe("true");
+  expect(view.contentDOM.getAttribute("aria-readonly")).toBe("false");
+  act(() => { expect(undo(view)).toBe(true); });
+  expect(view.state.doc.toString()).toBe("original");
 });
 
 it("offers TypeScript object members at the cursor", async () => {
@@ -276,4 +318,104 @@ it("does not report readiness for an editor removed during initialization", asyn
   await act(async () => { root.render(null); });
   await act(async () => { finishLanguage({ extension: [] } as unknown as LanguageSupport); });
   expect(onReady).not.toHaveBeenCalled();
+});
+
+
+it("highlights literal case-insensitive terms, ignores empty duplicates, and navigates without editing or focusing", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onMatchesChange = vi.fn().mockResolvedValue(undefined);
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "notes.txt", initialValue: "A.b aXb a.B end", readOnly: true,
+    matches: ["a.b", "A.B", "", "end"], onMatchesChange, onChange,
+  })));
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 3, activeIndex: 0 });
+  expect(container.querySelectorAll(".cm-fileMatch")).toHaveLength(3);
+  expect(container.querySelector(".cm-fileMatch-active")?.textContent).toBe("A.b");
+  const selection = editor().state.selection;
+  act(() => ref.current!.previousMatch());
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 3, activeIndex: 2 });
+  expect(container.querySelector(".cm-fileMatch-active")?.textContent).toBe("end");
+  act(() => { ref.current!.nextMatch(); ref.current!.nextMatch(); });
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 3, activeIndex: 1 });
+  expect(editor().state.selection).toBe(selection);
+  expect(editor().hasFocus).toBe(false);
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+it("updates matches after edits and undo, without rescanning on navigation or losing the document", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onMatchesChange = vi.fn().mockResolvedValue(undefined);
+  const show = (matches: string[]) => act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "notes.txt", initialValue: "cat dog cat", matches, onMatchesChange,
+  })));
+  await show(["cat"]);
+  const view = editor();
+  act(() => view.dispatch({ changes: { from: 0, to: 3, insert: "dog" } }));
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 1, activeIndex: 0 });
+  await show(["dog"]);
+  expect(editor()).toBe(view);
+  expect(view.state.doc.toString()).toBe("dog dog cat");
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 2, activeIndex: 0 });
+  const ranges = view.state.field(codeEditorMatches).ranges;
+  act(() => ref.current!.nextMatch());
+  expect(view.state.field(codeEditorMatches).ranges).toBe(ranges);
+  const reports = onMatchesChange.mock.calls.length;
+  await show(["dog"]);
+  act(() => view.dispatch({ selection: { anchor: 1 } }));
+  expect(onMatchesChange).toHaveBeenCalledTimes(reports);
+  act(() => undo(view));
+  expect(view.state.doc.toString()).toBe("cat dog cat");
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 1, activeIndex: 0 });
+  await show([]);
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 0, activeIndex: null });
+  expect(container.querySelector(".cm-fileMatch")).toBeNull();
+  act(() => ref.current!.nextMatch());
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 0, activeIndex: null });
+});
+
+it("preserves original offsets for Unicode and matches across line breaks", async () => {
+  const onMatchesChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    filename: "notes.txt", initialValue: "😀İ start\nfinish", matches: ["start\nfinish"], onMatchesChange,
+  })));
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 1, activeIndex: 0 });
+  expect(Array.from(container.querySelectorAll(".cm-fileMatch-active")).map((node) => node.textContent).join("\n")).toBe("start\nfinish");
+});
+
+it("keeps exact totals above 100 and resets navigation for a new file", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onMatchesChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "many.txt", initialValue: "x ".repeat(125), matches: ["x"], onMatchesChange,
+  })));
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 125, activeIndex: 0 });
+  act(() => ref.current!.previousMatch());
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 125, activeIndex: 124 });
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "empty.txt", initialValue: "", matches: ["x"], onMatchesChange,
+  })));
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 0, activeIndex: null });
+});
+
+
+it("keeps literal matching distinct from Unicode compatibility normalization", async () => {
+  const onMatchesChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    filename: "notes.txt", initialValue: "café cafe ﬁ fi", matches: ["cafe", "fi"], onMatchesChange,
+  })));
+  expect(onMatchesChange).toHaveBeenLastCalledWith({ total: 2, activeIndex: 0 });
+});
+
+
+it("reveals a match hidden inside a folded section", async () => {
+  const ref = createRef<CodeEditorRef>();
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "notes.txt", initialValue: "target\n{\n  target\n}\n", matches: ["target"], readOnly: true,
+  })));
+  act(() => editor().dispatch({ effects: foldEffect.of({ from: 8, to: 18 }) }));
+  expect(foldedRanges(editor().state).size).toBe(1);
+  act(() => ref.current!.nextMatch());
+  expect(foldedRanges(editor().state).size).toBe(0);
+  expect(container.querySelector(".cm-fileMatch-active")?.textContent).toBe("target");
 });

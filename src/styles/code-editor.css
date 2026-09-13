@@ -56,3 +56,7 @@ body { background: var(--background); }
 .code-editor-host .cm-panel-lint li { min-height: 44px; }
 .code-editor-host .cm-panel-lint [aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }
 .code-editor-host .cm-panel-lint button[name=close] { min-width: 44px; min-height: 44px; color: var(--foreground); font-size: 20px; }
+
+.code-editor-host .cm-fileMatch { background: color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 3px; }
+.code-editor-host .cm-fileMatch-active { background: var(--primary); color: var(--primary-foreground); outline: 1px solid var(--primary); border-radius: 3px; }
+.code-editor-host .cm-fileMatch-active span { color: inherit; }

@@ -7,10 +7,10 @@ import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectWorkspaceFileSearchProvider, useProjectWorkspaceFileSearch } from "../hooks/use-project-workspace-file-search";
 import type { ProjectFileSearchEntrySchema } from "../actions/file-search-schemas";
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), browse: vi.fn(), navigate: vi.fn(), select: vi.fn() }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), browse: vi.fn(), navigate: vi.fn(), push: vi.fn(), select: vi.fn() }));
 vi.mock("../components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => <>{children}</> }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId }), useRouter: () => ({ navigate: mocks.navigate }) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId }), useRouter: () => ({ navigate: mocks.navigate, push: mocks.push }) }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
 vi.mock("../hooks/use-project-files", () => ({ useProjectFiles: (...args: unknown[]) => {
@@ -27,7 +27,7 @@ vi.mock("../components/project-files-list", () => ({ ProjectFilesList: ({ onDire
   <button onClick={() => onDirectoryPress("src")}>Original directory</button> }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
-vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children?: ReactNode }) => <span>{children}</span>, HeadingText: ({ children }: { children?: ReactNode }) => <span>{children}</span> }));
+vi.mock("@/components/ui/text", () => ({ PText: ({ children, className }: { children?: ReactNode; className?: string }) => <span className={className}>{children}</span>, HeadingText: ({ children }: { children?: ReactNode }) => <span>{children}</span> }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress, disabled }: { children: ReactNode; onPress: () => void; disabled?: boolean }) => <button disabled={disabled} onClick={onPress}>{children}</button> }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
@@ -72,7 +72,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.read.mockReset().mockResolvedValue(page("src/live.ts", cursor));
-  mocks.browse.mockClear(); mocks.navigate.mockClear(); mocks.select.mockClear();
+  mocks.browse.mockClear(); mocks.navigate.mockClear(); mocks.push.mockClear(); mocks.select.mockClear();
   client = new QueryClient();
   container = document.createElement("div");
   root = createRoot(container);
@@ -96,8 +96,9 @@ it("shows the folder without searching, then replaces it with loading and live r
   expect(container.textContent).toContain("23 files");
   expect(container.textContent).toContain("100+ matches found in this file");
   await click("src/live.ts");
-  expect(mocks.select).toHaveBeenCalledWith("src/live.ts");
-  expect(mocks.navigate).toHaveBeenCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId } });
+  expect(mocks.select).not.toHaveBeenCalled();
+  expect(mocks.navigate).not.toHaveBeenCalled();
+  expect(mocks.push).toHaveBeenCalledWith({ pathname: "/projects/[projectId]/files/preview", params: { projectId, filePath: "src/live.ts", search: "live" } });
   act(() => search.setQuery(""));
   expect(container.textContent).toContain("Original directory");
   expect(mocks.browse.mock.lastCall?.[1]).toBe("src");
@@ -112,6 +113,29 @@ it("hides old results during typing and restarts when filters change", async () 
   act(() => search.setTitle(true));
   await flush();
   expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "next", scope: "title", cursor: undefined });
+});
+
+it.each([[false, false], [true, false], [true, true], [false, true]])(
+  "highlights filename matches according to title/content filters (%s, %s)",
+  async (title, content) => {
+    mocks.read.mockResolvedValue(page("src/Live-live.ts"));
+    act(() => { search.setTitle(title); search.setContent(content); });
+    await applySearch(" LIVE ");
+    const row = container.querySelector('[aria-label="src/Live-live.ts"]')!;
+    expect(Array.from(row.querySelectorAll(".text-primary-foreground"), (part) => part.textContent))
+      .toEqual(content && !title ? [] : ["Live", "live"]);
+    expect(row.textContent).toContain("Live-live.ts");
+  },
+);
+
+it("treats punctuation literally and does not highlight directory-only matches", async () => {
+  mocks.read.mockResolvedValue({ ...page("src/[id].tsx"), files: [
+    { ...page("src/[id].tsx").files[0] },
+    { ...page("[id]/index.tsx").files[0] },
+  ] });
+  await applySearch("[ID]");
+  expect(Array.from(container.querySelectorAll(".text-primary-foreground"), (part) => part.textContent)).toEqual(["[id]"]);
+  expect(container.querySelector('[aria-label="[id]/index.tsx"]')?.querySelector(".text-primary-foreground")).toBeNull();
 });
 
 it("appends pages, guards duplicate requests and retains rows during refresh", async () => {
@@ -172,4 +196,12 @@ it("shows a reconnect message when the initial request is paused offline", async
   onlineManager.setOnline(true);
   await flush();
   expect(container.textContent).toContain("live.ts");
+});
+
+
+it("keeps title-only searches out of the preview content highlights", async () => {
+  act(() => search.setTitle(true));
+  await applySearch("live");
+  await click("src/live.ts");
+  expect(mocks.push).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/files/preview", params: { projectId, filePath: "src/live.ts" } });
 });

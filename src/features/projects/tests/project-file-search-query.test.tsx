@@ -8,10 +8,14 @@ import type { ProjectFileSearchPageSchema } from "../actions/file-search-schemas
 
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
+  flushSaves: vi.fn(),
   session: { isPending: false, error: null as Error | null, data: { user: { id: "user-one" } } as { user: { id: string } } | null },
 }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => mocks.session }));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
+vi.mock("../hooks/use-project-file-save", () => ({
+  useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }),
+}));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 const cursor = "12345678-1234-4123-8123-123456789abc:10:" + "a".repeat(64);
 const freshCursor = "12345678-1234-4123-8123-123456789abd:10:" + "b".repeat(64);
@@ -51,6 +55,7 @@ beforeEach(() => {
   mocks.session.isPending = false;
   mocks.session.error = null;
   mocks.read.mockReset().mockResolvedValue(page("first.ts", cursor));
+  mocks.flushSaves.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -72,6 +77,51 @@ it("returns infinite-query pages and forwards the server cursor and filters", as
   expect(current.data?.pages.map((value) => value.files[0].path)).toEqual(["first.ts", "second.ts"]);
   expect(current.data?.pageParams).toEqual([null, cursor]);
   expect(current.hasNextPage).toBe(false);
+});
+
+it("waits for saves before first-page scans and refreshes, but not continuation pages", async () => {
+  let finish!: () => void;
+  mocks.flushSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  await render();
+  expect(current.isFetching).toBe(true);
+  expect(mocks.read).not.toHaveBeenCalled();
+  await act(async () => finish());
+  await flush();
+  expect(mocks.read).toHaveBeenCalledOnce();
+  await act(async () => { await current.fetchNextPage(); });
+  expect(mocks.flushSaves).toHaveBeenCalledOnce();
+  await act(async () => { await current.refetch(); });
+  expect(mocks.flushSaves).toHaveBeenCalledTimes(2);
+});
+
+it("surfaces save failures without starting or automatically retrying a search", async () => {
+  mocks.flushSaves.mockRejectedValue(new Error("Save failed. Open Code to retry."));
+  await render();
+  await flush(30_000);
+  expect(current.error?.message).toBe("Save failed. Open Code to retry.");
+  expect(mocks.flushSaves).toHaveBeenCalledOnce();
+  expect(mocks.read).not.toHaveBeenCalled();
+  mocks.flushSaves.mockResolvedValue(undefined);
+  await act(async () => { await current.refetch(); });
+  await flush();
+  expect(current.isSuccess).toBe(true);
+});
+
+it.each(["query", "account", "unmount"])("does not send an obsolete search after saves settle on %s change", async (change) => {
+  let finish!: () => void;
+  mocks.flushSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  await render();
+  expect(mocks.read).not.toHaveBeenCalled();
+  if (change === "unmount") {
+    await act(async () => root.render(null));
+  } else {
+    if (change === "account") mocks.session.data = { user: { id: "user-two" } };
+    await render({ search: "new query" });
+  }
+  await act(async () => finish());
+  await flush();
+  expect(mocks.read).toHaveBeenCalledTimes(change === "unmount" ? 0 : 1);
+  if (change !== "unmount") expect(mocks.read.mock.lastCall?.[1].search).toBe("new query");
 });
 
 it.each(["", "   ", "\0", "x".repeat(257)])("does not request an invalid search %j, even on manual refetch", async (search) => {
@@ -108,6 +158,7 @@ it("starts fresh and cancels the obsolete request when filters or account change
   await render({ search: "next", scope: "title", path: "src", pageSize: 20 });
   expect(mocks.read).toHaveBeenCalledTimes(3);
   expect(current.data?.pageParams).toEqual([null]);
+  expect(mocks.flushSaves).toHaveBeenCalledTimes(3);
 });
 
 it.each([0, 429, 502])("retries transient failure %s twice with backoff", async (status) => {
@@ -154,6 +205,7 @@ it.each([[410, "SEARCH_SESSION_EXPIRED"], [409, "SEARCH_WORKSPACE_CHANGED"], [40
   expect(mocks.read.mock.calls.map((call) => call[1].cursor)).toEqual([undefined, cursor, undefined]);
   expect(current.data?.pages.map((value) => value.files[0].path)).toEqual(["fresh.ts"]);
   expect(current.data?.pageParams).toEqual([null]);
+  expect(mocks.flushSaves).toHaveBeenCalledTimes(2);
 });
 
 it("does not loop when the new first page also fails", async () => {

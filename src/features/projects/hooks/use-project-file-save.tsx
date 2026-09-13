@@ -21,6 +21,7 @@ export type { ProjectFileSaveStatus } from "@/features/projects/lib/project-file
 type SaveDocument = ReturnType<typeof createFileSaveDocument>;
 type FileSaveRegistryState = {
   getDocument: (path: string, version: number, content: string) => SaveDocument;
+  flushPendingSaves: () => Promise<void>;
   renameFiles: <T>(previousPath: string, nextPath: string, rename: () => Promise<T>) => Promise<T>;
 };
 const RegistryContext = createContext<FileSaveRegistryState | null>(null);
@@ -97,6 +98,24 @@ const FileSaveRegistry = ({
     },
     [documents, projectId, queryClient, registerDocument, userId],
   );
+  const flushPendingSaves = useCallback(async () => {
+    while (true) {
+      // A paused document's normal flush returns without saving. Never treat
+      // that as confirmation or write through a rename's pause.
+      if (renameOperation.current)
+        throw new Error("A file rename is in progress. Wait for it to finish, then try again.");
+      const pending = [...documents.values()].filter(({ document }) => document.shouldRetain());
+      if (pending.length === 0) return;
+      const results = await Promise.allSettled(pending.map(({ document }) => document.flush()));
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure) {
+        const message = failure.reason instanceof Error ? failure.reason.message : "Unable to save your changes.";
+        throw new Error(`${message} Open Code to retry saving your changes.`);
+      }
+      // Navigation and late editor events can add drafts while earlier saves
+      // drain. Recheck the registry before allowing a dependent read to start.
+    }
+  }, [documents, renameOperation]);
   const renameFiles = useCallback<FileSaveRegistryState["renameFiles"]>(
     async (previousPath, nextPath, rename) => {
       if (renameOperation.current) throw new Error("Another rename is in progress. Please try again.");
@@ -153,7 +172,7 @@ const FileSaveRegistry = ({
     });
     return () => subscription.remove();
   }, [documents]);
-  return <RegistryContext value={{ getDocument, renameFiles }}>{children}</RegistryContext>;
+  return <RegistryContext value={{ getDocument, flushPendingSaves, renameFiles }}>{children}</RegistryContext>;
 };
 
 export const ProjectFileSaveRegistryProvider = ({

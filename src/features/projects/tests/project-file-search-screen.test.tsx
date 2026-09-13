@@ -7,7 +7,7 @@ import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectWorkspaceFileSearchProvider, useProjectWorkspaceFileSearch } from "../hooks/use-project-workspace-file-search";
 import type { ProjectFileSearchEntrySchema } from "../actions/file-search-schemas";
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), browse: vi.fn(), navigate: vi.fn(), push: vi.fn(), select: vi.fn() }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), flushSaves: vi.fn(), browse: vi.fn(), navigate: vi.fn(), push: vi.fn(), select: vi.fn() }));
 vi.mock("../components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => <>{children}</> }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId }), useRouter: () => ({ navigate: mocks.navigate, push: mocks.push }) }));
@@ -19,7 +19,7 @@ vi.mock("../hooks/use-project-files", () => ({ useProjectFiles: (...args: unknow
 } }));
 vi.mock("../hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => ({ kind: null }) }));
 vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ setFilePath: mocks.select }) }));
-vi.mock("../hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({}) }));
+vi.mock("../hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }) }));
 vi.mock("../hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 80 }) }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
 vi.mock("../components/project-file-create-row", () => ({ ProjectFileCreateRow: () => null }));
@@ -72,6 +72,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.read.mockReset().mockResolvedValue(page("src/live.ts", cursor));
+  mocks.flushSaves.mockReset().mockResolvedValue(undefined);
   mocks.browse.mockClear(); mocks.navigate.mockClear(); mocks.push.mockClear(); mocks.select.mockClear();
   client = new QueryClient();
   container = document.createElement("div");
@@ -80,6 +81,23 @@ beforeEach(async () => {
   await flush();
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); onlineManager.setOnline(true); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it("shows pending saves as loading, then surfaces their failure and allows searching after recovery", async () => {
+  let failSave!: (reason: Error) => void;
+  mocks.flushSaves.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { failSave = reject; }));
+  await applySearch("live");
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(container.querySelector('[aria-label="Searching files"]')).not.toBeNull();
+  await act(async () => failSave(new Error("Connection failed. Open Code to retry the save.")));
+  await flush();
+  expect(container.querySelector('[aria-label="Searching files"]')).toBeNull();
+  expect(container.textContent).toContain("Connection failed. Open Code to retry the save.");
+  expect(container.textContent).not.toContain("No matching files");
+  expect(mocks.read).not.toHaveBeenCalled();
+  await click("Try again");
+  expect(container.textContent).toContain("live.ts");
+  expect(mocks.read).toHaveBeenCalledOnce();
+});
 
 it("shows the folder without searching, then replaces it with loading and live results", async () => {
   expect(container.textContent).toContain("Original directory");

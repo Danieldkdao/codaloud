@@ -8,6 +8,7 @@ import {
   type ProjectFileSearchQuerySchema,
 } from "../actions/file-search-schemas";
 import { projectFileSearchLimits } from "../constants";
+import { useProjectFileSaveRegistry } from "./use-project-file-save";
 
 class ProjectFileSearchRequestError extends Error {
   constructor(
@@ -39,6 +40,7 @@ export const useProjectFileSearch = (
       ? (session.data?.user.id ?? null)
       : null;
   const queryClient = useQueryClient();
+  const { flushPendingSaves } = useProjectFileSaveRegistry();
   // Preserve meaningful spaces in literal content searches; blank searches are invalid.
   const params = projectFileSearchQuerySchema.safeParse({
     search,
@@ -86,6 +88,12 @@ export const useProjectFileSearch = (
       if (!validProject.success || !params.success) {
         throw new Error("Invalid project file search or pagination.");
       }
+      // A new snapshot must include pending editor writes. Continuations keep
+      // their existing snapshot and use the server's workspace-change recovery.
+      if (pageParam === null) await flushPendingSaves();
+      // Canceling search must not cancel accepted saves, but it must prevent
+      // an obsolete request from starting once those saves settle.
+      if (signal.aborted) throw new Error("Search canceled.");
       let requestError: ProjectFileSearchRequestError | undefined;
       const result = await readProjectFilesAction(
         validProject.data,

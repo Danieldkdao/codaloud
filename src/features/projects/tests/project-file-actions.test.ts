@@ -18,6 +18,91 @@ beforeEach(() => {
 
 const updateInput = { parentPath: "notes", previousName: "old.txt", name: "hello.txt", kind: "file" as const };
 
+const searchCursor = "12345678-1234-4123-8123-123456789abc:10:" + "a".repeat(64);
+const searchPage = {
+  files: [{ path: "notes/nested/file.ts", titleMatches: false, contentMatchCount: 150, contentSearched: true }],
+  totalCount: 21, nextCursor: searchCursor, skippedContentFiles: 0,
+  searchedAt: "2026-09-13T00:00:00.000Z", expiresAt: "2026-09-13T00:02:00.000Z",
+};
+
+it.each([[410, "SEARCH_SESSION_EXPIRED"], [409, "SEARCH_WORKSPACE_CHANGED"], [503, "WORKSPACE_RESTORING"]])("reports search failure metadata for %s without changing the null result", async (status, code) => {
+  const onFailure = vi.fn();
+  const onRestoring = vi.fn();
+  network.mockResolvedValue(Response.json({ error: true, message: "Search failed.", code }, { status, headers: { "Retry-After": "3" } }));
+  expect(await readProjectFilesAction(projectId, { search: "needle", pageSize: 10 }, undefined, onRestoring, onFailure)).toBeNull();
+  expect(onFailure).toHaveBeenCalledWith(status, "3", code);
+  expect(onRestoring).toHaveBeenCalledTimes(code === "WORKSPACE_RESTORING" ? 1 : 0);
+});
+
+it("reports non-JSON server and network failures, but not cancellation or invalid input as network failures", async () => {
+  const onFailure = vi.fn();
+  const input = { search: "needle", pageSize: 10 };
+  network.mockResolvedValue(new Response("Bad gateway", { status: 502 }));
+  expect(await readProjectFilesAction(projectId, input, undefined, undefined, onFailure)).toBeNull();
+  expect(onFailure).toHaveBeenLastCalledWith(502, null, undefined);
+  network.mockRejectedValue(new TypeError("Network unavailable"));
+  expect(await readProjectFilesAction(projectId, input, undefined, undefined, onFailure)).toBeNull();
+  expect(onFailure).toHaveBeenLastCalledWith(0, null);
+  onFailure.mockClear();
+  network.mockRejectedValue(new DOMException("Cancelled", "AbortError"));
+  expect(await readProjectFilesAction(projectId, input, undefined, undefined, onFailure)).toBeNull();
+  expect(await readProjectFilesAction(projectId, { search: "", pageSize: 10 }, undefined, undefined, onFailure)).toBeNull();
+  expect(onFailure).not.toHaveBeenCalled();
+});
+
+it("validates and encodes search parameters while preserving pagination metadata", async () => {
+  network.mockResolvedValue(Response.json({ error: false, message: "Search loaded.", data: searchPage }));
+  const controller = new AbortController();
+  const input = { search: "你好 #?& [x]", scope: "content" as const, path: "notes", pageSize: 10, cursor: searchCursor };
+  expect(await readProjectFilesAction(projectId, input, controller.signal)).toEqual(searchPage);
+  const [url, options] = network.mock.calls[0];
+  expect(Object.fromEntries(new URL(String(url)).searchParams)).toEqual({ ...input, pageSize: "10" });
+  expect(options).toMatchObject({ method: "GET", credentials: "omit", signal: controller.signal });
+  expect(new Headers(options?.headers).get("Cache-Control")).toBe("no-store");
+  expect(new Headers(options?.headers).get("Cookie")).toBe("session=mobile");
+});
+
+it("allows the first search page without a cursor and defaults scope and folder", async () => {
+  const emptyPage = { ...searchPage, files: [], totalCount: 0, nextCursor: null };
+  network.mockResolvedValue(Response.json({ error: false, message: "Search loaded.", data: emptyPage }));
+  expect(await readProjectFilesAction(projectId, { search: "needle", pageSize: 10 })).toEqual(emptyPage);
+  expect(Object.fromEntries(new URL(String(network.mock.calls[0][0])).searchParams)).toEqual({ search: "needle", pageSize: "10", scope: "all", path: "" });
+});
+
+it("rejects mixed browsing/search inputs and invalid pagination before authentication or fetch", async () => {
+  for (const input of [
+    { search: "needle" }, { search: "needle", cursor: searchCursor }, { pageSize: 10 }, { path: "notes", scope: "title" },
+    { path: "notes", cursor: searchCursor }, { search: undefined, pageSize: 10 }, { path: "notes", pageSize: undefined },
+    { search: "", pageSize: 10 }, { search: " ", pageSize: 10 }, { search: "needle", pageSize: 0 },
+    { search: "needle", pageSize: 101 }, { search: "needle", pageSize: 1.5 }, { search: "needle", pageSize: "10" },
+    { search: "needle", pageSize: 10, cursor: "bad" }, { search: "needle", pageSize: 10, scope: "bad" },
+    { search: "needle", pageSize: 10, path: "../outside" }, { search: "needle", pageSize: 10, sandboxId: "other" }, null,
+  ]) expect(await readProjectFilesAction(projectId, input as never)).toBeNull();
+  expect(mocks.getCookie).not.toHaveBeenCalled();
+  expect(network).not.toHaveBeenCalled();
+});
+
+it("accepts directory input objects without sending search or pagination parameters", async () => {
+  expect(await readProjectFilesAction(projectId, { path: "notes" })).toEqual([entry]);
+  expect(Object.fromEntries(new URL(String(network.mock.calls[0][0])).searchParams)).toEqual({ path: "notes" });
+});
+
+it("rejects malformed or mismatched search responses and preserves the null failure contract", async () => {
+  const input = { search: "needle", path: "notes", pageSize: 10 };
+  for (const data of [[entry], {}, { ...searchPage, nextCursor: "invalid" }, { ...searchPage, files: [{ ...searchPage.files[0], path: "other/file.ts" }] }]) {
+    network.mockResolvedValue(Response.json({ error: false, message: "Search loaded.", data }));
+    expect(await readProjectFilesAction(projectId, input)).toBeNull();
+  }
+  for (const status of [401, 409, 410, 413]) {
+    network.mockResolvedValue(Response.json({ error: true, message: "Search failed." }, { status }));
+    expect(await readProjectFilesAction(projectId, input)).toBeNull();
+  }
+  network.mockResolvedValue(new Response("not JSON"));
+  expect(await readProjectFilesAction(projectId, input)).toBeNull();
+  network.mockRejectedValue(new DOMException("Cancelled", "AbortError"));
+  expect(await readProjectFilesAction(projectId, input)).toBeNull();
+});
+
 const saveInput = { path: "notes/hello #?&你好.txt", content: "你好\r\n", expectedContentHash: "a".repeat(64) };
 const savedFile = { path: saveInput.path, size: 8, contentHash: "b".repeat(64) };
 

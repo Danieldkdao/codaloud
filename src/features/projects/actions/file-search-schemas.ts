@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { projectDirectoryPathSchema, projectFilePathSchema } from "./file-schemas";
+import { projectDirectoryPathSchema, projectFilePathSchema, readProjectFilesResponseSchema } from "./file-schemas";
 import { projectFileSearchLimits } from "../constants";
 
 export const projectFileSearchScopes = ["all", "title", "content"] as const;
@@ -31,3 +31,20 @@ export const projectFileSearchPageSchema = z.object({
   skippedContentFiles: z.number().int().nonnegative(),
 });
 export type ProjectFileSearchPageSchema = z.infer<typeof projectFileSearchPageSchema>;
+
+// Browsing has no search-only fields. Search callers explicitly choose the page
+// size; only a continuation needs a cursor. Legacy folder-string calls remain valid.
+export const readProjectFilesQuerySchema = z.union([
+  projectDirectoryPathSchema.transform((path) => ({ path })),
+  z.strictObject({ path: projectDirectoryPathSchema.default("") }),
+  projectFileSearchQuerySchema.extend({
+    pageSize: z.number().refine((value) => projectFileSearchQuerySchema.shape.pageSize.safeParse(value).success),
+  }),
+]);
+export type ReadProjectFilesQuerySchema = z.infer<typeof readProjectFilesQuerySchema>;
+export type ReadProjectFilesQueryInput = z.input<typeof readProjectFilesQuerySchema>;
+
+export const readProjectFileSearchResponseSchema = readProjectFilesResponseSchema.extend({
+  data: projectFileSearchPageSchema,
+});
+export type ReadProjectFileSearchResponseSchema = z.infer<typeof readProjectFileSearchResponseSchema>;

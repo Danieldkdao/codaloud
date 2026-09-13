@@ -1,0 +1,209 @@
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { useProjectFileSearch } from "../hooks/use-project-file-search";
+import type { ProjectFileSearchPageSchema } from "../actions/file-search-schemas";
+
+const mocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  session: { isPending: false, error: null as Error | null, data: { user: { id: "user-one" } } as { user: { id: string } } | null },
+}));
+vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => mocks.session }));
+vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
+const projectId = "abcdef00-0000-4000-8000-000000000001";
+const cursor = "12345678-1234-4123-8123-123456789abc:10:" + "a".repeat(64);
+const freshCursor = "12345678-1234-4123-8123-123456789abd:10:" + "b".repeat(64);
+const page = (path: string, nextCursor: string | null = null): ProjectFileSearchPageSchema => ({
+  files: [{ path, titleMatches: true, contentMatchCount: 150, contentSearched: true }],
+  totalCount: 2, nextCursor, skippedContentFiles: 0,
+  searchedAt: "2026-09-13T00:00:00.000Z", expiresAt: "2026-09-13T00:02:00.000Z",
+});
+let client: QueryClient;
+let root: Root;
+let current: ReturnType<typeof useProjectFileSearch>;
+type Options = NonNullable<Parameters<typeof useProjectFileSearch>[1]>;
+const Probe = ({ id, options }: { id: string | null; options: Options }) => {
+  // Read the result properties during render, as the consuming UI will do.
+  current = { ...useProjectFileSearch(id, options) };
+  return null;
+};
+const flush = async (ms = 1) => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+};
+const render = async (options: Options = { search: "needle" }, id: string | null = projectId) => {
+  await act(async () => { root.render(createElement(QueryClientProvider, { client }, createElement(Probe, { id, options }))); });
+  await flush();
+};
+const fail = (status: number, code?: string, retryAfter: string | null = null) =>
+  async (_id: string, _input: unknown, _signal: AbortSignal, _restoring: unknown, onFailure: (status: number, retryAfter: string | null, code?: string) => void) => {
+    onFailure(status, retryAfter, code);
+    return null;
+  };
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  root = createRoot(document.createElement("div"));
+  mocks.session.data = { user: { id: "user-one" } };
+  mocks.session.isPending = false;
+  mocks.session.error = null;
+  mocks.read.mockReset().mockResolvedValue(page("first.ts", cursor));
+});
+afterEach(() => {
+  act(() => root.unmount());
+  client.clear();
+  focusManager.setFocused(undefined);
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+it("returns infinite-query pages and forwards the server cursor and filters", async () => {
+  await render({ search: " needle ", scope: "content", path: "src", pageSize: 10 });
+  expect(mocks.read).toHaveBeenCalledWith(projectId, { search: " needle ", scope: "content", path: "src", pageSize: 10, cursor: undefined }, expect.any(AbortSignal), undefined, expect.any(Function));
+  expect(current.data?.pages[0].files[0].contentMatchCount).toBe(150);
+  expect(current.hasNextPage).toBe(true);
+  mocks.read.mockResolvedValueOnce(page("second.ts"));
+  await act(async () => { await current.fetchNextPage({ cancelRefetch: false }); });
+  await flush();
+  expect(mocks.read.mock.lastCall?.[1].cursor).toBe(cursor);
+  expect(current.data?.pages.map((value) => value.files[0].path)).toEqual(["first.ts", "second.ts"]);
+  expect(current.data?.pageParams).toEqual([null, cursor]);
+  expect(current.hasNextPage).toBe(false);
+});
+
+it.each(["", "   ", "\0", "x".repeat(257)])("does not request an invalid search %j, even on manual refetch", async (search) => {
+  await render({ search });
+  await act(async () => { await current.refetch(); });
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+
+it("requires a valid project, verified session and enabled observer", async () => {
+  await render({ search: "needle" }, null);
+  await render({ search: "needle" }, "invalid");
+  await render({ search: "needle", pageSize: 0 });
+  await render({ search: "needle", enabled: false });
+  mocks.session.isPending = true;
+  await render();
+  mocks.session.isPending = false;
+  mocks.session.error = new Error("Session lookup failed");
+  await render();
+  mocks.session.error = null;
+  mocks.session.data = null;
+  await render();
+  await act(async () => { await current.refetch(); });
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+
+it("starts fresh and cancels the obsolete request when filters or account change", async () => {
+  mocks.read.mockImplementationOnce(() => new Promise(() => {}));
+  await render();
+  const signal = mocks.read.mock.calls[0][2] as AbortSignal;
+  await render({ search: "next", scope: "title", path: "src", pageSize: 20 });
+  expect(signal.aborted).toBe(true);
+  expect(mocks.read.mock.lastCall?.[1]).toEqual({ search: "next", scope: "title", path: "src", pageSize: 20, cursor: undefined });
+  mocks.session.data = { user: { id: "user-two" } };
+  await render({ search: "next", scope: "title", path: "src", pageSize: 20 });
+  expect(mocks.read).toHaveBeenCalledTimes(3);
+  expect(current.data?.pageParams).toEqual([null]);
+});
+
+it.each([0, 429, 502])("retries transient failure %s twice with backoff", async (status) => {
+  mocks.read.mockImplementation(fail(status));
+  await render();
+  await flush(999);
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+  await flush(2001);
+  expect(mocks.read).toHaveBeenCalledTimes(3);
+  expect(current.isError).toBe(true);
+  await flush(30_000);
+  expect(mocks.read).toHaveBeenCalledTimes(3);
+  mocks.read.mockResolvedValue(page("recovered.ts"));
+  await act(async () => { await current.refetch(); });
+  await flush();
+  expect(current.isSuccess).toBe(true);
+});
+
+it("keeps retrying workspace restoration using Retry-After and stops on success", async () => {
+  mocks.read.mockImplementation(fail(503, "WORKSPACE_RESTORING", "3"));
+  await render();
+  await flush(12_000);
+  expect(mocks.read).toHaveBeenCalledTimes(5);
+  expect(current.isPending).toBe(true);
+  mocks.read.mockResolvedValue(page("restored.ts"));
+  await flush(3001);
+  expect(current.isSuccess).toBe(true);
+});
+
+it.each([401, 403, 413])("does not retry terminal failure %s", async (status) => {
+  mocks.read.mockImplementation(fail(status));
+  await render();
+  await flush(30_000);
+  expect(mocks.read).toHaveBeenCalledTimes(1);
+  expect(current.isError).toBe(true);
+});
+
+it.each([[410, "SEARCH_SESSION_EXPIRED"], [409, "SEARCH_WORKSPACE_CHANGED"], [400, "INVALID_SEARCH_CURSOR"]])("replaces the whole result set when a continuation fails with %s %s", async (status, code) => {
+  await render();
+  mocks.read.mockImplementationOnce(fail(status, code)).mockResolvedValueOnce(page("fresh.ts"));
+  await act(async () => { await current.fetchNextPage({ cancelRefetch: false }); });
+  await flush();
+  await flush();
+  expect(mocks.read.mock.calls.map((call) => call[1].cursor)).toEqual([undefined, cursor, undefined]);
+  expect(current.data?.pages.map((value) => value.files[0].path)).toEqual(["fresh.ts"]);
+  expect(current.data?.pageParams).toEqual([null]);
+});
+
+it("does not loop when the new first page also fails", async () => {
+  await render();
+  mocks.read.mockImplementation(fail(409, "SEARCH_WORKSPACE_CHANGED"));
+  await act(async () => { await current.fetchNextPage(); });
+  await flush(30_000);
+  await flush();
+  expect(mocks.read).toHaveBeenCalledTimes(3);
+  expect(current.isError).toBe(true);
+});
+
+it("keeps loaded pages on a pagination failure so fetchNextPage can retry", async () => {
+  await render();
+  mocks.read.mockImplementationOnce(fail(413, "SEARCH_LIMIT_EXCEEDED"));
+  await act(async () => { await current.fetchNextPage(); });
+  await flush();
+  expect(current.isFetchNextPageError).toBe(true);
+  expect(current.data?.pages).toHaveLength(1);
+  mocks.read.mockResolvedValueOnce(page("retry.ts"));
+  await act(async () => { await current.fetchNextPage(); });
+  await flush();
+  expect(current.data?.pages).toHaveLength(2);
+  expect(current.isError).toBe(false);
+});
+
+it("refetches from page one and follows fresh cursors while retaining visible results", async () => {
+  await render();
+  mocks.read.mockResolvedValueOnce(page("second.ts"));
+  await act(async () => { await current.fetchNextPage(); });
+  await flush();
+  let resolvePage!: (value: ProjectFileSearchPageSchema) => void;
+  mocks.read.mockImplementationOnce(() => new Promise((resolve) => { resolvePage = resolve; }))
+    .mockResolvedValueOnce(page("new-second.ts"));
+  let pending!: ReturnType<typeof current.refetch>;
+  await act(async () => { pending = current.refetch(); });
+  await flush();
+  expect(current.isRefetching).toBe(true);
+  expect(current.data?.pages).toHaveLength(2);
+  await act(async () => { resolvePage(page("new-first.ts", freshCursor)); await pending; });
+  await flush();
+  expect(mocks.read.mock.calls.slice(-2).map((call) => call[1].cursor)).toEqual([undefined, freshCursor]);
+  expect(current.data?.pages.map((value) => value.files[0].path)).toEqual(["new-first.ts", "new-second.ts"]);
+});
+
+it("refreshes when app focus returns without polling while idle", async () => {
+  await render();
+  await flush(60_000);
+  expect(mocks.read).toHaveBeenCalledTimes(1);
+  await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); });
+  await flush();
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+});

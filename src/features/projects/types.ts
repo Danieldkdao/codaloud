@@ -1,4 +1,6 @@
 import type { ProjectSelectData } from "@/db/schemas/project";
+import type { ProjectFileEntrySchema } from "./actions/file-schemas";
+import type { ProjectFileSearchPageSchema } from "./actions/file-search-schemas";
 
 export type ProjectWorkspaceTab = "files" | "code" | "git" | "agent";
 
@@ -76,6 +78,10 @@ export type ProjectAgentActivityData = {
 };
 
 export type { ProjectFileSearchScope } from "./actions/file-search-schemas";
+
+export type ReadProjectFilesActionResult<Input> = Input extends { search: string }
+  ? ProjectFileSearchPageSchema
+  : ProjectFileEntrySchema[];
 
 export type ProjectFileSearchDocument = {
   path: string;

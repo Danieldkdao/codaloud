@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
@@ -13,8 +13,12 @@ import { ProjectFilesList } from "@/features/projects/components/project-files-l
 import { ProjectFileSearchResults } from "@/features/projects/components/project-file-search-results";
 import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-project-workspace-file-search";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
+import { useProjectFileSearch } from "@/features/projects/hooks/use-project-file-search";
 import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
-import { getDirectoryFiles, isProjectFilePathWithin } from "@/features/projects/lib/files";
+import {
+  getDirectoryFiles,
+  isProjectFilePathWithin,
+} from "@/features/projects/lib/files";
 
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -23,13 +27,35 @@ const FilesScreen = () => {
   const fileSearch = useProjectWorkspaceFileSearch();
   const saves = useProjectFileSaveRegistry();
   const [currentDirectory, setCurrentDirectory] = useState("");
-  const { query, creation, update, deletion } = useProjectFiles(projectId, currentDirectory);
+  const { query, creation, update, deletion } = useProjectFiles(
+    projectId,
+    currentDirectory,
+    { enabled: !fileSearch.isSearching },
+  );
+  const isDebouncing = fileSearch.query !== fileSearch.debouncedQuery;
+  const search = useProjectFileSearch(projectId, {
+    // Changing the key to an empty search also cancels any obsolete request.
+    search: isDebouncing ? "" : fileSearch.debouncedQuery,
+    scope: fileSearch.scope,
+    enabled: fileSearch.isSearching && !isDebouncing,
+  });
+  const searchResults = useMemo(
+    () => search.data?.pages.flatMap((page) => page.files) ?? [],
+    [search.data],
+  );
   const fileCreation = useProjectWorkspaceFileCreation();
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const showSuccess = useSuccessFeedback();
   const deletionInFlight = useRef(false);
   const renameInFlight = useRef(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const openFile = (path: string) => {
+    currentFile.setFilePath(path);
+    router.navigate({
+      pathname: "/projects/[projectId]/code",
+      params: { projectId },
+    });
+  };
   const parentDirectory =
     currentDirectory === ""
       ? undefined
@@ -39,7 +65,34 @@ const FilesScreen = () => {
         );
 
   if (fileSearch.isSearching) {
-    return <ProjectFileSearchResults key={`${fileSearch.query}:${fileSearch.scope}`} results={fileSearch.results} />;
+    const canFetch =
+      !isDebouncing && !search.isFetching && search.fetchStatus !== "paused";
+    return (
+      <ProjectFileSearchResults
+        key={`${projectId}:${fileSearch.query}:${fileSearch.scope}`}
+        results={searchResults}
+        totalCount={search.data?.pages[0]?.totalCount ?? 0}
+        isLoading={isDebouncing || search.isPending}
+        isFetching={search.isFetching}
+        isFetchingNextPage={search.isFetchingNextPage}
+        isPaused={search.fetchStatus === "paused"}
+        error={search.error?.message}
+        onFilePress={openFile}
+        onLoadMore={() => {
+          if (canFetch && search.hasNextPage && !search.error)
+            void search.fetchNextPage({ cancelRefetch: false });
+        }}
+        onRefresh={() => {
+          if (canFetch) void search.refetch();
+        }}
+        onRetry={() => {
+          if (!canFetch) return;
+          if (search.isFetchNextPageError)
+            void search.fetchNextPage({ cancelRefetch: false });
+          else void search.refetch();
+        }}
+      />
+    );
   }
 
   if (query.isPending) {
@@ -52,7 +105,11 @@ const FilesScreen = () => {
         accessibilityLabel="Loading files"
         accessibilityState={{ busy: true }}
       >
-        <ActivityIndicator size="large" className="text-primary" accessible={false} />
+        <ActivityIndicator
+          size="large"
+          className="text-primary"
+          accessible={false}
+        />
       </View>
     );
   }
@@ -111,21 +168,29 @@ const FilesScreen = () => {
         existingNames={existingNames}
         parentDirectory={parentDirectory}
         onDirectoryPress={setCurrentDirectory}
-        onFilePress={(path) => {
-          currentFile.setFilePath(path);
-          router.navigate({ pathname: "/projects/[projectId]/code", params: { projectId } });
-        }}
+        onFilePress={openFile}
         onUpdate={async (input) => {
-          if (renameInFlight.current) throw new Error("Another rename is in progress. Please try again.");
+          if (renameInFlight.current)
+            throw new Error("Another rename is in progress. Please try again.");
           renameInFlight.current = true;
-          const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
-          const nextPath = [input.parentPath, input.name].filter(Boolean).join("/");
+          const previousPath = [input.parentPath, input.previousName]
+            .filter(Boolean)
+            .join("/");
+          const nextPath = [input.parentPath, input.name]
+            .filter(Boolean)
+            .join("/");
           setRenamingPath(previousPath);
           try {
-            const updatedFile = await saves.renameFiles(previousPath, nextPath, () => update.mutateAsync(input));
-            currentFile.setFilePath((path) => path !== null && isProjectFilePathWithin(path, previousPath)
-              ? updatedFile.path + path.slice(previousPath.length)
-              : path);
+            const updatedFile = await saves.renameFiles(
+              previousPath,
+              nextPath,
+              () => update.mutateAsync(input),
+            );
+            currentFile.setFilePath((path) =>
+              path !== null && isProjectFilePathWithin(path, previousPath)
+                ? updatedFile.path + path.slice(previousPath.length)
+                : path,
+            );
             showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
           } finally {
             renameInFlight.current = false;
@@ -137,20 +202,38 @@ const FilesScreen = () => {
           deletionInFlight.current = true;
           try {
             const deletedFile = await deletion.mutateAsync(input);
-            currentFile.setFilePath((path) => path !== null && isProjectFilePathWithin(path, deletedFile.path) ? null : path);
+            currentFile.setFilePath((path) =>
+              path !== null && isProjectFilePathWithin(path, deletedFile.path)
+                ? null
+                : path,
+            );
             showSuccess(formatProjectFileKind(input.kind).deleteSuccessMessage);
           } catch (error) {
-            Alert.alert("Couldn't delete this item", error instanceof Error ? error.message : "Refresh the folder and try again.");
+            Alert.alert(
+              "Couldn't delete this item",
+              error instanceof Error
+                ? error.message
+                : "Refresh the folder and try again.",
+            );
           } finally {
             deletionInFlight.current = false;
           }
         }}
-        updatingPath={renamingPath ?? (update.isPending
-          ? [update.variables.parentPath, update.variables.previousName].filter(Boolean).join("/")
-          : undefined)}
-        deletingPath={deletion.isPending
-          ? [deletion.variables.parentPath, deletion.variables.name].filter(Boolean).join("/")
-          : undefined}
+        updatingPath={
+          renamingPath ??
+          (update.isPending
+            ? [update.variables.parentPath, update.variables.previousName]
+                .filter(Boolean)
+                .join("/")
+            : undefined)
+        }
+        deletingPath={
+          deletion.isPending
+            ? [deletion.variables.parentPath, deletion.variables.name]
+                .filter(Boolean)
+                .join("/")
+            : undefined
+        }
         navigationDisabled={Boolean(fileCreation.kind) || deletion.isPending}
       />
     </View>

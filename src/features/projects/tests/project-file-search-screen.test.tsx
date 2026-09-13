@@ -1,0 +1,175 @@
+// @vitest-environment happy-dom
+import { act, createElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import FilesScreen from "@/app/projects/[projectId]/files";
+import { ProjectWorkspaceFileSearchProvider, useProjectWorkspaceFileSearch } from "../hooks/use-project-workspace-file-search";
+import type { ProjectFileSearchEntrySchema } from "../actions/file-search-schemas";
+
+const mocks = vi.hoisted(() => ({ read: vi.fn(), browse: vi.fn(), navigate: vi.fn(), select: vi.fn() }));
+vi.mock("../components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => <>{children}</> }));
+const projectId = "abcdef00-0000-4000-8000-000000000001";
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId }), useRouter: () => ({ navigate: mocks.navigate }) }));
+vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
+vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
+vi.mock("../hooks/use-project-files", () => ({ useProjectFiles: (...args: unknown[]) => {
+  mocks.browse(...args);
+  return { query: { data: [], isPending: false, isError: false }, creation: {}, update: {}, deletion: {} };
+} }));
+vi.mock("../hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => ({ kind: null }) }));
+vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ setFilePath: mocks.select }) }));
+vi.mock("../hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({}) }));
+vi.mock("../hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 80 }) }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
+vi.mock("../components/project-file-create-row", () => ({ ProjectFileCreateRow: () => null }));
+vi.mock("../components/project-files-list", () => ({ ProjectFilesList: ({ onDirectoryPress }: { onDirectoryPress: (path: string) => void }) =>
+  <button onClick={() => onDirectoryPress("src")}>Original directory</button> }));
+vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children?: ReactNode }) => <span>{children}</span>, HeadingText: ({ children }: { children?: ReactNode }) => <span>{children}</span> }));
+vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress, disabled }: { children: ReactNode; onPress: () => void; disabled?: boolean }) => <button disabled={disabled} onClick={onPress}>{children}</button> }));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
+vi.mock("react-native", () => ({
+  View: ({ children, accessibilityLabel }: { children?: ReactNode; accessibilityLabel?: string }) => <div aria-label={accessibilityLabel}>{children}</div>,
+  ActivityIndicator: () => <span>Spinner</span>,
+  Pressable: ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress: () => void; accessibilityLabel?: string }) => <button aria-label={accessibilityLabel} onClick={onPress}>{children}</button>,
+  Keyboard: { dismiss: vi.fn() }, Alert: { alert: vi.fn() },
+  FlatList: ({ data, renderItem, ListEmptyComponent, ListFooterComponent, onEndReached, onRefresh }: {
+    data: ProjectFileSearchEntrySchema[]; renderItem: (info: { item: ProjectFileSearchEntrySchema }) => ReactNode;
+    ListEmptyComponent: ReactNode; ListFooterComponent: ReactNode; onEndReached: () => void; onRefresh: () => void;
+  }) => <div>{data.length ? data.map((item) => <div key={item.path}>{renderItem({ item })}</div>) : ListEmptyComponent}
+    {ListFooterComponent}<button onClick={onEndReached}>List end</button><button onClick={onRefresh}>Pull to refresh</button></div>,
+}));
+
+let search: ReturnType<typeof useProjectWorkspaceFileSearch>;
+const Controls = () => { search = useProjectWorkspaceFileSearch(); return null; };
+let root: Root;
+let container: HTMLDivElement;
+let client: QueryClient;
+const cursor = "12345678-1234-4123-8123-123456789abc:10:" + "a".repeat(64);
+const page = (path: string, nextCursor: string | null = null) => ({
+  files: [{ path, titleMatches: true, contentMatchCount: 150, contentSearched: true }],
+  totalCount: 23, nextCursor, skippedContentFiles: 0,
+  searchedAt: "2026-09-13T00:00:00.000Z", expiresAt: "2026-09-13T00:02:00.000Z",
+});
+const flush = async () => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(2); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(2); });
+};
+const applySearch = async (value: string) => {
+  act(() => search.setQuery(value));
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  await flush();
+};
+const click = async (label: string) => {
+  const button = Array.from(container.querySelectorAll("button")).find((item) => item.getAttribute("aria-label") === label || item.textContent === label);
+  expect(button).toBeDefined();
+  act(() => button!.click());
+  await flush();
+};
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.read.mockReset().mockResolvedValue(page("src/live.ts", cursor));
+  mocks.browse.mockClear(); mocks.navigate.mockClear(); mocks.select.mockClear();
+  client = new QueryClient();
+  container = document.createElement("div");
+  root = createRoot(container);
+  act(() => root.render(<QueryClientProvider client={client}><ProjectWorkspaceFileSearchProvider><Controls /><FilesScreen /></ProjectWorkspaceFileSearchProvider></QueryClientProvider>));
+  await flush();
+});
+afterEach(() => { act(() => root.unmount()); client.clear(); onlineManager.setOnline(true); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+it("shows the folder without searching, then replaces it with loading and live results", async () => {
+  expect(container.textContent).toContain("Original directory");
+  expect(mocks.read).not.toHaveBeenCalled();
+  await click("Original directory");
+  act(() => search.setQuery("live"));
+  expect(container.textContent).not.toContain("Original directory");
+  expect(container.querySelector('[aria-label="Searching files"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("No matching files");
+  expect(mocks.read).not.toHaveBeenCalled();
+  await applySearch("live");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "live", scope: "all", path: "", pageSize: 10 });
+  expect(container.textContent).toContain("live.ts");
+  expect(container.textContent).toContain("23 files");
+  expect(container.textContent).toContain("100+ matches found in this file");
+  await click("src/live.ts");
+  expect(mocks.select).toHaveBeenCalledWith("src/live.ts");
+  expect(mocks.navigate).toHaveBeenCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId } });
+  act(() => search.setQuery(""));
+  expect(container.textContent).toContain("Original directory");
+  expect(mocks.browse.mock.lastCall?.[1]).toBe("src");
+});
+
+it("hides old results during typing and restarts when filters change", async () => {
+  await applySearch("live");
+  act(() => search.setQuery("next"));
+  expect(container.textContent).not.toContain("live.ts");
+  expect(container.querySelector('[aria-label="Searching files"]')).not.toBeNull();
+  await applySearch("next");
+  act(() => search.setTitle(true));
+  await flush();
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "next", scope: "title", cursor: undefined });
+});
+
+it("appends pages, guards duplicate requests and retains rows during refresh", async () => {
+  await applySearch("live");
+  let resolve!: (value: ReturnType<typeof page>) => void;
+  mocks.read.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  await click("List end");
+  await click("List end");
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+  expect(container.querySelector('[aria-label="Loading more files"]')).not.toBeNull();
+  expect(container.textContent).toContain("live.ts");
+  act(() => resolve(page("src/second.ts")));
+  await flush();
+  expect(container.textContent).toContain("second.ts");
+  await click("List end");
+  expect(mocks.read).toHaveBeenCalledTimes(2);
+  mocks.read.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  await click("Pull to refresh");
+  expect(mocks.read.mock.lastCall?.[1].cursor).toBeUndefined();
+  expect(container.textContent).toContain("live.ts");
+  act(() => resolve(page("src/fresh.ts")));
+  await flush();
+  expect(container.textContent).toContain("fresh.ts");
+  expect(container.textContent).not.toContain("second.ts");
+});
+
+it("offers retry after initial and next-page failures without claiming no matches", async () => {
+  mocks.read.mockResolvedValueOnce(null);
+  await applySearch("live");
+  expect(container.textContent).not.toContain("No matching files");
+  await click("Try again");
+  expect(container.textContent).toContain("live.ts");
+  mocks.read.mockResolvedValueOnce(null);
+  await click("List end");
+  expect(container.textContent).toContain("live.ts");
+  const attempts = mocks.read.mock.calls.length;
+  await click("List end");
+  expect(mocks.read).toHaveBeenCalledTimes(attempts);
+  mocks.read.mockResolvedValueOnce(page("src/retry.ts"));
+  await click("Try again");
+  expect(mocks.read.mock.lastCall?.[1].cursor).toBe(cursor);
+  expect(container.textContent).toContain("retry.ts");
+});
+
+it("shows the empty state only after a successful empty search", async () => {
+  mocks.read.mockResolvedValue({ ...page("unused"), files: [], totalCount: 0 });
+  await applySearch("absent");
+  expect(container.textContent).toContain("No matching files");
+  expect(container.textContent).toContain("0 files");
+});
+
+it("shows a reconnect message when the initial request is paused offline", async () => {
+  onlineManager.setOnline(false);
+  await applySearch("live");
+  expect(container.textContent).toContain("Reconnect to the internet to continue.");
+  expect(container.textContent).not.toContain("No matching files");
+  expect(mocks.read).not.toHaveBeenCalled();
+  onlineManager.setOnline(true);
+  await flush();
+  expect(container.textContent).toContain("live.ts");
+});

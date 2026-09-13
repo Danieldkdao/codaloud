@@ -9,10 +9,12 @@ import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwip
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 
 const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
-const fileSearch = vi.hoisted(() => ({ query: "", scope: "all", isSearching: false,
-  results: [{ file: { path: "docs/guide.md", content: "Search result contents" }, titleMatches: false, contentMatchCount: 1 }],
-}));
+const fileSearch = vi.hoisted(() => ({ query: "", debouncedQuery: "", scope: "all", isSearching: false }));
 vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => fileSearch }));
+vi.mock("@/features/projects/hooks/use-project-file-search", () => ({ useProjectFileSearch: () => ({
+  data: { pages: [{ files: [{ path: "docs/guide.md", titleMatches: false, contentMatchCount: 1, contentSearched: true }], totalCount: 1 }] },
+  isPending: false, isFetching: false, isFetchingNextPage: false, fetchStatus: "idle", error: null,
+}) }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({
   renameFiles: async (_previousPath: string, _nextPath: string, rename: () => Promise<unknown>) => rename(),
 }) }));
@@ -128,12 +130,14 @@ afterEach(() => act(() => root.unmount()));
 it("replaces directory content with search results and restores it after clearing", () => {
   expect(container.textContent).toContain("package.json");
   fileSearch.query = "result";
+  fileSearch.debouncedQuery = "result";
   fileSearch.isSearching = true;
   act(() => root.render(createElement(FilesScreen)));
   expect(container.textContent).toContain("guide.md");
   expect(container.textContent).not.toContain("package.json");
   expect(container.textContent).not.toMatch(/Mock preview|Title & content/);
   fileSearch.query = "";
+  fileSearch.debouncedQuery = "";
   fileSearch.isSearching = false;
   act(() => root.render(createElement(FilesScreen)));
   expect(container.textContent).toContain("package.json");

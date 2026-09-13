@@ -5,11 +5,9 @@ import {
   type DeleteProjectFileResponseSchema,
   createProjectFileResponseSchema,
   createProjectFileSchema,
-  projectDirectoryPathSchema,
   readProjectFilesResponseSchema,
   type CreateProjectFileSchema,
   type CreateProjectFileResponseSchema,
-  type ProjectFileEntrySchema,
   updateProjectFileSchema,
   updateProjectFileResponseSchema,
   type UpdateProjectFileSchema,
@@ -24,9 +22,20 @@ import {
   type SaveProjectFileContentSchema,
   type SaveProjectFileContentResponseSchema,
 } from "./file-schemas";
+import {
+  readProjectFilesQuerySchema,
+  readProjectFileSearchResponseSchema,
+  type ReadProjectFilesQueryInput,
+} from "./file-search-schemas";
+import type { ReadProjectFilesActionResult } from "../types";
 import { isProjectFileResultValid } from "@/features/projects/utils/is-project-file-result-valid";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { createRequestHeaders, fetchBase, isValidIds } from "@/lib/utils";
+import {
+  createRequestHeaders,
+  createSearchParams,
+  fetchBase,
+  isValidIds,
+} from "@/lib/utils";
 
 export const saveProjectFileContentAction = async (
   projectId: string,
@@ -131,34 +140,59 @@ export const readProjectFileContentAction = async (
   }
 };
 
-export const readProjectFilesAction = async (
+export const readProjectFilesAction = async <
+  Input extends ReadProjectFilesQueryInput = string,
+>(
   projectId: string,
-  directoryPath = "",
+  unsafeInput: Input = "" as Input,
   signal?: AbortSignal,
   onWorkspaceRestoring?: (retryAfter: string | null) => void,
-): Promise<ProjectFileEntrySchema[] | null> => {
+  onFailure?: (status: number, retryAfter: string | null, code?: string) => void,
+): Promise<ReadProjectFilesActionResult<Input> | null> => {
   try {
     if (!isValidIds(projectId)) return null;
-    const path = projectDirectoryPathSchema.parse(directoryPath);
-    const headers = await createRequestHeaders();
+    const input = readProjectFilesQuerySchema.parse(unsafeInput);
+    const { path } = input;
+    const params = createSearchParams(input);
+    const headers = await createRequestHeaders({ "Cache-Control": "no-store" });
     const response = await fetchBase(
-      `/api/projects/${projectId}/files?${new URLSearchParams({ path })}`,
+      `/api/projects/${projectId}/files?${params}`,
       {
         method: "GET",
         headers,
         credentials: "omit",
         signal,
       },
-    );
+    ).catch((error: unknown) => {
+      if (!signal?.aborted && !(error instanceof Error && error.name === "AbortError")) {
+        onFailure?.(0, null);
+      }
+      throw error;
+    });
     if (!response.ok) {
       // Report transient response metadata separately from the data-or-null result.
-      if (response.status === 503 && onWorkspaceRestoring) {
-        const failure = await response.json();
-        if (failure?.code === "WORKSPACE_RESTORING") {
-          onWorkspaceRestoring(response.headers.get("Retry-After"));
+      if (!signal?.aborted && (onFailure || onWorkspaceRestoring)) {
+        const failure = await response.json().catch(() => null);
+        const code = typeof failure?.code === "string" ? failure.code : undefined;
+        const retryAfter = response.headers.get("Retry-After");
+        onFailure?.(response.status, retryAfter, code);
+        if (response.status === 503 && code === "WORKSPACE_RESTORING") {
+          onWorkspaceRestoring?.(retryAfter);
         }
       }
       return null;
+    }
+    if ("search" in input) {
+      const { data } = readProjectFileSearchResponseSchema.parse(
+        await response.json(),
+      );
+      if (
+        data.files.length > input.pageSize ||
+        data.totalCount < data.files.length ||
+        data.files.some((entry) => path && !entry.path.startsWith(`${path}/`))
+      )
+        return null;
+      return data as ReadProjectFilesActionResult<Input>;
     }
     const result = readProjectFilesResponseSchema.parse(await response.json());
     if (
@@ -167,7 +201,7 @@ export const readProjectFilesAction = async (
       )
     )
       return null;
-    return result.data;
+    return result.data as ReadProjectFilesActionResult<Input>;
   } catch {
     return null;
   }

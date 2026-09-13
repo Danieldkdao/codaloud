@@ -38,17 +38,16 @@ export const GlassSurface = ({ children, borderRadius = 28, shadow = true }: Gla
       // Inline glass controls also contain the native effect within their outline.
       overflow: shadow ? "visible" : "hidden",
     }}>
+      {/* Only the background may change type. Replacing a parent of the controls
+          remounts them and dismisses their open searches, sheets, and inputs. */}
       {useGlass ? (
-        <GlassView glassEffectStyle="regular" isInteractive style={{ borderRadius }}>
-          {children}
-        </GlassView>
+        <GlassView pointerEvents="none" glassEffectStyle="regular" isInteractive
+          style={{ ...StyleSheet.absoluteFill, borderRadius }} />
       ) : (
-        <View className="bg-card" style={{ borderRadius }}>
-          {children}
-          <View pointerEvents="none" className="border border-border"
-            style={{ ...StyleSheet.absoluteFill, borderRadius }} />
-        </View>
+        <View pointerEvents="none" className="bg-card border border-border"
+          style={{ ...StyleSheet.absoluteFill, borderRadius }} />
       )}
+      <View>{children}</View>
     </View>
   );
 };

@@ -1,10 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { GET } from "@/app/api/projects/[projectId]/commits+api";
+import { GET, POST } from "@/app/api/projects/[projectId]/commits+api";
 import { CommitHistoryError } from "@/features/projects/server/commit-pagination";
 import { SandboxFilesError } from "@/services/daytona/api";
 import { createSearchParams } from "@/lib/utils";
 
-const mocks = vi.hoisted(() => ({ user: vi.fn(), local: vi.fn(), remote: vi.fn() }));
+const mocks = vi.hoisted(() => ({ user: vi.fn(), local: vi.fn(), remote: vi.fn(), commit: vi.fn() }));
+vi.mock("@/features/projects/server/project-commit", () => ({ commitUserProject: mocks.commit }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/services/daytona/commits", () => ({ readSandboxCommits: mocks.local }));
 vi.mock("@/services/github/server/commits", () => ({ readGitHubCommits: mocks.remote }));
@@ -30,6 +31,46 @@ beforeEach(() => {
   mocks.user.mockReset().mockResolvedValue({ userId: "authenticated-user" });
   mocks.local.mockReset().mockResolvedValue(page);
   mocks.remote.mockReset().mockResolvedValue(page);
+  mocks.commit.mockReset().mockResolvedValue({ hash: "c".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
+});
+
+const commitRequest = () => new Request(`https://codaloud.test/api/projects/${projectId}/commits`, {
+  method: "POST", headers: { Cookie: "session=valid", "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "Update", paths: ["file.txt"] }),
+});
+
+it("returns the confirmed commit after validation and staging", async () => {
+  const input = commitRequest();
+  const response = await POST(input, { projectId });
+  expect(mocks.commit).toHaveBeenCalledExactlyOnceWith(input.headers, projectId, { message: "Update", paths: ["file.txt"] }, input.signal);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ error: false, message: "Selected changes committed.", data: {
+    hash: "c".repeat(40), currentBranch: "main", parentHash: "a".repeat(40),
+  } });
+});
+
+it("does not validate workspace files when the route session is missing", async () => {
+  mocks.user.mockResolvedValue({ userId: null });
+  expect((await POST(commitRequest(), { projectId })).status).toBe(401);
+  expect(mocks.commit).not.toHaveBeenCalled();
+});
+
+it.each([[404, "PROJECT_NOT_FOUND"], [409, "COMMIT_SELECTION_CHANGED"], [503, "WORKSPACE_RESTORING"]] as const)(
+  "returns commit validation errors to the caller: %s %s", async (status, code) => {
+    mocks.commit.mockRejectedValue(new SandboxFilesError(status, code, "Safe validation message."));
+    const response = await POST(commitRequest(), { projectId });
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: true, code, message: "Safe validation message." });
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    if (status === 503) expect(response.headers.get("Retry-After")).toBe("3");
+  },
+);
+
+it("treats unexpected failures after starting the commit flow as an unknown outcome", async () => {
+  mocks.commit.mockRejectedValue(new Error("internal credential"));
+  const response = await POST(commitRequest(), { projectId });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toMatchObject({ error: true, code: "COMMIT_OUTCOME_UNKNOWN" });
 });
 
 it.each(["local", "remote"])("dispatches %s with normalized filters, cursor and the original session and signal", async (source) => {

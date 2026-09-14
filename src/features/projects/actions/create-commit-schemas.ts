@@ -28,3 +28,17 @@ export const projectCreatedCommitSchema = z.object({
   parentHash: commitHashSchema.nullable(),
 });
 export type ProjectCreatedCommitSchema = z.infer<typeof projectCreatedCommitSchema>;
+
+export const createProjectCommitResponseSchema = z.discriminatedUnion("error", [
+  z.object({
+    error: z.literal(true),
+    message: z.string().min(1),
+    code: z.string().min(1).optional(),
+  }),
+  z.object({
+    error: z.literal(false),
+    message: z.string().min(1),
+    data: projectCreatedCommitSchema,
+  }),
+]);
+export type CreateProjectCommitResponseSchema = z.infer<typeof createProjectCommitResponseSchema>;

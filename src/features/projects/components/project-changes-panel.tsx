@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,8 @@ export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }
   // selection to the actual snapshot and account instead of that picker.
   const scope = JSON.stringify([session.data?.user.id, projectId, data?.currentBranch, data?.headSha]);
   const [selection, setSelection] = useState<{ scope: string; paths: string[] }>({ scope, paths: [] });
-  const availablePaths = new Set(changes.map((change) => change.path));
-  const paths = selection.scope === scope ? selection.paths.filter((path) => availablePaths.has(path)) : [];
+  const availablePaths = useMemo(() => new Set(changes.map((change) => change.path)), [changes]);
+  const paths = useMemo(() => selection.scope === scope ? selection.paths.filter((path) => availablePaths.has(path)) : [], [selection, scope, availablePaths]);
   if (selection.scope !== scope || paths.length !== selection.paths.length) {
     // Reconcile before children render, so removed files cannot silently become
     // selected again if a later poll brings them back.
@@ -44,14 +44,25 @@ export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }
   const untracked = changes.filter((change) => change.isUntracked);
   const checked = paths.length === 0 ? false : paths.length === changes.length ? true : "mixed";
   const paused = query.fetchStatus === "paused";
+  const isReady = Boolean(data && !query.error && !query.isFetching && !paused &&
+    data.repositoryState !== "not-initialized" && !data.isDetached && data.currentBranch &&
+    !changes.some((change) => change.isConflicted || (selectedPaths.has(change.path) && (
+      change.kind !== "file" || change.staged?.unavailableReason === "unsupported" || change.unstaged?.unavailableReason === "unsupported"
+    ))));
+  const clear = useCallback(() => {
+    setSelection((previous) => previous.scope === scope ? { scope, paths: [] } : previous);
+  }, [scope]);
 
   useEffect(() => {
     setCommitSelection({
       scope,
       selectedCount: paths.length,
       totalCount: changes.length,
+      paths,
+      isReady,
+      clear,
     });
-  }, [changes.length, paths.length, scope, setCommitSelection]);
+  }, [changes.length, paths, scope, isReady, clear, setCommitSelection]);
 
   const toggleChanges = (items: ProjectRepositoryChangeSchema[]) => {
     const toggled = new Set(items.map((change) => change.path));

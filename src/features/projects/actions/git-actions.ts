@@ -20,6 +20,58 @@ import {
   type ProjectCommitQueryInput,
 } from "./commit-schemas";
 import { projectCommitParamsSchema } from "../lib/commit-params";
+import {
+  createProjectCommitResponseSchema,
+  createProjectCommitSchema,
+  type CreateProjectCommitResponseSchema,
+  type CreateProjectCommitSchema,
+} from "./create-commit-schemas";
+
+export const createProjectCommitAction = async (
+  projectId: string,
+  unsafeInput: CreateProjectCommitSchema,
+): Promise<CreateProjectCommitResponseSchema> => {
+  const unconfirmed = {
+    error: true as const,
+    code: "COMMIT_OUTCOME_UNKNOWN",
+    message: "Unable to confirm the commit. Refresh commit history and Git changes before retrying; the commit may already exist.",
+  };
+  let requestStarted = false;
+
+  try {
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError)
+      return { error: true, code: "SESSION_UNAVAILABLE", message: "Unable to verify your session. Please try again." };
+    if (!userId)
+      return { error: true, code: "UNAUTHENTICATED", message: "Sign in to commit changes." };
+    if (!isValidIds(projectId))
+      return { error: true, code: "INVALID_PROJECT", message: "Invalid project ID." };
+    const input = createProjectCommitSchema.safeParse(unsafeInput);
+    if (!input.success)
+      return { error: true, code: "INVALID_COMMIT_INPUT", message: "Send a nonempty commit message and a nonempty list of unique repository-relative paths, without extra fields." };
+
+    const headers = await createRequestHeaders({ "Content-Type": "application/json" });
+    if (!headers.get("Cookie")?.trim())
+      return { error: true, code: "UNAUTHENTICATED", message: "Sign in to commit changes." };
+
+    const body = JSON.stringify(input.data);
+    requestStarted = true;
+    const response = await fetchBase(`/api/projects/${projectId}/commits`, {
+      method: "POST",
+      headers,
+      credentials: "omit",
+      body,
+    });
+    const result = createProjectCommitResponseSchema.parse(await response.json());
+    if (result.error) return result;
+    if (!response.ok) return unconfirmed;
+    return result;
+  } catch {
+    // A lost response can follow a successful commit; do not retry this request.
+    if (requestStarted) return unconfirmed;
+    return { error: true, code: "COMMIT_REQUEST_UNAVAILABLE", message: "Unable to prepare the commit request. Please try again." };
+  }
+};
 
 export const checkoutProjectBranchAction = async (
   projectId: string,

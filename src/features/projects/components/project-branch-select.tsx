@@ -21,6 +21,7 @@ import { formatProjectBranchLabel } from "../lib/formatters";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
+import { projectCommitParamsSchema } from "../lib/commit-params";
 
 const getRemoteBranches = (page: GitHubRepositoryBranchPage) => page.branches;
 const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
@@ -64,15 +65,25 @@ export const ProjectBranchSelect = () => {
     checkoutBranch(name, async () => {
       await flushPendingSaves();
       const result = await query.checkout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
-      // Reset cached bytes and Git snapshots for the submitted workspace. Other
-      // accounts/projects remain intact if the user navigates while checkout runs.
-      await queryClient.resetQueries({
-        queryKey: ["projects"],
-        // The checkout mutation already invalidates changes; avoid a second fetch.
-        predicate: ({ queryKey }) => queryKey[1] !== "changes" && Boolean(userId) && queryKey.includes(userId) && queryKey.includes(projectId),
-      }).catch(() => {
-        // Read errors are displayed by their queries; a refresh failure cannot undo a confirmed checkout.
-      });
+      if (userId) {
+        const folders = { queryKey: ["projects", "files", userId, projectId] };
+        // Folder data also proves readiness to ProjectSetupGate. Keep it visible
+        // while refreshing; resetting project details would unmount the workspace.
+        await queryClient.cancelQueries(folders);
+        // Clear old document bytes and pagination snapshots, which cannot be
+        // reused across checkouts. The mutation already refreshes changes.
+        await Promise.allSettled([
+          queryClient.invalidateQueries(folders),
+          queryClient.resetQueries({ queryKey: ["projects", "file", userId, projectId] }),
+          queryClient.resetQueries({ queryKey: ["projects", "file-search", "infinite", userId, projectId] }),
+          queryClient.resetQueries({
+            queryKey: ["projects", "commits", "infinite", "cursor", userId, projectId],
+            predicate: ({ queryKey }) => projectCommitParamsSchema.safeParse(queryKey[6]).data?.source === "local",
+          }),
+          queryClient.resetQueries({ queryKey: ["projects", "branches", "infinite", "cursor", userId, projectId, "local"] }),
+        ]);
+        // Read errors belong to their queries and cannot undo a confirmed checkout.
+      }
       if (filePath) refreshFile(filePath);
       return result;
     });

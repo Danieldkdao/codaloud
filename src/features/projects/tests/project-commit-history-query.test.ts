@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { readProjectCommitsAction } from "../actions/git-actions";
+import { createProjectCommitAction, readProjectCommitsAction } from "../actions/git-actions";
 import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import type { ProjectCommitPageSchema } from "../actions/commit-schemas";
 
@@ -12,9 +12,12 @@ const session = vi.hoisted(() => ({
   isPending: false, error: null as Error | null,
 }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
-vi.mock("../actions/git-actions", () => ({ readProjectCommitsAction: vi.fn() }));
+vi.mock("../actions/git-actions", () => ({ readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn() }));
 
 const read = vi.mocked(readProjectCommitsAction);
+const createCommit = vi.mocked(createProjectCommitAction);
+const commitInput = { message: "Update files", paths: ["file.ts"] };
+const createdCommit = { hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) };
 const projectId = "11111111-1111-4111-8111-111111111111";
 const otherProjectId = "22222222-2222-4222-8222-222222222222";
 const page = (message: string, nextCursor: string | null = null): ProjectCommitPageSchema => ({
@@ -54,6 +57,7 @@ beforeEach(() => {
   session.isPending = false;
   session.error = null;
   read.mockReset().mockResolvedValue(page("first"));
+  createCommit.mockReset().mockResolvedValue({ error: false, message: "Committed.", data: createdCommit });
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -238,3 +242,171 @@ it.each([401, 403, 404, 409, 429])("does not automatically retry HTTP %s", async
   expect(current.isError).toBe(true);
   expect(read).toHaveBeenCalledOnce();
 });
+
+it("exposes the full commit mutation and returns the confirmed commit", async () => {
+  let finish!: (value: Awaited<ReturnType<typeof createProjectCommitAction>>) => void;
+  createCommit.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render({ enabled: false });
+  let pending!: ReturnType<typeof current.commit.mutateAsync>;
+  await act(async () => { pending = current.commit.mutateAsync(commitInput); });
+  await flush();
+  expect(current.commit.isPending).toBe(true);
+  expect(current.commit.mutate).toEqual(expect.any(Function));
+  expect(current.commit.reset).toEqual(expect.any(Function));
+  expect(createCommit).toHaveBeenCalledExactlyOnceWith(projectId, commitInput);
+  await run(async () => {
+    finish({ error: false, message: "Committed.", data: createdCommit });
+    expect(await pending).toEqual(createdCommit);
+  });
+  expect(current.commit.isPending).toBe(false);
+  expect(current.commit.error).toBeNull();
+});
+
+it("preserves action error codes and disables automatic commit retries", async () => {
+  client.setDefaultOptions({ mutations: { retry: 3, retryDelay: 0 } });
+  createCommit.mockResolvedValue({ error: true, message: "Refresh before retrying.", code: "COMMIT_OUTCOME_UNKNOWN" });
+  await render();
+  await run(async () => {
+    await expect(current.commit.mutateAsync(commitInput)).rejects.toMatchObject({ message: "Refresh before retrying.", code: "COMMIT_OUTCOME_UNKNOWN" });
+  });
+  expect(current.commit.error).toMatchObject({ code: "COMMIT_OUTCOME_UNKNOWN" });
+  expect(createCommit).toHaveBeenCalledOnce();
+});
+
+it.each(["pending", "signed-out", "error"])("blocks committing when authentication is %s", async (state) => {
+  if (state === "pending") session.isPending = true;
+  if (state === "signed-out") session.data = null;
+  if (state === "error") session.error = new Error("Unavailable");
+  await render();
+  await run(async () => { await expect(current.commit.mutateAsync(commitInput)).rejects.toThrow("Sign in to commit changes."); });
+  expect(createCommit).not.toHaveBeenCalled();
+});
+
+it("blocks committing without a project", async () => {
+  await render({}, null);
+  await run(async () => { await expect(current.commit.mutateAsync(commitInput)).rejects.toThrow("Invalid project ID."); });
+  expect(createCommit).not.toHaveBeenCalled();
+});
+
+it("refreshes local history from page one after eviction and invalidates changed files", async () => {
+  read.mockResolvedValueOnce(page("first", "next")).mockResolvedValueOnce(page("second")).mockResolvedValue(page("new commit"));
+  const changesKey = ["projects", "changes", "user-one", projectId];
+  client.setQueryData(changesKey, { headSha: "a".repeat(40) });
+  await render({ maxPages: 1 });
+  await run(() => current.onLoadMore());
+  await run(() => current.commit.mutateAsync(commitInput));
+  expect(read.mock.calls.map(([, input]) => input.cursor)).toEqual([null, "next", null]);
+  expect(current.data?.pages).toEqual([page("new commit")]);
+  expect(client.getQueryState(changesKey)?.isInvalidated).toBe(true);
+});
+
+it("refreshes the submitted account and project when navigation changes during a commit", async () => {
+  let finish!: (value: Awaited<ReturnType<typeof createProjectCommitAction>>) => void;
+  createCommit.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const originalChanges = ["projects", "changes", "user-one", projectId];
+  const otherChanges = ["projects", "changes", "user-two", otherProjectId];
+  client.setQueryData(originalChanges, { changed: true });
+  client.setQueryData(otherChanges, { changed: true });
+  await render({ source: "remote" });
+  const remoteKey = client.getQueryCache().getAll().find((query) => query.queryKey[1] === "commits")!.queryKey;
+  await render();
+  let pending!: ReturnType<typeof current.commit.mutateAsync>;
+  await act(async () => { pending = current.commit.mutateAsync(commitInput); });
+  session.data = { user: { id: "user-two" } };
+  await render({}, otherProjectId);
+  await run(async () => {
+    finish({ error: false, message: "Committed.", data: createdCommit });
+    await pending;
+  });
+  expect(client.getQueryState(originalChanges)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(otherChanges)?.isInvalidated).toBe(false);
+  expect(client.getQueryData(remoteKey)).toBeDefined();
+  expect(current.data?.pages).toEqual([page("first")]);
+});
+
+it("keeps a confirmed commit successful when refreshing queries fails", async () => {
+  await render();
+  const reset = vi.spyOn(client, "resetQueries").mockRejectedValueOnce(new Error("Refresh failed"));
+  await run(async () => { expect(await current.commit.mutateAsync(commitInput)).toEqual(createdCommit); });
+  expect(current.commit.error).toBeNull();
+  reset.mockRestore();
+});
+
+it("does not queue an offline commit for execution after reconnecting", async () => {
+  onlineManager.setOnline(false);
+  createCommit.mockResolvedValue({ error: true, code: "COMMIT_REQUEST_UNAVAILABLE", message: "Unable to connect." });
+  await render({ enabled: false });
+  await run(async () => { await expect(current.commit.mutateAsync(commitInput)).rejects.toThrow("Unable to connect."); });
+  expect(createCommit).toHaveBeenCalledOnce();
+  onlineManager.setOnline(true);
+  await flush();
+  expect(createCommit).toHaveBeenCalledOnce();
+});
+
+it("invalidates every file, directory and local branch query for the submitted workspace", async () => {
+  const keys = (userId: string, id: string) => [
+    ["projects", "file", userId, id, "file.ts"],
+    ["projects", "file", userId, id, "other.ts"],
+    ["projects", "files", userId, id, ""],
+    ["projects", "files", userId, id, "src/nested"],
+    ["projects", "changes", userId, id],
+    ["projects", "branches", "infinite", "cursor", userId, id, "local", { search: "" }],
+  ];
+  const affected = keys("user-one", projectId);
+  const unrelated = [...keys("user-two", projectId), ...keys("user-one", otherProjectId)];
+  for (const key of [...affected, ...unrelated]) client.setQueryData(key, { cached: true });
+  await render({ enabled: false });
+  await run(() => current.commit.mutateAsync(commitInput));
+  for (const key of affected) {
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(client.getQueryData(key)).toEqual({ cached: true });
+  }
+  for (const key of unrelated) expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+});
+
+it("discards old file-search snapshots without resetting other workspaces", async () => {
+  const searchKey = ["projects", "file-search", "infinite", "user-one", projectId, { search: "text" }];
+  const otherKey = ["projects", "file-search", "infinite", "user-one", otherProjectId, { search: "text" }];
+  for (const key of [searchKey, otherKey]) client.setQueryData(key, { pages: ["old snapshot"], pageParams: [null] });
+  await render({ enabled: false });
+  await run(() => current.commit.mutateAsync(commitInput));
+  expect(client.getQueryData(searchKey)).toBeUndefined();
+  expect(client.getQueryData(otherKey)).toBeDefined();
+});
+
+it("cancels an older individual-file read and refetches its contents and stats", async () => {
+  const queryKey = ["projects", "file", "user-one", projectId, "file.ts"];
+  const refreshed = { content: "later edit", stats: { staged: false, modified: true } };
+  let finishOldRead!: (value: typeof refreshed) => void;
+  let oldSignal!: AbortSignal;
+  const readFile = vi.fn<({ signal }: { signal: AbortSignal }) => Promise<typeof refreshed>>()
+    .mockImplementationOnce(({ signal }) => {
+      oldSignal = signal;
+      return new Promise((resolve) => { finishOldRead = resolve; });
+    }).mockResolvedValue(refreshed);
+  const observer = new QueryObserver(client, { queryKey, queryFn: readFile, staleTime: Infinity });
+  const unsubscribe = observer.subscribe(() => {});
+  try {
+    await render({ enabled: false });
+    await run(() => current.commit.mutateAsync(commitInput));
+    expect(oldSignal.aborted).toBe(true);
+    await run(() => finishOldRead({ content: "older bytes", stats: { staged: true, modified: false } }));
+    expect(readFile).toHaveBeenCalledTimes(2);
+    expect(client.getQueryData(queryKey)).toEqual(refreshed);
+  } finally { unsubscribe(); }
+});
+
+it.each(["COMMIT_FAILED", "COMMIT_OUTCOME_UNKNOWN", "COMMIT_STAGING_OUTCOME_UNKNOWN"])(
+  "refreshes potentially changed staging after %s while preserving the commit error", async (code) => {
+    const key = ["projects", "file", "user-one", projectId, "file.ts"];
+    const changesKey = ["projects", "changes", "user-one", projectId];
+    for (const queryKey of [key, changesKey]) client.setQueryData(queryKey, { staged: false });
+    createCommit.mockResolvedValue({ error: true, code, message: "Refresh before retrying." });
+    await render({ enabled: false });
+    await run(async () => { await expect(current.commit.mutateAsync(commitInput)).rejects.toMatchObject({ code }); });
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(changesKey)?.isInvalidated).toBe(true);
+    expect(current.commit.error).toMatchObject({ code });
+    expect(createCommit).toHaveBeenCalledOnce();
+  },
+);

@@ -10,6 +10,9 @@ type ProjectCommitSelection = {
   scope: string;
   selectedCount: number;
   totalCount: number;
+  paths: string[];
+  isReady: boolean;
+  clear: () => void;
 };
 
 type ProjectWorkspaceChangesState = {
@@ -29,12 +32,19 @@ export const ProjectWorkspaceChangesProvider = ({
     scope: "",
     selectedCount: 0,
     totalCount: 0,
+    paths: [],
+    isReady: false,
+    clear: () => {},
   });
   const setCommitSelection = useCallback((selection: ProjectCommitSelection) => {
     setSelection((previous) =>
       previous.scope === selection.scope &&
       previous.selectedCount === selection.selectedCount &&
-      previous.totalCount === selection.totalCount
+      previous.totalCount === selection.totalCount &&
+      previous.isReady === selection.isReady &&
+      previous.clear === selection.clear &&
+      previous.paths.length === selection.paths.length &&
+      previous.paths.every((path, index) => path === selection.paths[index])
         ? previous
         : selection,
     );

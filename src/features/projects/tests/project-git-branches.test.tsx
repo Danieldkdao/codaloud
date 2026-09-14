@@ -3,7 +3,7 @@ import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/us
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { act, createElement, useImperativeHandle, useState, useRef, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
 import GitScreen from "@/app/projects/[projectId]/git/index";
@@ -32,12 +32,16 @@ const repositoryChanges = (): ProjectRepositoryChangesSchema => ({
 });
 
 const history = vi.hoisted(() => ({
+  commit: { mutateAsync: vi.fn(), isPending: false },
   query: vi.fn(), onLoadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: undefined as { pages: ProjectCommitPageSchema[] } | undefined,
 }));
-vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: (...args: unknown[]) => { history.query(...args); return history; } }));
+vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: (...args: unknown[]) => {
+  if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false && !("branch" in args[1]))) history.query(...args);
+  return history;
+} }));
 const commitPage = (message = "Live commit"): ProjectCommitPageSchema => ({
   commits: [{ hash: "a".repeat(40), message, author: "Ada", authorEmail: "ada@example.com", committedAt: "2026-09-12T12:00:00Z", parentHashes: [], isMerge: false }],
   snapshotSha: "a".repeat(40), nextCursor: null, isShallow: false,
@@ -55,6 +59,8 @@ const live = vi.hoisted(() => ({
   data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
 }));
 const workspaceFiles = vi.hoisted(() => ({ flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
+const feedback = vi.hoisted(() => ({ success: vi.fn() }));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFile: workspaceFiles.refreshFile }) }));
 let queryClient: QueryClient;
@@ -141,8 +147,8 @@ vi.mock("@expo/ui/community/bottom-sheet", () => ({
   BottomSheetView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
 }));
 vi.mock("@/components/ui/input", () => ({
-  Input: ({ placeholder, accessibilityLabel, value, onChangeText }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void }) =>
-    createElement("input", { placeholder, "aria-label": accessibilityLabel, value, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
+  Input: ({ placeholder, accessibilityLabel, value, onChangeText, editable }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void; editable?: boolean }) =>
+    createElement("input", { placeholder, "aria-label": accessibilityLabel, value, readOnly: editable === false, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "var(--card)" }));
 vi.mock("react-native-svg", () => {
@@ -210,12 +216,15 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  feedback.success.mockReset();
+  history.commit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
+  history.commit.isPending = false;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
   live.checkout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
   Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
-  changesQuery.query.mockClear(); changesQuery.refetch.mockClear();
+  changesQuery.query.mockClear(); changesQuery.refetch.mockReset().mockImplementation(async () => ({ data: changesQuery.data, isError: false }));
   Object.assign(history, { data: { pages: [commitPage()] }, isPending: false, isFetching: false, isFetchingNextPage: false,
     isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
   history.query.mockClear(); history.onLoadMore.mockClear(); history.retry.mockClear();
@@ -619,11 +628,14 @@ it("keeps local selection usable when GitHub fails or no repository is connected
 
 
 it("loads changes only while their Git tab is active", () => {
-  expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: true });
+  expect(changesQuery.query).toHaveBeenCalledWith(live.projectId, { enabled: true });
+  changesQuery.query.mockClear();
   click("Commit History");
-  expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: false });
+  expect(changesQuery.query).toHaveBeenCalled();
+  expect(changesQuery.query.mock.calls.every(([, options]) => options.enabled === false)).toBe(true);
+  changesQuery.query.mockClear();
   click("Changes");
-  expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: true });
+  expect(changesQuery.query).toHaveBeenCalledWith(live.projectId, { enabled: true });
 });
 
 it("updates the visible branch immediately and disables the picker until checkout succeeds", async () => {
@@ -674,6 +686,68 @@ it("reverts without checkout when saving fails", async () => {
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
   expect(live.checkout.mutateAsync).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenCalledWith("Couldn’t switch branches", "Save failed. Open Code to retry.");
+});
+
+it("keeps workspace readiness intact while checkout refreshes the root folder", async () => {
+  const projectKey = ["projects", "detail", live.userId, live.projectId];
+  const filesKey = ["projects", "files", live.userId, live.projectId, ""];
+  const project = { setupStatus: "ready", sandboxId: "sandbox-one" };
+  queryClient.setQueryData(projectKey, project);
+  queryClient.setQueryData(filesKey, [{ path: "app.ts" }]);
+  const readProject = vi.fn(async () => project);
+  let finishFiles!: (files: { path: string }[]) => void;
+  const readFiles = vi.fn(() => new Promise<{ path: string }[]>((resolve) => { finishFiles = resolve; }));
+  const projectObserver = new QueryObserver(queryClient, { queryKey: projectKey, queryFn: readProject, staleTime: Infinity });
+  const filesObserver = new QueryObserver(queryClient, { queryKey: filesKey, queryFn: readFiles, staleTime: Infinity });
+  const projectStates: string[] = [];
+  const folderStates: string[] = [];
+  const unsubscribeProject = projectObserver.subscribe((result) => projectStates.push(result.status));
+  const unsubscribeFiles = filesObserver.subscribe((result) => folderStates.push(result.status));
+  try {
+    await selectBranch("feature/live");
+    expect(readFiles).toHaveBeenCalledOnce();
+    // These are the two readiness inputs used by ProjectSetupGate. Neither
+    // should revert to pending and display startup after a successful checkout.
+    expect(projectStates).not.toContain("pending");
+    expect(folderStates).not.toContain("pending");
+    expect(readProject).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(filesKey)).toEqual([{ path: "app.ts" }]);
+    await act(async () => finishFiles([{ path: "branch-file.ts" }]));
+    expect(queryClient.getQueryData(filesKey)).toEqual([{ path: "branch-file.ts" }]);
+    expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
+    expect(workspaceFiles.alert).not.toHaveBeenCalled();
+  } finally {
+    unsubscribeProject();
+    unsubscribeFiles();
+  }
+});
+
+it("refreshes branch snapshots without touching project readiness or other workspaces", async () => {
+  const localHistoryKey = ["projects", "commits", "infinite", "cursor", live.userId, live.projectId,
+    { projectId: live.projectId, source: "local", branch: "main", cursor: null, pageSize: 20 }];
+  const remoteHistoryKey = [...localHistoryKey.slice(0, 6), { ...localHistoryKey[6] as object, source: "remote" }];
+  const resetKeys = [
+    localHistoryKey,
+    ["projects", "file-search", "infinite", live.userId, live.projectId, { query: "old" }],
+    ["projects", "branches", "infinite", "cursor", live.userId, live.projectId, "local", {}],
+    ["projects", "file", live.userId, live.projectId, "app.ts"],
+  ];
+  const folderKey = ["projects", "files", live.userId, live.projectId, "src"];
+  const unchangedKeys = [
+    remoteHistoryKey,
+    ["projects", "detail", live.userId, live.projectId],
+    ["projects", "files", live.userId, "other-project", ""],
+    ["projects", "files", "other-user", live.projectId, ""],
+  ];
+  for (const key of [...resetKeys, folderKey, ...unchangedKeys]) queryClient.setQueryData(key, "cached");
+  await selectBranch("feature/live");
+  for (const key of resetKeys) expect(queryClient.getQueryData(key)).toBeUndefined();
+  expect(queryClient.getQueryData(folderKey)).toBe("cached");
+  expect(queryClient.getQueryState(folderKey)?.isInvalidated).toBe(true);
+  for (const key of unchangedKeys) {
+    expect(queryClient.getQueryData(key)).toBe("cached");
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+  }
 });
 
 it("distinguishes loading, offline, failure, and an uninitialized repository", () => {
@@ -783,4 +857,111 @@ it("combines staged and unstaged counts into a single summary", () => {
   expect(container.textContent).toContain("View Full Diff+4−2");
   expect(container.textContent).not.toContain("Staged");
   expect(container.textContent).not.toContain("Unstaged");
+});
+
+const enterCommitMessage = (message: string) => {
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')!;
+  act(() => { input.value = message; input.dispatchEvent(new Event("input", { bubbles: true })); });
+};
+const commitButton = () => container.querySelector<HTMLButtonElement>('[aria-label="Commit selected changes"]')!;
+
+it("enables committing only with a valid message and a nonempty selected path list", () => {
+  click("Open commit form");
+  expect(commitButton().disabled).toBe(true);
+  enterCommitMessage("Update files");
+  expect(commitButton().disabled).toBe(true);
+  click("Select tracked changes");
+  expect(commitButton().disabled).toBe(false);
+  for (const message of [" ", "x".repeat(5001), "bad\0message"]) {
+    enterCommitMessage(message);
+    expect(commitButton().disabled).toBe(true);
+  }
+  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+});
+
+it("submits the latest exact selection after saves and a fresh changes read, then clears the form", async () => {
+  click("Include src/example.ts");
+  // Swap selection without changing its count.
+  act(() => {
+    container.querySelector<HTMLButtonElement>('[aria-label="Include src/example.ts"]')!.click();
+    container.querySelector<HTMLButtonElement>('[aria-label="Include new.txt"]')!.click();
+  });
+  click("Open commit form");
+  enterCommitMessage("  Commit new file  ");
+  click("Commit selected changes");
+  await act(async () => {});
+  expect(history.commit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message: "Commit new file", paths: ["new.txt"] });
+  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(changesQuery.refetch.mock.invocationCallOrder[0]);
+  expect(changesQuery.refetch.mock.invocationCallOrder[0]).toBeLessThan(history.commit.mutateAsync.mock.invocationCallOrder[0]);
+  expect(feedback.success).toHaveBeenCalledWith("Selected changes committed.");
+  expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Select all changes"]')?.getAttribute("aria-checked")).toBe("false");
+  click("Open commit form");
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe("");
+});
+
+it("blocks repeated submission while saves or the commit are pending", async () => {
+  let finishSave!: () => void;
+  let finishCommit!: (value: unknown) => void;
+  workspaceFiles.flushPendingSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve; }));
+  history.commit.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finishCommit = resolve; }));
+  click("Select all changes"); click("Open commit form"); enterCommitMessage("Update");
+  act(() => { commitButton().click(); commitButton().click(); });
+  expect(commitButton().disabled).toBe(true);
+  expect(workspaceFiles.flushPendingSaves).toHaveBeenCalledOnce();
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.readOnly).toBe(true);
+  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  await act(async () => { finishSave(); });
+  expect(commitButton().disabled).toBe(true);
+  expect(history.commit.mutateAsync).toHaveBeenCalledOnce();
+  await act(async () => { finishCommit({ hash: "b".repeat(40) }); });
+});
+
+it.each(["save", "commit"])("keeps the draft and selection when %s fails", async (stage) => {
+  const failure = new Error(stage === "save" ? "Save failed." : "Commit outcome unknown. Refresh before retrying.");
+  (stage === "save" ? workspaceFiles.flushPendingSaves : history.commit.mutateAsync).mockRejectedValueOnce(failure);
+  click("Select tracked changes"); click("Open commit form"); enterCommitMessage("My draft");
+  click("Commit selected changes");
+  await act(async () => {});
+  expect(workspaceFiles.alert).toHaveBeenCalledWith("Unable to commit", failure.message);
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe("My draft");
+  expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(feedback.success).not.toHaveBeenCalled();
+  if (stage === "save") expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+});
+
+it.each(["missing-path", "branch", "head", "error"])("rejects a stale %s after saving and refreshing", async (kind) => {
+  const fresh = repositoryChanges();
+  if (kind === "missing-path") fresh.changes = [];
+  if (kind === "branch") fresh.currentBranch = "other";
+  if (kind === "head") fresh.headSha = "c".repeat(40);
+  changesQuery.refetch.mockResolvedValueOnce({ data: fresh, isError: kind === "error" });
+  click("Select tracked changes"); click("Open commit form"); enterCommitMessage("Update");
+  click("Commit selected changes");
+  await act(async () => {});
+  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  expect(workspaceFiles.alert).toHaveBeenCalled();
+});
+
+it.each(["loading", "error", "offline", "detached", "conflicted", "unsupported"])("disables commit submission when changes are %s", (state) => {
+  click("Select tracked changes"); click("Open commit form"); enterCommitMessage("Update");
+  if (state === "loading") changesQuery.isFetching = true;
+  if (state === "error") changesQuery.error = new Error("failed");
+  if (state === "offline") changesQuery.fetchStatus = "paused";
+  if (state === "detached") changesQuery.data = { ...repositoryChanges(), isDetached: true };
+  if (state === "conflicted") changesQuery.data!.changes[0].isConflicted = true;
+  if (state === "unsupported") changesQuery.data!.changes[0].kind = "symlink";
+  act(() => root.render(createElement(Workspace)));
+  expect(commitButton().disabled).toBe(true);
+});
+
+it("does not submit if the form's workspace changes while saves are pending", async () => {
+  let finishSave!: () => void;
+  workspaceFiles.flushPendingSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve; }));
+  click("Select tracked changes"); click("Open commit form"); enterCommitMessage("Update");
+  click("Commit selected changes");
+  live.projectId = "22222222-2222-4222-8222-222222222222";
+  act(() => root.render(createElement(Workspace)));
+  await act(async () => { finishSave(); });
+  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
 });

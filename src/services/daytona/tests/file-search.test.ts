@@ -64,7 +64,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { vi.unstubAllGlobals(); await rm(home, { recursive: true, force: true }); });
 
-sandboxTest("merges title and content by full path and ranks actual occurrences before paging", async () => {
+sandboxTest("ranks every filename match before content-only matches before paging", async () => {
   await file("needle.ts", "needle ".repeat(150));
   await file("nested/needle.ts", "needle ".repeat(101));
   await file("title-needle.ts", "no match");
@@ -74,6 +74,7 @@ sandboxTest("merges title and content by full path and ranks actual occurrences 
   expect(first.totalCount).toBe(16);
   expect(first.files[0]).toMatchObject({ path: "needle.ts", titleMatches: true, contentMatchCount: 150 });
   expect(first.files[1]).toMatchObject({ path: "nested/needle.ts", contentMatchCount: 101 });
+  expect(first.files[2]).toMatchObject({ path: "title-needle.ts", titleMatches: true, contentMatchCount: 0 });
   expect(first.nextCursor).toEqual(expect.any(String));
   // Continuations may read session JSON and file metadata, but not workspace contents.
   hook = `const fs = require('node:fs'); const read = fs.readSync; fs.readSync = (...args) => {
@@ -82,10 +83,32 @@ sandboxTest("merges title and content by full path and ranks actual occurrences 
   };`;
   const second = await search({ cursor: first.nextCursor });
   expect(second.files).toHaveLength(6);
-  expect(second.files.at(-1)?.path).toBe("title-needle.ts");
+  expect(second.files.at(-1)?.path).toBe("file-0.ts");
   expect(second.nextCursor).toBeNull();
   expect(new Set([...first.files, ...second.files].map(({ path }) => path)).size).toBe(16);
   expect(await search({ cursor: first.nextCursor })).toEqual(second);
+});
+
+sandboxTest("keeps filename matches first across pages and breaks count ties by path", async () => {
+  await file("a-body.ts", "needle ".repeat(200));
+  await file("b-body.ts", "needle ".repeat(200));
+  await file("c-body.ts", "needle");
+  await file("a-needle.ts", "no match");
+  await file("nested/b-NEEDLE.ts", "needle");
+  await file("c-needle.ts", "needle");
+  const first = await search({ pageSize: 2 });
+  const second = await search({ pageSize: 2, cursor: first.nextCursor });
+  const third = await search({ pageSize: 2, cursor: second.nextCursor });
+  expect(first.files.map(({ path }) => path)).toEqual(["c-needle.ts", "nested/b-NEEDLE.ts"]);
+  expect(second.files.map(({ path }) => path)).toEqual(["a-needle.ts", "a-body.ts"]);
+  expect(third.files.map(({ path }) => path)).toEqual(["b-body.ts", "c-body.ts"]);
+  expect(third.nextCursor).toBeNull();
+  expect((await search({ scope: "title" })).files.map(({ path }) => path)).toEqual([
+    "a-needle.ts", "c-needle.ts", "nested/b-NEEDLE.ts",
+  ]);
+  expect((await search({ scope: "content" })).files.map(({ path }) => path)).toEqual([
+    "a-body.ts", "b-body.ts", "c-body.ts", "c-needle.ts", "nested/b-NEEDLE.ts",
+  ]);
 });
 
 sandboxTest("supports title/content scopes, literal Unicode text and search rooted at a folder", async () => {
@@ -110,7 +133,7 @@ sandboxTest("skips excluded directories and symlinks, reports unsupported conten
   await writeFile(join(home, "outside.txt"), "needle");
   await symlink(join(home, "outside.txt"), join(home, ".codaloud/workspace/link.txt"));
   const result = await search();
-  expect(result.files.map(({ path }) => path)).toEqual([".env", "needle-large.txt", "needle.bin"]);
+  expect(result.files.map(({ path }) => path)).toEqual(["needle-large.txt", "needle.bin", ".env"]);
   expect(result.skippedContentFiles).toBe(2);
   expect(result.files.find(({ path }) => path === "needle.bin")?.contentSearched).toBe(false);
 });

@@ -17,6 +17,9 @@ type ProjectWorkspaceFileSearchState = {
   setTitle: (title: boolean) => void;
   content: boolean;
   setContent: (content: boolean) => void;
+  currentFolder: boolean;
+  setCurrentFolder: (currentFolder: boolean) => void;
+  isCurrentFolderScoped: boolean;
   scope: ProjectFileSearchScope;
   isSearching: boolean;
 };
@@ -50,7 +53,10 @@ export const ProjectWorkspaceFileSearchProvider = ({
   );
   const [title, setTitle] = useState(false);
   const [content, setContent] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState(false);
   const scope = getProjectFileSearchScope(title, content);
+  // With no filters selected, search both fields within the browsed folder.
+  const isCurrentFolderScoped = currentFolder || (!title && !content);
 
   return (
     <ProjectWorkspaceFileSearchContext
@@ -62,6 +68,9 @@ export const ProjectWorkspaceFileSearchProvider = ({
         setTitle,
         content,
         setContent,
+        currentFolder,
+        setCurrentFolder,
+        isCurrentFolderScoped,
         scope,
         isSearching: query.trim().length > 0,
       }}

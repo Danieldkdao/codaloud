@@ -24,7 +24,9 @@ vi.mock("../hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspa
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
 vi.mock("../components/project-file-create-row", () => ({ ProjectFileCreateRow: () => null }));
 vi.mock("../components/project-files-list", () => ({ ProjectFilesList: ({ onDirectoryPress }: { onDirectoryPress: (path: string) => void }) =>
-  <button onClick={() => onDirectoryPress("src")}>Original directory</button> }));
+  <><button onClick={() => onDirectoryPress("src")}>Original directory</button>
+    <button onClick={() => onDirectoryPress("src/components")}>Nested directory</button>
+    <button onClick={() => onDirectoryPress("")}>Workspace root</button></> }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/components/ui/text", () => ({ PText: ({ children, className }: { children?: ReactNode; className?: string }) => <span className={className}>{children}</span>, HeadingText: ({ children }: { children?: ReactNode }) => <span>{children}</span> }));
@@ -141,7 +143,7 @@ it("shows the folder without searching, then replaces it with loading and live r
   expect(container.textContent).not.toContain("No matching files");
   expect(mocks.read).not.toHaveBeenCalled();
   await applySearch("live");
-  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "live", scope: "all", path: "", pageSize: 10 });
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "live", scope: "all", path: "src", pageSize: 10 });
   expect(container.textContent).toContain("live.ts");
   expect(container.textContent).toContain("23 files");
   expect(container.textContent).toContain("100+ matches found in this file");
@@ -163,6 +165,57 @@ it("hides old results during typing and restarts when filters change", async () 
   act(() => search.setTitle(true));
   await flush();
   expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "next", scope: "title", cursor: undefined });
+});
+
+it.each([
+  { title: false, content: false, currentFolder: false, scope: "all", path: "src/components" },
+  { title: true, content: false, currentFolder: false, scope: "title", path: "" },
+  { title: false, content: true, currentFolder: false, scope: "content", path: "" },
+  { title: true, content: true, currentFolder: false, scope: "all", path: "" },
+  { title: false, content: false, currentFolder: true, scope: "all", path: "src/components" },
+  { title: true, content: false, currentFolder: true, scope: "title", path: "src/components" },
+  { title: false, content: true, currentFolder: true, scope: "content", path: "src/components" },
+  { title: true, content: true, currentFolder: true, scope: "all", path: "src/components" },
+])("forwards the folder and field filters: $title / $content / $currentFolder", async ({ title, content, currentFolder, scope, path }) => {
+  await click("Nested directory");
+  act(() => { search.setTitle(title); search.setContent(content); search.setCurrentFolder(currentFolder); });
+  await applySearch("live");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ search: "live", scope, path, cursor: undefined });
+});
+
+it("starts a fresh search when folder scoping changes and keeps that path on subsequent pages", async () => {
+  await click("Nested directory");
+  act(() => search.setTitle(true));
+  await applySearch("live");
+  mocks.read.mockResolvedValueOnce(page("root-next.ts"));
+  await click("List end");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ path: "", cursor });
+  mocks.read.mockResolvedValue(page("src/components/scoped.ts", cursor));
+  act(() => search.setCurrentFolder(true));
+  await flush();
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ path: "src/components", cursor: undefined });
+  expect(container.textContent).not.toContain("live.ts");
+  mocks.read.mockResolvedValueOnce(page("src/components/scoped-next.ts"));
+  await click("List end");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ path: "src/components", cursor });
+  act(() => search.setCurrentFolder(false));
+  await flush();
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ path: "", cursor: undefined });
+});
+
+it("follows the browsed directory on later searches and uses an empty path at the workspace root", async () => {
+  await click("Nested directory");
+  await applySearch("live");
+  expect(mocks.read.mock.lastCall?.[1].path).toBe("src/components");
+  await applySearch("");
+  await click("Original directory");
+  await applySearch("live");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ path: "src", cursor: undefined });
+  await applySearch("");
+  await click("Workspace root");
+  act(() => search.setCurrentFolder(true));
+  await applySearch("live");
+  expect(mocks.read.mock.lastCall?.[1]).toMatchObject({ path: "", cursor: undefined });
 });
 
 it.each([[false, false], [true, false], [true, true], [false, true]])(

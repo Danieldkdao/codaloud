@@ -20,39 +20,60 @@ import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-pro
 
 type SearchFilterRowProps = {
   label: string;
-  icon: "file" | "file-text";
+  description: string;
+  icon: "file" | "file-text" | "folder";
   value: boolean;
   onValueChange: (value: boolean) => void;
 };
 
 const SearchFilterRow = ({
   label,
+  description,
   icon,
   value,
   onValueChange,
 }: SearchFilterRowProps) => {
   const primary = useThemeColor("primary");
   const border = useThemeColor("border");
+  const [switchValue, setSwitchValue] = useState(value);
+  const [previousValue, setPreviousValue] = useState(value);
+
+  // Overlay props arrive in a later commit. A native switch must receive its
+  // new value immediately or RN sends a command that reverses the gesture.
+  // Reconcile external changes before the native switch renders.
+  if (previousValue !== value) {
+    setPreviousValue(value);
+    setSwitchValue(value);
+  }
 
   return (
-    <View className="min-h-16 flex-row items-center gap-3 px-4 py-4">
-      <Icon
-        family="Feather"
-        name={icon}
-        size={22}
-        className="text-foreground"
-        accessible={false}
-      />
-      <PText className="min-w-0 flex-1 text-lg font-medium text-foreground">
-        {label}
+    <View className="gap-2 px-4 py-4">
+      <View className="flex-row items-center gap-3">
+        <Icon
+          family="Feather"
+          name={icon}
+          size={22}
+          className="text-foreground"
+          accessible={false}
+        />
+        <PText className="min-w-0 flex-1 text-lg font-medium text-foreground">
+          {label}
+        </PText>
+        <Switch
+          accessibilityLabel={label}
+          accessibilityHint={description}
+          value={switchValue}
+          onValueChange={(nextValue) => {
+            setSwitchValue(nextValue);
+            onValueChange(nextValue);
+          }}
+          trackColor={{ false: border, true: primary }}
+          ios_backgroundColor={border}
+        />
+      </View>
+      <PText className="text-base text-muted-foreground">
+        {description}
       </PText>
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: border, true: primary }}
-        ios_backgroundColor={border}
-      />
     </View>
   );
 };
@@ -63,7 +84,7 @@ export const ProjectWorkspaceFileSearch = ({
   anchorRef: RefObject<View | null>;
 }) => {
   const [open, setOpen] = useState(false);
-  const { query, setQuery, title, setTitle, content, setContent } = useProjectWorkspaceFileSearch();
+  const { query, setQuery, title, setTitle, content, setContent, currentFolder, setCurrentFolder } = useProjectWorkspaceFileSearch();
   const card = useThemeColor("card");
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -83,15 +104,15 @@ export const ProjectWorkspaceFileSearch = ({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search filters"
-          accessibilityHint="Choose file title or file content"
-          accessibilityState={{ expanded: open, selected: title || content }}
+          accessibilityHint="Choose file title, file content, or current folder"
+          accessibilityState={{ expanded: open, selected: title || content || currentFolder }}
           onPress={() => {
             Keyboard.dismiss();
             setOpen(true);
           }}
           className={cn(
             "size-12 items-center justify-center rounded-full active:bg-secondary",
-            (title || content) && "bg-secondary",
+            (title || content || currentFolder) && "bg-secondary",
           )}
         >
           <Icon
@@ -119,6 +140,7 @@ export const ProjectWorkspaceFileSearch = ({
           <View>
             <SearchFilterRow
               label="File title"
+              description="Find files whose names match your search."
               icon="file"
               value={title}
               onValueChange={setTitle}
@@ -126,9 +148,18 @@ export const ProjectWorkspaceFileSearch = ({
             <View className="mx-4 border-t border-border" />
             <SearchFilterRow
               label="File content"
+              description="Find files containing your search text."
               icon="file-text"
               value={content}
               onValueChange={setContent}
+            />
+            <View className="mx-4 border-t border-border" />
+            <SearchFilterRow
+              label="Current folder"
+              description="Limit searches to this folder and its subfolders, the default when all filters are off."
+              icon="folder"
+              value={currentFolder}
+              onValueChange={setCurrentFolder}
             />
           </View>
         </ScrollView>

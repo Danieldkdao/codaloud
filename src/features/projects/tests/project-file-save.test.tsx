@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppStateStatus } from "react-native";
@@ -488,4 +488,49 @@ it("keeps the document active when React checks initializers twice in Strict Mod
   expect(mocks.save).toHaveBeenCalledOnce();
   expect(current.status).toBe("saved");
   expect(registry.getDocument("one.ts", 0, "edited")).toBe(previous);
+});
+
+
+it.each([true, false])("invalidates only this account and project's changes after a confirmed save (active: %s)", async (active) => {
+  const key = ["projects", "changes", "user-one", "project-one"];
+  const unrelated = [
+    ["projects", "changes", "user-two", "project-one"],
+    ["projects", "changes", "user-one", "project-two"],
+  ];
+  for (const queryKey of [key, ...unrelated]) client.setQueryData(queryKey, { revision: "before" });
+  const fetchChanges = vi.fn().mockResolvedValue({ revision: "after" });
+  const observer = new QueryObserver(client, { queryKey: key, queryFn: fetchChanges, staleTime: Infinity, enabled: active });
+  const unsubscribe = observer.subscribe(() => {});
+  try {
+    let finish!: (value: unknown) => void;
+    mocks.save.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await render();
+    await act(async () => current.onChange("edited"));
+    await tick();
+    expect(current.status).toBe("saving");
+    expect(fetchChanges).not.toHaveBeenCalled();
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+    await act(async () => finish(success("edited")));
+    await tick(1);
+    expect(current.status).toBe("saved");
+    if (active) {
+      expect(fetchChanges).toHaveBeenCalledOnce();
+      expect(client.getQueryData(key)).toEqual({ revision: "after" });
+    } else {
+      expect(fetchChanges).not.toHaveBeenCalled();
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    }
+    for (const queryKey of unrelated) expect(client.getQueryState(queryKey)?.isInvalidated).toBe(false);
+  } finally { unsubscribe(); }
+});
+
+it("does not invalidate changes for failed saves", async () => {
+  const key = ["projects", "changes", "user-one", "project-one"];
+  client.setQueryData(key, { revision: "before" });
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Save failed." });
+  await render();
+  await act(async () => current.onChange("edited"));
+  await tick();
+  expect(current.status).toBe("error");
+  expect(client.getQueryState(key)?.isInvalidated).toBe(false);
 });

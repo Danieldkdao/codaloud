@@ -1,158 +1,72 @@
-import { useState, type ReactNode } from "react";
-import {
-  KeyboardAvoidingView,
-  Pressable,
-  ScrollView,
-  View,
-} from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input";
-import { CodeText, HeadingText, PText } from "@/components/ui/text";
-import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
-import { ProjectWorkspaceDiffSummary } from "@/features/projects/components/project-workspace-diff-summary";
-import {
-  formatProjectChangeCount,
-  formatProjectChangeLines,
-  formatProjectChangePath,
-  formatProjectChangeSelection,
-} from "@/features/projects/lib/formatters";
-import type { ProjectChangeData } from "@/features/projects/types";
-import { cn } from "@/lib/utils";
-
-type ChangeCheckboxProps = {
-  checked: boolean | "mixed";
-  label: string;
-  onPress: () => void;
-  children?: ReactNode;
-  className?: string;
-};
-
-const ChangeCheckbox = ({
-  checked,
-  label,
-  onPress,
-  children,
-  className,
-}: ChangeCheckboxProps) => (
-  <Pressable
-    accessibilityRole="checkbox"
-    accessibilityLabel={label}
-    accessibilityState={{ checked }}
-    onPress={onPress}
-    className={cn(
-      "min-h-12 flex-row items-center gap-3 rounded-xl px-2 py-3 active:bg-secondary",
-      className,
-    )}
-  >
-    <View
-      accessible={false}
-      className={cn(
-        "size-6 items-center justify-center rounded-md border",
-        checked
-          ? "border-primary bg-primary"
-          : "border-muted-foreground bg-background",
-      )}
-    >
-      {checked ? (
-        <Icon
-          family="Feather"
-          name={checked === "mixed" ? "minus" : "check"}
-          size={16}
-          className="text-primary-foreground"
-          accessible={false}
-        />
-      ) : null}
-    </View>
-    {children}
-  </Pressable>
-);
+import { HeadingText, PText } from "@/components/ui/text";
+import { useAuthSession } from "@/hooks/use-auth-session";
+import type { ProjectRepositoryChangeSchema } from "../actions/change-schemas";
+import { useProjectChanges } from "../hooks/use-project-changes";
+import { useProjectWorkspaceDockHeight } from "../hooks/use-project-workspace-dock-height";
+import { useProjectWorkspaceChanges } from "../hooks/use-project-workspace-changes";
+import { ProjectChangeCheckbox } from "./project-change-checkbox";
+import { ProjectChangesGroup } from "./project-changes-group";
+import { ProjectWorkspaceDiffSummary } from "./project-workspace-diff-summary";
+import { demoChanges } from "../data/demo-changes";
 
 type ProjectChangesPanelProps = {
-  changes: ProjectChangeData[];
+  projectId: string;
+  active?: boolean;
   onViewFullDiff?: () => void;
 };
 
-export const ProjectChangesPanel = ({
-  changes,
-  onViewFullDiff,
-}: ProjectChangesPanelProps) => {
-  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
+export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }: ProjectChangesPanelProps) => {
+  const query = useProjectChanges(projectId, { enabled: active });
+  const session = useAuthSession();
   const { dockHeight } = useProjectWorkspaceDockHeight();
+  const { setCommitSelection } = useProjectWorkspaceChanges();
   const insets = useSafeAreaInsets();
-  const tracked = changes.filter((change) => change.status !== "untracked");
-  const untracked = changes.filter((change) => change.status === "untracked");
-  const selectedCount = changes.filter((change) =>
-    selectedPaths.includes(change.path),
-  ).length;
+  const { data } = query;
+  const changes = data?.changes ?? [];
+  // The history branch picker does not switch the checkout. Scope drafts and
+  // selection to the actual snapshot and account instead of that picker.
+  const scope = JSON.stringify([session.data?.user.id, projectId, data?.currentBranch, data?.headSha]);
+  const [selection, setSelection] = useState<{ scope: string; paths: string[] }>({ scope, paths: [] });
+  const availablePaths = new Set(changes.map((change) => change.path));
+  const paths = selection.scope === scope ? selection.paths.filter((path) => availablePaths.has(path)) : [];
+  if (selection.scope !== scope || paths.length !== selection.paths.length) {
+    // Reconcile before children render, so removed files cannot silently become
+    // selected again if a later poll brings them back.
+    setSelection({ scope, paths });
+  }
+  const selectedPaths = new Set(paths);
+  const tracked = changes.filter((change) => !change.isUntracked);
+  const untracked = changes.filter((change) => change.isUntracked);
+  const checked = paths.length === 0 ? false : paths.length === changes.length ? true : "mixed";
+  const paused = query.fetchStatus === "paused";
 
-  const selectionState = (changes: ProjectChangeData[]): boolean | "mixed" => {
-    const count = changes.filter((change) =>
-      selectedPaths.includes(change.path),
-    ).length;
-    if (count === 0) return false;
-    return count === changes.length ? true : "mixed";
-  };
+  useEffect(() => {
+    setCommitSelection({
+      scope,
+      selectedCount: paths.length,
+      totalCount: changes.length,
+    });
+  }, [changes.length, paths.length, scope, setCommitSelection]);
 
-  const toggleChanges = (changes: ProjectChangeData[]) => {
-    setSelectedPaths((selected) => {
-      const paths = changes.map((change) => change.path);
-      return paths.every((path) => selected.includes(path))
-        ? selected.filter((path) => !paths.includes(path))
-        : [...new Set([...selected, ...paths])];
+  const toggleChanges = (items: ProjectRepositoryChangeSchema[]) => {
+    const toggled = new Set(items.map((change) => change.path));
+    setSelection((previous) => {
+      const selected = previous.scope === scope ? previous.paths.filter((path) => availablePaths.has(path)) : [];
+      return {
+        scope,
+        paths: items.every((change) => selected.includes(change.path))
+          ? selected.filter((path) => !toggled.has(path))
+          : [...new Set([...selected, ...toggled])],
+      };
     });
   };
 
-  const renderChange = (change: ProjectChangeData) => {
-    const path = formatProjectChangePath(change.path);
-    const lines = formatProjectChangeLines(change.additions, change.deletions);
-    return (
-      <View key={change.path} className="border-t border-border">
-        <ChangeCheckbox
-          checked={selectedPaths.includes(change.path)}
-          label={`Include ${change.path}`}
-          className="rounded-none px-4"
-          onPress={() => toggleChanges([change])}
-        >
-          <View className="min-w-0 flex-1 gap-1">
-            <CodeText
-              className="text-base text-foreground"
-              numberOfLines={1}
-              ellipsizeMode="middle"
-            >
-              {path.name}
-            </CodeText>
-            <View className="flex-row items-center gap-3">
-              <PText
-                className="min-w-0 flex-1 text-base text-muted-foreground"
-                numberOfLines={1}
-                ellipsizeMode="middle"
-              >
-                {path.directory}
-              </PText>
-              <View className="shrink-0 flex-row items-center gap-2">
-                <CodeText className="text-base text-success-foreground">
-                  {lines.additions}
-                </CodeText>
-                <CodeText className="text-base text-destructive">
-                  {lines.deletions}
-                </CodeText>
-              </View>
-            </View>
-          </View>
-        </ChangeCheckbox>
-      </View>
-    );
-  };
-
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior={process.env.EXPO_OS === "android" ? "height" : undefined}
-    >
+    <KeyboardAvoidingView className="flex-1" behavior={process.env.EXPO_OS === "android" ? "height" : undefined}>
       <ScrollView
         className="flex-1"
         contentInsetAdjustmentBehavior="automatic"
@@ -160,145 +74,60 @@ export const ProjectChangesPanel = ({
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          flexGrow: 1,
-          paddingTop: 12,
-          paddingLeft: 20 + insets.left,
-          paddingRight: 20 + insets.right,
-          paddingBottom: dockHeight + 24,
-          gap: 20,
+          flexGrow: 1, paddingTop: 12, paddingLeft: 20 + insets.left,
+          paddingRight: 20 + insets.right, paddingBottom: dockHeight + 24, gap: 20,
         }}
         scrollIndicatorInsets={{ bottom: dockHeight }}
       >
-        {changes.length > 0 ? (
+        {!data ? (
+          <View className="flex-1 items-center justify-center gap-4 py-8" accessibilityLiveRegion="polite">
+            {query.isFetching ? <ActivityIndicator className="text-primary" accessible={false} /> : null}
+            <HeadingText accessibilityRole="header" className="text-center text-3xl">
+              {paused ? "Waiting for a connection…" : query.error ? "Unable to load changes" : "Loading changes…"}
+            </HeadingText>
+            <PText className="text-center text-base text-muted-foreground">
+              {paused ? "Changes will load when you reconnect." : query.error ? "We couldn’t read your workspace changes. Please try again." : "Reading the workspace’s current changes."}
+            </PText>
+            {query.error && !paused && !query.isFetching ? (
+              <Button accessibilityLabel="Retry project changes" onPress={() => void query.refetch()}>Try again</Button>
+            ) : null}
+          </View>
+        ) : (
           <>
-            <View
-              className="rounded-3xl border border-border bg-card p-4"
-              style={{ gap: 12 }}
-            >
-              <PText accessibilityRole="header" className="text-lg font-medium">
-                Commit message
-              </PText>
-              <Input
-                multiline
-                value={message}
-                onChangeText={setMessage}
-                accessibilityLabel="Commit message"
-                // Put the inset on the wrapper so native multiline padding cannot skew it.
-                containerClassName="rounded-2xl bg-background p-3"
-                style={{
-                  fontFamily: "Outfit_400Regular",
-                  height: 48,
-                  padding: 0,
-                }}
-                scrollEnabled
-                textAlignVertical="top"
-                placeholder="Describe your changes…"
-                className="min-h-0 rounded-none border-0 bg-transparent p-0 focus:border-transparent focus:outline-0"
-              />
-              <View
-                className="flex-row items-center gap-2"
-                accessibilityLiveRegion="polite"
-              >
-                <Icon
-                  family="Feather"
-                  name="git-commit"
-                  size={18}
-                  className="text-muted-foreground"
-                  accessible={false}
-                />
-                <PText className="flex-1 text-base text-muted-foreground">
-                  {formatProjectChangeSelection(selectedCount, changes.length)}
+            {paused || (query.error && !query.isFetching) ? (
+              <View className="gap-2" accessibilityLiveRegion="polite">
+                <PText className="text-base text-muted-foreground">
+                  {paused ? "Waiting for a connection… Showing previously loaded changes." : "Couldn’t refresh changes. Showing previously loaded changes."}
+                </PText>
+                {query.error && !query.isFetching && !paused ? (
+                  <Button variant="outline" accessibilityLabel="Retry project changes" onPress={() => void query.refetch()}>Try again</Button>
+                ) : null}
+              </View>
+            ) : null}
+            {changes.length > 0 ? (
+              <>
+                <View className="gap-2">
+                  <View className="flex-row items-center justify-between gap-2 pr-4">
+                    <ProjectChangeCheckbox checked={checked} label="Select all changes" className="ml-px px-4" onPress={() => toggleChanges(changes)}>
+                      <PText className="text-base font-medium">All</PText>
+                    </ProjectChangeCheckbox>
+                    <ProjectWorkspaceDiffSummary changes={demoChanges} onViewFullDiff={onViewFullDiff} />
+                  </View>
+                  <ProjectChangesGroup title="Tracked" label="Select tracked changes" changes={tracked} selectedPaths={selectedPaths} onToggleChanges={toggleChanges} />
+                  <ProjectChangesGroup title="Untracked" label="Select untracked changes" changes={untracked} selectedPaths={selectedPaths} onToggleChanges={toggleChanges} />
+                </View>
+              </>
+            ) : (
+              <View className="flex-1 items-center justify-center gap-4 py-8">
+                <HeadingText accessibilityRole="header" className="text-center text-3xl">
+                  {data.repositoryState === "not-initialized" ? "Git is not initialized" : "No uncommitted changes"}
+                </HeadingText>
+                <PText className="max-w-sm text-center text-lg text-muted-foreground">
+                  {data.repositoryState === "not-initialized" ? "Initialize a Git repository in this workspace to track changes." : "Changed and untracked files will appear here, ready for your next commit."}
                 </PText>
               </View>
-              <Button
-                size="lg"
-                className="rounded-full"
-                disabled
-                accessibilityLabel="Commit selected changes"
-              >
-                Commit selected changes
-              </Button>
-            </View>
-
-            <View className="gap-2">
-              <View className="flex-row items-center justify-between gap-2 pr-4">
-                <ChangeCheckbox
-                  checked={selectionState(changes)}
-                  label="Select all changes"
-                  className="ml-px px-4"
-                  onPress={() => toggleChanges(changes)}
-                >
-                  <PText className="text-base font-medium">All</PText>
-                </ChangeCheckbox>
-                <ProjectWorkspaceDiffSummary
-                  changes={changes}
-                  onViewFullDiff={onViewFullDiff}
-                />
-              </View>
-              {tracked.length > 0 ? (
-                <View className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <View>
-                    <ChangeCheckbox
-                      checked={selectionState(tracked)}
-                      label="Select tracked changes"
-                      className="rounded-none px-4"
-                      onPress={() => toggleChanges(tracked)}
-                    >
-                      <PText className="flex-1 text-base font-medium">
-                        Tracked
-                      </PText>
-                      <PText className="text-base text-muted-foreground">
-                        {formatProjectChangeCount(tracked.length)}
-                      </PText>
-                    </ChangeCheckbox>
-                  </View>
-                  {tracked.map(renderChange)}
-                </View>
-              ) : null}
-              {untracked.length > 0 ? (
-                <View className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
-                  <View>
-                    <ChangeCheckbox
-                      checked={selectionState(untracked)}
-                      label="Select untracked changes"
-                      className="rounded-none px-4"
-                      onPress={() => toggleChanges(untracked)}
-                    >
-                      <PText className="flex-1 text-base font-medium">
-                        Untracked
-                      </PText>
-                      <PText className="text-base text-muted-foreground">
-                        {formatProjectChangeCount(untracked.length)}
-                      </PText>
-                    </ChangeCheckbox>
-                  </View>
-                  {untracked.map(renderChange)}
-                </View>
-              ) : null}
-            </View>
+            )}
           </>
-        ) : (
-          <View className="flex-1 items-center justify-center gap-4 py-8">
-            <View className="size-20 items-center justify-center rounded-3xl border border-border bg-card">
-              <Icon
-                family="Feather"
-                name="check"
-                size={32}
-                className="text-secondary-foreground"
-                accessible={false}
-              />
-            </View>
-            <HeadingText
-              accessibilityRole="header"
-              className="text-center text-3xl"
-            >
-              No uncommitted changes
-            </HeadingText>
-            <PText className="max-w-sm text-center text-lg text-muted-foreground">
-              Changed and untracked files will appear here, ready for your next
-              commit.
-            </PText>
-          </View>
         )}
       </ScrollView>
     </KeyboardAvoidingView>

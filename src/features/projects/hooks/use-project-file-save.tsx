@@ -81,6 +81,12 @@ const FileSaveRegistry = ({
           void queryClient.invalidateQueries({
             queryKey: ["projects", "files", userId, projectId],
           });
+          // Refresh an active changes panel, or mark its snapshot stale so it
+          // reloads when reopened. Only confirmed writes reach this callback.
+          void queryClient.invalidateQueries({
+            queryKey: ["projects", "changes", userId, projectId],
+            exact: true,
+          });
         },
         (documentPath, inUse) => {
           // A retained React tree can reconnect after its clean entry was released.

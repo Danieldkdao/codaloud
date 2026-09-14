@@ -10,7 +10,6 @@ import { projectFilePathSchema } from "@/features/projects/actions/file-schemas"
 import { useProjectFile } from "@/features/projects/hooks/use-project-file";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
-import { formatProjectFileSearchPath } from "@/features/projects/lib/formatters";
 import { ProjectFilePreviewContent } from "@/features/projects/components/project-file-preview-content";
 import { projectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
 
@@ -28,7 +27,6 @@ const FilePreviewScreen = () => {
   const currentFile = useProjectWorkspaceCurrentFile();
   const router = useRouter();
   const { dockHeight } = useProjectWorkspaceDockHeight();
-  const title = filePath ? formatProjectFileSearchPath(filePath) : null;
 
   return (
     <View className="flex-1 bg-background">
@@ -47,9 +45,8 @@ const FilePreviewScreen = () => {
         {filePath ? <ProjectIcon name={filePath} isDirectory={false} /> : null}
         <View className="min-w-0 flex-1">
           <PText className="text-lg font-medium text-foreground" numberOfLines={1} ellipsizeMode="middle">
-            {title?.name ?? "File preview"}
+            {filePath ?? "File preview"}
           </PText>
-          {title ? <PText numberOfLines={1} ellipsizeMode="middle">{title.directory}</PText> : null}
         </View>
         {query.isFetching && query.data ? <ActivityIndicator className="text-muted-foreground" accessibilityLabel="Refreshing file" /> : null}
         <Icon family="Feather" name="lock" size={18} accessible accessibilityLabel="Read-only preview" className="text-muted-foreground" />

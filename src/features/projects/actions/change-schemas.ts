@@ -96,3 +96,12 @@ export const projectRepositoryChangesSchema = z.object({
 export type ProjectRepositoryChangesSchema = z.infer<
   typeof projectRepositoryChangesSchema
 >;
+
+export const readProjectChangesResponseSchema = z.object({
+  error: z.literal(false),
+  message: z.string(),
+  data: projectRepositoryChangesSchema,
+});
+export type ReadProjectChangesResponseSchema = z.infer<
+  typeof readProjectChangesResponseSchema
+>;

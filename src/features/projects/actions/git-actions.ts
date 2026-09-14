@@ -4,7 +4,11 @@ import {
 } from "./branch-schemas";
 import { projectBranchParamsSchema, readProjectBranchCursor, type ProjectBranchParamsSchema } from "../lib/branch-params";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
+import { createRequestHeaders, createSearchParams, fetchBase, isValidIds } from "@/lib/utils";
+import {
+  readProjectChangesResponseSchema,
+  type ProjectRepositoryChangesSchema,
+} from "./change-schemas";
 import {
   readProjectCommitsResponseSchema,
   type CommitSource,
@@ -12,6 +16,35 @@ import {
   type ProjectCommitQueryInput,
 } from "./commit-schemas";
 import { projectCommitParamsSchema } from "../lib/commit-params";
+
+export const readProjectChangesAction = async (
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectRepositoryChangesSchema | null> => {
+  try {
+    if (signal?.aborted) return null;
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError || !userId || !isValidIds(projectId)) return null;
+
+    const headers = await createRequestHeaders();
+    if (!headers.get("Cookie")?.trim() || signal?.aborted) return null;
+
+    const response = await fetchBase(`/api/projects/${projectId}/changes`, {
+      method: "GET",
+      headers,
+      credentials: "omit",
+      signal,
+    });
+    if (!response.ok) throw new Error("Unable to load project changes.");
+    if (signal?.aborted) return null;
+
+    const payload: unknown = await response.json();
+    if (signal?.aborted) return null;
+    return readProjectChangesResponseSchema.parse(payload).data;
+  } catch {
+    return null;
+  }
+};
 
 export const readProjectBranchesAction = async (
   projectId: string,

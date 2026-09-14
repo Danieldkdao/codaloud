@@ -22,7 +22,7 @@ vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { chi
 const state = vi.hoisted(() => ({ empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn() }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/components/code-editor", () => ({ default: ({ onReady, onAnalysis, onChange, colorScheme, initialValue }: { onChange: (value: string) => Promise<void>; onReady: () => Promise<void>; onAnalysis: (value: CodeEditorAnalysis) => Promise<void>; colorScheme: string; initialValue: string }) => {
   state.change = onChange;
@@ -56,15 +56,14 @@ vi.mock("@/features/projects/components/project-git-tabs", () => ({
   ProjectGitTabPanel: ({ children, active }: { children: ReactNode; active: boolean }) => active ? children : null,
 }));
 vi.mock("@/features/projects/components/project-changes-panel", () => ({
-  ProjectChangesPanel: ({ changes }: { changes: unknown[] }) => createElement("span", null, changes.length ? "Changes" : "No uncommitted changes"),
+  ProjectChangesPanel: () => createElement("span", null, "No uncommitted changes"),
 }));
 vi.mock("@/features/projects/components/project-branch-select", () => ({ ProjectBranchSelect: () => null }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
 vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({
-  useProjectWorkspaceBranch: () => ({ gitTab: "changes", setGitTab: vi.fn() }),
+  useProjectWorkspaceBranch: () => ({ projectId: "project-one", gitTab: "changes", setGitTab: vi.fn() }),
 }));
 vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: vi.fn() }));
-vi.mock("@/features/projects/data/demo-changes", () => ({ demoChanges: [] }));
 vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));
 
 let container: HTMLDivElement;
@@ -111,6 +110,7 @@ const finishLoading = (content = "const value = 1;", path = "app/page.tsx") => {
 it("shows severity counts beside the filename and resets them for another file", async () => {
   finishLoading();
   renderCode();
+  expect(container.textContent).toContain("app/page.tsx");
   const previousAnalysis = state.analysis!;
   const diagnostic = { from: 0, to: 1, message: "Problem", code: 1 };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 
@@ -308,4 +308,69 @@ it("retains content for a rename that does not change the path", async () => {
     await current.update.mutateAsync({ parentPath: "notes", previousName: "hello.txt", name: "hello.txt", kind: "file" });
   });
   expect(client.getQueryData(queryKey)).toEqual(content);
+});
+
+
+it.each([
+  ["update", "file", true], ["update", "folder", true],
+  ["deletion", "file", true], ["deletion", "folder", true],
+  ["update", "file", false], ["update", "folder", false],
+  ["deletion", "file", false], ["deletion", "folder", false],
+] as const)("refreshes changes after %s of a %s succeeds (active: %s)", async (operation, kind, active) => {
+  const key = ["projects", "changes", "user-one", "project-one"];
+  const unrelated = [
+    ["projects", "changes", "user-two", "project-one"],
+    ["projects", "changes", "user-one", "project-two"],
+  ];
+  for (const queryKey of [key, ...unrelated]) client.setQueryData(queryKey, { revision: "before" });
+  const fetchChanges = vi.fn().mockResolvedValue({ revision: "after" });
+  const observer = new QueryObserver(client, { queryKey: key, queryFn: fetchChanges, staleTime: Infinity, enabled: active });
+  const unsubscribe = observer.subscribe(() => {});
+  try {
+    let finish!: (value: unknown) => void;
+    const action = operation === "update" ? mocks.update : mocks.delete;
+    action.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await render("notes");
+    let mutation!: Promise<unknown>;
+    await act(async () => {
+      mutation = operation === "update"
+        ? current.update.mutateAsync({ parentPath: "notes", previousName: "old", name: "new", kind })
+        : current.deletion.mutateAsync({ parentPath: "notes", name: "old", kind });
+    });
+    expect(fetchChanges).not.toHaveBeenCalled();
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+    // Navigation/session changes must not redirect the mutation's invalidation.
+    mocks.session.data = { user: { id: "user-two" } };
+    await render("other");
+    const name = operation === "update" ? "new" : "old";
+    await act(async () => {
+      finish({ error: false, message: "Done.", data: { name, path: `notes/${name}`, isDir: kind === "folder", size: 0 } });
+      await mutation;
+    });
+    if (active) {
+      expect(fetchChanges).toHaveBeenCalledOnce();
+      expect(client.getQueryData(key)).toEqual({ revision: "after" });
+    } else {
+      expect(fetchChanges).not.toHaveBeenCalled();
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    }
+    for (const queryKey of unrelated) expect(client.getQueryState(queryKey)?.isInvalidated).toBe(false);
+  } finally { unsubscribe(); }
+});
+
+it.each([
+  ["update", "file"], ["update", "folder"],
+  ["deletion", "file"], ["deletion", "folder"],
+] as const)("does not invalidate changes when %s of a %s fails", async (operation, kind) => {
+  const key = ["projects", "changes", "user-one", "project-one"];
+  client.setQueryData(key, { revision: "before" });
+  (operation === "update" ? mocks.update : mocks.delete).mockResolvedValueOnce({ error: true, message: "Operation failed." });
+  await render("notes");
+  await act(async () => {
+    const mutation = operation === "update"
+      ? current.update.mutateAsync({ parentPath: "notes", previousName: "old", name: "new", kind })
+      : current.deletion.mutateAsync({ parentPath: "notes", name: "old", kind });
+    await expect(mutation).rejects.toThrow("Operation failed.");
+  });
+  expect(client.getQueryState(key)?.isInvalidated).toBe(false);
 });

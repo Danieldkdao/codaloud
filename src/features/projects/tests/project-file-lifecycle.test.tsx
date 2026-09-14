@@ -247,7 +247,9 @@ it.each([
   await flush();
   expect(selection.filePath).toBe(expected);
   expect(container.querySelector("textarea")?.value).toBe("server contents");
-  expect(container.textContent).toContain(expected);
+  const segments = expected.split("/");
+  expect(container.textContent).toContain(segments.pop());
+  if (segments.length > 0) expect(container.textContent).toContain(segments.join("/"));
 });
 
 it.each([

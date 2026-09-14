@@ -8,7 +8,27 @@ import { ProjectChangesPanel } from "@/features/projects/components/project-chan
 import GitScreen from "@/app/projects/[projectId]/git/index";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
+import { ProjectWorkspaceChangesProvider } from "@/features/projects/hooks/use-project-workspace-changes";
 import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit-schemas";
+
+import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
+
+const changesQuery = vi.hoisted(() => ({
+  query: vi.fn(), refetch: vi.fn(), isPending: false, isFetching: false,
+  fetchStatus: "idle", error: null as Error | null,
+  data: undefined as ProjectRepositoryChangesSchema | undefined,
+}));
+vi.mock("@/features/projects/hooks/use-project-changes", () => ({ useProjectChanges: (...args: unknown[]) => { changesQuery.query(...args); return changesQuery; } }));
+const change = (path: string, isUntracked = false): ProjectRepositoryChangeSchema => ({
+  path, originalPath: null, indexStatus: "unchanged", worktreeStatus: isUntracked ? "untracked" : "modified",
+  isUntracked, isConflicted: false, kind: "file", headMode: "100644", indexMode: "100644", worktreeMode: "100644",
+  staged: null, unstaged: { patch: "", additions: 3, deletions: 1, unavailableReason: null },
+});
+const repositoryChanges = (): ProjectRepositoryChangesSchema => ({
+  repositoryState: "ready", currentBranch: "main", headSha: "a".repeat(40), isDetached: false,
+  observedAt: "2026-09-13T12:00:00Z",
+  changes: [change("src/app/projects/[projectId]/git/index.tsx"), change("src/example.ts"), change("new.txt", true)],
+});
 
 const history = vi.hoisted(() => ({
   query: vi.fn(), onLoadMore: vi.fn(), retry: vi.fn(),
@@ -67,10 +87,12 @@ vi.mock("@expo/vector-icons", () => ({ Feather: {}, Ionicons: {} }));
 const Workspace = () => (
   <ProjectWorkspaceDockHeightProvider>
     <ProjectWorkspaceBranchProvider>
-      <GitScreen />
-      <ProjectWorkspaceFileCreationProvider projectId="demo">
-        <ProjectWorkspaceDock />
-      </ProjectWorkspaceFileCreationProvider>
+      <ProjectWorkspaceChangesProvider>
+        <GitScreen />
+        <ProjectWorkspaceFileCreationProvider projectId="demo">
+          <ProjectWorkspaceDock />
+        </ProjectWorkspaceFileCreationProvider>
+      </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
   </ProjectWorkspaceDockHeightProvider>
 );
@@ -178,6 +200,8 @@ const selectBranch = (name: string) => {
 };
 
 beforeEach(() => {
+  Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
+  changesQuery.query.mockClear(); changesQuery.refetch.mockClear();
   Object.assign(history, { data: { pages: [commitPage()] }, isPending: false, isFetching: false, isFetchingNextPage: false,
     isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
   history.query.mockClear(); history.onLoadMore.mockClear(); history.retry.mockClear();
@@ -398,6 +422,9 @@ it("shows changes immediately and keeps tracked and untracked selections without
   expect(container.textContent).not.toContain("No uncommitted changes");
   expect(container.textContent).not.toMatch(/demo|preview/i);
   expect(container.querySelector('[aria-label="Show empty state"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Open commit form"]')?.textContent).toBe("");
+  click("Open commit form");
   expect(container.querySelector('[aria-label="Commit message"]')).not.toBeNull();
   const checked = (label: string) => container.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-checked");
   expect(checked("Select all changes")).toBe("false");
@@ -409,9 +436,13 @@ it("shows changes immediately and keeps tracked and untracked selections without
   expect(checked("Select untracked changes")).toBe("true");
   click("Include src/app/projects/[projectId]/git/index.tsx");
   expect(checked("Select tracked changes")).toBe("mixed");
+  click("Swipe down");
   click("Commit History");
+  expect(container.querySelector('[aria-label="Open commit form"]')).toBeNull();
   click("Changes");
+  expect(container.querySelector('[aria-label="Open commit form"]')).not.toBeNull();
   expect(checked("Select tracked changes")).toBe("mixed");
+  click("Open commit form");
   const commit = container.querySelector<HTMLButtonElement>('[aria-label="Commit selected changes"]');
   expect(commit?.disabled).toBe(true);
   const before = container.textContent;
@@ -419,24 +450,28 @@ it("shows changes immediately and keeps tracked and untracked selections without
   expect(container.textContent).toBe(before);
 });
 
-it("opens the full workspace diff separately without changing commit selection", () => {
-  expect(container.textContent).not.toContain("Workspace diff");
-  expect(container.textContent).not.toContain("Include in commit");
-  expect(container.textContent).not.toContain("Hide workspace diff");
+it("opens the mock full diff without changing the live selection", () => {
   click("Select tracked changes");
+  expect(container.textContent).toContain("+20");
+  expect(container.textContent).toContain("−7");
   click("View Full Diff");
   expect(navigation.push).toHaveBeenCalledWith({
-    pathname: "/projects/[projectId]/git/workspace-diff", params: { projectId: live.projectId },
+    pathname: "/projects/[projectId]/git/workspace-diff",
+    params: { projectId: live.projectId },
   });
   expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("true");
-  expect(container.querySelector('[aria-label="Select untracked changes"]')?.getAttribute("aria-checked")).toBe("false");
+  expect(container.textContent).not.toContain("Checkout:");
 });
 
 it("renders the empty state from an empty changes list", () => {
+  changesQuery.data = { ...repositoryChanges(), changes: [] };
   act(() => root.render(createElement(ProjectWorkspaceDockHeightProvider, null,
-    createElement(ProjectChangesPanel, { changes: [] }))));
+    createElement(ProjectWorkspaceChangesProvider, null,
+      createElement(ProjectChangesPanel, { projectId: live.projectId })))));
   expect(container.textContent).toContain("No uncommitted changes");
   expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Open commit form"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Refresh project changes"]')).toBeNull();
   expect(container.textContent).not.toMatch(/demo|preview/i);
   expect(container.querySelector('[aria-label="Show empty state"]')).toBeNull();
 });
@@ -548,4 +583,96 @@ it("keeps local selection usable when GitHub fails or no repository is connected
   expect(container.textContent).toContain("No GitHub repository connected.");
   expect(container.querySelector('[aria-label="Remote branch: main"]')).toBeNull();
   expect(remote.query).toHaveBeenLastCalledWith(undefined, { search: "", enabled: false });
+});
+
+
+it("loads changes only while their Git tab is active", () => {
+  expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: true });
+  click("Commit History");
+  expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: false });
+  click("Changes");
+  expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: true });
+});
+
+it("distinguishes loading, offline, failure, and an uninitialized repository", () => {
+  changesQuery.data = undefined; changesQuery.isPending = true; changesQuery.isFetching = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Loading changes…");
+  expect(container.textContent).not.toContain("No uncommitted changes");
+  changesQuery.fetchStatus = "paused"; changesQuery.isFetching = false;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Waiting for a connection…");
+  changesQuery.fetchStatus = "idle"; changesQuery.isPending = false; changesQuery.error = new Error("private server detail");
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Unable to load changes");
+  expect(container.textContent).not.toContain("private server detail");
+  click("Retry project changes");
+  expect(changesQuery.refetch).toHaveBeenCalledOnce();
+  changesQuery.error = null; changesQuery.data = { ...repositoryChanges(), repositoryState: "not-initialized", currentBranch: null, headSha: null, changes: [] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Git is not initialized");
+  expect(container.textContent).not.toContain("No uncommitted changes");
+});
+
+it("keeps selection and the commit draft through refreshes and reports stale data", () => {
+  click("Select tracked changes");
+  click("Open commit form");
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')!;
+  act(() => { input.value = "My draft"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+  click("Swipe down");
+  changesQuery.isFetching = true;
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).not.toContain("Refreshing changes…");
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Refresh project changes"]')).toBeNull();
+  changesQuery.isFetching = false; changesQuery.error = new Error("failed");
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("Couldn’t refresh changes. Showing previously loaded changes.");
+  expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("true");
+  changesQuery.error = null; changesQuery.data = repositoryChanges();
+  act(() => root.render(createElement(Workspace)));
+  click("Open commit form");
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe("My draft");
+  expect(container.querySelector('[aria-label="Refresh project changes"]')).toBeNull();
+});
+
+it("drops removed selections and resets draft and selection for another checkout or account", () => {
+  click("Select all changes");
+  changesQuery.data = { ...repositoryChanges(), changes: [change("new.txt", true)] };
+  act(() => root.render(createElement(Workspace)));
+  changesQuery.data = repositoryChanges();
+  act(() => root.render(createElement(Workspace)));
+  expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("false");
+  for (const scope of ["checkout", "account", "project"]) {
+    click("Select tracked changes");
+    click("Open commit form");
+    const input = container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')!;
+    act(() => { input.value = "Old draft"; input.dispatchEvent(new Event("input", { bubbles: true })); });
+    if (scope === "checkout") changesQuery.data = { ...repositoryChanges(), currentBranch: "release" };
+    if (scope === "account") live.userId = "other-user";
+    if (scope === "project") live.projectId = "22222222-2222-4222-8222-222222222222";
+    act(() => root.render(createElement(Workspace)));
+    expect(container.querySelector('[aria-label="Select all changes"]')?.getAttribute("aria-checked")).toBe("false");
+    expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
+    click("Open commit form");
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe("");
+    click("Swipe down");
+  }
+});
+
+it("keeps the file path and change totals on one compact line", () => {
+  changesQuery.data = { ...repositoryChanges(), changes: [{ ...change("src/renamed.ts"), originalPath: "old.ts", indexStatus: "renamed",
+    staged: { patch: "", additions: 8, deletions: 2, unavailableReason: null } },
+    { ...change("image.png", true), unstaged: { patch: null, additions: null, deletions: null, unavailableReason: "binary" } }] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).not.toContain("From old.ts");
+  expect(container.textContent).not.toContain("Staged ·");
+  expect(container.textContent).not.toContain("Unstaged ·");
+  expect(container.textContent).not.toContain("Modified");
+  expect(container.textContent).not.toContain("Renamed");
+  expect(container.textContent).toContain("src/renamed.ts+11−3");
+  expect(container.textContent).toContain("+11");
+  expect(container.textContent).toContain("−3");
+  expect(container.textContent).not.toContain("Binary file");
+  expect(container.textContent).toContain("—");
 });

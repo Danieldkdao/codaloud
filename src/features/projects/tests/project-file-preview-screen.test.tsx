@@ -66,7 +66,7 @@ afterEach(() => {
 it("fetches the selected file through the shared hook and renders a read-only editor", async () => {
   await render();
   expect(mocks.read).toHaveBeenCalledExactlyOnceWith("project-one", mocks.params.filePath, expect.any(AbortSignal), expect.any(Function));
-  expect(container.textContent).toContain("My File [id].tsx");
+  expect(container.textContent).toContain("src/My File [id].tsx");
   expect(container.textContent).not.toContain("Project ID");
   expect(editorProps()).toMatchObject({ filename: mocks.params.filePath, initialValue: "export const answer = 42;", readOnly: true, colorScheme: "light" });
   expect(editorProps().onChange).toBeUndefined();

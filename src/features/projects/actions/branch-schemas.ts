@@ -1,6 +1,22 @@
 import { z } from "zod";
 import { projectBranchCursorTokenSchema } from "../lib/branch-params";
 
+export const projectBranchNameSchema = z.string().min(1).max(1024).refine((branch) =>
+  branch !== "HEAD" && branch !== "@" && !branch.startsWith("-") && !branch.startsWith("refs/") &&
+  !/[\x00-\x20\x7f~^:?*\[\\]/.test(branch) && !branch.includes("..") && !branch.includes("@{") &&
+  !branch.endsWith(".") && branch.split("/").every((part) => part && !part.startsWith(".") && !part.endsWith(".lock")),
+"Select a valid branch name.");
+export type ProjectBranchNameSchema = z.infer<typeof projectBranchNameSchema>;
+
+export const checkoutProjectBranchSchema = z.strictObject({ branchName: projectBranchNameSchema });
+export type CheckoutProjectBranchSchema = z.infer<typeof checkoutProjectBranchSchema>;
+
+export const projectBranchCheckoutSchema = z.object({
+  previousBranch: z.string().min(1).nullable(),
+  currentBranch: projectBranchNameSchema,
+});
+export type ProjectBranchCheckoutSchema = z.infer<typeof projectBranchCheckoutSchema>;
+
 export const projectBranchesSchema = z.object({
   branches: z.array(z.string().min(1)),
   currentBranch: z.string().min(1).nullable(),

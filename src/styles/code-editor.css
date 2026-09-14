@@ -32,15 +32,30 @@ body { background: var(--background); }
 
 .code-editor-host .cm-textfield:focus { outline: 2px solid var(--ring); outline-offset: -2px; }
 
-.code-editor-host .cm-lintRange { background-image: none; text-decoration: none; }
-/* The active selection also has cm-lintRange and wraps the severity mark.
- * Underlining that wrapper adds a second, foreground-colored stroke. */
-.code-editor-host .cm-lintRange-error,
-.code-editor-host .cm-lintRange-warning,
-.code-editor-host .cm-lintRange-info { text-decoration: underline wavy; text-decoration-thickness: 1px; text-underline-offset: 4px; text-decoration-skip-ink: none; }
-.code-editor-host .cm-lintRange-error { text-decoration-color: var(--destructive); }
-.code-editor-host .cm-lintRange-warning { text-decoration-color: var(--warning); }
-.code-editor-host .cm-lintRange-info { text-decoration-color: var(--info); }
+/* Use one masked wave instead of WebView text decorations and CodeMirror's SVG
+ * backgrounds. Only severity marks draw it; the active wrapper stays unadorned. */
+.code-editor-host .cm-editor .cm-lintRange { background-image: none; text-decoration: none; }
+.code-editor-host .cm-editor .cm-lintRange-error,
+.code-editor-host .cm-editor .cm-lintRange-warning,
+.code-editor-host .cm-editor .cm-lintRange-info { position: relative; }
+.code-editor-host .cm-editor .cm-lintRange-error::after,
+.code-editor-host .cm-editor .cm-lintRange-warning::after,
+.code-editor-host .cm-editor .cm-lintRange-info::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 4px;
+  pointer-events: none;
+  /* The SVG supplies alpha geometry only; the visible color comes from the theme. */
+  --diagnostic-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4'%3E%3Cpath d='M0 2C1 0 3 0 4 2S7 4 8 2' fill='none' stroke='black'/%3E%3C/svg%3E");
+  -webkit-mask: var(--diagnostic-wave) repeat-x left center / 8px 4px;
+  mask: var(--diagnostic-wave) repeat-x left center / 8px 4px;
+}
+.code-editor-host .cm-editor .cm-lintRange-error::after { background-color: var(--destructive); }
+.code-editor-host .cm-editor .cm-lintRange-warning::after { background-color: var(--warning); }
+.code-editor-host .cm-editor .cm-lintRange-info::after { background-color: var(--info); }
 .code-editor-host .cm-lintRange-active { background-color: var(--secondary); }
 .code-editor-host .cm-lintPoint-error::after { border-bottom-color: var(--destructive); }
 .code-editor-host .cm-lintPoint-warning::after { border-bottom-color: var(--warning); }

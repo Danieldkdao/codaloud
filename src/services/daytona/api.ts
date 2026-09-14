@@ -8,7 +8,11 @@ export class SandboxFilesError extends Error {
   }
 }
 
-export const requestDaytona = async (url: string, init?: RequestInit): Promise<unknown> => {
+export const requestDaytona = async (
+  url: string,
+  init?: RequestInit,
+  failureResponse?: (response: Response) => Promise<SandboxFilesError>,
+): Promise<unknown> => {
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${serverEnv.DAYTONA_API_KEY}`);
   headers.set("Accept", "application/json");
@@ -18,6 +22,9 @@ export const requestDaytona = async (url: string, init?: RequestInit): Promise<u
       ...init, headers, redirect: "error", signal: init?.signal ?? AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
+      // Operations with actionable Git failures may translate the provider body.
+      // Other requests keep the existing generic response and never expose it.
+      if (failureResponse) throw await failureResponse(response);
       throw new SandboxFilesError(response.status === 404 ? 404 : 502, "DAYTONA_REQUEST_FAILED", "Unable to access your workspace. Please try again.");
     }
     // File deletion can succeed without a JSON body.

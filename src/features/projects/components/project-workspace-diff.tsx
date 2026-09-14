@@ -1,64 +1,178 @@
-import { FlatList, ScrollView, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CodeText, PText } from "@/components/ui/text";
+import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
+import { CodeText, HeadingText, PText } from "@/components/ui/text";
 import {
   formatProjectChangeCount,
-  formatProjectChangeLines,
   formatProjectChangePath,
-  formatProjectChangeStatus,
-  formatProjectDiffLabel,
-  formatProjectDiffLine,
-} from "@/features/projects/lib/formatters";
-import type { ProjectWorkspaceDiffFile } from "@/features/projects/types";
-import { cn } from "@/lib/utils";
+  formatProjectDiffDisclosure,
+} from "../lib/formatters";
+import type { ProjectWorkspaceDiffData } from "../types";
+import { ProjectWorkspaceDiffComparison } from "./project-workspace-diff-comparison";
 
 type ProjectWorkspaceDiffProps = {
-  files: ProjectWorkspaceDiffFile[];
+  data: ProjectWorkspaceDiffData | undefined;
+  isFetching: boolean;
+  isPaused: boolean;
+  error: Error | null;
+  onRefresh: () => void;
 };
 
-export const ProjectWorkspaceDiff = ({ files }: ProjectWorkspaceDiffProps) => {
+export const ProjectWorkspaceDiff = ({
+  data,
+  isFetching,
+  isPaused,
+  error,
+  onRefresh,
+}: ProjectWorkspaceDiffProps) => {
   const insets = useSafeAreaInsets();
+  // Keep disclosure state outside virtualized rows so scrolling preserves it.
+  const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleFile = (path: string) => {
+    setCollapsedPaths((previous) => {
+      const next = new Set(previous);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+  const notInitialized = data?.repositoryState === "not-initialized";
 
   return (
     <FlatList
-      className="flex-1 bg-background"
+      className="flex-1"
       accessibilityLabel="Full workspace diff"
-      data={files}
+      data={data?.files ?? []}
       keyExtractor={(file) => file.path}
+      extraData={collapsedPaths}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ paddingBottom: insets.bottom + 24, paddingLeft: insets.left, paddingRight: insets.right }}
+      refreshing={Boolean(data) && isFetching}
+      onRefresh={!isFetching && !isPaused ? onRefresh : undefined}
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingBottom: insets.bottom + 24,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
       ListHeaderComponent={
-        <PText className="px-4 py-3 text-base">{formatProjectChangeCount(files.length)}</PText>
+        data ? (
+          <View className="gap-2 px-4 py-3">
+            <View className="flex-row items-center justify-between gap-3">
+              <PText className="text-base">
+                {formatProjectChangeCount(data.summary.fileCount)}
+              </PText>
+              <Button
+                variant="outline"
+                accessibilityLabel="Refresh workspace diff"
+                disabled={isFetching || isPaused}
+                onPress={onRefresh}
+              >
+                Refresh
+              </Button>
+            </View>
+            {isPaused || isFetching || error ? (
+              <PText
+                className="text-base text-muted-foreground"
+                accessibilityLiveRegion="polite"
+              >
+                {isPaused
+                  ? "Waiting for a connection… Showing previously loaded changes."
+                  : isFetching
+                    ? "Updating changes…"
+                    : "Couldn’t refresh changes. Showing previously loaded changes."}
+              </PText>
+            ) : null}
+          </View>
+        ) : null
+      }
+      ListEmptyComponent={
+        <View
+          className="flex-1 items-center justify-center gap-4 px-6 py-8"
+          accessibilityLiveRegion="polite"
+        >
+          {!data && isFetching && !isPaused ? (
+            <ActivityIndicator className="text-primary" accessible={false} />
+          ) : null}
+          <HeadingText
+            accessibilityRole="header"
+            className="text-center text-3xl"
+          >
+            {data
+              ? notInitialized
+                ? "Git is not initialized"
+                : "No uncommitted changes"
+              : isPaused
+                ? "Waiting for a connection…"
+                : error && !isFetching
+                  ? "Unable to load changes"
+                  : "Loading changes…"}
+          </HeadingText>
+          <PText className="text-center text-base text-muted-foreground">
+            {data
+              ? notInitialized
+                ? "Initialize a Git repository in this workspace to track changes."
+                : "Saved changes will appear here."
+              : isPaused
+                ? "Changes will load when you reconnect."
+                : error && !isFetching
+                  ? "We couldn’t read your workspace changes. Please try again."
+                  : "Reading the workspace’s saved changes."}
+          </PText>
+          {!data && error && !isFetching && !isPaused ? (
+            <Button
+              accessibilityLabel="Retry workspace diff"
+              onPress={onRefresh}
+            >
+              Try again
+            </Button>
+          ) : null}
+        </View>
       }
       renderItem={({ item: file }) => {
         const path = formatProjectChangePath(file.path);
-        const lines = formatProjectChangeLines(file.additions, file.deletions);
-
+        const expanded = !collapsedPaths.has(file.path);
+        const disclosure = formatProjectDiffDisclosure(file.path, expanded);
         return (
-          <View className="border-t border-border">
-            <View className="gap-2 px-4 py-4">
-              <CodeText selectable className="text-base font-semibold text-foreground">{path.name}</CodeText>
-              <PText selectable className="text-base">{path.directory}</PText>
-              <View className="flex-row flex-wrap items-center gap-3">
-                <PText className="text-base font-medium text-foreground">{formatProjectChangeStatus(file.status)}</PText>
-                <CodeText className="text-base text-success-foreground">{lines.additions}</CodeText>
-                <CodeText className="text-base text-destructive">{lines.deletions}</CodeText>
+          <View className="border-t border-border bg-card/25">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={disclosure.label}
+              accessibilityState={{ expanded }}
+              onPress={() => toggleFile(file.path)}
+              className="min-h-12 flex-row items-center gap-3 px-4 py-4 active:opacity-60"
+            >
+              <View className="min-w-0 flex-1 gap-2">
+                <CodeText
+                  className="text-base font-semibold text-foreground"
+                >
+                  {path.name}
+                </CodeText>
+                <PText className="text-base text-muted-foreground">
+                  {path.directory}
+                </PText>
+                {file.originalPath ? (
+                  <PText className="text-base text-muted-foreground">
+                    From {file.originalPath}
+                  </PText>
+                ) : null}
               </View>
-            </View>
-            <ScrollView horizontal directionalLockEnabled
-              accessibilityLabel={formatProjectDiffLabel(file.path)}
-              contentContainerStyle={{ minWidth: "100%", paddingBottom: 12 }}>
-              <View style={{ flexGrow: 1 }}>
-                {file.patch.split("\n").map((line, index) => {
-                  const presentation = formatProjectDiffLine(line);
-                  return (
-                    <CodeText key={index} selectable accessibilityLabel={presentation.label}
-                      className={cn("px-4 py-1 text-base", presentation.className)}>{line || " "}</CodeText>
-                  );
-                })}
-              </View>
-            </ScrollView>
+              <Icon family="Feather" name={disclosure.icon} size={22} className="text-muted-foreground" accessible={false} />
+            </Pressable>
+            {expanded && file.staged ? (
+              <ProjectWorkspaceDiffComparison
+                comparison={file.staged}
+                status={file.indexStatus}
+              />
+            ) : null}
+            {expanded && file.unstaged ? (
+              <ProjectWorkspaceDiffComparison
+                comparison={file.unstaged}
+                status={file.worktreeStatus}
+              />
+            ) : null}
           </View>
         );
       }}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { useProjectWorkspaceChanges } from "../hooks/use-project-workspace-chang
 import { ProjectChangeCheckbox } from "./project-change-checkbox";
 import { ProjectChangesGroup } from "./project-changes-group";
 import { ProjectWorkspaceDiffSummary } from "./project-workspace-diff-summary";
-import { demoChanges } from "../data/demo-changes";
+import { createProjectWorkspaceDiff } from "../lib/workspace-diff";
 
 type ProjectChangesPanelProps = {
   projectId: string;
@@ -26,6 +26,7 @@ export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }
   const { setCommitSelection } = useProjectWorkspaceChanges();
   const insets = useSafeAreaInsets();
   const { data } = query;
+  const diff = useMemo(() => data ? createProjectWorkspaceDiff(data) : undefined, [data]);
   const changes = data?.changes ?? [];
   // The history branch picker does not switch the checkout. Scope drafts and
   // selection to the actual snapshot and account instead of that picker.
@@ -111,7 +112,7 @@ export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }
                     <ProjectChangeCheckbox checked={checked} label="Select all changes" className="ml-px px-4" onPress={() => toggleChanges(changes)}>
                       <PText className="text-base font-medium">All</PText>
                     </ProjectChangeCheckbox>
-                    <ProjectWorkspaceDiffSummary changes={demoChanges} onViewFullDiff={onViewFullDiff} />
+                    {diff ? <ProjectWorkspaceDiffSummary summary={diff.summary} onViewFullDiff={onViewFullDiff} /> : null}
                   </View>
                   <ProjectChangesGroup title="Tracked" label="Select tracked changes" changes={tracked} selectedPaths={selectedPaths} onToggleChanges={toggleChanges} />
                   <ProjectChangesGroup title="Untracked" label="Select untracked changes" changes={untracked} selectedPaths={selectedPaths} onToggleChanges={toggleChanges} />

@@ -22,7 +22,7 @@ vi.mock("@/features/projects/hooks/use-project-changes", () => ({ useProjectChan
 const change = (path: string, isUntracked = false): ProjectRepositoryChangeSchema => ({
   path, originalPath: null, indexStatus: "unchanged", worktreeStatus: isUntracked ? "untracked" : "modified",
   isUntracked, isConflicted: false, kind: "file", headMode: "100644", indexMode: "100644", worktreeMode: "100644",
-  staged: null, unstaged: { patch: "", additions: 3, deletions: 1, unavailableReason: null },
+  staged: null, unstaged: { patch: "@@ -1 +1,3 @@\n-old\n+one\n+two\n+three\n", additions: 3, deletions: 1, unavailableReason: null },
 });
 const repositoryChanges = (): ProjectRepositoryChangesSchema => ({
   repositoryState: "ready", currentBranch: "main", headSha: "a".repeat(40), isDetached: false,
@@ -450,10 +450,11 @@ it("shows changes immediately and keeps tracked and untracked selections without
   expect(container.textContent).toBe(before);
 });
 
-it("opens the mock full diff without changing the live selection", () => {
+it("opens the real full diff with live totals without changing the selection", () => {
   click("Select tracked changes");
-  expect(container.textContent).toContain("+20");
-  expect(container.textContent).toContain("−7");
+  expect(container.textContent).toContain("View Full Diff+9−3");
+  expect(container.textContent).not.toContain("Unstaged");
+  expect(container.textContent).not.toContain("+20");
   click("View Full Diff");
   expect(navigation.push).toHaveBeenCalledWith({
     pathname: "/projects/[projectId]/git/workspace-diff",
@@ -662,7 +663,7 @@ it("drops removed selections and resets draft and selection for another checkout
 
 it("keeps the file path and change totals on one compact line", () => {
   changesQuery.data = { ...repositoryChanges(), changes: [{ ...change("src/renamed.ts"), originalPath: "old.ts", indexStatus: "renamed",
-    staged: { patch: "", additions: 8, deletions: 2, unavailableReason: null } },
+    staged: { patch: "@@ -1,2 +1,8 @@\n-old\n-old2\n+1\n+2\n+3\n+4\n+5\n+6\n+7\n+8\n", additions: 8, deletions: 2, unavailableReason: null } },
     { ...change("image.png", true), unstaged: { patch: null, additions: null, deletions: null, unavailableReason: "binary" } }] };
   act(() => root.render(createElement(Workspace)));
   expect(container.textContent).not.toContain("From old.ts");
@@ -675,4 +676,30 @@ it("keeps the file path and change totals on one compact line", () => {
   expect(container.textContent).toContain("−3");
   expect(container.textContent).not.toContain("Binary file");
   expect(container.textContent).toContain("—");
+});
+
+it("keeps the summary to the link and known counts with no scope or preview labels", () => {
+  changesQuery.data = { ...repositoryChanges(), changes: [
+    { ...change("src/staged.ts"), indexStatus: "modified", unstaged: null,
+      staged: { patch: "@@ -1 +1 @@\n-old\n+new\n", additions: 1, deletions: 1, unavailableReason: null } },
+    { ...change("image.png"), unstaged: { patch: null, additions: null, deletions: null, unavailableReason: "binary" } },
+  ] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("View Full Diff+1−1");
+  expect(container.textContent).not.toContain("Staged");
+  expect(container.textContent).not.toContain("Unstaged");
+  expect(container.textContent).not.toContain("preview unavailable");
+  expect(container.textContent).not.toContain("+0");
+});
+
+
+it("combines staged and unstaged counts into a single summary", () => {
+  changesQuery.data = { ...repositoryChanges(), changes: [
+    { ...change("src/both.ts"), indexStatus: "modified",
+      staged: { patch: "@@ -1 +1 @@\n-old\n+new\n", additions: 1, deletions: 1, unavailableReason: null } },
+  ] };
+  act(() => root.render(createElement(Workspace)));
+  expect(container.textContent).toContain("View Full Diff+4−2");
+  expect(container.textContent).not.toContain("Staged");
+  expect(container.textContent).not.toContain("Unstaged");
 });

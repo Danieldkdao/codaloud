@@ -1,15 +1,17 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { RequestError } from "octokit";
+import { gunzipSync } from "node:zlib";
 import { POST } from "@/app/api/projects/[projectId]/checkout+api";
 
 const mocks = vi.hoisted(() => ({
   user: vi.fn(), project: vi.fn(), accounts: vi.fn(), token: vi.fn(), repository: vi.fn(),
   sandbox: vi.fn(), home: vi.fn(), branches: vi.fn(), checkout: vi.fn(), fetch: vi.fn(),
+  remoteBranch: vi.fn(), sync: vi.fn(),
 }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/lib/auth/auth", () => ({ auth: { api: { listUserAccounts: mocks.accounts, getAccessToken: mocks.token } } }));
 vi.mock("@/features/projects/server/projects", () => ({ confirmUserProjectOwnership: mocks.project }));
-vi.mock("@/services/github/server/repositories", () => ({ verifyGitHubRepositoryAccess: mocks.repository }));
+vi.mock("@/services/github/server/repositories", () => ({ verifyGitHubRepositoryAccess: mocks.repository, verifyGitHubRepositoryBranch: mocks.remoteBranch }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "test-server-key" } }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
@@ -39,6 +41,8 @@ beforeEach(() => {
   mocks.accounts.mockReset().mockResolvedValue([{ id: "linked-account", providerId: "github", scopes: ["repo"] }]);
   mocks.token.mockReset().mockResolvedValue({ accessToken: "test-github-token" });
   mocks.repository.mockReset().mockResolvedValue({ id: 123, fullName: "owner/repo" });
+  mocks.remoteBranch.mockReset().mockResolvedValue(undefined);
+  mocks.sync.mockReset().mockResolvedValue({ exitCode: 0, result: JSON.stringify({ branchName: "remote-only" }) });
   mocks.sandbox.mockReset().mockResolvedValue(sandbox);
   mocks.home.mockReset().mockResolvedValue({ dir: "/home/daytona" });
   mocks.branches.mockReset().mockImplementation(() => ({ branches: ["main", "feature/voice"], current: currentBranch }));
@@ -54,10 +58,59 @@ beforeEach(() => {
     else if (url.pathname === "/owned-sandbox/user-home-dir") result = await mocks.home();
     else if (url.pathname === "/owned-sandbox/git/branches") result = await mocks.branches(url.searchParams.get("path"));
     else if (url.pathname === "/owned-sandbox/git/checkout") result = await mocks.checkout(JSON.parse(String(init.body)));
+    else if (url.pathname === "/owned-sandbox/process/execute") result = await mocks.sync(JSON.parse(String(init.body)));
     else throw new Error("Unexpected Daytona request");
     return result instanceof Response ? result : Response.json(result);
   });
   vi.stubGlobal("fetch", mocks.fetch);
+});
+
+it("verifies a remote branch, fetches it through HTTP, and then performs a safe checkout", async () => {
+  mocks.branches.mockImplementation(() => ({ branches: ["main", ...(mocks.sync.mock.calls.length ? ["remote-only"] : [])], current: currentBranch }));
+  const result = await checkout({ branchName: "remote-only", source: "remote" });
+  expect(result.response.status).toBe(200);
+  expect(result.body.data).toEqual({ previousBranch: "main", currentBranch: "remote-only" });
+  expect(mocks.remoteBranch).toHaveBeenCalledWith("test-github-token", expect.objectContaining({ id: 123 }), "remote-only", expect.any(AbortSignal));
+  expect(mocks.remoteBranch.mock.invocationCallOrder[0]).toBeLessThan(mocks.sync.mock.invocationCallOrder[0]);
+  expect(mocks.sync.mock.invocationCallOrder[0]).toBeLessThan(mocks.checkout.mock.invocationCallOrder[0]);
+  const body = mocks.sync.mock.calls[0][0];
+  expect(body.command).not.toContain("test-github-token");
+  const encoded = Array.from({ length: Number(body.envs.CODALOUD_INPUT_CHUNKS) }, (_, i) => body.envs[`CODALOUD_INPUT_${i}`]).join("");
+  expect(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString())).toMatchObject({
+    repositoryPath: "/home/daytona/.codaloud/workspace", branchName: "remote-only", repositoryId: "123", cloneUrl: "https://github.com/owner/repo.git", accessToken: "test-github-token",
+  });
+  expect(mocks.checkout).toHaveBeenCalledExactlyOnceWith({ path: "/home/daytona/.codaloud/workspace", branch: "remote-only" });
+});
+
+it("preserves an existing local branch when the remote branch is selected", async () => {
+  const result = await checkout({ branchName: "feature/voice", source: "remote" });
+  expect(result.response.status).toBe(200);
+  expect(mocks.remoteBranch).toHaveBeenCalledOnce();
+  expect(mocks.sync).not.toHaveBeenCalled();
+  expect(mocks.checkout).toHaveBeenCalledOnce();
+});
+
+it("rejects remote checkout without a linked repository", async () => {
+  mocks.project.mockResolvedValueOnce({ ...project, githubRepositoryId: null });
+  const result = await checkout({ branchName: "remote-only", source: "remote" });
+  expect(result.body).toMatchObject({ error: true, code: "GITHUB_REPOSITORY_REQUIRED" });
+  expect(mocks.fetch).not.toHaveBeenCalled();
+});
+
+it("rejects a deleted GitHub branch before contacting the sandbox", async () => {
+  mocks.remoteBranch.mockRejectedValueOnce(new RequestError("secret", 404, { request: { method: "GET", url: "https://api.github.com/test", headers: {} } }));
+  const result = await checkout({ branchName: "remote-only", source: "remote" });
+  expect(result.response.status).toBe(404);
+  expect(result.body.code).toBe("REMOTE_BRANCH_NOT_FOUND");
+  expect(mocks.fetch).not.toHaveBeenCalled();
+});
+
+it.each(["REMOTE_FETCH_FAILED", "REMOTE_BRANCH_NOT_FOUND", "WORKSPACE_REMOTE_MISMATCH"])("returns a safe sync failure without attempting checkout: %s", async (code) => {
+  mocks.sync.mockResolvedValueOnce({ exitCode: 1, result: JSON.stringify({ code, secret: "test-github-token" }) });
+  const result = await checkout({ branchName: "remote-only", source: "remote" });
+  expect(result.body).toMatchObject({ error: true, code, message: expect.any(String) });
+  expect(JSON.stringify(result.body)).not.toContain("test-github-token");
+  expect(mocks.checkout).not.toHaveBeenCalled();
 });
 
 it("authorizes the stored project/repository and checks out through HTTP, then verifies the current branch", async () => {

@@ -1,5 +1,9 @@
 import {
+  checkoutProjectBranchResponseSchema,
+  checkoutProjectBranchSchema,
   readProjectBranchesResponseSchema,
+  type CheckoutProjectBranchResponseSchema,
+  type CheckoutProjectBranchSchema,
   type ProjectBranchPageSchema,
 } from "./branch-schemas";
 import { projectBranchParamsSchema, readProjectBranchCursor, type ProjectBranchParamsSchema } from "../lib/branch-params";
@@ -16,6 +20,49 @@ import {
   type ProjectCommitQueryInput,
 } from "./commit-schemas";
 import { projectCommitParamsSchema } from "../lib/commit-params";
+
+export const checkoutProjectBranchAction = async (
+  projectId: string,
+  unsafeInput: CheckoutProjectBranchSchema,
+): Promise<CheckoutProjectBranchResponseSchema> => {
+  // A lost or invalid response does not prove that the sandbox stayed on its old branch.
+  const unconfirmed = {
+    error: true as const,
+    code: "CHECKOUT_OUTCOME_UNKNOWN",
+    message: "Unable to confirm the branch switch. Refresh the current branch and files before trying again.",
+  };
+
+  try {
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError)
+      return { error: true, message: "Unable to verify your session. Please try again." };
+    if (!userId)
+      return { error: true, message: "Sign in to switch branches." };
+    if (!isValidIds(projectId))
+      return { error: true, message: "Invalid project ID." };
+    const input = checkoutProjectBranchSchema.safeParse(unsafeInput);
+    if (!input.success)
+      return { error: true, message: "Send a valid branchName without checkout options or extra fields." };
+
+    const headers = await createRequestHeaders({ "Content-Type": "application/json" });
+    if (!headers.get("Cookie")?.trim())
+      return { error: true, message: "Sign in to switch branches." };
+
+    const response = await fetchBase(`/api/projects/${projectId}/checkout`, {
+      method: "POST",
+      headers,
+      credentials: "omit",
+      body: JSON.stringify(input.data),
+    });
+    const result = checkoutProjectBranchResponseSchema.parse(await response.json());
+    if (result.error) return result;
+    if (!response.ok || result.data.currentBranch !== input.data.branchName)
+      return unconfirmed;
+    return result;
+  } catch {
+    return unconfirmed;
+  }
+};
 
 export const readProjectChangesAction = async (
   projectId: string,

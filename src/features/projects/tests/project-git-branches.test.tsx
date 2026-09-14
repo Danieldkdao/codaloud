@@ -3,6 +3,7 @@ import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/us
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { act, createElement, useImperativeHandle, useState, useRef, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
 import GitScreen from "@/app/projects/[projectId]/git/index";
@@ -47,11 +48,16 @@ const live = vi.hoisted(() => ({
   userId: "user-one",
   repositoryId: "123" as string | null,
   query: vi.fn(),
+  checkout: { mutateAsync: vi.fn() },
   loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
 }));
+const workspaceFiles = vi.hoisted(() => ({ flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
+vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFile: workspaceFiles.refreshFile }) }));
+let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({
   query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
@@ -85,6 +91,7 @@ vi.mock("@/components/ui/button", () => ({
 }));
 vi.mock("@expo/vector-icons", () => ({ Feather: {}, Ionicons: {} }));
 const Workspace = () => (
+  <QueryClientProvider client={queryClient}>
   <ProjectWorkspaceDockHeightProvider>
     <ProjectWorkspaceBranchProvider>
       <ProjectWorkspaceChangesProvider>
@@ -95,6 +102,7 @@ const Workspace = () => (
       </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
   </ProjectWorkspaceDockHeightProvider>
+  </QueryClientProvider>
 );
 
 vi.mock("@/features/projects/hooks/use-workspace-loading-preview", () => ({ useWorkspaceLoadingPreview: () => false }));
@@ -149,6 +157,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  Alert: { alert: workspaceFiles.alert },
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   Platform: { OS: "ios" },
   Keyboard: { dismiss: vi.fn() },
@@ -166,9 +175,9 @@ vi.mock("react-native", () => ({
   }) => createElement("div", null, ListHeaderComponent, data.length ? data.map((item, index) =>
     createElement("div", { key: index }, renderItem({ item, index }))) : ListEmptyComponent, ListFooterComponent,
     onEndReached && createElement("button", { "aria-label": "Reach end", onClick: onEndReached })),
-  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState }: {
-    children?: ReactNode; onPress?: () => void; accessibilityLabel?: string; accessibilityState?: { checked?: boolean | "mixed"; selected?: boolean };
-  }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-checked": accessibilityState?.checked, "aria-selected": accessibilityState?.selected }, children),
+  Pressable: ({ children, onPress, disabled, accessibilityLabel, accessibilityState }: {
+    children?: ReactNode; onPress?: () => void; disabled?: boolean; accessibilityLabel?: string; accessibilityState?: { checked?: boolean | "mixed"; selected?: boolean };
+  }) => createElement("button", { onClick: onPress, disabled, "aria-label": accessibilityLabel, "aria-checked": accessibilityState?.checked, "aria-selected": accessibilityState?.selected }, children),
 }));
 vi.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children, actions, onPressAction }: {
@@ -189,17 +198,22 @@ const click = (label: string) => {
   expect(button).not.toBeNull();
   act(() => button!.click());
 };
-const selectBranch = (name: string) => {
+const selectBranch = async (name: string) => {
   const trigger = container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]');
   expect(trigger).not.toBeNull();
   act(() => trigger!.click());
   click(name);
+  await act(async () => {});
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(container.querySelector('[aria-label^="Branch:"]')?.getAttribute("aria-label")).toBe(`Branch: ${name}`);
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe(name);
 };
 
 beforeEach(() => {
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
+  workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
+  live.checkout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
   Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
   changesQuery.query.mockClear(); changesQuery.refetch.mockClear();
   Object.assign(history, { data: { pages: [commitPage()] }, isPending: false, isFetching: false, isFetchingNextPage: false,
@@ -221,7 +235,7 @@ beforeEach(() => {
   root = createRoot(container);
   act(() => root.render(createElement(Workspace)));
 });
-afterEach(() => act(() => root.unmount()));
+afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); });
 
 it("switches workspace sections through the menu and reflects the active route", () => {
   for (const [name, label] of [["files", "Files"], ["code", "Code"], ["agent", "Agent"], ["git", "Git"]]) {
@@ -236,20 +250,35 @@ it("switches workspace sections through the menu and reflects the active route",
   }
 });
 
-it("reads history for the selected local or remote branch without changing workspace files", () => {
+it("fetches and checks out remote selections before reading their local history", async () => {
   click("Commit History");
   expect(container.textContent).toContain("Live commit");
   expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "local", branch: "main", enabled: true }));
-  selectBranch("feature/live");
+  await selectBranch("feature/live");
   expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "local", branch: "feature/live" }));
   click("Branch: feature/live");
   click("Remote branch: remote-only");
-  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "remote", branch: "remote-only" }));
+  await act(async () => {});
+  expect(live.checkout.mutateAsync).toHaveBeenLastCalledWith({ branchName: "remote-only", source: "remote" });
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "local", branch: "remote-only" }));
   expect(container.textContent).not.toContain("Polish the dashboard layout");
 });
 
-it("keeps a manual selection across server updates and resets it for another project or account", () => {
-  selectBranch("feature/live");
+it("waits for a remote branch to exist locally before loading its history", async () => {
+  let finish!: (value: unknown) => void;
+  live.checkout.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  click("Commit History");
+  click("Branch: main");
+  click("Remote branch: remote-only");
+  await act(async () => {});
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ branch: "remote-only", source: "local", enabled: false }));
+  expect(container.textContent).toContain("Switching branches…");
+  await act(async () => finish({ previousBranch: "main", currentBranch: "remote-only" }));
+  expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ branch: "remote-only", source: "local", enabled: true }));
+});
+
+it("keeps a manual selection across server updates and resets it for another project or account", async () => {
+  await selectBranch("feature/live");
   live.data = { pages: [{ branches: ["release"], currentBranch: "release", nextCursor: null }] };
   act(() => root.render(createElement(Workspace)));
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
@@ -262,9 +291,9 @@ it("keeps a manual selection across server updates and resets it for another pro
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("account-branch");
 });
 
-it("keeps commit presses inert after changing branches", () => {
+it("keeps commit presses inert after changing branches", async () => {
   click("Commit History");
-  selectBranch("fix/live");
+  await selectBranch("fix/live");
   const before = container.textContent;
   const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Live commit,"]');
   expect(commit).not.toBeNull();
@@ -555,7 +584,7 @@ it("distinguishes initial, continuation, and active refresh states", () => {
 });
 
 
-it("shows separate local and remote lists, shares search, and distinguishes identical branch names", () => {
+it("shows separate local and remote lists, shares search, and distinguishes identical branch names", async () => {
   click("Branch: main");
   expect(container.textContent).toContain("Local branches");
   expect(container.textContent).toContain("Remote branches");
@@ -565,19 +594,21 @@ it("shows separate local and remote lists, shares search, and distinguishes iden
   expect(live.query).toHaveBeenLastCalledWith(live.projectId, { search: "MAIN" });
   expect(remote.query).toHaveBeenLastCalledWith("123", { search: "MAIN", enabled: true });
   click("Remote branch: main");
+  await act(async () => {});
   click("Branch: main");
-  expect(container.querySelector('[aria-label="Remote branch: main"]')?.getAttribute("aria-checked")).toBe("true");
-  expect(container.querySelector('[aria-label="main"]')?.getAttribute("aria-checked")).toBe("false");
+  expect(container.querySelector('[aria-label="Remote branch: main"]')?.getAttribute("aria-checked")).toBe("false");
+  expect(container.querySelector('[aria-label="main"]')?.getAttribute("aria-checked")).toBe("true");
   click("main");
+  await act(async () => {});
   click("Branch: main");
   expect(container.querySelector('[aria-label="main"]')?.getAttribute("aria-checked")).toBe("true");
   expect(container.querySelector('[aria-label="Remote branch: main"]')?.getAttribute("aria-checked")).toBe("false");
 });
 
-it("keeps local selection usable when GitHub fails or no repository is connected", () => {
+it("keeps local selection usable when GitHub fails or no repository is connected", async () => {
   remote.error = new Error("GitHub is unavailable");
   act(() => root.render(createElement(Workspace)));
-  selectBranch("feature/live");
+  await selectBranch("feature/live");
   live.repositoryId = null;
   act(() => root.render(createElement(Workspace)));
   click("Branch: feature/live");
@@ -593,6 +624,56 @@ it("loads changes only while their Git tab is active", () => {
   expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: false });
   click("Changes");
   expect(changesQuery.query).toHaveBeenLastCalledWith(live.projectId, { enabled: true });
+});
+
+it("updates the visible branch immediately and disables the picker until checkout succeeds", async () => {
+  let finish!: (value: unknown) => void;
+  live.checkout.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await selectBranch("feature/live");
+  const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Branch: feature/live"]')!;
+  expect(trigger.disabled).toBe(true);
+  act(() => trigger.click());
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(live.checkout.mutateAsync).toHaveBeenCalledExactlyOnceWith({ branchName: "feature/live" });
+  await act(async () => finish({ previousBranch: "main", currentBranch: "feature/live" }));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Branch: feature/live"]')?.disabled).toBe(false);
+});
+
+it("reverts a rejected checkout and shows its message", async () => {
+  let reject!: (reason: Error) => void;
+  live.checkout.mutateAsync.mockImplementationOnce(() => new Promise((_resolve, no) => { reject = no; }));
+  await selectBranch("feature/live");
+  await act(async () => reject(new Error("Commit or stash app.ts before switching.")));
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
+  expect(workspaceFiles.alert).toHaveBeenCalledWith("Couldn’t switch branches", "Commit or stash app.ts before switching.");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Branch: main"]')?.disabled).toBe(false);
+});
+
+it("finishes pending saves before checkout and refreshes only the submitted workspace", async () => {
+  let finishSave!: () => void;
+  workspaceFiles.flushPendingSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve; }));
+  const key = ["projects", "file", live.userId, live.projectId, "app.ts"];
+  const otherKey = ["projects", "file", "other-user", live.projectId, "app.ts"];
+  queryClient.setQueryData(key, { content: "old branch" });
+  queryClient.setQueryData(otherKey, { content: "other account" });
+  await selectBranch("feature/live");
+  expect(live.checkout.mutateAsync).not.toHaveBeenCalled();
+  await act(async () => finishSave());
+  expect(live.checkout.mutateAsync).toHaveBeenCalledOnce();
+  expect(queryClient.getQueryData(key)).toBeUndefined();
+  expect(queryClient.getQueryData(otherKey)).toEqual({ content: "other account" });
+  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+});
+
+it("reverts without checkout when saving fails", async () => {
+  workspaceFiles.flushPendingSaves.mockRejectedValueOnce(new Error("Save failed. Open Code to retry."));
+  click("Branch: main");
+  click("feature/live");
+  await act(async () => {});
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
+  expect(live.checkout.mutateAsync).not.toHaveBeenCalled();
+  expect(workspaceFiles.alert).toHaveBeenCalledWith("Couldn’t switch branches", "Save failed. Open Code to retry.");
 });
 
 it("distinguishes loading, offline, failure, and an uninitialized repository", () => {

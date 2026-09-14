@@ -2,6 +2,7 @@ import { serverEnv } from "@/data/env/server";
 import { projectBranchCheckoutSchema } from "@/features/projects/actions/branch-schemas";
 import { requestDaytona, SandboxFilesError } from "./api";
 import { getSandboxGitRepository, readSandboxGitBranches } from "./branches";
+import { fetchSandboxBranch, type RemoteBranchFetchInput } from "./fetch-branch";
 
 const unknownCheckoutOutcome = () =>
   new SandboxFilesError(
@@ -131,13 +132,18 @@ export const checkoutSandboxBranch = async (
   projectId: string,
   branchName: string,
   signal?: AbortSignal,
+  remote?: RemoteBranchFetchInput,
 ) => {
   const repository = await getSandboxGitRepository(sandboxId, projectId);
-  const existingBranches = await readSandboxGitBranches(
+  let existingBranches = await readSandboxGitBranches(
     repository,
     signal,
     checkoutFailureResponse,
   );
+  if (remote && !existingBranches.branches.includes(branchName)) {
+    await fetchSandboxBranch(repository, branchName, remote, signal);
+    existingBranches = await readSandboxGitBranches(repository, signal, checkoutFailureResponse);
+  }
   if (!existingBranches.branches.includes(branchName)) {
     throw new SandboxFilesError(
       404,

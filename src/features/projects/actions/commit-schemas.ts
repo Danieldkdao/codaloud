@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { PAGE_SIZE } from "@/lib/constants";
-import { projectBranchNameSchema } from "./branch-schemas";
+import { projectBranchNameSchema, projectBranchSources } from "./branch-schemas";
 
-export const commitSources = ["local", "remote"] as const;
+export const commitSources = projectBranchSources;
 export type CommitSource = (typeof commitSources)[number];
 export const commitSourceSchema = z.enum(commitSources);
 export type CommitSourceSchema = z.infer<typeof commitSourceSchema>;

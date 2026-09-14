@@ -8,7 +8,12 @@ export const projectBranchNameSchema = z.string().min(1).max(1024).refine((branc
 "Select a valid branch name.");
 export type ProjectBranchNameSchema = z.infer<typeof projectBranchNameSchema>;
 
-export const checkoutProjectBranchSchema = z.strictObject({ branchName: projectBranchNameSchema });
+export const projectBranchSources = ["local", "remote"] as const;
+export type ProjectBranchSource = (typeof projectBranchSources)[number];
+export const checkoutProjectBranchSchema = z.strictObject({
+  branchName: projectBranchNameSchema,
+  source: z.enum(projectBranchSources).optional(),
+});
 export type CheckoutProjectBranchSchema = z.infer<typeof checkoutProjectBranchSchema>;
 
 export const projectBranchCheckoutSchema = z.object({
@@ -16,6 +21,22 @@ export const projectBranchCheckoutSchema = z.object({
   currentBranch: projectBranchNameSchema,
 });
 export type ProjectBranchCheckoutSchema = z.infer<typeof projectBranchCheckoutSchema>;
+
+export const checkoutProjectBranchResponseSchema = z.discriminatedUnion("error", [
+  z.object({
+    error: z.literal(true),
+    message: z.string().min(1),
+    code: z.string().min(1).optional(),
+  }),
+  z.object({
+    error: z.literal(false),
+    message: z.string().min(1),
+    data: projectBranchCheckoutSchema,
+  }),
+]);
+export type CheckoutProjectBranchResponseSchema = z.infer<
+  typeof checkoutProjectBranchResponseSchema
+>;
 
 export const projectBranchesSchema = z.object({
   branches: z.array(z.string().min(1)),

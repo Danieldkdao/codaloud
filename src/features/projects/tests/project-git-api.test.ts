@@ -78,7 +78,7 @@ const mutationRoutes = [
   { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { ...expected, confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { ...expected, stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
-  { name: "stash all", handler: stashPush, input: { ...expected, message: "Saved" }, output: { created: true, remainingChanges: false, stashSha: "b".repeat(40) } },
+  { name: "stash all", handler: stashPush, input: { message: "Saved" }, output: { created: true, remainingChanges: false, stashSha: "b".repeat(40) } },
   { name: "create branch", handler: createBranch, input: { branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
 ];
 for (const route of mutationRoutes) {
@@ -204,7 +204,7 @@ it("pull: rejects string rebase options", async () => {
 
 it("stash all: uses the account identity rather than requiring repository identity configuration", async () => {
   mocks.user.mockResolvedValue({ userId: "user-one", user: { name: "", email: "bad" } });
-  expect((await stashPush(mutationRequest(expected), { projectId })).status).toBe(422);
+  expect((await stashPush(mutationRequest({}), { projectId })).status).toBe(422);
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
@@ -220,5 +220,10 @@ it("rejects mutation query flags rather than silently ignoring them", async () =
 
 it.each([{}, { branchName: "new", expectedBranch: "main" }, { branchName: "new", expectedHeadSha: "a".repeat(40) }, { branchName: "new", startPoint: "other" }])("create branch: rejects missing name and caller-selected source %j", async (input) => {
   expect((await createBranch(mutationRequest(input), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("stash all: rejects caller-supplied branch state", async () => {
+  expect((await stashPush(mutationRequest(expected), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });

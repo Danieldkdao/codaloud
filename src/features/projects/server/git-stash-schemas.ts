@@ -18,7 +18,7 @@ export const gitStashListSchema = z.object({
 });
 export type GitStashListSchema = z.infer<typeof gitStashListSchema>;
 
-export const gitStashPushSchema = gitExpectedStateSchema.extend({ message: z.string().trim().min(1).max(5000).optional() });
+export const gitStashPushSchema = z.strictObject({ message: z.string().trim().min(1).max(5000).optional() });
 export type GitStashPushSchema = z.infer<typeof gitStashPushSchema>;
 export const gitStashPushedSchema = z.object({ created: z.boolean(), remainingChanges: z.boolean(), stashSha: commitHashSchema.nullable() });
 export type GitStashPushedSchema = z.infer<typeof gitStashPushedSchema>;

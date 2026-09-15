@@ -2,12 +2,13 @@ import { createGitOperationCommand } from "./git-command";
 
 export const sandboxGitStashPushCommand = createGitOperationCommand(String.raw`
   ensureIdle();
-  checkExpected();
+  captureCurrentState();
   if (!git(["status", "--porcelain=v1", "--untracked-files=all"])) return { created: false, stashSha: null, remainingChanges: false };
   // Git can reuse an identical stash commit without adding a reflog entry.
   // Report that saved state instead of treating an unchanged SHA as failure.
   const stashCount = () => git(["stash", "list", "--format=%H"]).split("\n").filter(Boolean).length;
   const previousCount = stashCount();
+  checkExpected();
   mutationStarted = true;
   git(["stash", "push", "--include-untracked", "--message", input.message ?? "Codaloud saved changes"]);
   const stashSha = optional(["rev-parse", "--verify", "--quiet", "refs/stash"]);

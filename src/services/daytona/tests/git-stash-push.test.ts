@@ -20,10 +20,13 @@ it("stashes staged, unstaged and untracked work while preserving ignored files",
 it("returns an explicit no-op without duplicating an existing stash", () => {
   expect(fixture.run(sandboxGitStashPushCommand)).toMatchObject({ created: false, stashSha: null });
 });
-it("refuses stale requests", () => {
+it("stashes changes from the currently checked-out feature branch", () => {
+  fixture.git("switch", "-c", "feature/work");
+  fixture.git("commit", "--allow-empty", "-m", "Latest");
   fixture.write("file.txt", "work\n");
-  expect(() => fixture.run(sandboxGitStashPushCommand, { expectedBranch: "wrong" })).toThrow(expect.objectContaining({ code: "WORKSPACE_CHANGED" }));
-  expect(fixture.git("diff")).toContain("work");
+  expect(fixture.run(sandboxGitStashPushCommand, { expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ created: true });
+  expect(fixture.git("stash", "list")).toContain("feature/work");
+  expect(fixture.git("branch", "--show-current")).toBe("feature/work");
 });
 
 it("confirms a stash when restoring ignore rules makes a preserved file untracked", () => {

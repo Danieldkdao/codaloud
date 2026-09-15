@@ -82,6 +82,8 @@ All paginated application API contracts now accept `cursor` and return `nextCurs
 
 The remaining APIs return individual resources, bounded complete results, or mutation results, with no client pagination contract. GitHub REST adapters continue using the provider's documented page parameters internally. This audit does not claim provider snapshot consistency for mutable GitHub repository/branch lists.
 
+The unused `page` field was removed from the shared `paginationSchema`. Its consumers reuse only `search` and `pageSize`, with each resource defining its own cursor validation. This schema-only cleanup was verified by caller inspection and TypeScript rather than dedicated schema tests.
+
 ### Stash implementation decisions
 
 - The cursor includes version, project/sandbox/repository-and-query scope hash, complete snapshot digest, and the last returned entry's actual index and SHA. A repeated SHA remains a distinct entry. Continuation selects matching entries after that anchor, with no caller-provided offset.

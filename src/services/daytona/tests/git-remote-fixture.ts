@@ -27,8 +27,8 @@ cp.execFileSync = (file, args, options) => {
   return original(file, args, options);
 };
 `;
-  const run = (script: string, input: Record<string, unknown> = {}) => fixture.run(script, {
+  const run = (script: string, input: Record<string, unknown> = {}, hook = "") => fixture.run(script, {
     remote: { cloneUrl: "https://github.com/example/repo.git", accessToken: "test-secret" }, ...input,
-  }, prefix);
+  }, prefix + hook);
   return { ...fixture, remotePath, remoteGit, run, cleanup: () => { fixture.cleanup(); rmSync(remotePath, { recursive: true, force: true }); } };
 };

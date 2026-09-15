@@ -28,3 +28,20 @@ it("rejects executable workspace configuration", () => {
   fixture.git("config", "filter.evil.clean", "touch stolen");
   expect(() => fixture.run(sandboxGitCountsCommand)).toThrow(expect.objectContaining({ code: "GIT_UNSUPPORTED_CONFIG" }));
 });
+
+it("distinguishes outgoing and incoming commits on divergent branches", () => {
+  fixture.git("branch", "remote-side");
+  fixture.git("commit", "--allow-empty", "-m", "Local");
+  fixture.git("switch", "remote-side"); fixture.git("commit", "--allow-empty", "-m", "Remote");
+  fixture.git("update-ref", "refs/remotes/origin/main", fixture.git("rev-parse", "HEAD")); fixture.git("switch", "main");
+  fixture.git("config", "remote.origin.url", "https://github.com/example/repo.git");
+  fixture.git("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*");
+  fixture.git("config", "branch.main.remote", "origin"); fixture.git("config", "branch.main.merge", "refs/heads/main");
+  expect(fixture.run(sandboxGitCountsCommand)).toMatchObject({ outgoing: 1, incoming: 1 });
+});
+it("handles detached HEAD and unborn branches explicitly", () => {
+  fixture.git("switch", "--detach", "HEAD");
+  expect(fixture.run(sandboxGitCountsCommand)).toMatchObject({ currentBranch: null, headSha: fixture.headSha, outgoing: null, incoming: null });
+  fixture.git("switch", "--orphan", "empty");
+  expect(fixture.run(sandboxGitCountsCommand)).toMatchObject({ currentBranch: "empty", headSha: null, outgoing: null, incoming: null });
+});

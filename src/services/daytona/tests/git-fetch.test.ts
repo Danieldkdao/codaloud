@@ -23,3 +23,10 @@ it("rejects a mismatched remote before authenticated transport", () => {
   fixture.git("remote", "set-url", "origin", "https://github.com/other/repo.git");
   expect(() => fixture.run(sandboxGitFetchCommand)).toThrow(expect.objectContaining({ code: "GIT_REMOTE_MISMATCH" }));
 });
+
+it("unshallows from complete origin history before returning exact counts", () => {
+  fixture.git("commit", "--allow-empty", "-m", "Second"); const tip = fixture.git("rev-parse", "HEAD");
+  fixture.git("push", fixture.remotePath, "main"); fixture.write(".git/shallow", tip + "\n");
+  expect(fixture.run(sandboxGitFetchCommand, { expectedHeadSha: tip })).toMatchObject({ isShallow: false, outgoing: 0, incoming: 0 });
+  expect(fixture.git("rev-list", "--count", "HEAD")).toBe("2");
+});

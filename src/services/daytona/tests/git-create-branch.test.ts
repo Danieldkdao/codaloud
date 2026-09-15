@@ -1,3 +1,5 @@
+import { chmodSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { sandboxGitCreateBranchCommand } from "../git-create-branch-command";
 import { createGitFixture } from "./git-fixture";
@@ -21,6 +23,7 @@ it("rejects stale expected state", () => {
 });
 it("does not run checkout hooks", () => {
   fixture.write(".git/hooks/post-checkout", "#!/bin/sh\ntouch hooked\n");
+  chmodSync(join(fixture.repositoryPath, ".git/hooks/post-checkout"), 0o755);
   fixture.run(sandboxGitCreateBranchCommand, { branchName: "safe" });
   expect(fixture.git("status", "--porcelain")).toBe("");
 });

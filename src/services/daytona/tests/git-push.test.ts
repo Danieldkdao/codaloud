@@ -30,3 +30,30 @@ it("ignores a configured push URL when choosing the trusted destination", () => 
   fixture.git("config", "remote.origin.pushurl", "https://evil.invalid/repo.git");
   expect(run().pushed).toBe(true);
 });
+
+it("keeps a confirmed push successful when local tracking configuration cannot be refreshed", () => {
+  const hook = `
+const pushExecute = cp.execFileSync;
+cp.execFileSync = (file, args, options) => {
+  const result = pushExecute(file, args, options);
+  if (args.includes("push") && args.includes("https://github.com/example/repo.git")) {
+    require("node:fs").writeFileSync(${JSON.stringify(fixture.repositoryPath + "/.git/config.lock")}, "busy");
+  }
+  return result;
+};`;
+  const result = fixture.run(sandboxGitPushCommand, { remoteBranch: "main", force: false }, hook);
+  expect(result).toMatchObject({ pushed: true, trackingUpdated: false, counts: null });
+  expect(fixture.remoteGit("rev-parse", "main")).toBe(fixture.headSha);
+});
+it("treats a lost push response as unknown without retrying the remote mutation", () => {
+  fixture.git("commit", "--allow-empty", "-m", "Outgoing"); const tip = fixture.git("rev-parse", "HEAD");
+  const hook = `
+const pushExecute = cp.execFileSync;
+cp.execFileSync = (file, args, options) => {
+  const result = pushExecute(file, args, options);
+  if (args.includes("push") && args.includes("https://github.com/example/repo.git")) throw new Error("Response lost");
+  return result;
+};`;
+  expect(() => fixture.run(sandboxGitPushCommand, { expectedHeadSha: tip, remoteBranch: "main", force: false }, hook)).toThrow(expect.objectContaining({ code: "GIT_OUTCOME_UNKNOWN" }));
+  expect(fixture.remoteGit("rev-parse", "main")).toBe(tip);
+});

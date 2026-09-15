@@ -13,7 +13,7 @@ const projectId = "abcdef00-0000-4000-8000-000000000001";
 const counts = { currentBranch: "main", headSha: "a".repeat(40), upstream: null, upstreamSha: null, outgoing: null, incoming: null, isShallow: false, observedAt: "2026-09-15T00:00:00.000Z" };
 const request = () => new Request(`https://codaloud.test/api/projects/${projectId}/git/counts`);
 beforeEach(() => {
-  mocks.user.mockReset().mockResolvedValue({ userId: "user-one" });
+  mocks.user.mockReset().mockResolvedValue({ userId: "user-one", user: { name: "Ada", email: "ada@example.com" } });
   mocks.project.mockReset().mockResolvedValue({ id: projectId, sandboxId: "sandbox" });
   mocks.repository.mockReset().mockResolvedValue({ toolboxUrl: "https://toolbox.test/sandbox", repositoryPath: "/home/daytona/.codaloud/workspace" });
   mocks.request.mockReset().mockResolvedValue({ exitCode: 0, result: JSON.stringify(counts) });
@@ -60,7 +60,9 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
 import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
 import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
 import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api";
+import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
 const mutationRoutes = [
+  { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { ...expected, confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { ...expected, stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
   { name: "stash all", handler: stashPush, input: { ...expected, message: "Saved" }, output: { created: true, stashSha: "b".repeat(40) } },
@@ -107,4 +109,10 @@ it("view stash: validates pagination and returns an empty collection", async () 
   expect((await viewStash(request(), { projectId })).status).toBe(200);
   expect((await viewStash(new Request("https://codaloud.test/?pageSize=1000"), { projectId })).status).toBe(400);
   expect((await viewStash(new Request("https://codaloud.test/?index=0"), { projectId })).status).toBe(400);
+});
+
+it("revert: requires a valid server-resolved commit identity", async () => {
+  mocks.user.mockResolvedValue({ userId: "user-one", user: { name: "Ada", email: "bad" } });
+  expect((await revert(mutationRequest(expected), { projectId })).status).toBe(422);
+  expect(mocks.request).not.toHaveBeenCalled();
 });

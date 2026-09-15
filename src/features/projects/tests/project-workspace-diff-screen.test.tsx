@@ -13,6 +13,12 @@ const query = vi.hoisted(() => ({
   error: null as Error | null,
   data: undefined as ProjectRepositoryChangesSchema | undefined,
 }));
+const commitActions = vi.hoisted(() => ({ copy: vi.fn(), openURL: vi.fn(), alert: vi.fn() }));
+vi.mock("expo-linking", () => ({ openURL: commitActions.openURL }));
+vi.mock("@/components/copy-button", () => ({
+  CopyButton: ({ copyText, children, accessibilityLabel }: { copyText: string; children: ReactNode; accessibilityLabel: string }) =>
+    createElement("button", { onClick: () => commitActions.copy(copyText), "aria-label": accessibilityLabel }, children),
+}));
 const commitQuery = vi.hoisted(() => ({
   read: vi.fn(), refetch: vi.fn(), isFetching: false, fetchStatus: "idle",
   error: null as Error | null,
@@ -33,7 +39,7 @@ const route = vi.hoisted(() => ({ projectId: "11111111-1111-4111-8111-1111111111
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => route, useFocusEffect: (effect: () => (() => void) | void) => { focus.effect = effect; } }));
 vi.mock("@/features/projects/hooks/use-project-changes", () => ({ useProjectChanges: (...args: unknown[]) => { query.read(...args); return query; } }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 16, left: 0, right: 0 }) }));
-vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
+vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" "), alert: commitActions.alert }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, onPress, accessibilityLabel, disabled }: { children: ReactNode; onPress?: () => void; accessibilityLabel?: string; disabled?: boolean }) =>
     createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }, children),
@@ -156,6 +162,7 @@ beforeEach(() => {
   route.commitSha = undefined; route.source = undefined;
   Object.assign(commitQuery, { data: undefined, error: null, isFetching: false, fetchStatus: "idle" });
   commitQuery.read.mockClear(); commitQuery.refetch.mockReset().mockResolvedValue({});
+  commitActions.openURL.mockReset().mockResolvedValue(true);
   query.read.mockClear(); query.refetch.mockClear();
   saves.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   query.refreshAfterSaves.mockReset().mockImplementation(async (flush: () => Promise<void>) => { await flush(); return query.refetch(); });
@@ -557,7 +564,7 @@ it("renders root commits with no files and no GitHub URL", () => {
   expect(container.textContent).toContain("ParentNone");
   expect(container.textContent).toContain("0 files changed");
   expect(container.textContent).toContain("No file changes");
-  expect(container.querySelector<HTMLButtonElement>('[aria-label="View commit on GitHub"]')?.disabled).toBe(true);
+  expect(container.querySelector('[aria-label="View commit on GitHub"]')).toBeNull();
 });
 
 it("renders remote renames and unavailable diffs without inventing file modes", () => {
@@ -599,4 +606,84 @@ it.each([
   expect(query.read).toHaveBeenCalled();
   expect(container.textContent).toContain("live.ts");
   expect(container.querySelector('[aria-label="Copy commit SHA"]')).toBeNull();
+});
+
+it.each(["local", "remote"] as const)("copies the full SHA of the loaded %s commit", (source) => {
+  selectCommit(); route.source = source; commitQuery.data = { ...commitDetails(), source }; render();
+  click("Copy commit SHA");
+  expect(commitActions.copy).toHaveBeenCalledWith(commitQuery.data.commit.hash);
+});
+
+it("opens the loaded commit's GitHub URL", async () => {
+  selectCommit(); route.source = "remote"; commitQuery.data = { ...commitDetails(), source: "remote" }; render();
+  await act(async () => click("View commit on GitHub"));
+  expect(commitActions.openURL).toHaveBeenCalledWith(commitQuery.data.githubUrl);
+  expect(commitActions.alert).not.toHaveBeenCalled();
+});
+
+it("reports a failed GitHub handoff", async () => {
+  selectCommit(); commitQuery.data = commitDetails(); render();
+  commitActions.openURL.mockRejectedValue(new Error("Cannot open URL"));
+  await act(async () => click("View commit on GitHub"));
+  expect(commitActions.alert).toHaveBeenCalledOnce();
+});
+
+const contentWidthFor = (label: string) => Number(viewportFor(label).querySelector('[data-width]')?.getAttribute("data-width"));
+const shortenedDiff = () => snapshot([
+  change({ unstaged: { patch: "@@ -1,2 +1,2 @@\n unchanged\n-before\n+x\n", additions: 1, deletions: 1, unavailableReason: null } }),
+  twoFileDiff().changes[1],
+]);
+
+it("resets a refreshed file's width and offset without resetting unchanged files", () => {
+  query.data = twoFileDiff(); render();
+  measureCode("Added line 2: after", 800); measureCode("Added line 1: new second file", 600);
+  dragCode("Added line 2: after", 400); dragCode("Added line 1: new second file", 90);
+  const previousUnchangedLine = viewportFor("Unchanged line 1: unchanged");
+  query.data = shortenedDiff(); render();
+  measureCode("Added line 2: x", 40);
+  expect(contentWidthFor("Added line 2: x")).toBe(390);
+  expect(viewportFor("Added line 2: x").dataset.scrollX).toBe("0");
+  // Even retained lines must remount and report their width for the new comparison.
+  expect(viewportFor("Unchanged line 1: unchanged")).not.toBe(previousUnchangedLine);
+  expect(contentWidthFor("Added line 1: new second file")).toBe(680);
+  expect(viewportFor("Added line 1: new second file").dataset.scrollX).toBe("90");
+});
+
+it("ignores stale measurements after a diff refresh, including when old content returns", () => {
+  query.data = twoFileDiff(); render();
+  const oldMeasurement = textMeasurements.get("Added line 2: after")!.onTextLayout!;
+  measureCode("Added line 2: after", 800);
+  query.data = shortenedDiff(); render();
+  act(() => oldMeasurement({ nativeEvent: { lines: [{ width: 1200 }] } }));
+  expect(contentWidthFor("Added line 2: x")).toBe(390);
+  query.data = twoFileDiff(); render();
+  act(() => oldMeasurement({ nativeEvent: { lines: [{ width: 1200 }] } }));
+  expect(contentWidthFor("Added line 2: after")).toBe(390);
+  measureCode("Added line 2: after", 500);
+  expect(contentWidthFor("Added line 2: after")).toBe(580);
+});
+
+it("preserves measurements and scroll position when a refresh returns identical comparisons", () => {
+  query.data = twoFileDiff(); render();
+  measureCode("Added line 2: after", 800); dragCode("Added line 2: after", 160);
+  const previousLine = viewportFor("Added line 2: after");
+  query.data = { ...twoFileDiff(), observedAt: "2026-09-13T13:00:00Z" }; render();
+  expect(viewportFor("Added line 2: after")).toBe(previousLine);
+  expect(contentWidthFor("Added line 2: after")).toBe(880);
+  expect(viewportFor("Added line 2: after").dataset.scrollX).toBe("160");
+});
+
+it("resets a changed file while collapsed and when removed then re-added", () => {
+  query.data = twoFileDiff(); render();
+  measureCode("Added line 2: after", 800); dragCode("Added line 2: after", 160);
+  click("Collapse src/live.ts diff");
+  query.data = shortenedDiff(); render();
+  click("Expand src/live.ts diff");
+  expect(contentWidthFor("Added line 2: x")).toBe(390);
+  expect(viewportFor("Added line 2: x").dataset.scrollX).toBe("0");
+  const oldMeasurement = textMeasurements.get("Added line 2: x")!.onTextLayout!;
+  query.data = snapshot([]); render();
+  query.data = shortenedDiff(); render();
+  act(() => oldMeasurement({ nativeEvent: { lines: [{ width: 1200 }] } }));
+  expect(contentWidthFor("Added line 2: x")).toBe(390);
 });

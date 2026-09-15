@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { ActivityIndicator, View } from "react-native";
+import * as Linking from "expo-linking";
 
+import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
+import { alert } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { CodeText, HeadingText, PText } from "@/components/ui/text";
 import type { CommitSource } from "../actions/commit-schemas";
@@ -45,6 +48,14 @@ export const ProjectCommitDiff = ({
     : new Error("Invalid project, commit SHA, or source.");
   const refresh = () => {
     void query.refetch();
+  };
+  const openGitHub = async () => {
+    if (!data?.githubUrl) return;
+    try {
+      await Linking.openURL(data.githubUrl);
+    } catch {
+      alert("Unable to open GitHub. Please try again.");
+    }
   };
 
   return (
@@ -119,7 +130,7 @@ export const ProjectCommitDiff = ({
             </View>
 
             <View className="flex-row flex-wrap gap-2">
-              <Button variant="outline" accessibilityLabel="Copy commit SHA">
+              <CopyButton copyText={data.commit.hash} variant="outline" accessibilityLabel="Copy commit SHA">
                 <Icon
                   family="Feather"
                   name="copy"
@@ -128,11 +139,12 @@ export const ProjectCommitDiff = ({
                   accessible={false}
                 />
                 Copy SHA
-              </Button>
+              </CopyButton>
+              {data.githubUrl ? (
               <Button
                 variant="outline"
                 accessibilityLabel="View commit on GitHub"
-                disabled={!data.githubUrl}
+                onPress={() => { void openGitHub(); }}
               >
                 <Icon
                   family="Feather"
@@ -143,6 +155,7 @@ export const ProjectCommitDiff = ({
                 />
                 View on GitHub
               </Button>
+              ) : null}
             </View>
 
             <View className="flex-row flex-wrap items-center justify-between gap-3 pt-1">

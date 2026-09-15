@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { FlatList, Pressable, View, useWindowDimensions } from "react-native";
 import { makeMutable } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,38 +20,53 @@ type ProjectDiffListProps = {
   onRefresh?: () => void;
 };
 
+type FileLayout = {
+  contentKey: string;
+  revision: number;
+  width: number;
+  scroll: ProjectDiffScrollState;
+};
+
+type DiffLayoutState = {
+  files: ProjectWorkspaceDiffEntry[] | null;
+  fontScale: number;
+  revision: number;
+  layouts: ReadonlyMap<string, FileLayout>;
+};
+
 export const ProjectDiffList = ({ files, header, empty, accessibilityLabel, refreshing = false, onRefresh }: ProjectDiffListProps) => {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const [viewportWidth, setViewportWidth] = useState(width - insets.left - insets.right);
-  const [contentWidths, setContentWidths] = useState<ReadonlyMap<string, number>>(() => new Map());
   // State belongs to the file, outside cells that FlatList can unmount at any time.
-  const [fileScrolls] = useState(() => new Map<string, ProjectDiffScrollState>());
-  const getFileScroll = (path: string) => {
-    let scroll = fileScrolls.get(path);
-    if (!scroll) {
-      scroll = makeMutable({ x: 0, owner: "" });
-      fileScrolls.set(path, scroll);
-    }
-    return scroll;
-  };
-  useEffect(() => {
-    const paths = new Set(files.map((file) => file.path));
-    for (const path of fileScrolls.keys()) {
-      if (!paths.has(path)) fileScrolls.delete(path);
-    }
-    setContentWidths((previous) => {
-      if ([...previous.keys()].every((path) => paths.has(path))) return previous;
-      return new Map([...previous].filter(([path]) => paths.has(path)));
-    });
-  }, [files, fileScrolls]);
+  const [layoutState, setLayoutState] = useState<DiffLayoutState>(() => ({
+    files: null, fontScale, revision: 0, layouts: new Map(),
+  }));
+  let layouts = layoutState.layouts;
+  if (layoutState.files !== files || layoutState.fontScale !== fontScale) {
+    const revision = layoutState.revision + 1;
+    layouts = new Map(files.map((file) => {
+      const contentKey = JSON.stringify([file.staged, file.unstaged, fontScale]);
+      const previous = layoutState.layouts.get(file.path);
+      return [file.path, previous?.contentKey === contentKey ? previous : {
+        contentKey, revision, width: 0, scroll: makeMutable({ x: 0, owner: "" }),
+      }];
+    }));
+    // Reconcile before rendering children so new native measurements cannot race
+    // an effect that clears widths. Equal comparisons retain their scroll position.
+    setLayoutState({ files, fontScale, revision, layouts });
+  }
   // Native measurements include font scaling and wide glyphs. Every row in a
   // file gets the same width so even a short row can pan to its longest line.
-  const measureContent = useCallback((path: string, measuredWidth: number) => {
-    setContentWidths((previous) => {
+  const measureContent = useCallback((path: string, revision: number, measuredWidth: number) => {
+    setLayoutState((previous) => {
+      const layout = previous.layouts.get(path);
+      // Discard late events from replaced or removed comparisons, even if their
+      // old content has since returned at the same path.
+      if (!layout || layout.revision !== revision) return previous;
       const width = Math.ceil(measuredWidth);
-      if (width <= (previous.get(path) ?? 0)) return previous;
-      return new Map(previous).set(path, width);
+      if (width <= layout.width) return previous;
+      return { ...previous, layouts: new Map(previous.layouts).set(path, { ...layout, width }) };
     });
   }, []);
   // Keep disclosure state outside virtualized rows so scrolling preserves it.
@@ -75,7 +90,7 @@ export const ProjectDiffList = ({ files, header, empty, accessibilityLabel, refr
         style={{ flex: 1 }}
         accessibilityLabel={accessibilityLabel}
         data={rows}
-        keyExtractor={(row) => row.key}
+        keyExtractor={(row) => row.kind === "line" ? `${row.key}:${layouts.get(row.path)!.revision}` : row.key}
         initialNumToRender={24}
         maxToRenderPerBatch={24}
         windowSize={5}
@@ -93,16 +108,17 @@ export const ProjectDiffList = ({ files, header, empty, accessibilityLabel, refr
         ListHeaderComponent={<View>{header}</View>}
         ListEmptyComponent={<View style={{ flex: 1 }}>{empty}</View>}
         renderItem={({ item: row }) => {
+          const layout = layouts.get(row.path)!;
           switch (row.kind) {
             case "line": return (
               <View className="bg-card/25">
                 <ProjectDiffScrollRow
-                  scroll={getFileScroll(row.path)}
+                  scroll={layout.scroll}
                   rowKey={row.key}
-                  contentWidth={Math.max(viewportWidth, contentWidths.get(row.path) ?? 0)}
+                  contentWidth={Math.max(viewportWidth, layout.width)}
                   viewportWidth={viewportWidth}
                 >
-                  <ProjectWorkspaceDiffLine line={row.line} onContentWidth={(width) => measureContent(row.path, width)} />
+                  <ProjectWorkspaceDiffLine line={row.line} onContentWidth={(width) => measureContent(row.path, layout.revision, width)} />
                 </ProjectDiffScrollRow>
               </View>
             );

@@ -98,6 +98,16 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); unsubscribe(); client.clear(); });
 
+it.each([
+  ["2026-09-07T12:00:00", "Updated Sep 7, 2026"],
+  ["invalid", "Update date unavailable"],
+  ["2026-02-29T12:00:00", "Update date unavailable"],
+])("renders the project update date for %s", (updatedAt, label) => {
+  act(() => root.render(createElement(QueryClientProvider, { client },
+    createElement(ProjectsListItem, { project: { ...project, updatedAt } }))));
+  expect(container.textContent).toContain(label);
+});
+
 it("waits for explicit confirmation before deleting the selected project", async () => {
   openConfirmation();
   expect(mocks.confirm).toHaveBeenCalledWith("Delete project?", expect.stringContaining(project.name), expect.objectContaining({ actionText: "Delete", onConfirmPress: expect.any(Function) }));
@@ -228,7 +238,7 @@ it("keeps a server-reported deletion disabled after reopening the list", () => {
   act(() => root.render(createElement(QueryClientProvider, { client },
     createElement(ProjectsListItem, { project: { ...project, deletionRequested: true } }))));
   expect(mocks.card.disabled).toBe(true);
-  expect(container.textContent).toContain("Deleting");
+  expect(container.querySelector('[aria-label="Deleting My project"]')?.getAttribute("aria-busy")).toBe("true");
   act(() => {
     mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "update" } } as never);
     mocks.card.onAccessibilityAction?.({ nativeEvent: { actionName: "delete" } } as never);

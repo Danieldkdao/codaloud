@@ -1,5 +1,6 @@
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ type ProjectCommitListProps = {
 };
 
 export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
+  const router = useRouter();
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
   const { projectId, branch, branchSource, commitSearch, isBranchLoading, isCheckingOut } =
@@ -184,7 +186,10 @@ export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
       }
       renderItem={({ item, index }) => (
         <Pressable
-          onPress={() => {}}
+          onPress={() => router.push({
+            pathname: "/projects/[projectId]/git/workspace-diff",
+            params: { projectId, commitSha: item.hash, source: branchSource },
+          })}
           accessibilityRole="button"
           accessibilityLabel={`${formatCommitSubject(item.message)}, ${item.author}, ${formatCommitDate(item.committedAt)}, ${formatCommitHash(item.hash)}`}
           className="flex-row gap-3 rounded-xl active:bg-secondary"

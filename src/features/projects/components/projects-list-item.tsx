@@ -11,7 +11,7 @@ import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
-import { formatProjectSetupStatus } from "@/features/projects/lib/formatters";
+import { formatProjectSetupStatus, formatProjectUpdatedDate } from "@/features/projects/lib/formatters";
 import type {
   ProjectPageData,
   ProjectResponseData,
@@ -37,14 +37,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   const router = useRouter();
   const status = formatProjectSetupStatus(project.setupStatus);
   const sourceLabel = project.githubRepositoryId ? "GitHub import" : null;
-  const updatedAt = new Date(project.updatedAt);
-  const updatedLabel = Number.isNaN(updatedAt.getTime())
-    ? "Update date unavailable"
-    : `Updated ${updatedAt.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })}`;
+  const updatedLabel = formatProjectUpdatedDate(project.updatedAt);
 
   const updateProject = () => {
     if (deletionInFlight.current || isDeleting) return;

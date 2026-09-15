@@ -9,8 +9,10 @@ import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 
 const state = vi.hoisted(() => ({
   projectId: "project-one",
+  segments: ["projects", "[projectId]", "files"],
+  commitParams: {} as { commitSha?: string | string[]; source?: string | string[] },
   dismissTo: vi.fn(),
-  headerOptions: {} as { headerBackVisible?: boolean; headerLeft?: () => ReactNode },
+  headerOptions: {} as { headerTitle?: string; headerBackVisible?: boolean; headerLeft?: () => ReactNode },
   readFiles: vi.fn(),
   query: {
     data: undefined as { name: string; setupStatus: string; sandboxId: string | null } | undefined,
@@ -22,7 +24,8 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: state.projectId }),
-  useSegments: () => ["projects", "[projectId]", "files"],
+  useGlobalSearchParams: () => state.commitParams,
+  useSegments: () => state.segments,
   useRouter: () => ({ dismissTo: state.dismissTo }),
   Stack: { Screen: ({ options }: { options: typeof state.headerOptions }) => { state.headerOptions = options; return null; } },
 }));
@@ -78,6 +81,8 @@ beforeEach(() => {
   root = createRoot(container);
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   state.projectId = "project-one";
+  state.segments = ["projects", "[projectId]", "files"];
+  state.commitParams = {};
   state.dismissTo.mockClear();
   state.readFiles.mockReset().mockResolvedValue([]);
   Object.assign(state.query, { data: undefined, isError: false, isFetching: false });
@@ -91,6 +96,35 @@ it("provides an explicit home action while the workspace is loading", async () =
   expect(home?.querySelector('[data-icon="home"]')).not.toBeNull();
   act(() => home!.click());
   expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
+});
+
+it.each(["local", "remote"])("uses the short SHA for a %s commit and restores the normal titles on navigation", async (source) => {
+  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
+  state.commitParams = { commitSha: "40d01ac" + "a".repeat(33), source };
+  await render();
+  expect(state.headerOptions.headerTitle).toBe("40d01ac");
+  state.commitParams = { commitSha: "b".repeat(40), source };
+  await render();
+  expect(state.headerOptions.headerTitle).toBe("bbbbbbb");
+  state.commitParams = {};
+  await render();
+  expect(state.headerOptions.headerTitle).toBe("Workspace diff");
+  state.segments = ["projects", "[projectId]", "git"];
+  await render();
+  expect(state.headerOptions.headerTitle).toBe("Example");
+});
+
+it.each([
+  { commitSha: "a".repeat(40) }, { source: "local" },
+  { commitSha: ["a".repeat(40)], source: "local" },
+  { commitSha: "a".repeat(40), source: "invalid" },
+])("keeps the workspace title for incomplete commit parameters: %j", async (params) => {
+  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
+  state.commitParams = params;
+  await render();
+  expect(state.headerOptions.headerTitle).toBe("Workspace diff");
 });
 afterEach(() => {
   act(() => root.unmount());

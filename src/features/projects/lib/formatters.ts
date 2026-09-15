@@ -1,3 +1,5 @@
+import { format, isValid, parseISO } from "date-fns";
+
 import type { CodeEditorMatchState } from "@/components/code-editor-matches";
 import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
 import type { ProjectDiffComparison, ProjectDiffLine, ProjectDiffScope, ProjectWorkspaceDiffData } from "@/features/projects/types";
@@ -176,6 +178,16 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
 
 export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
 
+export const formatCommitTimestamp = (timestamp: string): string => {
+  const date = parseISO(timestamp);
+  return isValid(date) ? format(date, "MMM d, yyyy 'at' h:mm a") : "Date unavailable";
+};
+
+export const formatProjectUpdatedDate = (updatedAt: string): string => {
+  const date = parseISO(updatedAt);
+  return isValid(date) ? `Updated ${format(date, "MMM d, yyyy")}` : "Update date unavailable";
+};
+
 // Full Git messages include a body and often a trailing newline. List titles use only the subject.
 export const formatCommitSubject = (message: string): string => message.split(/\r?\n/, 1)[0].trim();
 
@@ -280,8 +292,10 @@ export const formatProjectDiffMode = (mode: string) => {
   }
 };
 
-export const formatCommitDate = (committedAt: string): string =>
-  new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));
+export const formatCommitDate = (committedAt: string): string => {
+  const date = parseISO(committedAt);
+  return isValid(date) ? format(date, "MMM d") : "Date unavailable";
+};
 
 
 export const formatAgentActivityKind = (kind: ProjectAgentActivityKind): {
@@ -326,13 +340,10 @@ export const formatAgentActivityStatus = (status: ProjectAgentActivityStatus): {
   }
 };
 
-export const formatAgentActivityDate = (createdAt: string): string =>
-  new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(createdAt));
+export const formatAgentActivityDate = (createdAt: string): string => {
+  const date = parseISO(createdAt);
+  return isValid(date) ? format(date, "MMM d 'at' h:mm a") : "Date unavailable";
+};
 
 
 export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {

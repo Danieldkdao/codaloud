@@ -9,3 +9,8 @@ export const projectCommitParamsSchema = projectCommitQuerySchema.extend({
   pageSize: paginationSchema.shape.pageSize,
 });
 export type ProjectCommitParamsSchema = z.infer<typeof projectCommitParamsSchema>;
+
+export const getProjectCommitDiffParams = (commitSha: unknown, source: unknown) => {
+  if (typeof commitSha !== "string" || !commitSha.trim() || (source !== "local" && source !== "remote")) return null;
+  return { commitSha, source } as const;
+};

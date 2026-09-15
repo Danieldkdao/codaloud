@@ -15,8 +15,12 @@ const query = vi.hoisted(() => ({
 const saves = vi.hoisted(() => ({ flushPendingSaves: vi.fn() }));
 const focus = vi.hoisted(() => ({ effect: undefined as (() => (() => void) | void) | undefined }));
 const listWindow = vi.hoisted(() => ({ start: 0, limit: Infinity, count: 0 }));
+const textMeasurements = vi.hoisted(() => new Map<string, {
+  onLayout?: (event: { nativeEvent: { layout: { x: number; width: number } } }) => void;
+  onTextLayout?: (event: { nativeEvent: { lines: { width: number }[] } }) => void;
+}>());
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => saves }));
-const route = vi.hoisted(() => ({ projectId: "11111111-1111-4111-8111-111111111111" }));
+const route = vi.hoisted(() => ({ projectId: "11111111-1111-4111-8111-111111111111", commitSha: undefined as string | string[] | undefined, source: undefined as string | string[] | undefined }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => route, useFocusEffect: (effect: () => (() => void) | void) => { focus.effect = effect; } }));
 vi.mock("@/features/projects/hooks/use-project-changes", () => ({ useProjectChanges: (...args: unknown[]) => { query.read(...args); return query; } }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 16, left: 0, right: 0 }) }));
@@ -26,27 +30,93 @@ vi.mock("@/components/ui/button", () => ({
     createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }, children),
 }));
 vi.mock("@/components/ui/text", () => {
-  const Text = ({ children, accessibilityLabel, className, accessible }: { children?: ReactNode; accessibilityLabel?: string; className?: string; accessible?: boolean }) => createElement("span", { "aria-label": accessibilityLabel, className, "aria-hidden": accessible === false || undefined }, children);
+  const Text = ({ children, accessibilityLabel, className, accessible, ...props }: { children?: ReactNode; accessibilityLabel?: string; className?: string; accessible?: boolean } & {
+    onLayout?: (event: { nativeEvent: { layout: { x: number; width: number } } }) => void;
+    onTextLayout?: (event: { nativeEvent: { lines: { width: number }[] } }) => void;
+  }) => {
+    if (accessibilityLabel) textMeasurements.set(accessibilityLabel, props);
+    return createElement("span", { "aria-label": accessibilityLabel, className, "aria-hidden": accessible === false || undefined }, children);
+  };
   return { CodeText: Text, PText: Text, HeadingText: Text };
 });
 vi.mock("@/components/ui/icon", () => ({
   Icon: ({ name }: { name: string }) => createElement("span", { "data-icon": name }),
 }));
+type ScrollEvent = { contentOffset: { x: number; y: number } };
+type ScrollHandlers = { onBeginDrag?: (event: ScrollEvent) => void; onScroll?: (event: ScrollEvent) => void };
+const nativeScroll = vi.hoisted(() => ({
+  handlers: new WeakMap<HTMLElement, ScrollHandlers>(),
+  reactions: new Set<() => void>(),
+}));
+vi.mock("react-native-worklets", () => ({ scheduleOnUI: (worklet: () => void) => worklet() }));
+vi.mock("react-native-reanimated", async () => {
+  const { useEffect, useRef } = await import("react");
+  return {
+    makeMutable: <T,>(initial: T) => {
+      let value = initial;
+      return {
+        get value() { return value; },
+        set value(next: T) { value = next; [...nativeScroll.reactions].forEach((reaction) => reaction()); },
+      };
+    },
+    useAnimatedRef: () => useRef<HTMLElement>(null),
+    useAnimatedScrollHandler: (handlers: ScrollHandlers) => handlers,
+    useAnimatedReaction: (prepare: () => unknown, react: (value: unknown) => void) => {
+      useEffect(() => {
+        let previous: unknown;
+        const reaction = () => {
+          const value = prepare();
+          if (value !== previous) { previous = value; react(value); }
+        };
+        nativeScroll.reactions.add(reaction);
+        reaction();
+        return () => { nativeScroll.reactions.delete(reaction); };
+      }, [prepare, react]);
+    },
+    scrollTo: (ref: { current: HTMLElement | null }, x: number) => {
+      if (!ref.current) return;
+      ref.current.dataset.scrollX = String(x);
+      // Native programmatic scroll events must not drive another synchronization loop.
+      nativeScroll.handlers.get(ref.current)?.onScroll?.({ contentOffset: { x, y: 0 } });
+    },
+    default: {
+      ScrollView: ({ children, ref, horizontal, onScroll, onContentSizeChange, contentContainerStyle }: {
+        children?: ReactNode; ref: { current: HTMLElement | null }; horizontal?: boolean; onScroll: ScrollHandlers;
+        onContentSizeChange?: () => void; contentContainerStyle?: { width?: number };
+      }) => {
+        useEffect(() => {
+          nativeScroll.handlers.set(ref.current!, onScroll);
+          onContentSizeChange?.();
+        }, [ref, onScroll, onContentSizeChange, contentContainerStyle?.width]);
+        return createElement("div", { ref, "data-horizontal-scroll": horizontal || undefined, "data-scroll-x": "0" }, children);
+      },
+    },
+  };
+});
 vi.mock("react-native", () => ({
+  useWindowDimensions: () => ({ width: 390, height: 844, fontScale: 1, scale: 3 }),
+  Animated: {
+    Value: class { constructor(public value: number) {} },
+    event: () => undefined,
+    View: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+    ScrollView: ({ children, horizontal }: { children?: ReactNode; horizontal?: boolean }) => createElement("div", { "data-horizontal-scroll": horizontal || undefined }, children),
+  },
   Pressable: ({ children, accessibilityLabel, accessibilityState, onPress }: { children?: ReactNode; accessibilityLabel?: string; accessibilityState?: { expanded?: boolean }; onPress?: () => void }) =>
     createElement("button", { "aria-label": accessibilityLabel, "aria-expanded": accessibilityState?.expanded, onClick: onPress }, children),
-  View: ({ children, accessibilityLabel, className }: { children?: ReactNode; accessibilityLabel?: string; className?: string }) => createElement("div", { "aria-label": accessibilityLabel, className }, children),
-  ScrollView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+  View: ({ children, accessibilityLabel, className, style }: { children?: ReactNode; accessibilityLabel?: string; className?: string; style?: { width?: number } }) => createElement("div", { "aria-label": accessibilityLabel, className, "data-width": style?.width }, children),
+  ScrollView: ({ children, horizontal }: { children?: ReactNode; horizontal?: boolean }) => createElement("div", { "data-horizontal-scroll": horizontal || undefined }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
-  FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent, keyExtractor, onRefresh, refreshing }: {
+  FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent, keyExtractor, onRefresh, refreshing, renderScrollComponent }: {
     data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode;
     keyExtractor: (item: unknown, index: number) => string;
     ListHeaderComponent?: ReactNode; ListEmptyComponent?: ReactNode; onRefresh?: () => void; refreshing?: boolean;
+    renderScrollComponent?: (props: { children: ReactNode }) => ReactNode;
   }) => {
     listWindow.count = data.length;
-    return createElement("div", { "data-refreshing": refreshing }, ListHeaderComponent,
+    const content = createElement("div", { "data-refreshing": refreshing }, ListHeaderComponent,
       data.length ? data.slice(listWindow.start, listWindow.start + listWindow.limit).map((item, index) => createElement("div", { key: keyExtractor(item, index) }, renderItem({ item, index }))) : ListEmptyComponent,
       onRefresh && createElement("button", { "aria-label": "Pull to refresh", onClick: onRefresh }));
+    return renderScrollComponent ? renderScrollComponent({ children: content }) : content;
   },
 }));
 
@@ -74,11 +144,13 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   Object.assign(query, { data: undefined, error: null, isFetching: false, fetchStatus: "idle" });
   route.projectId = "11111111-1111-4111-8111-111111111111";
+  route.commitSha = undefined; route.source = undefined;
   query.read.mockClear(); query.refetch.mockClear();
   saves.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   query.refreshAfterSaves.mockReset().mockImplementation(async (flush: () => Promise<void>) => { await flush(); return query.refetch(); });
   focus.effect = undefined;
   Object.assign(listWindow, { start: 0, limit: Infinity, count: 0 });
+  textMeasurements.clear();
   container = document.createElement("div"); document.body.append(container);
   root = createRoot(container);
 });
@@ -248,6 +320,94 @@ it("uses one line-number gutter and keeps indentation", () => {
   }
 });
 
+const viewportFor = (label: string) => {
+  const viewport = container.querySelector(`[aria-label="${label}"]`)?.closest<HTMLElement>('[data-horizontal-scroll="true"]');
+  expect(viewport).not.toBeNull();
+  return viewport!;
+};
+const dragCode = (label: string, x: number) => {
+  const viewport = viewportFor(label);
+  const event = { contentOffset: { x, y: 0 } };
+  act(() => {
+    nativeScroll.handlers.get(viewport)?.onBeginDrag?.(event);
+    viewport.dataset.scrollX = String(x);
+    nativeScroll.handlers.get(viewport)?.onScroll?.(event);
+  });
+};
+const twoFileDiff = () => snapshot([
+  change({ unstaged: {
+    patch: "@@ -1,2 +1,2 @@\n unchanged\n-before\n+after\n", additions: 1, deletions: 1, unavailableReason: null,
+  } }),
+  change({ path: "src/other.ts", unstaged: {
+    patch: "@@ -1 +1 @@\n-old second file\n+new second file\n", additions: 1, deletions: 1, unavailableReason: null,
+  } }),
+]);
+const measureCode = (label: string, width: number) => act(() => {
+  textMeasurements.get(label)!.onTextLayout!({ nativeEvent: { lines: [{ width }] } });
+});
+
+it("scrolls every line of a file together while other files keep their own position", () => {
+  query.data = twoFileDiff(); render();
+  measureCode("Added line 2: after", 800);
+  measureCode("Added line 1: new second file", 600);
+  dragCode("Added line 2: after", 160);
+  for (const label of ["Added line 2: after", "Removed line 2: before", "Unchanged line 1: unchanged"]) {
+    expect(viewportFor(label).dataset.scrollX).toBe("160");
+  }
+  expect(viewportFor("Added line 1: new second file").dataset.scrollX).toBe("0");
+  dragCode("Removed line 1: old second file", 90);
+  expect(viewportFor("Added line 1: new second file").dataset.scrollX).toBe("90");
+  expect(viewportFor("Added line 2: after").dataset.scrollX).toBe("160");
+  // A different line takes over the same file, including its momentum events.
+  dragCode("Unchanged line 1: unchanged", 220);
+  act(() => nativeScroll.handlers.get(viewportFor("Unchanged line 1: unchanged"))?.onScroll?.({ contentOffset: { x: 240, y: 0 } }));
+  expect(viewportFor("Added line 2: after").dataset.scrollX).toBe("240");
+  expect(viewportFor("Removed line 2: before").dataset.scrollX).toBe("240");
+  expect(viewportFor("Added line 1: new second file").dataset.scrollX).toBe("90");
+  expect(container.querySelector('[aria-label="Collapse src/live.ts diff"]')?.closest('[data-horizontal-scroll]')).toBeNull();
+});
+
+it("restores the file offset when virtualized lines return or a file is reopened", () => {
+  query.data = twoFileDiff(); render();
+  measureCode("Added line 2: after", 800);
+  dragCode("Removed line 2: before", 160);
+  listWindow.start = 5; render();
+  expect(container.querySelector('[aria-label="Added line 2: after"]')).toBeNull();
+  listWindow.start = 0; render();
+  expect(viewportFor("Added line 2: after").dataset.scrollX).toBe("160");
+  click("Collapse src/live.ts diff");
+  click("Expand src/live.ts diff");
+  expect(viewportFor("Added line 2: after").dataset.scrollX).toBe("160");
+  route.projectId = "22222222-2222-4222-8222-222222222222"; render();
+  expect(viewportFor("Added line 2: after").dataset.scrollX).toBe("0");
+});
+
+it("paints the file heading, comparison details, and code on the same card surface", () => {
+  query.data = snapshot([change({ unstaged: {
+    patch: "@@ -1,2 +1,2 @@\n unchanged\n-before\n+after\n", additions: 1, deletions: 1, unavailableReason: null,
+  } })]); render();
+  for (const label of ["Collapse src/live.ts diff", "Unchanged line 1: unchanged", "Added line 2: after", "Removed line 2: before"]) {
+    expect(container.querySelector(`[aria-label="${label}"]`)?.closest('[class~="bg-card/25"]')).not.toBeNull();
+  }
+  const status = [...container.querySelectorAll("span")].find((node) => node.textContent === "Modified");
+  expect(status?.closest('[class~="bg-card/25"]')).not.toBeNull();
+});
+
+it("measures a common width within each file without widening unrelated files", () => {
+  query.data = twoFileDiff(); render();
+  const added = textMeasurements.get("Added line 2: after")!;
+  act(() => {
+    added.onLayout!({ nativeEvent: { layout: { x: 64, width: 5000 } } });
+    added.onTextLayout!({ nativeEvent: { lines: [{ width: 550.5 }] } });
+  });
+  const contentWidth = (label: string) => viewportFor(label).querySelector('[data-width]')?.getAttribute("data-width");
+  expect(contentWidth("Added line 2: after")).toBe("631");
+  expect(contentWidth("Removed line 2: before")).toBe("631");
+  expect(contentWidth("Added line 1: new second file")).toBe("390");
+  measureCode("Removed line 2: before", 200);
+  expect(contentWidth("Added line 2: after")).toBe("631");
+});
+
 it("paints row backgrounds once without a second tint behind the code", () => {
   query.data = snapshot(); render();
   for (const label of ["Added line 1: after", "Removed line 1: before"]) {
@@ -297,4 +457,39 @@ it("starts expanded when switching to another project with the same filename", (
   query.data = snapshot(); render();
   expect(container.querySelector('[aria-label="Collapse src/live.ts diff"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Added line 1: after"]')).not.toBeNull();
+});
+
+it.each(["local", "remote"])("opens the commit layout for a SHA and %s source without reading workspace changes", (source) => {
+  route.commitSha = "b".repeat(40); route.source = source;
+  render();
+  expect(query.read).not.toHaveBeenCalled();
+  expect(saves.flushPendingSaves).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("improve workspace startup feedback");
+  expect(container.textContent).toContain("Alex Morgan");
+  expect(container.textContent).toContain("alex@example.com");
+  // The SHA is rendered by the native header, covered in project-setup-gate.test.tsx.
+  expect(container.textContent).toContain("Committed Sep 14, 2026 at");
+  expect(container.textContent).not.toMatch(/Local commit|Remote commit/);
+  expect(container.querySelector('[aria-label="Copy commit SHA"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="View commit on GitHub"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Refresh workspace diff"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Pull to refresh"]')).toBeNull();
+  expect(container.querySelectorAll('[aria-label^="Added line"]')).not.toHaveLength(0);
+  expect(container.textContent).not.toMatch(/mock|fixture|demo/i);
+  expect(container.textContent).not.toContain("Keep startup messages clear");
+
+  click("Collapse src/features/projects/components/project-setup-status.tsx diff");
+  expect(container.querySelector('[aria-label="Expand src/features/projects/components/project-setup-status.tsx diff"]')).not.toBeNull();
+});
+
+it.each([
+  { commitSha: "a".repeat(40) }, { source: "local" },
+  { commitSha: "", source: "local" }, { commitSha: "a".repeat(40), source: "unknown" },
+  { commitSha: ["a".repeat(40), "b".repeat(40)], source: "local" },
+  { commitSha: "a".repeat(40), source: ["local", "remote"] },
+])("keeps the workspace view for incomplete or ambiguous parameters: %j", (params) => {
+  Object.assign(route, params); query.data = snapshot(); render();
+  expect(query.read).toHaveBeenCalled();
+  expect(container.textContent).toContain("live.ts");
+  expect(container.querySelector('[aria-label="Copy commit SHA"]')).toBeNull();
 });

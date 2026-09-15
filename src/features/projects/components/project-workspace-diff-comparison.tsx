@@ -1,4 +1,5 @@
-import { ScrollView, View } from "react-native";
+import { useRef } from "react";
+import { View, useWindowDimensions } from "react-native";
 
 import { CodeText, PText } from "@/components/ui/text";
 import {
@@ -48,14 +49,37 @@ export const ProjectWorkspaceDiffComparison = ({ comparison, status }: ProjectWo
   );
 };
 
-export const ProjectWorkspaceDiffLine = ({ line }: { line: ProjectDiffLine }) => {
+type ProjectWorkspaceDiffLineProps = {
+  line: ProjectDiffLine;
+  onContentWidth: (width: number) => void;
+};
+
+export const ProjectWorkspaceDiffLine = ({ line, onContentWidth }: ProjectWorkspaceDiffLineProps) => {
   const presentation = formatProjectDiffRow(line);
+  const { fontScale } = useWindowDimensions();
+  const textLeft = useRef(64);
+  const textWidth = useRef(0);
+  // Give native text room to measure one unwrapped line. The viewport uses its
+  // actual glyph width, not this generous measurement bound (including tabs).
+  const measurementWidth = (line.text.length + 2 + (line.text.match(/\t/g)?.length ?? 0) * 8) * 32 * fontScale;
   return (
-    <ScrollView horizontal directionalLockEnabled nestedScrollEnabled contentContainerStyle={{ minWidth: "100%" }}>
-      <View className={cn("flex-row flex-1 px-4 py-1", presentation.className)}>
-        <CodeText className="min-w-12 pr-4 text-right text-base text-muted-foreground" accessible={false}>{formatProjectDiffLineNumber(line.newLine ?? line.oldLine)}</CodeText>
-        <CodeText selectable accessibilityLabel={presentation.label} className={cn("text-base", presentation.textClassName)}>{presentation.prefix}{line.text || " "}</CodeText>
-      </View>
-    </ScrollView>
+    <View className={cn("flex-row px-4 py-1", presentation.className)}>
+      <CodeText className="min-w-12 pr-4 text-right text-base text-muted-foreground" accessible={false}>{formatProjectDiffLineNumber(line.newLine ?? line.oldLine)}</CodeText>
+      <CodeText
+        selectable
+        numberOfLines={1}
+        style={{ width: measurementWidth }}
+        onLayout={({ nativeEvent: { layout } }) => {
+          textLeft.current = layout.x;
+          onContentWidth(layout.x + textWidth.current + 16);
+        }}
+        onTextLayout={({ nativeEvent: { lines } }) => {
+          textWidth.current = lines[0]?.width ?? 0;
+          onContentWidth(textLeft.current + textWidth.current + 16);
+        }}
+        accessibilityLabel={presentation.label}
+        className={cn("shrink-0 text-base", presentation.textClassName)}
+      >{presentation.prefix}{line.text || " "}</CodeText>
+    </View>
   );
 };

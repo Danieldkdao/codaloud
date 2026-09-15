@@ -34,3 +34,23 @@ it("rejects dirty work before fetching", () => {
   expect(() => run()).toThrow(expect.objectContaining({ code: "GIT_DIRTY_WORKTREE" }));
   expect(fixture.git("for-each-ref", "refs/remotes/origin")).toBe("");
 });
+
+it("pulls into the checked-out branch from its differently named upstream", () => {
+  const remoteSha = remoteCommit();
+  fixture.remoteGit("branch", "review", "main");
+  fixture.git("switch", "-c", "feature/current");
+  fixture.git("config", "branch.feature/current.remote", "origin");
+  fixture.git("config", "branch.feature/current.merge", "refs/heads/review");
+  expect(fixture.run(sandboxGitPullCommand, { rebase: false, expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ currentBranch: "feature/current", headSha: remoteSha });
+  expect(fixture.git("rev-parse", "main")).toBe(fixture.headSha);
+});
+it("requires an upstream before pulling instead of guessing a remote branch", () => {
+  fixture.git("switch", "-c", "feature/untracked");
+  expect(() => fixture.run(sandboxGitPullCommand, { rebase: false, expectedBranch: undefined, expectedHeadSha: undefined })).toThrow(expect.objectContaining({ code: "GIT_UPSTREAM_REQUIRED" }));
+  expect(fixture.git("for-each-ref", "refs/remotes/origin")).toBe("");
+});
+it("rejects multiple upstreams before fetching", () => {
+  fixture.git("config", "--add", "branch.main.merge", "refs/heads/other");
+  expect(() => run()).toThrow(expect.objectContaining({ code: "GIT_UPSTREAM_REQUIRED" }));
+  expect(fixture.git("for-each-ref", "refs/remotes/origin")).toBe("");
+});

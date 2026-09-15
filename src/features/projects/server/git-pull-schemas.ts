@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { gitExpectedStateSchema, gitCountsSchema } from "./git-schemas";
+import { gitCountsSchema } from "./git-schemas";
 import { projectBranchNameSchema } from "../actions/branch-schemas";
 import { commitHashSchema } from "../actions/commit-schemas";
 
-export const gitPullSchema = gitExpectedStateSchema.extend({ remoteBranch: projectBranchNameSchema, rebase: z.boolean().default(false) });
+export const gitPullSchema = z.strictObject({ rebase: z.boolean().default(false) });
 export type GitPullSchema = z.infer<typeof gitPullSchema>;
 export const gitPulledSchema = z.object({
   previousHeadSha: commitHashSchema, headSha: commitHashSchema, currentBranch: projectBranchNameSchema,

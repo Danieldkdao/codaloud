@@ -37,11 +37,4 @@ export const sandboxGitRemoteRuntime = String.raw`
     catch { fail("GIT_UPSTREAM_REQUIRED"); }
     return name;
   };
-  const remoteBranch = () => {
-    const configuredRemote = optional(["config", "--get", "branch." + input.expectedBranch + ".remote"]);
-    const configuredMerge = optional(["config", "--get", "branch." + input.expectedBranch + ".merge"]);
-    if ((configuredRemote && configuredRemote !== "origin") || (configuredMerge && configuredMerge !== "refs/heads/" + input.remoteBranch)) fail("GIT_UPSTREAM_REQUIRED");
-    git(["check-ref-format", "--branch", input.remoteBranch]);
-    return "refs/heads/" + input.remoteBranch;
-  };
 `;

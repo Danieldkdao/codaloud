@@ -72,7 +72,7 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
   method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
 });
 const mutationRoutes = [
-  { name: "pull", handler: pullGit, input: { ...expected, remoteBranch: "main", rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
+  { name: "pull", handler: pullGit, input: { rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: {}, output: counts },
   { name: "revert", handler: revert, input: {}, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
@@ -198,7 +198,7 @@ it("push: checks write permission before transport", async () => {
 });
 
 it("pull: rejects string rebase options", async () => {
-  expect((await pullGit(mutationRequest({ ...expected, remoteBranch: "main", rebase: "true" }), { projectId })).status).toBe(400);
+  expect((await pullGit(mutationRequest({ rebase: "true" }), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
@@ -254,5 +254,10 @@ it("fetch: rejects caller-selected branch state", async () => {
 
 it.each([{ expectedBranch: "main" }, { expectedHeadSha: "a".repeat(40) }, { remoteBranch: "other" }])("push: rejects caller-selected branch state %j", async (input) => {
   expect((await pushGit(mutationRequest(input), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it.each([{ expectedBranch: "main" }, { expectedHeadSha: "a".repeat(40) }, { remoteBranch: "other" }])("pull: rejects caller-selected branch state %j", async (input) => {
+  expect((await pullGit(mutationRequest(input), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });

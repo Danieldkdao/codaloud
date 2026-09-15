@@ -3,16 +3,16 @@ import { sandboxGitRemoteRuntime } from "./git-remote-command";
 
 export const sandboxGitPullCommand = createGitOperationCommand(sandboxGitRemoteRuntime + String.raw`
   ensureIdle();
-  checkExpected();
+  const currentState = captureCurrentState();
   ensureClean();
-  remoteBranch();
+  const remoteBranchName = resolveRemoteBranch(currentState.branchName);
   prepareRemote();
   fetchRemote();
   ensureIdle();
   ensureClean();
   checkExpected();
   if (git(["rev-parse", "--is-shallow-repository"]).trim() === "true") fail("GIT_HISTORY_INCOMPLETE");
-  const remoteSha = optional(["rev-parse", "--verify", "--quiet", "refs/remotes/origin/" + input.remoteBranch + "^{commit}"]);
+  const remoteSha = optional(["rev-parse", "--verify", "--quiet", "refs/remotes/origin/" + remoteBranchName + "^{commit}"]);
   if (!remoteSha) fail("GIT_UPSTREAM_REQUIRED");
   mutationStarted = true;
   try {
@@ -25,10 +25,10 @@ export const sandboxGitPullCommand = createGitOperationCommand(sandboxGitRemoteR
     if (git(["ls-files", "--unmerged", "-z"])) fail("GIT_CONFLICTS");
     throw error;
   }
-  if (!head() || branch() !== input.expectedBranch) fail("GIT_OUTCOME_UNKNOWN");
+  if (!head() || branch() !== currentState.branchName) fail("GIT_OUTCOME_UNKNOWN");
   // Integration is already complete; failure to read counts must not ask the
   // caller to repeat a successful merge or rebase.
   let refreshedCounts = null;
   try { refreshedCounts = counts(); } catch {}
-  return { previousHeadSha: input.expectedHeadSha, headSha: head(), currentBranch: branch(), rebased: input.rebase, counts: refreshedCounts };
+  return { previousHeadSha: currentState.headSha, headSha: head(), currentBranch: branch(), rebased: input.rebase, counts: refreshedCounts };
 `);

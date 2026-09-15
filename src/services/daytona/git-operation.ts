@@ -5,6 +5,7 @@ import { getSandboxGitRepository } from "./branches";
 
 const operationError = (code: string) => {
   switch (code) {
+    case "INVALID_STASH_CURSOR": return new SandboxFilesError(400, code, "Invalid stash cursor or changed search. Start a new stash search.");
     case "GIT_BUSY": return new SandboxFilesError(409, code, "Another Git operation is running. Refresh before trying again.");
     case "WORKSPACE_CHANGED": return new SandboxFilesError(409, code, "The checked-out branch or commit changed. Refresh before trying again.");
     case "GIT_CONFLICTS": return new SandboxFilesError(409, code, "The operation encountered conflicts. Work may be partially applied. Resolve or abort the operation before retrying; any conflicting stash is retained.");
@@ -40,7 +41,10 @@ export const executeGitOperation = async <T>(options: {
     response = z.object({ exitCode: z.number().int(), result: z.string().max(4 * 1024 * 1024) }).parse(
       await requestDaytona(`${repository.toolboxUrl}/process/execute`, {
         method: "POST", signal: AbortSignal.any([options.signal, AbortSignal.timeout(95_000)]),
-        body: JSON.stringify(createSandboxCommand(options.script, { ...options.input as object, repositoryPath: repository.repositoryPath }, 90)),
+        body: JSON.stringify(createSandboxCommand(options.script, {
+          ...options.input as object, repositoryPath: repository.repositoryPath,
+          projectId: options.projectId, sandboxId: options.sandboxId,
+        }, 90)),
       }),
     );
     if (response.exitCode === 0) return options.output.parse(JSON.parse(response.result));

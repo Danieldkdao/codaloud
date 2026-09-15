@@ -36,3 +36,17 @@ it("does not run checkout hooks", () => {
   fixture.run(sandboxGitCreateBranchCommand, { branchName: "safe" });
   expect(fixture.git("status", "--porcelain")).toBe("");
 });
+
+it("captures state under the lock and rejects a branch change before mutation", () => {
+  fixture.git("branch", "other");
+  const hook = `
+const cp = require("node:child_process");
+const original = cp.execFileSync;
+cp.execFileSync = (file, args, options) => {
+  if (args.includes("symbolic-ref") && !require("node:fs").existsSync(${JSON.stringify(join(fixture.repositoryPath, ".git/codaloud-operation.lock"))})) throw new Error("State read outside lock");
+  if (args.includes("check-ref-format")) original("git", ["switch", "other"], options);
+  return original(file, args, options);
+};`;
+  expect(() => fixture.run(sandboxGitCreateBranchCommand, { branchName: "new" }, hook)).toThrow(expect.objectContaining({ code: "WORKSPACE_CHANGED" }));
+  expect(fixture.git("branch", "--list", "new")).toBe("");
+});

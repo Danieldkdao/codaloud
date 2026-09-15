@@ -37,8 +37,7 @@ const ensureIdle = () => {
 };
 let capturedState;
 const checkExpected = () => {
-  const state = capturedState ?? { branchName: input.expectedBranch, headSha: input.expectedHeadSha };
-  if (!state.branchName || branch() !== state.branchName || head() !== state.headSha) fail("WORKSPACE_CHANGED");
+  if (!capturedState || branch() !== capturedState.branchName || head() !== capturedState.headSha) fail("WORKSPACE_CHANGED");
 };
 // Called inside the repository lock, so the operation uses the branch checked out
 // when it starts. Later checks compare against this server-captured state.

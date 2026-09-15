@@ -17,7 +17,7 @@ export const createGitFixture = () => {
   const headSha = git("rev-parse", "HEAD");
   const run = (script: string, input: Record<string, unknown> = {}, prefix = "") => {
     const command = createSandboxCommand(prefix + script, {
-      repositoryPath, expectedBranch: "main", expectedHeadSha: headSha,
+      repositoryPath,
       author: { name: "Ada", email: "ada@example.com" }, ...input,
     }, 90);
     const result = spawnSync("sh", ["-c", command.command], {

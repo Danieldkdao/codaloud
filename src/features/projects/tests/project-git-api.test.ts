@@ -57,7 +57,9 @@ const expected = { expectedBranch: "main", expectedHeadSha: "a".repeat(40) };
 const mutationRequest = (body: unknown, contentType = "application/json") => new Request(`https://codaloud.test/api/projects/${projectId}/git`, {
   method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
 });
+import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
 const mutationRoutes = [
+  { name: "stash all", handler: stashPush, input: { ...expected, message: "Saved" }, output: { created: true, stashSha: "b".repeat(40) } },
   { name: "create branch", handler: createBranch, input: { ...expected, branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
 ];
 for (const route of mutationRoutes) {

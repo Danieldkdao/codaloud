@@ -25,7 +25,7 @@ export const createGitFixture = () => {
     });
     if (!result.stdout) throw new Error(result.stderr || String(result.error));
     const output = JSON.parse(result.stdout);
-    if (result.status !== 0) throw output;
+    if (result.status !== 0) throw { ...output, stderr: result.stderr };
     return output;
   };
   return { repositoryPath, git, write, headSha, run, cleanup: () => rmSync(repositoryPath, { recursive: true, force: true }) };

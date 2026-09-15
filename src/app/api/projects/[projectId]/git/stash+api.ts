@@ -6,3 +6,11 @@ export const GET = createGitRoute({
   input: gitStashQuerySchema, output: gitStashListSchema, script: sandboxGitStashViewCommand,
   message: "Stash entries loaded.",
 });
+
+import { gitStashPushSchema, gitStashPushedSchema } from "@/features/projects/server/git-stash-schemas";
+import { sandboxGitStashPushCommand } from "@/services/daytona/git-stash-push-command";
+
+export const POST = createGitRoute({
+  input: gitStashPushSchema, output: gitStashPushedSchema, script: sandboxGitStashPushCommand,
+  mutation: true, message: "Stash completed; ignored files were preserved.",
+});

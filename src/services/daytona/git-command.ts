@@ -18,7 +18,7 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !key.startsWith("GIT_") && !key.startsWith("CODALOUD_") && !/^(?:https?|all)_proxy$/i.test(key)));
 Object.assign(env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", GIT_EDITOR: "true", GIT_SEQUENCE_EDITOR: "true", GIT_MERGE_AUTOEDIT: "no" });
 if (input.author) Object.assign(env, { GIT_AUTHOR_NAME: input.author.name, GIT_AUTHOR_EMAIL: input.author.email, GIT_COMMITTER_NAME: input.author.name, GIT_COMMITTER_EMAIL: input.author.email });
-const options = ["--no-pager", "--no-replace-objects", "--literal-pathspecs",
+const options = ["--no-pager", "--no-replace-objects",
   "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.splitIndex=false",
   "-c", "core.untrackedCache=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
   "-c", "credential.helper=", "-c", "protocol.allow=never", "-c", "submodule.recurse=false",

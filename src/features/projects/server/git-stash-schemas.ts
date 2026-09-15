@@ -14,3 +14,9 @@ export const gitStashListSchema = z.object({
   patch: z.string().max(3 * 1024 * 1024).nullable(),
 });
 export type GitStashListSchema = z.infer<typeof gitStashListSchema>;
+
+import { gitExpectedStateSchema } from "./git-schemas";
+export const gitStashPushSchema = gitExpectedStateSchema.extend({ message: z.string().trim().min(1).max(5000).optional() });
+export type GitStashPushSchema = z.infer<typeof gitStashPushSchema>;
+export const gitStashPushedSchema = z.object({ created: z.boolean(), stashSha: commitHashSchema.nullable() });
+export type GitStashPushedSchema = z.infer<typeof gitStashPushedSchema>;

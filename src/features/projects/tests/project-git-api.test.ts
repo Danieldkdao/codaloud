@@ -75,7 +75,7 @@ const mutationRoutes = [
   { name: "pull", handler: pullGit, input: { ...expected, remoteBranch: "main", rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: { ...expected }, output: counts },
-  { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
+  { name: "revert", handler: revert, input: {}, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
   { name: "stash all", handler: stashPush, input: { message: "Saved" }, output: { created: true, remainingChanges: false, stashSha: "b".repeat(40) } },
@@ -175,7 +175,7 @@ it.each([["INVALID_STASH_CURSOR", 400], ["GIT_STASH_CHANGED", 409]] as const)(
 
 it("revert: requires a valid server-resolved commit identity", async () => {
   mocks.user.mockResolvedValue({ userId: "user-one", user: { name: "Ada", email: "bad" } });
-  expect((await revert(mutationRequest(expected), { projectId })).status).toBe(422);
+  expect((await revert(mutationRequest({}), { projectId })).status).toBe(422);
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
@@ -240,4 +240,9 @@ it("discard: previews server-derived state and rejects state overrides", async (
   expect(response.status).toBe(200);
   expect((await response.json()).data).toEqual(preview);
   expect((await discard(mutationRequest({ ...expected, fingerprint: preview.fingerprint, confirm: true, includeUntracked: false }), { projectId })).status).toBe(400);
+});
+
+it("revert: rejects caller-selected branch and commit", async () => {
+  expect((await revert(mutationRequest(expected), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
 });

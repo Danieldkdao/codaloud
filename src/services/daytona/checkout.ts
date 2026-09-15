@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { createSandboxCommand } from "./create-command";
+import { sandboxGitCheckoutCommand } from "./git-checkout-command";
 import { serverEnv } from "@/data/env/server";
 import { projectBranchCheckoutSchema } from "@/features/projects/actions/branch-schemas";
 import { requestDaytona, SandboxFilesError } from "./api";
@@ -156,20 +159,29 @@ export const checkoutSandboxBranch = async (
     return { previousBranch, currentBranch: branchName };
 
   try {
-    // The HTTP checkout operation has no force option. Git rejects switches
-    // that would overwrite work; never retry by discarding, stashing, or resetting.
-    await requestDaytona(
-      `${repository.toolboxUrl}/git/checkout`,
-      {
+    const response = z.object({ exitCode: z.number().int(), result: z.string().max(32768) }).parse(
+      await requestDaytona(`${repository.toolboxUrl}/process/execute`, {
         method: "POST",
-        signal,
-        body: JSON.stringify({
-          path: repository.repositoryPath,
-          branch: branchName,
-        }),
-      },
-      checkoutFailureResponse,
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(95_000)]) : AbortSignal.timeout(95_000),
+        body: JSON.stringify(createSandboxCommand(sandboxGitCheckoutCommand, {
+          repositoryPath: repository.repositoryPath, branch: branchName, previousBranch,
+        }, 90)),
+      }),
     );
+    const result = z.object({ checkedOut: z.literal(true).optional(), error: z.string().optional(), code: z.string().optional() }).parse(JSON.parse(response.result));
+    if (response.exitCode !== 0) {
+      switch (result.code) {
+        case "GIT_BUSY": throw await checkoutFailureResponse(new Response("cannot lock ref"));
+        case "GIT_OPERATION_IN_PROGRESS":
+        case "GIT_CONFLICTS": throw await checkoutFailureResponse(new Response("unmerged"));
+        case "GIT_REPOSITORY_UNAVAILABLE": throw await checkoutFailureResponse(new Response("not a git repository"));
+        case "GIT_UNSUPPORTED_CONFIG": throw new SandboxFilesError(422, result.code, "This workspace uses unsupported Git configuration. Remove custom filters or merge drivers before switching branches.");
+        case "WORKSPACE_CHANGED": throw new SandboxFilesError(409, "CHECKOUT_NOT_CONFIRMED", "The current branch changed. Refresh before switching branches.");
+        default: throw unknownCheckoutOutcome();
+      }
+    }
+    if (result.error !== undefined) throw await checkoutFailureResponse(new Response(result.error));
+    if (!result.checkedOut) throw unknownCheckoutOutcome();
   } catch (error) {
     if (
       error instanceof SandboxFilesError &&

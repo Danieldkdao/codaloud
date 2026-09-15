@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import { act, createElement, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { Keyboard, type View } from "react-native";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -13,6 +13,7 @@ import { ProjectSearchOverlayProvider } from "@/features/projects/components/pro
 const workspace = vi.hoisted(() => ({ projectId: "project-one", commitSearch: "", setCommitSearch: vi.fn(), setGitTab: vi.fn() }));
 const touches = vi.hoisted(() => ({ claimed: 0, rootTop: 0, back: new Set<() => boolean>() }));
 const transparency = vi.hoisted(() => ({ read: vi.fn(), onChange: undefined as ((enabled: boolean) => void) | undefined }));
+const switchCommands = vi.hoisted(() => ({ setValue: vi.fn() }));
 vi.mock("expo-glass-effect", () => ({
   isGlassEffectAPIAvailable: () => true,
   isLiquidGlassAvailable: () => true,
@@ -33,8 +34,21 @@ vi.mock("react-native", () => ({
     },
   },
   ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
-  Switch: ({ value, onValueChange, accessibilityLabel }: { value: boolean; onValueChange: (value: boolean) => void; accessibilityLabel: string }) =>
-    createElement("button", { role: "switch", "aria-label": accessibilityLabel, "aria-checked": value, onClick: () => onValueChange(!value) }),
+  Switch: ({ value, onValueChange, accessibilityLabel }: { value: boolean; onValueChange: (value: boolean) => void; accessibilityLabel: string }) => {
+    const [native, setNative] = useState<{ value: boolean | null }>({ value: null });
+    // Model RN Switch's controlled-value reconciliation, including intermediate commits.
+    useLayoutEffect(() => {
+      if (native.value !== null && native.value !== value) {
+        switchCommands.setValue(accessibilityLabel, value);
+      }
+    }, [value, native, accessibilityLabel]);
+    return createElement("button", { role: "switch", "aria-label": accessibilityLabel, "aria-checked": value,
+      onClick: () => {
+        onValueChange(!value);
+        setNative({ value: !value });
+      },
+    });
+  },
   FlatList: ({ data, renderItem, ListEmptyComponent }: { data: { file: { path: string } }[]; renderItem: (info: { item: unknown }) => ReactNode; ListEmptyComponent: ReactNode }) =>
     createElement("div", null, data.length ? data.map((item) => createElement("div", { key: item.file.path }, renderItem({ item }))) : ListEmptyComponent),
   View: ({ children, ref, className, testID, onLayout, onStartShouldSetResponderCapture, pointerEvents }: {
@@ -95,6 +109,7 @@ const FileSearchScreen = ({ showSearch = true }: { showSearch?: boolean }) => {
       ? <span>Search results</span>
       : <span>Original directory</span>}</div>
     <span data-query>{search.query}</span><span data-applied>{search.debouncedQuery}</span><span data-scope>{search.scope}</span>
+    <span data-folder-scoped>{String(search.isCurrentFolderScoped)}</span>
     {showSearch && <ProjectWorkspaceFileSearch anchorRef={{ current: null }} />}
   </>;
 };
@@ -203,6 +218,68 @@ it("applies file filters immediately and retains selections when search reopens"
   expect(contentSwitch()?.getAttribute("aria-checked")).toBe("true");
   act(() => vi.advanceTimersByTime(1000));
   expect(container.querySelector("[data-applied]")?.textContent).toBe("project");
+});
+
+it("does not send a stale value back to either native switch during its first toggle", () => {
+  act(() => root.render(<FileSearchWorkspace />));
+  click("Search files");
+  click("Search filters");
+  click("File title");
+  expect(switchCommands.setValue).not.toHaveBeenCalled();
+  click("File content");
+  expect(switchCommands.setValue).not.toHaveBeenCalled();
+  click("File title");
+  click("File content");
+  expect(switchCommands.setValue).not.toHaveBeenCalled();
+  expect(container.querySelector("[data-scope]")?.textContent).toBe("all");
+  expect(container.querySelector('[aria-label="File title"]')?.getAttribute("aria-checked")).toBe("false");
+  expect(container.querySelector('[aria-label="File content"]')?.getAttribute("aria-checked")).toBe("false");
+  click("Dismiss search");
+  click("Search files");
+  click("Search filters");
+  click("File title");
+  expect(switchCommands.setValue).not.toHaveBeenCalled();
+  expect(container.querySelector("[data-scope]")?.textContent).toBe("title");
+});
+
+it("toggles current-folder scoping immediately and retains the selection when search reopens", () => {
+  act(() => root.render(<FileSearchWorkspace />));
+  click("Search files");
+  click("Search filters");
+  const folderSwitch = () => container.querySelector('[aria-label="Current folder"]');
+  expect(folderSwitch()?.getAttribute("aria-checked")).toBe("false");
+  expect(container.querySelector("[data-folder-scoped]")?.textContent).toBe("true");
+  click("File title");
+  expect(container.querySelector("[data-folder-scoped]")?.textContent).toBe("false");
+  click("Current folder");
+  expect(folderSwitch()?.getAttribute("aria-checked")).toBe("true");
+  expect(container.querySelector("[data-folder-scoped]")?.textContent).toBe("true");
+  expect(switchCommands.setValue).not.toHaveBeenCalled();
+  click("Dismiss search");
+  click("Search files");
+  click("Search filters");
+  expect(folderSwitch()?.getAttribute("aria-checked")).toBe("true");
+  click("Current folder");
+  expect(container.querySelector("[data-folder-scoped]")?.textContent).toBe("false");
+  expect(switchCommands.setValue).not.toHaveBeenCalled();
+});
+
+it("synchronizes external filter changes while the sheet stays open", () => {
+  let updateTitle: (value: boolean) => void = () => { throw new Error("Filters not mounted"); };
+  const ExternalFilterControl = () => {
+    const { setTitle } = useProjectWorkspaceFileSearch();
+    useEffect(() => { updateTitle = setTitle; }, [setTitle]);
+    return <FileSearchScreen />;
+  };
+  act(() => root.render(<ProjectWorkspaceFileSearchProvider><ExternalFilterControl /></ProjectWorkspaceFileSearchProvider>));
+  click("Search files");
+  click("Search filters");
+  click("File title");
+  act(() => updateTitle(false));
+  expect(container.querySelector('[aria-label="File title"]')?.getAttribute("aria-checked")).toBe("false");
+  act(() => updateTitle(true));
+  expect(container.querySelector('[aria-label="File title"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(container.querySelector("[data-scope]")?.textContent).toBe("title");
 });
 
 it("tracks the draft immediately, applies only the final query, and clears results immediately", () => {

@@ -61,16 +61,15 @@ type SharedIconProps = Omit<ComponentProps<typeof FontAwesome>, "name"> & {
   brand?: boolean;
 };
 
-export type IconProps = SharedIconProps &
-  (
-    | { name: IconName; family?: undefined }
-    | {
-        [Family in IconFamily]: {
-          name: IconNameForFamily<Family>;
-          family: Family;
-        };
-      }[IconFamily]
-  );
+export type IconProps<Family extends IconFamily | undefined = IconFamily | undefined> = SharedIconProps &
+  (Family extends IconFamily
+    ? { name: IconNameForFamily<Family>; family: Family }
+    : { name: IconName; family?: undefined });
+
+// Infer the family before offering names; a bare JSX union suggests every family's glyphs.
+type InferredIconProps<Family extends IconFamily | undefined> = IconProps<Family> & {
+  family?: Family;
+};
 
 const families = Object.keys(iconSets) as IconFamily[];
 
@@ -80,7 +79,8 @@ const styledIconSets = Object.fromEntries(
 ) as Record<IconFamily, ComponentType<SharedIconProps & { name: IconName }>>;
 
 /** Names resolve automatically; pass `family` to select a particular icon set. */
-export const Icon = ({ name, family, ...props }: IconProps) => {
+export const Icon = <Family extends IconFamily | undefined = undefined,>(input: InferredIconProps<Family>) => {
+  const { name, family, ...props }: IconProps = input;
   const resolvedFamily =
     family ??
     families.find((candidate) =>

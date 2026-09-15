@@ -7,7 +7,9 @@ import { ProjectFilesAdd } from "@/features/projects/components/project-files-ad
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
+import { ProjectCommitForm } from "@/features/projects/components/project-commit-form";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
+import { useProjectWorkspaceChanges } from "@/features/projects/hooks/use-project-workspace-changes";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 import type { ProjectWorkspaceTab } from "@/features/projects/types";
 
@@ -55,7 +57,8 @@ export const ProjectActionButtonsRight = ({
   branchIndicatorRef,
   onGitSearchOpenChange,
 }: ProjectActionButtonsRightProps) => {
-  const { projectId } = useProjectWorkspaceBranch();
+  const { projectId, gitTab } = useProjectWorkspaceBranch();
+  const { commitSelection } = useProjectWorkspaceChanges();
   switch (tab) {
     case "code":
       return (
@@ -72,10 +75,16 @@ export const ProjectActionButtonsRight = ({
       );
     case "git":
       return (
-        <ProjectWorkspaceGitSearch
-          branchIndicatorRef={branchIndicatorRef}
-          onOpenChange={onGitSearchOpenChange}
-        />
+        <>
+          <ProjectWorkspaceGitSearch
+            branchIndicatorRef={branchIndicatorRef}
+            onOpenChange={onGitSearchOpenChange}
+          />
+          <ProjectCommitForm
+            key={commitSelection.scope}
+            visible={gitTab === "changes" && commitSelection.totalCount > 0}
+          />
+        </>
       );
     case "files":
       return <ProjectWorkspaceFileSearch key={projectId} anchorRef={dockRef} />;

@@ -122,7 +122,8 @@ const scan = (root, readContents) => {
   walk(root, input.path, 0);
   records.sort((a, b) => compare(a[0], b[0]));
   const fingerprint = crypto.createHash("sha256").update(JSON.stringify(records)).digest("hex");
-  const files = [...matches.values()].sort((a, b) => b.contentMatchCount - a.contentMatchCount || compare(a.path, b.path));
+  const files = [...matches.values()].sort((a, b) => Number(b.titleMatches) - Number(a.titleMatches)
+    || b.contentMatchCount - a.contentMatchCount || compare(a.path, b.path));
   return { fingerprint, files, skippedContentFiles };
 };
 const cursorSignature = (session, position) => crypto.createHmac("sha256", session.secret).update(session.id + ":" + position).digest("hex");

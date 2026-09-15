@@ -1,14 +1,15 @@
 import { View } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
 import { ProjectCommitList } from "@/features/projects/components/project-commit-list";
 import { ProjectGitTabPanel, ProjectGitTabs } from "@/features/projects/components/project-git-tabs";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
-import { demoChanges } from "@/features/projects/data/demo-changes";
 
 const GitScreen = () => {
-  const { gitTab: tab, setGitTab: setTab } = useProjectWorkspaceBranch();
+  const { projectId, gitTab: tab, setGitTab: setTab } = useProjectWorkspaceBranch();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   return (
@@ -17,7 +18,14 @@ const GitScreen = () => {
         <ProjectGitTabs tab={tab} onTabChange={setTab} />
       </View>
       <ProjectGitTabPanel active={tab === "changes"}>
-        <ProjectChangesPanel changes={demoChanges} />
+        <ProjectChangesPanel
+          projectId={projectId}
+          active={tab === "changes"}
+          onViewFullDiff={() => router.push({
+            pathname: "/projects/[projectId]/git/workspace-diff",
+            params: { projectId },
+          })}
+        />
       </ProjectGitTabPanel>
       <ProjectGitTabPanel active={tab === "history"}>
         <ProjectCommitList active={tab === "history"} />

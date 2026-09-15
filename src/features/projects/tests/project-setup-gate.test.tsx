@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: state.projectId }),
+  useSegments: () => ["projects", "[projectId]", "files"],
   useRouter: () => ({ dismissTo: state.dismissTo }),
   Stack: { Screen: ({ options }: { options: typeof state.headerOptions }) => { state.headerOptions = options; return null; } },
 }));
@@ -101,7 +102,7 @@ afterEach(() => {
 
 it("does not mount a requested child route before the project loads", async () => {
   await render();
-  expect(container.textContent).toContain("We’re starting your sandbox");
+  expect(container.textContent).toContain("We’re starting your workspace");
   expect(state.readFiles).not.toHaveBeenCalled();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
 });
@@ -111,7 +112,7 @@ it.each(["pending", "running", "failed"])("blocks workspace routes while setup i
   await render();
   expect(state.readFiles).not.toHaveBeenCalled();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain(setupStatus === "failed" ? "Sandbox setup couldn’t finish" : "Scaffolding your sandbox");
+  expect(container.textContent).toContain(setupStatus === "failed" ? "Workspace setup couldn’t finish" : "We’re scaffolding your workspace");
 });
 
 it("opens the requested child when setup and the workspace become ready, and removes it if setup regresses", async () => {
@@ -131,7 +132,7 @@ it("blocks a stale ready result on a query error and offers a retry", async () =
   await render();
   expect(state.readFiles).not.toHaveBeenCalled();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Unable to load your sandbox");
+  expect(container.textContent).toContain("Unable to load your workspace");
   act(() => container.querySelector("button")?.click());
   expect(state.query.refetch).toHaveBeenCalledOnce();
 });
@@ -146,7 +147,7 @@ it.each([false, true])("blocks the entire workspace through restoration retries 
   await render();
   expect(state.readFiles).toHaveBeenCalledOnce();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("We’re starting your sandbox");
+  expect(container.textContent).toContain("We’re starting your workspace");
   await advance(2998);
   expect(state.readFiles).toHaveBeenCalledOnce();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
@@ -178,7 +179,7 @@ it.each([false, true])("opens a long restoration without leaving or pressing ref
   await advance(90_001);
   expect(state.readFiles.mock.calls.length).toBeGreaterThan(21);
   expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("We’re starting your sandbox");
+  expect(container.textContent).toContain("We’re starting your workspace");
   state.readFiles.mockResolvedValue([]);
   await advance(3_001);
   expect(state.query.refetch).not.toHaveBeenCalled();
@@ -219,7 +220,7 @@ it("ends restoration checks on a real failure and allows an explicit retry", asy
   }).mockResolvedValue(null);
   await render();
   await advance(3_001);
-  expect(container.textContent).toContain("Unable to start your sandbox");
+  expect(container.textContent).toContain("Unable to start your workspace");
   await advance(30_000);
   expect(state.readFiles).toHaveBeenCalledTimes(2);
   state.readFiles.mockResolvedValue([]);
@@ -251,7 +252,7 @@ it("keeps terminal workspace errors outside the tabs without automatic retries",
   await advance(30_000);
   expect(state.readFiles).toHaveBeenCalledOnce();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Unable to start your sandbox");
+  expect(container.textContent).toContain("Unable to start your workspace");
 });
 
 it("cancels restoration for the previous project when navigation changes", async () => {
@@ -292,7 +293,7 @@ it("hides existing tabs during a later restoration without discarding their moun
   });
   await act(async () => { void client.invalidateQueries({ queryKey: ["projects", "files", "user-one", "project-one", ""] }); });
   await advance();
-  expect(container.textContent).toContain("We’re starting your sandbox");
+  expect(container.textContent).toContain("We’re starting your workspace");
   expect(container.contains(workspace)).toBe(true);
   expect(workspace?.closest('[style*="display: none"]')).not.toBeNull();
   await advance(3001);

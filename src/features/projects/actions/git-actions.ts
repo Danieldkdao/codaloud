@@ -1,10 +1,18 @@
 import {
+  checkoutProjectBranchResponseSchema,
+  checkoutProjectBranchSchema,
   readProjectBranchesResponseSchema,
+  type CheckoutProjectBranchResponseSchema,
+  type CheckoutProjectBranchSchema,
   type ProjectBranchPageSchema,
 } from "./branch-schemas";
 import { projectBranchParamsSchema, readProjectBranchCursor, type ProjectBranchParamsSchema } from "../lib/branch-params";
 import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { createRequestHeaders, createSearchParams, fetchBase } from "@/lib/utils";
+import { createRequestHeaders, createSearchParams, fetchBase, isValidIds } from "@/lib/utils";
+import {
+  readProjectChangesResponseSchema,
+  type ProjectRepositoryChangesSchema,
+} from "./change-schemas";
 import {
   readProjectCommitsResponseSchema,
   type CommitSource,
@@ -12,6 +20,130 @@ import {
   type ProjectCommitQueryInput,
 } from "./commit-schemas";
 import { projectCommitParamsSchema } from "../lib/commit-params";
+import {
+  createProjectCommitResponseSchema,
+  createProjectCommitSchema,
+  type CreateProjectCommitResponseSchema,
+  type CreateProjectCommitSchema,
+} from "./create-commit-schemas";
+
+export const createProjectCommitAction = async (
+  projectId: string,
+  unsafeInput: CreateProjectCommitSchema,
+): Promise<CreateProjectCommitResponseSchema> => {
+  const unconfirmed = {
+    error: true as const,
+    code: "COMMIT_OUTCOME_UNKNOWN",
+    message: "Unable to confirm the commit. Refresh commit history and Git changes before retrying; the commit may already exist.",
+  };
+  let requestStarted = false;
+
+  try {
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError)
+      return { error: true, code: "SESSION_UNAVAILABLE", message: "Unable to verify your session. Please try again." };
+    if (!userId)
+      return { error: true, code: "UNAUTHENTICATED", message: "Sign in to commit changes." };
+    if (!isValidIds(projectId))
+      return { error: true, code: "INVALID_PROJECT", message: "Invalid project ID." };
+    const input = createProjectCommitSchema.safeParse(unsafeInput);
+    if (!input.success)
+      return { error: true, code: "INVALID_COMMIT_INPUT", message: "Send a nonempty commit message and a nonempty list of unique repository-relative paths, without extra fields." };
+
+    const headers = await createRequestHeaders({ "Content-Type": "application/json" });
+    if (!headers.get("Cookie")?.trim())
+      return { error: true, code: "UNAUTHENTICATED", message: "Sign in to commit changes." };
+
+    const body = JSON.stringify(input.data);
+    requestStarted = true;
+    const response = await fetchBase(`/api/projects/${projectId}/commits`, {
+      method: "POST",
+      headers,
+      credentials: "omit",
+      body,
+    });
+    const result = createProjectCommitResponseSchema.parse(await response.json());
+    if (result.error) return result;
+    if (!response.ok) return unconfirmed;
+    return result;
+  } catch {
+    // A lost response can follow a successful commit; do not retry this request.
+    if (requestStarted) return unconfirmed;
+    return { error: true, code: "COMMIT_REQUEST_UNAVAILABLE", message: "Unable to prepare the commit request. Please try again." };
+  }
+};
+
+export const checkoutProjectBranchAction = async (
+  projectId: string,
+  unsafeInput: CheckoutProjectBranchSchema,
+): Promise<CheckoutProjectBranchResponseSchema> => {
+  // A lost or invalid response does not prove that the sandbox stayed on its old branch.
+  const unconfirmed = {
+    error: true as const,
+    code: "CHECKOUT_OUTCOME_UNKNOWN",
+    message: "Unable to confirm the branch switch. Refresh the current branch and files before trying again.",
+  };
+
+  try {
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError)
+      return { error: true, message: "Unable to verify your session. Please try again." };
+    if (!userId)
+      return { error: true, message: "Sign in to switch branches." };
+    if (!isValidIds(projectId))
+      return { error: true, message: "Invalid project ID." };
+    const input = checkoutProjectBranchSchema.safeParse(unsafeInput);
+    if (!input.success)
+      return { error: true, message: "Send a valid branchName without checkout options or extra fields." };
+
+    const headers = await createRequestHeaders({ "Content-Type": "application/json" });
+    if (!headers.get("Cookie")?.trim())
+      return { error: true, message: "Sign in to switch branches." };
+
+    const response = await fetchBase(`/api/projects/${projectId}/checkout`, {
+      method: "POST",
+      headers,
+      credentials: "omit",
+      body: JSON.stringify(input.data),
+    });
+    const result = checkoutProjectBranchResponseSchema.parse(await response.json());
+    if (result.error) return result;
+    if (!response.ok || result.data.currentBranch !== input.data.branchName)
+      return unconfirmed;
+    return result;
+  } catch {
+    return unconfirmed;
+  }
+};
+
+export const readProjectChangesAction = async (
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectRepositoryChangesSchema | null> => {
+  try {
+    if (signal?.aborted) return null;
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError || !userId || !isValidIds(projectId)) return null;
+
+    const headers = await createRequestHeaders();
+    if (!headers.get("Cookie")?.trim() || signal?.aborted) return null;
+
+    const response = await fetchBase(`/api/projects/${projectId}/changes`, {
+      method: "GET",
+      headers,
+      credentials: "omit",
+      signal,
+    });
+    if (!response.ok) throw new Error("Unable to load project changes.");
+    if (signal?.aborted) return null;
+
+    const payload: unknown = await response.json();
+    if (signal?.aborted) return null;
+    return readProjectChangesResponseSchema.parse(payload).data;
+  } catch {
+    return null;
+  }
+};
 
 export const readProjectBranchesAction = async (
   projectId: string,

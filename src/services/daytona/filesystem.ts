@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sandboxFileContentCommand } from "./file-content-command";
 import {
   deleteProjectFileSchema, type DeleteProjectFileSchema,
   saveProjectFileContentSchema, savedProjectFileContentSchema, type SaveProjectFileContentSchema,
@@ -33,40 +34,7 @@ const directory = (target, initialize) => {
   if (!info.isDirectory()) fail("ENOTDIR");
   return target;
 };
-const readContent = (target) => {
-  const existing = fs.lstatSync(target, { throwIfNoEntry: false });
-  if (!existing) fail("FILE_NOT_FOUND");
-  if (existing.isSymbolicLink()) fail("INVALID_PATH");
-  if (!existing.isFile()) fail("NOT_A_FILE");
-  // Reject special files without blocking, including replacements after lstat.
-  const fd = fs.openSync(target, (input.saveContent ? fs.constants.O_RDWR : fs.constants.O_RDONLY) | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-  try {
-    const info = fs.fstatSync(fd);
-    if (!info.isFile()) fail("NOT_A_FILE");
-    if (info.dev !== existing.dev || info.ino !== existing.ino) fail("INVALID_PATH");
-    if (info.size > input.maxBytes) fail("FILE_TOO_LARGE");
-    // One extra byte detects growth past the limit without reading the whole file.
-    const bytes = Buffer.alloc(input.maxBytes + 1);
-    let size = 0;
-    while (size <= input.maxBytes) {
-      const count = fs.readSync(fd, bytes, size, Math.min(65536, bytes.length - size), null);
-      if (count === 0) break;
-      size += count;
-      if (size > input.maxBytes) fail("FILE_TOO_LARGE");
-    }
-    const after = fs.fstatSync(fd);
-    if (after.size > input.maxBytes) fail("FILE_TOO_LARGE");
-    if (after.size !== size || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs) fail("FILE_CHANGED");
-    const data = bytes.subarray(0, size);
-    if (data.includes(0)) fail("UNSUPPORTED_FILE_ENCODING");
-    let content;
-    try { content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data); }
-    catch { fail("UNSUPPORTED_FILE_ENCODING"); }
-    return { path: [input.parentPath, input.name].filter(Boolean).join("/"), content, size, ...(input.saveContent ? { info: after } : {}) };
-  } finally {
-    fs.closeSync(fd);
-  }
-};
+${sandboxFileContentCommand}
 const saveContent = (parentFd, target) => {
   // Lock the anchored directory, not the file inode that atomic rename replaces.
   // The child inherits the same open description; closing parentFd releases it.
@@ -75,7 +43,7 @@ const saveContent = (parentFd, target) => {
       stdio: ["ignore", "pipe", "pipe", parentFd], timeout: 6000,
     });
   } catch (error) { fail(error.status === 1 ? "SAVE_BUSY" : "FILESYSTEM_UNAVAILABLE"); }
-  const current = readContent(target);
+  const current = readContent(target, input);
   const hash = (content) => require("node:crypto").createHash("sha256").update(content).digest("hex");
   const bytes = Buffer.from(input.content, "utf8");
   if (bytes.length > input.maxBytes) fail("FILE_TOO_LARGE");
@@ -108,39 +76,9 @@ const saveContent = (parentFd, target) => {
     }
   }
 };
-const accessWorkspaceContent = () => {
-  // Node has no openat API. Linux procfs lets us resolve each single component
-  // relative to an open directory, even if another process renames that directory.
-  // Never fall back to absolute pathname checks: an attacker can swap and restore
-  // a parent between those checks while the opened file remains outside the workspace.
-  if (process.platform !== "linux") fail("FILESYSTEM_UNAVAILABLE");
-  const flags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
-  let parentFd = fs.openSync("/", flags);
-  try {
-    // Anchor the home path too; opening the workspace's full path would still
-    // follow symlinks in .codaloud, workspace, or any earlier component.
-    const parts = [...input.home.split("/").filter(Boolean), ".codaloud", "workspace", ...input.parentPath.split("/").filter(Boolean)];
-    for (const part of parts) {
-      validateName(part);
-      let childFd;
-      try { childFd = fs.openSync("/proc/self/fd/" + parentFd + "/" + part, flags); }
-      catch (error) {
-        if (error.code === "ELOOP" || error.code === "ENOTDIR") fail("INVALID_PATH");
-        if (error.code === "ENOENT") fail("WORKSPACE_NOT_READY");
-        throw error;
-      }
-      // Keep at most two directory descriptors live, regardless of path depth.
-      const previousFd = parentFd;
-      parentFd = childFd;
-      fs.closeSync(previousFd);
-    }
-    validateName(input.name);
-    const target = "/proc/self/fd/" + parentFd + "/" + input.name;
-    return input.saveContent ? saveContent(parentFd, target) : readContent(target);
-  } finally {
-    fs.closeSync(parentFd);
-  }
-};
+const accessWorkspaceContent = () => withWorkspaceFile(input, (parentFd, target) =>
+  input.saveContent ? saveContent(parentFd, target) : readContent(target, input));
+
 try {
   if (input.readContent || input.saveContent) {
     process.stdout.write(JSON.stringify(accessWorkspaceContent()));

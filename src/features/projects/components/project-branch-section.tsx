@@ -20,6 +20,7 @@ type ProjectBranchSectionProps = {
   open: boolean;
   query: BranchSectionQuery;
   onSelect: (name: string) => void;
+  disabled?: boolean;
 };
 
 const formatBranchLoadError = (message: string, hasData: boolean, isNextPageError: boolean) => {
@@ -28,7 +29,7 @@ const formatBranchLoadError = (message: string, hasData: boolean, isNextPageErro
   return message;
 };
 
-export const ProjectBranchSection = ({ source, branches, selectedBranch, search, open, query, onSelect }: ProjectBranchSectionProps) => {
+export const ProjectBranchSection = ({ source, branches, selectedBranch, search, open, query, onSelect, disabled = false }: ProjectBranchSectionProps) => {
   const { title, icon } = formatProjectBranchSource(source);
   const { height } = useWindowDimensions();
   // Use a screen-based cap: a percentage of the content-sized sheet creates a circular measurement.
@@ -45,11 +46,11 @@ export const ProjectBranchSection = ({ source, branches, selectedBranch, search,
         style={{ flexGrow: 0 }}
         accessibilityLabel={title}
         data={branches}
-        extraData={selectedBranch}
+        extraData={{ selectedBranch, disabled }}
         keyExtractor={(name) => name}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        onEndReached={() => { if (open) query.loadMore(); }}
+        onEndReached={() => { if (open && !disabled) query.loadMore(); }}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={!query.error && query.fetchStatus !== "paused" ? (
           <View className="items-center gap-3 px-5 py-4">
@@ -71,18 +72,19 @@ export const ProjectBranchSection = ({ source, branches, selectedBranch, search,
         ) : query.error ? (
           <View className="gap-3 p-5">
             <PText accessibilityRole="alert" className="text-base text-destructive">{formatBranchLoadError(query.error.message, Boolean(query.data), query.isFetchNextPageError)}</PText>
-            <Button variant="outline" onPress={() => { query.retry(); }} loading={query.isFetching}>Try again</Button>
+            <Button variant="outline" onPress={() => { query.retry(); }} disabled={disabled} loading={query.isFetching}>Try again</Button>
           </View>
         ) : query.hasNextPage ? (
           <View className="p-5">
-            <Button variant="outline" onPress={() => { query.loadMore(); }} disabled={query.isFetching}>{branches.length ? "Load more branches" : "Continue searching"}</Button>
+            <Button variant="outline" onPress={() => { query.loadMore(); }} disabled={disabled || query.isFetching}>{branches.length ? "Load more branches" : "Continue searching"}</Button>
           </View>
         ) : null}
         renderItem={({ item: name }) => (
           <Pressable
             accessibilityRole="radio"
             accessibilityLabel={source === "remote" ? `Remote branch: ${name}` : name}
-            accessibilityState={{ checked: selectedBranch === name }}
+            accessibilityState={{ checked: selectedBranch === name, disabled }}
+            disabled={disabled}
             onPress={() => onSelect(name)}
             className="min-h-14 flex-row items-center gap-3 px-5 py-3 active:bg-secondary"
           >

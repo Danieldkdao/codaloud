@@ -1,12 +1,20 @@
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
-import { readProjectCommitsAction } from "../actions/git-actions";
+import { createProjectCommitAction, readProjectCommitsAction } from "../actions/git-actions";
 import { projectCommitParamsSchema, type ProjectCommitParamsSchema } from "../lib/commit-params";
+import type { CreateProjectCommitSchema, ProjectCreatedCommitSchema } from "../actions/create-commit-schemas";
 
 class ProjectCommitHistoryRequestError extends Error {
   constructor(readonly status: number, readonly retryAfterMs: number, readonly code?: string) {
     super("Unable to load commit history. Please try again.");
     this.name = "ProjectCommitHistoryRequestError";
+  }
+}
+
+class ProjectCommitError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "ProjectCommitError";
   }
 }
 
@@ -73,6 +81,53 @@ export const useProjectCommitHistory = (
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
+  const commitMutation = useMutation<
+    ProjectCreatedCommitSchema,
+    ProjectCommitError,
+    CreateProjectCommitSchema,
+    { userId: string | null; projectId: string | null | undefined }
+  >({
+    mutationKey: ["projects", "commits", "create", userId, projectId],
+    retry: false,
+    // Do not defer an offline commit until the workspace may have changed.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input) => {
+      if (!userId) throw new ProjectCommitError("Sign in to commit changes.");
+      if (!projectId) throw new ProjectCommitError("Invalid project ID.");
+      const result = await createProjectCommitAction(projectId, input);
+      if (result.error) throw new ProjectCommitError(result.message, result.code);
+      return result.data;
+    },
+    onSettled: async (_data, _error, _input, context) => {
+      if (!context?.userId || !context.projectId) return;
+      const workspaceQueries = [
+        ["projects", "file", context.userId, context.projectId],
+        ["projects", "files", context.userId, context.projectId],
+        ["projects", "changes", context.userId, context.projectId],
+        ["projects", "branches", "infinite", "cursor", context.userId, context.projectId, "local"],
+      ];
+      // Staging may succeed even when committing fails or its response is lost.
+      // Refresh the submitted workspace, including all file contents/metadata and
+      // diff data. Never replace file contents with a guessed clean-state value.
+      await Promise.allSettled([
+        queryClient.resetQueries({
+          queryKey: ["projects", "commits", "infinite", "cursor", context.userId, context.projectId],
+          predicate: (query) => projectCommitParamsSchema.safeParse(query.queryKey[6]).data?.source === "local",
+        }),
+        // Paginated history and file searches must start with a fresh snapshot.
+        queryClient.resetQueries({
+          queryKey: ["projects", "file-search", "infinite", context.userId, context.projectId],
+        }),
+        ...workspaceQueries.map(async (queryKey) => {
+          // Cancel even initial reads with no cached data before refetching.
+          await queryClient.cancelQueries({ queryKey });
+          await queryClient.invalidateQueries({ queryKey });
+        }),
+      ]);
+    },
+  });
+
   const onLoadMore = () => {
     if (enabled && userId && params.success && validPageLimit && query.hasNextPage &&
       !query.isFetching && !query.error && query.fetchStatus !== "paused") {
@@ -92,5 +147,10 @@ export const useProjectCommitHistory = (
       : query.refetch();
   };
 
-  return { ...query, onLoadMore, retry };
+  return {
+    ...query,
+    onLoadMore,
+    retry,
+    commit: commitMutation,
+  };
 };

@@ -112,7 +112,13 @@ export const useProjectFiles = (
       queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
         files ? [...files.filter((file) => file.path !== previousPath && file.path !== entry.path), entry] : undefined,
       );
-      await queryClient.invalidateQueries({ queryKey, exact: true });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey, exact: true }),
+        queryClient.invalidateQueries({
+          queryKey: ["projects", "changes", context.userId, context.projectId],
+          exact: true,
+        }),
+      ]);
     },
   });
 
@@ -146,7 +152,13 @@ export const useProjectFiles = (
       queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
         files?.filter((file) => file.path !== entry.path),
       );
-      await queryClient.invalidateQueries({ queryKey, exact: true });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey, exact: true }),
+        queryClient.invalidateQueries({
+          queryKey: ["projects", "changes", context.userId, context.projectId],
+          exact: true,
+        }),
+      ]);
     },
   });
 

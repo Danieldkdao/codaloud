@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { PAGE_SIZE } from "@/lib/constants";
+import { projectBranchNameSchema, projectBranchSources } from "./branch-schemas";
 
-export const commitSources = ["local", "remote"] as const;
+export const commitSources = projectBranchSources;
 export type CommitSource = (typeof commitSources)[number];
 export const commitSourceSchema = z.enum(commitSources);
 export type CommitSourceSchema = z.infer<typeof commitSourceSchema>;
@@ -10,11 +11,7 @@ export const commitHashSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})
 export type CommitHashSchema = z.infer<typeof commitHashSchema>;
 
 export const projectCommitQuerySchema = z.strictObject({
-  branch: z.string().min(1).max(1024).refine((branch) =>
-    branch !== "HEAD" && !branch.startsWith("-") && !branch.startsWith("refs/") &&
-    !/[\x00-\x20\x7f~^:?*\[\\]/.test(branch) && !branch.includes("..") && !branch.includes("@{") &&
-    !branch.endsWith(".") && branch.split("/").every((part) => part && !part.startsWith(".") && !part.endsWith(".lock")),
-  "Select a valid branch name."),
+  branch: projectBranchNameSchema,
   search: z.string().trim().max(200).transform((value) => value.toLowerCase()).default(""),
   author: z.string().trim().max(200).transform((value) => value.toLowerCase()).default(""),
   pageSize: z.number().int().min(1).max(100).default(PAGE_SIZE),

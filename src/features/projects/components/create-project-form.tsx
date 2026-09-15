@@ -20,7 +20,10 @@ import {
 } from "@/features/projects/actions/schemas";
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
 
-const projectSources = ["new", "github"] as const satisfies readonly CreateProjectFormSchema["source"][];
+const projectSources = [
+  "new",
+  "github",
+] as const satisfies readonly CreateProjectFormSchema["source"][];
 
 export const CreateProjectForm = () => {
   const showSuccess = useSuccessFeedback();
@@ -191,7 +194,9 @@ export const CreateProjectForm = () => {
                     reconnectError={connectionError}
                     selectedRepositoryId={value || null}
                     onValueChange={(repository) => {
-                      const repositoryId = repository ? String(repository.id) : "";
+                      const repositoryId = repository
+                        ? String(repository.id)
+                        : "";
                       onChange(repositoryId);
                       onBlur();
                     }}
@@ -199,9 +204,7 @@ export const CreateProjectForm = () => {
                   />
                 ) : (
                   <View className="gap-3">
-                    <PText
-                      accessibilityLiveRegion="polite"
-                    >
+                    <PText accessibilityLiveRegion="polite">
                       {isChecking
                         ? "Checking GitHub connection…"
                         : "To import a project from GitHub, you need to connect your GitHub account first and grant repository access."}

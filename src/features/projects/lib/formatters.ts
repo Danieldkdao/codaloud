@@ -1,5 +1,7 @@
 import type { CodeEditorMatchState } from "@/components/code-editor-matches";
 import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
+import type { ProjectDiffComparison, ProjectDiffLine, ProjectDiffScope, ProjectWorkspaceDiffData } from "@/features/projects/types";
+import type { ProjectGitFileState } from "../actions/change-schemas";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
@@ -98,7 +100,7 @@ export const formatProjectSource = (source: CreateProjectSchema["source"]): {
         value: source,
         icon: "box",
         title: "New project",
-        description: "Start from scratch in an empty cloud sandbox.",
+        description: "Start from scratch in an empty cloud workspace.",
       };
     case "github":
       return {
@@ -200,6 +202,83 @@ export const formatProjectChangeLines = (additions: number, deletions: number) =
   additions: `+${additions}`,
   deletions: `−${deletions}`,
 });
+
+export const formatProjectDiffAccessibility = (additions: number, deletions: number) => ({
+  additions: `${additions} added lines`,
+  deletions: `${deletions} removed lines`,
+});
+
+export const formatProjectDiffSummary = (summary: ProjectWorkspaceDiffData["summary"]) => {
+  const additions = summary.staged.additions + summary.unstaged.additions;
+  const deletions = summary.staged.deletions + summary.unstaged.deletions;
+  const unavailable = summary.staged.unavailableCount + summary.unstaged.unavailableCount;
+  const comparisons = summary.staged.fileCount + summary.unstaged.fileCount;
+  if (comparisons > 0 && comparisons === unavailable) return null;
+  const labels = formatProjectDiffAccessibility(additions, deletions);
+  return {
+    ...formatProjectChangeLines(additions, deletions),
+    // Keep the compact visible totals while disclosing omitted previews to assistive technology.
+    additionsLabel: unavailable ? `${labels.additions} in available previews` : labels.additions,
+    deletionsLabel: unavailable ? `${labels.deletions} in available previews` : labels.deletions,
+  };
+};
+
+export const formatProjectGitFileState = (status: ProjectGitFileState) => {
+  switch (status) {
+    case "unchanged": return "Unchanged";
+    case "modified": return "Modified";
+    case "added": return "Added";
+    case "deleted": return "Deleted";
+    case "renamed": return "Renamed";
+    case "copied": return "Copied";
+    case "type-changed": return "File type changed";
+    case "unmerged": return "Merge conflict";
+    case "untracked": return "New file";
+  }
+};
+
+export const formatProjectDiffScope = (scope: ProjectDiffScope) => {
+  switch (scope) {
+    case "staged": return "Staged";
+    case "unstaged": return "Unstaged";
+  }
+};
+
+export const formatProjectDiffUnavailable = (reason: Extract<ProjectDiffComparison, { kind: "unavailable" }>["reason"]) => {
+  switch (reason) {
+    case "binary": return "Binary file or unsupported text encoding. Text preview unavailable.";
+    case "too-large": return "This change is too large to preview.";
+    case "unsupported": return "Text preview is unavailable for this file type.";
+    case "conflict": return "Merge conflict. A two-way diff is unavailable until the conflict is resolved.";
+    case "invalid-patch": return "Unable to display this patch. Refresh to try again.";
+  }
+};
+
+export const formatProjectDiffRow = (line: ProjectDiffLine) => {
+  switch (line.kind) {
+    case "addition": return { prefix: "+ ", className: "bg-success", textClassName: "text-success-foreground", label: `Added line ${line.newLine}: ${line.text}` };
+    case "deletion": return { prefix: "− ", className: "bg-destructive/10", textClassName: "text-destructive", label: `Removed line ${line.oldLine}: ${line.text}` };
+    case "context": return { prefix: "  ", className: "", textClassName: "text-foreground", label: `Unchanged line ${line.newLine}: ${line.text}` };
+  }
+};
+
+export const formatProjectDiffDisclosure = (path: string, expanded: boolean) => ({
+  label: `${expanded ? "Collapse" : "Expand"} ${path} diff`,
+  icon: expanded ? "chevron-up" as const : "chevron-down" as const,
+});
+
+export const formatProjectDiffLineNumber = (line: number | null) => line === null ? "" : String(line);
+
+export const formatProjectDiffMode = (mode: string) => {
+  switch (mode) {
+    case "000000": return "Missing file";
+    case "100644": return "Regular file";
+    case "100755": return "Executable file";
+    case "120000": return "Symbolic link";
+    case "160000": return "Submodule";
+    default: return `Mode ${mode}`;
+  }
+};
 
 export const formatCommitDate = (committedAt: string): string =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));

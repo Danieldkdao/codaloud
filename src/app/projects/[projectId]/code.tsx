@@ -16,6 +16,7 @@ import { useProjectFile } from "@/features/projects/hooks/use-project-file";
 import { ProjectFileSaveProvider, useProjectFileSave } from "@/features/projects/hooks/use-project-file-save";
 import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-shortcuts";
 import { useTheme } from "@/hooks/use-theme";
+import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 
 const LoadedCodeEditor = ({ projectId, filePath, bottomInset }: {
   projectId: string;
@@ -24,6 +25,7 @@ const LoadedCodeEditor = ({ projectId, filePath, bottomInset }: {
 }) => {
   const { isDarkMode } = useTheme();
   const save = useProjectFileSave()!;
+  const { isCheckingOut } = useProjectWorkspaceBranch();
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [analysis, setAnalysis] = useState<CodeEditorAnalysis>({ status: "checking", diagnostics: [] });
   const [analysisPanelRequest, setAnalysisPanelRequest] = useState(0);
@@ -45,6 +47,7 @@ const LoadedCodeEditor = ({ projectId, filePath, bottomInset }: {
           importantForAccessibility={isEditorReady ? "auto" : "no-hide-descendants"}
         >
           <CodeEditor
+            readOnly={isCheckingOut}
             colorScheme={isDarkMode ? "dark" : "light"}
             onReady={handleEditorReady}
             onRequestAnalysis={requestAnalysis}

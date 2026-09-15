@@ -88,7 +88,7 @@ export const handleProjectSandbox = schemaTask({
           },
           public: false,
           ephemeral: false,
-          autoStopInterval: 5,
+          autoStopInterval: 10,
           autoArchiveInterval: 60,
           autoDeleteInterval: -1,
           ttlMinutes: 0,

@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter, useSegments } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +15,8 @@ import { useThemeColor } from "@/hooks/use-theme";
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
+  const segments = useSegments();
+  const isWorkspaceDiff = segments[2] === "git" && segments[3] === "workspace-diff";
   const insets = useSafeAreaInsets();
   const verticalPadding = Math.max(insets.top, insets.bottom) + 24;
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
@@ -44,7 +46,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerShadowVisible: false,
           headerShown: true,
           headerTransparent: !ready,
-          headerTitle: ready ? project?.name : "",
+          headerTitle: ready ? (isWorkspaceDiff ? "Workspace diff" : project?.name) : "",
           headerTitleStyle: {
             fontSize: 22,
             fontFamily: "Fraunces_500Medium",
@@ -53,12 +55,14 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerLeft: () => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Home"
-              accessibilityHint="Returns to your projects"
-              onPress={() => router.dismissTo("/(main)")}
+              accessibilityLabel={isWorkspaceDiff ? "Back to Git" : "Home"}
+              accessibilityHint={isWorkspaceDiff ? "Returns to your changes" : "Returns to your projects"}
+              onPress={() => isWorkspaceDiff
+                ? router.dismissTo({ pathname: "/projects/[projectId]/git", params: { projectId } })
+                : router.dismissTo("/(main)")}
               className="size-11 items-center justify-center rounded-full active:bg-secondary"
             >
-              <Icon family="Feather" name="home" size={22} accessible={false} className="text-foreground" />
+              <Icon family="Feather" name={isWorkspaceDiff ? "chevron-left" : "home"} size={22} accessible={false} className="text-foreground" />
             </Pressable>
           ),
         }}
@@ -100,10 +104,10 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
                 className="text-center"
               >
                 {isError
-                  ? "Unable to load your sandbox. Please try again."
+                  ? "Unable to load your workspace. Please try again."
                   : workspaceError
-                    ? "Unable to start your sandbox. Please try again."
-                    : "Sandbox setup couldn’t finish. Please check back later."}
+                    ? "Unable to start your workspace. Please try again."
+                    : "Workspace setup couldn’t finish. Please check back later."}
               </PText>
               <Button
                 variant="outline"

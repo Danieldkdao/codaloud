@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Pressable, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Alert, Keyboard, Pressable, View, useWindowDimensions } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
 import { useProjectBranches } from "@/features/projects/hooks/use-project-branches";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
-import type { ProjectBranchPageSchema } from "@/features/projects/actions/branch-schemas";
+import type { ProjectBranchPageSchema, ProjectBranchSource } from "@/features/projects/actions/branch-schemas";
 import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
 import { useThemeColor } from "@/hooks/use-theme";
 
@@ -17,6 +18,10 @@ import { useProject } from "../hooks/use-project";
 import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
 import type { GitHubRepositoryBranchPage, GitHubRepositoryBranch } from "@/services/github/types";
 import { formatProjectBranchLabel } from "../lib/formatters";
+import { useAuthSession } from "@/hooks/use-auth-session";
+import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
+import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
+import { projectCommitParamsSchema } from "../lib/commit-params";
 
 const getRemoteBranches = (page: GitHubRepositoryBranchPage) => page.branches;
 const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
@@ -26,7 +31,12 @@ const getBranchKey = (branch: string) => branch;
 
 export const ProjectBranchSelect = () => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading } = useProjectWorkspaceBranch();
+  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isCheckingOut, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
+  const queryClient = useQueryClient();
+  const session = useAuthSession();
+  const userId = session.data?.user.id;
+  const { flushPendingSaves } = useProjectFileSaveRegistry();
+  const { filePath, refreshFile } = useProjectWorkspaceCurrentFile();
   const [search, setSearch] = useState("");
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
@@ -45,30 +55,67 @@ export const ProjectBranchSelect = () => {
   const [open, setOpen] = useState(false);
   const card = useThemeColor("card");
   const close = () => setOpen(false);
+  useEffect(() => {
+    if (checkoutError) Alert.alert("Couldn’t switch branches", checkoutError);
+  }, [checkoutError]);
+  const refreshWorkspace = async () => {
+    if (userId) {
+      const folders = { queryKey: ["projects", "files", userId, projectId] };
+      await queryClient.cancelQueries(folders);
+      // Keep folder data as readiness evidence, but discard branch-specific bytes
+      // and pagination even when checkout's response was lost.
+      await Promise.allSettled([
+        queryClient.invalidateQueries(folders),
+        queryClient.resetQueries({ queryKey: ["projects", "file", userId, projectId] }),
+        queryClient.resetQueries({ queryKey: ["projects", "file-search", "infinite", userId, projectId] }),
+        queryClient.resetQueries({
+          queryKey: ["projects", "commits", "infinite", "cursor", userId, projectId],
+          predicate: ({ queryKey }) => projectCommitParamsSchema.safeParse(queryKey[6]).data?.source === "local",
+        }),
+        queryClient.resetQueries({ queryKey: ["projects", "branches", "infinite", "cursor", userId, projectId, "local"] }),
+      ]);
+    }
+    if (filePath) refreshFile(filePath);
+  };
+  const selectBranch = (name: string, source: ProjectBranchSource = "local") => {
+    if (isCheckingOut) return;
+    close();
+    Keyboard.dismiss();
+    checkoutBranch(name, async () => {
+      await flushPendingSaves();
+      const result = await query.checkout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
+      await refreshWorkspace();
+      return result;
+    }, async () => {
+      await refreshWorkspace();
+      return query.recoverCheckout();
+    });
+  };
 
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={() => { if (isCheckoutRecoveryRequired) retryCheckoutRecovery(); else if (!isCheckingOut) setOpen(true); }}
+        disabled={isCheckingOut && !isCheckoutRecoveryRequired}
         accessibilityRole="button"
-        accessibilityLabel={`Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
-        accessibilityHint="Opens available branches"
-        accessibilityState={{ expanded: open }}
+        accessibilityLabel={isCheckoutRecoveryRequired ? "Retry branch recovery" : `Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
+        accessibilityHint={isCheckoutRecoveryRequired ? "Confirms the current branch before editing resumes" : isCheckingOut ? "Switching branches. Please wait." : "Opens available branches"}
+        accessibilityState={{ expanded: open, disabled: isCheckingOut && !isCheckoutRecoveryRequired, busy: isCheckingOut }}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"
       >
-        <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />
+        {isCheckingOut && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />}
       </Pressable>
-      <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
+      <ContentSheet open={open && !isCheckingOut} onOpenChange={(value) => { if (!value || !isCheckingOut) setOpen(value); }} backgroundColor={card}>
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
         <View style={{ width }}>
           <View className="bg-card" accessibilityViewIsModal onAccessibilityEscape={close}>
             <View>
               <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
-                search={search} open={open} query={query} onSelect={(name) => { close(); setBranch(name, "local"); }} />
+                search={search} open={open} query={query} disabled={isCheckingOut} onSelect={selectBranch} />
               <View className="h-px shrink-0 bg-border" />
               {repositoryId ? (
                 <ProjectBranchSection source="remote" branches={remoteBranches.map(({ name }) => name)} selectedBranch={branchSource === "remote" ? branch : null}
-                  search={search} open={open} query={remoteQuery} onSelect={(name) => { close(); setBranch(name, "remote"); }} />
+                  search={search} open={open} query={remoteQuery} disabled={isCheckingOut} onSelect={(name) => selectBranch(name, "remote")} />
               ) : (
                 <View className="gap-3 px-5 py-4">
                   <View className="flex-row items-center gap-2">
@@ -86,7 +133,7 @@ export const ProjectBranchSelect = () => {
               <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
               <Input type="search" variant="ghost" size="sm" placeholder="Search branches"
                 accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
-                value={search} onChangeText={setSearch} maxLength={200}
+                value={search} onChangeText={setSearch} editable={!isCheckingOut} maxLength={200}
                 containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
             </View>
           </View>

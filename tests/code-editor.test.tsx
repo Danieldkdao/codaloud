@@ -180,28 +180,38 @@ it("marks and reports diagnostics, then clears corrected errors", async () => {
   expect(container.querySelector(".cm-lintRange-error")).toBeNull();
 });
 
-it("selects a diagnostic without drawing a second underline around its severity mark", async () => {
+it.each(["error", "warning", "info"] as const)("selects a %s diagnostic without extra underline layers regardless of stylesheet order", async (severity) => {
   const style = document.createElement("style");
+  const baseStyle = document.createElement("style");
   style.textContent = readFileSync("src/styles/code-editor.css", "utf8");
   document.head.append(style);
   try {
     await act(async () => root.render(createElement(CodeEditor, {
       filename: "demo.ts", initialValue: 'const answer: number = "wrong";',
       onRequestAnalysis: async () => ({ diagnostics: [
-        { from: 6, to: 12, severity: "error" as const, message: "Type mismatch", code: 2322 },
+        { from: 6, to: 12, severity, message: "Diagnostic", code: 2322 },
       ] }),
     })));
     act(() => forceLinting(editor()));
-    await vi.waitFor(() => expect(container.querySelector(".cm-lintRange-error")).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector(`.cm-lintRange-${severity}`)).not.toBeNull());
     act(() => { openLintPanel(editor()); });
     const selected = container.querySelector<HTMLElement>(".cm-lintRange-active")!;
-    const error = selected.querySelector<HTMLElement>(".cm-lintRange-error")!;
+    const mark = selected.querySelector<HTMLElement>(`.cm-lintRange-${severity}`)!;
     expect(selected).not.toBeNull();
-    expect(error).not.toBeNull();
-    expect(getComputedStyle(selected).textDecoration).toBe("none");
-    expect(getComputedStyle(error).textDecoration).toContain("wavy");
-    expect(getComputedStyle(error).backgroundImage).toBe("none");
-  } finally { style.remove(); }
+    expect(mark).not.toBeNull();
+    // Happy DOM drops CodeMirror's SVG data URLs. Preserve its selectors and
+    // declarations with a simple URL so the background cascade is exercised.
+    const theme = Array.from(document.head.querySelectorAll("style")).find((item) =>
+      item !== style && item.textContent?.includes(".cm-lintRange-info"))!;
+    baseStyle.textContent = theme.textContent!.replace(/url\('data:image\/svg\+xml,.*?'\)/g, 'url("diagnostic-underline.svg")');
+    document.head.prepend(baseStyle);
+    for (const position of ["last", "first"] as const) {
+      if (position === "first") document.head.prepend(style);
+      expect(getComputedStyle(selected).textDecoration).toBe("none");
+      expect(getComputedStyle(mark).textDecoration).toBe("none");
+      expect(getComputedStyle(mark).backgroundImage).toBe("none");
+    }
+  } finally { style.remove(); baseStyle.remove(); }
 });
 
 it("ignores diagnostics for older edits and closed editors", async () => {

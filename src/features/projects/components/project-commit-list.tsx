@@ -28,19 +28,23 @@ type ProjectCommitListProps = {
 export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
-  const { projectId, branch, branchSource, commitSearch, isBranchLoading } =
+  const { projectId, branch, branchSource, commitSearch, isBranchLoading, isCheckingOut } =
     useProjectWorkspaceBranch();
   const query = useProjectCommitHistory(projectId, {
     branch: branch ?? undefined,
     source: branchSource ?? undefined,
     search: commitSearch,
-    enabled: active,
+    enabled: active && !isCheckingOut,
   });
   const commits = useUniquePaginatedItems(
     query.data?.pages,
     getCommits,
     getCommitKey,
   );
+
+  if (isCheckingOut) {
+    return <ProjectWorkspaceState isLoading icon="git-commit" title="Switching branches…" description="Updating your workspace before loading commit history." />;
+  }
 
   if (!branch || !branchSource) {
     if (isBranchLoading) {

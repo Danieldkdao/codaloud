@@ -33,10 +33,12 @@ const FilesScreen = () => {
     { enabled: !fileSearch.isSearching },
   );
   const isDebouncing = fileSearch.query !== fileSearch.debouncedQuery;
+  const searchPath = fileSearch.isCurrentFolderScoped ? currentDirectory : "";
   const search = useProjectFileSearch(projectId, {
     // Changing the key to an empty search also cancels any obsolete request.
     search: isDebouncing ? "" : fileSearch.debouncedQuery,
     scope: fileSearch.scope,
+    path: searchPath,
     enabled: fileSearch.isSearching && !isDebouncing,
   });
   const searchResults = useMemo(
@@ -69,7 +71,7 @@ const FilesScreen = () => {
       !search.validationError && !isDebouncing && !search.isFetching && search.fetchStatus !== "paused";
     return (
       <ProjectFileSearchResults
-        key={`${projectId}:${fileSearch.query}:${fileSearch.scope}`}
+        key={`${projectId}:${fileSearch.query}:${fileSearch.scope}:${searchPath}`}
         query={fileSearch.query}
         scope={fileSearch.scope}
         results={searchResults}

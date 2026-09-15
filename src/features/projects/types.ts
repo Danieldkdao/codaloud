@@ -1,16 +1,95 @@
 import type { ProjectSelectData } from "@/db/schemas/project";
 import type { ProjectFileEntrySchema } from "./actions/file-schemas";
 import type { ProjectFileSearchPageSchema } from "./actions/file-search-schemas";
+import type {
+  ProjectDiffUnavailableReason,
+  ProjectRepositoryChangeSchema,
+  ProjectRepositoryChangesSchema,
+} from "./actions/change-schemas";
 
 export type ProjectWorkspaceTab = "files" | "code" | "git" | "agent";
 
 export type ProjectGitTab = "changes" | "history";
 
-export type ProjectChangeData = {
-  path: string;
-  status: "modified" | "deleted" | "added" | "untracked";
+export type ProjectDiffScope = "staged" | "unstaged";
+
+export type ProjectDiffLine = {
+  kind: "context" | "addition" | "deletion";
+  text: string;
+  oldLine: number | null;
+  newLine: number | null;
+  noNewline: boolean;
+};
+
+export type ProjectDiffHunk = {
+  header: string;
+  oldStart: number;
+  oldCount: number;
+  newStart: number;
+  newCount: number;
+  lines: ProjectDiffLine[];
+  /** Only this hunk's source text, including its original line endings. */
+  beforeText: string;
+  /** Omitted context between hunks is never reconstructed as file contents. */
+  afterText: string;
+};
+
+export type ProjectDiffPatch = {
+  metadata: string[];
+  hunks: ProjectDiffHunk[];
   additions: number;
   deletions: number;
+};
+
+export type ProjectDiffComparison = {
+  key: string;
+  scope: ProjectDiffScope;
+  beforePath: string | null;
+  afterPath: string | null;
+  beforeMode: string;
+  afterMode: string;
+} & (
+  | ({ kind: "available" } & ProjectDiffPatch)
+  | {
+      kind: "unavailable";
+      reason: ProjectDiffUnavailableReason | "invalid-patch";
+      additions: null;
+      deletions: null;
+    }
+);
+
+export type ProjectWorkspaceDiffEntry = Omit<
+  ProjectRepositoryChangeSchema,
+  "staged" | "unstaged"
+> & {
+  staged: ProjectDiffComparison | null;
+  unstaged: ProjectDiffComparison | null;
+};
+
+export type ProjectWorkspaceDiffRow = { key: string; path: string } & (
+  | { kind: "file"; file: ProjectWorkspaceDiffEntry }
+  | { kind: "comparison"; comparison: ProjectDiffComparison; status: ProjectWorkspaceDiffEntry["indexStatus"] }
+  | { kind: "line"; line: ProjectDiffLine }
+);
+
+export type ProjectDiffTotals = {
+  fileCount: number;
+  /** Counts cover available text previews; unavailableCount discloses omissions. */
+  additions: number;
+  deletions: number;
+  unavailableCount: number;
+};
+
+export type ProjectWorkspaceDiffData = Omit<
+  ProjectRepositoryChangesSchema,
+  "changes"
+> & {
+  files: ProjectWorkspaceDiffEntry[];
+  summary: {
+    fileCount: number;
+    staged: ProjectDiffTotals;
+    unstaged: ProjectDiffTotals;
+  };
 };
 
 // The API serializes database timestamps as ISO strings.

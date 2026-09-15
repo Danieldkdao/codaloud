@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn()
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
 vi.mock("@/features/projects/components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children) }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
+vi.mock("expo-router", () => ({ useSegments: () => ["projects", "[projectId]", "files"], useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {
   selection = useProjectWorkspaceCurrentFile();
@@ -247,7 +247,9 @@ it.each([
   await flush();
   expect(selection.filePath).toBe(expected);
   expect(container.querySelector("textarea")?.value).toBe("server contents");
-  expect(container.textContent).toContain(expected);
+  const segments = expected.split("/");
+  expect(container.textContent).toContain(segments.pop());
+  if (segments.length > 0) expect(container.textContent).toContain(segments.join("/"));
 });
 
 it.each([

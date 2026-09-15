@@ -50,3 +50,47 @@ it("sanitizes provider failures and malformed output without retrying", async ()
   expect(await response.text()).not.toContain("credential-secret");
   expect(mocks.request).toHaveBeenCalledTimes(1);
 });
+
+// Every mutation goes through the real shared route and transport adapter.
+import { POST as createBranch } from "@/app/api/projects/[projectId]/git/branches+api";
+const expected = { expectedBranch: "main", expectedHeadSha: "a".repeat(40) };
+const mutationRequest = (body: unknown, contentType = "application/json") => new Request(`https://codaloud.test/api/projects/${projectId}/git`, {
+  method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
+});
+const mutationRoutes = [
+  { name: "create branch", handler: createBranch, input: { ...expected, branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
+];
+for (const route of mutationRoutes) {
+  it(`${route.name}: executes valid input`, async () => {
+    mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify(route.output) });
+    const response = await route.handler(mutationRequest(route.input), { projectId });
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toEqual(route.output);
+  });
+  it(`${route.name}: authenticates before reading the workspace`, async () => {
+    mocks.user.mockResolvedValue({ userId: null });
+    expect((await route.handler(mutationRequest(route.input), { projectId })).status).toBe(401);
+    expect(mocks.project).not.toHaveBeenCalled();
+  });
+  it(`${route.name}: rejects invalid IDs, media types, missing state and extra fields`, async () => {
+    expect((await route.handler(mutationRequest(route.input), { projectId: "bad" })).status).toBe(400);
+    expect((await route.handler(mutationRequest(route.input, "text/plain"), { projectId })).status).toBe(415);
+    expect((await route.handler(mutationRequest({}), { projectId })).status).toBe(400);
+    expect((await route.handler(mutationRequest({ ...route.input, command: "rm" }), { projectId })).status).toBe(400);
+    expect(mocks.project).not.toHaveBeenCalled();
+  });
+  it(`${route.name}: checks project ownership before executing`, async () => {
+    mocks.project.mockRejectedValue(new SandboxFilesError(404, "PROJECT_NOT_FOUND", "Project not found."));
+    expect((await route.handler(mutationRequest(route.input), { projectId })).status).toBe(404);
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it(`${route.name}: maps conflicts and never retries uncertain execution`, async () => {
+    mocks.request.mockResolvedValue({ exitCode: 1, result: JSON.stringify({ code: "WORKSPACE_CHANGED" }) });
+    expect((await route.handler(mutationRequest(route.input), { projectId })).status).toBe(409);
+    mocks.request.mockRejectedValue(new Error("secret-token"));
+    const response = await route.handler(mutationRequest(route.input), { projectId });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: true, code: "GIT_OUTCOME_UNKNOWN" });
+    expect(mocks.request).toHaveBeenCalledTimes(2);
+  });
+}

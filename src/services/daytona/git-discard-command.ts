@@ -2,7 +2,7 @@ import { createGitOperationCommand } from "./git-command";
 
 const snapshot = String.raw`
   ensureIdle();
-  if (!branch() || !head()) fail("GIT_BRANCH_REQUIRED");
+  const currentState = captureCurrentState();
   const snapshot = () => {
     const { createHash } = require("node:crypto");
     const hash = createHash("sha256");
@@ -32,7 +32,8 @@ const snapshot = String.raw`
       if (total > 64 * 1024 * 1024) fail("GIT_RESULT_TOO_LARGE");
       add(fs.readFileSync(file));
     }
-    return { expectedBranch: branch(), expectedHeadSha: head(), fingerprint: hash.digest("hex"), changedPaths };
+    checkExpected();
+    return { currentBranch: currentState.branchName, headSha: currentState.headSha, fingerprint: hash.digest("hex"), changedPaths };
   };
 `;
 
@@ -43,8 +44,9 @@ export const sandboxGitDiscardCommand = createGitOperationCommand(snapshot + Str
   if (!input.confirm) fail("WORKSPACE_CHANGED");
   if (git(["ls-files", "--stage"]).split("\n").some((line) => line.startsWith("160000 "))) fail("GIT_UNSUPPORTED_CONFIG");
   const untracked = git(["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
+  checkExpected();
   mutationStarted = true;
-  git(["restore", "--source=" + input.expectedHeadSha, "--staged", "--worktree", "--", "."]);
+  git(["restore", "--source=" + currentState.headSha, "--staged", "--worktree", "--", "."]);
   // Single force deliberately preserves nested repositories; no -x preserves ignored files.
   if (input.includeUntracked) {
     // Restoring .gitignore can expose files that were ignored in the preview.

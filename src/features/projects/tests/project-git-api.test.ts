@@ -5,7 +5,7 @@ import { SandboxFilesError } from "@/services/daytona/api";
 import { POST as createBranch } from "@/app/api/projects/[projectId]/git/branches+api";
 import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
 import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
-import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api";
+import { POST as discard, GET as previewDiscard } from "@/app/api/projects/[projectId]/git/discard+api";
 import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
 import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
 import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
@@ -76,7 +76,7 @@ const mutationRoutes = [
   { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: { ...expected }, output: counts },
   { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
-  { name: "discard", handler: discard, input: { ...expected, confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
+  { name: "discard", handler: discard, input: { confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
   { name: "stash all", handler: stashPush, input: { message: "Saved" }, output: { created: true, remainingChanges: false, stashSha: "b".repeat(40) } },
   { name: "create branch", handler: createBranch, input: { branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
@@ -231,4 +231,13 @@ it("stash all: rejects caller-supplied branch state", async () => {
 it("pop stash: rejects caller-supplied branch state", async () => {
   expect((await stashPop(mutationRequest({ ...expected, stashIndex: 0, stashSha: "b".repeat(40) }), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("discard: previews server-derived state and rejects state overrides", async () => {
+  const preview = { currentBranch: "feature/current", headSha: "a".repeat(40), fingerprint: "c".repeat(64), changedPaths: ["file.txt"] };
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify(preview) });
+  const response = await previewDiscard(request(), { projectId });
+  expect(response.status).toBe(200);
+  expect((await response.json()).data).toEqual(preview);
+  expect((await discard(mutationRequest({ ...expected, fingerprint: preview.fingerprint, confirm: true, includeUntracked: false }), { projectId })).status).toBe(400);
 });

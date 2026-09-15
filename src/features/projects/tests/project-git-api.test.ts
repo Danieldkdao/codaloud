@@ -1,6 +1,16 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/git/counts+api";
 import { SandboxFilesError } from "@/services/daytona/api";
+import { POST as createBranch } from "@/app/api/projects/[projectId]/git/branches+api";
+import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
+import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
+import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api";
+import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
+import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
+import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
+import { POST as pullGit } from "@/app/api/projects/[projectId]/git/pull+api";
+import { GET as viewStash } from "@/app/api/projects/[projectId]/git/stash+api";
+
 const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), repository: vi.fn(), request: vi.fn(), credentials: vi.fn(), access: vi.fn() }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/features/projects/server/project-workspace", () => ({ getUserReadyProject: mocks.project }));
@@ -56,18 +66,10 @@ it("sanitizes provider failures and malformed output without retrying", async ()
 });
 
 // Every mutation goes through the real shared route and transport adapter.
-import { POST as createBranch } from "@/app/api/projects/[projectId]/git/branches+api";
 const expected = { expectedBranch: "main", expectedHeadSha: "a".repeat(40) };
 const mutationRequest = (body: unknown, contentType = "application/json") => new Request(`https://codaloud.test/api/projects/${projectId}/git`, {
   method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
 });
-import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
-import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
-import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api";
-import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
-import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
-import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
-import { POST as pullGit } from "@/app/api/projects/[projectId]/git/pull+api";
 const mutationRoutes = [
   { name: "pull", handler: pullGit, input: { ...expected, remoteBranch: "main", rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
@@ -113,7 +115,6 @@ for (const route of mutationRoutes) {
   });
 }
 
-import { GET as viewStash } from "@/app/api/projects/[projectId]/git/stash+api";
 it("view stash: validates pagination and returns an empty collection", async () => {
   mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextOffset: null, patch: null }) });
   expect((await viewStash(request(), { projectId })).status).toBe(200);

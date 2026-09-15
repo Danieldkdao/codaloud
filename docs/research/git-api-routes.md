@@ -82,3 +82,60 @@ Repository paths, symlinked metadata, alternate object stores, in-progress opera
 Write route/command tests before implementation; do not create dedicated schema tests. For each route verify authentication and ownership precede provider access, strict request rejection, response privacy headers, restored/unavailable workspace handling, translated errors, and malformed/timeout provider responses. Test command builders against temporary real Git repositories and local bare remotes, with network execution mocked at the transport boundary where required.
 
 Exercise ordinary push, rejected non-fast-forward push, explicit force lease success/rejection, first push; fast-forward/divergent pull and rebase/conflicts; fetch without worktree mutation; stash tracked/untracked/ignored files, no-op, pop conflict and stale entry, bounded list/detail; discard preserving ignored/nested repositories; root/ordinary/merge revert; duplicate/invalid/stale branch creation; equal/ahead/behind/divergent/missing-upstream/shallow counts. Include malicious configuration and command-input cases. Run TypeScript and applicable existing tests after each coherent route chunk, then commit that route before starting the next. No application runtime or live user repository mutations are needed for these tests.
+
+## Implemented API contract
+
+Base path: `/api/projects/:projectId/git`. These routes use the existing authenticated session and project ownership/readiness checks. Responses retain `{ error, message, data? }` on success and `{ error: true, code, message }` on failure, with `Cache-Control: private, no-store` and `Vary: Cookie`. Restoration responses include `Retry-After: 3`.
+
+All POST requests require `Content-Type: application/json`, a body of at most 64 KiB, and no query parameters or unknown body fields. Booleans must be JSON booleans, not strings. All mutations require `expectedBranch` and `expectedHeadSha` from the last observed workspace state. They operate on initialized repositories with an existing commit. Creating a repository and initializing Git remain separate operations.
+
+| Method and endpoint | Additional request fields | Result and behavior |
+| --- | --- | --- |
+| `GET /counts` | None | `currentBranch`, `headSha`, `upstream`, `upstreamSha`, `outgoing`, `incoming`, `isShallow`, `observedAt`. Counts use local tracking refs, not a network request. Missing upstream/head or shallow history yields null counts. |
+| `POST /branches` | `branchName` | Creates from the expected current commit and checks out the branch; returns previous/current branch and HEAD. Never resets an existing branch. |
+| `GET /stash` | Query `offset` (default 0), `pageSize` (default 20, maximum 100) | Returns `stashes`, `nextOffset`, and `patch: null`. Entries include zero-based `index`, `sha`, `message`, and `createdAt`. Offset is bounded to 10,000. |
+| `GET /stash` (detail) | Query `index` and `stashSha` together | Verifies the selected slot still has that SHA, then returns its entry and patch, including untracked files. Patches are bounded to 3 MiB. |
+| `POST /stash` | Optional `message` (1–5,000 trimmed characters) | Saves tracked/staged/untracked work, preserving ignored files. Returns `created`, `stashSha`, and `remainingChanges`. A clean workspace is a successful no-op. If Git reuses an identical saved commit without adding an entry, `created` is false and `stashSha` identifies the saved work. Uses the account's name/email. A restored ignore rule can make a preserved file newly untracked, which is reported through `remainingChanges`. |
+| `POST /stash-pop` | `stashIndex`, `stashSha`, optional `restoreIndex` (default false) | Applies the verified stash by immutable SHA, rechecks its reflog slot, and removes it only after success. Requires a clean workspace. Returns `stashSha` and `dropped: true`. Conflicts retain the stash. |
+| `GET /discard` | None | Returns `expectedBranch`, `expectedHeadSha`, `fingerprint`, and `changedPaths` for review. The token includes the index and changed file contents/modes, not just filenames. Preview is limited to 10,000 paths and 64 MiB of changed regular-file content. |
+| `POST /discard` | `fingerprint`, `confirm: true`, `includeUntracked` (required boolean) | Verifies the preview, restores tracked/index content from expected HEAD, and optionally cleans only previously identified untracked paths. Preserves ignored files and nested repositories; does not move HEAD. Returns `headSha` and `remainingChanges`. Submodule repositories are rejected for discard. |
+| `POST /revert` | Optional `mainline` for merge commits | Creates an inverse commit using the account's name/email. Requires clean work and complete history. Merge commits require an explicit valid parent number. Returns the new `hash`, `parentHash`, and `currentBranch`. |
+| `POST /fetch` | No additional fields | Fetches all origin branches through isolated authenticated transport, atomically refreshes/prunes origin-tracking refs, and attempts to unshallow from complete remote history. Leaves local branch tips and working files intact. Returns refreshed counts. |
+| `POST /push` | `remoteBranch`, optional `force` (default false), `expectedRemoteSha` required when force is true | Pushes one explicit ref. Force uses an explicit SHA lease; null means the remote branch must be absent. Returns `pushed`, `remoteBranch`, `remoteSha`, `trackingUpdated`, and `counts`. First push records the branch's upstream. A confirmed push remains successful if local metadata refresh fails (`trackingUpdated: false`, `counts: null`). |
+| `POST /pull` | `remoteBranch`, optional `rebase` (default false) | Fetches then explicitly merges with the ort strategy or rebases local commits. Requires clean work and a valid account identity. Rebase disables autostash, autosquash, unrelated-ref updates, and merge recreation. Returns `previousHeadSha`, `headSha`, `currentBranch`, `rebased`, and refreshed `counts` (null if the post-success count read fails). |
+
+For push/pull, `remoteBranch` must agree with an existing configured origin upstream. Remote access is verified using the project's stored GitHub repository ID; callers cannot supply a URL, token, sandbox ID, or repository filesystem path. Push additionally checks write permission and archived status. Local operations do not request GitHub credentials.
+
+### Examples
+
+Push the branch whose state the caller last observed:
+
+```json
+{
+  "expectedBranch": "main",
+  "expectedHeadSha": "<40-or-64-character-commit-sha>",
+  "remoteBranch": "main",
+  "force": false
+}
+```
+
+To force push, set `force` to true and include `expectedRemoteSha` from the reviewed remote-tracking state. Fetch first if a current remote snapshot is needed, but do not replace a user's reviewed lease automatically after a rejection. Pull uses the same expected branch/HEAD and remote branch fields, with `rebase: true` to select rebase.
+
+For discard, first call `GET /discard`. POST only its `expectedBranch`, `expectedHeadSha`, and `fingerprint`, plus `confirm: true` and an explicit `includeUntracked` choice; `changedPaths` is preview output, not an accepted mutation field.
+
+### Coordination and recovery
+
+The shared repository lock now covers the new routes, existing staging/committing, existing remote-branch fetch and checkout, and application file creation/rename/deletion/save. Existing checkout still uses `requestDaytona` and its established error translator, with Git execution moved under the shared command lock. Native Git locks, expected revisions, immutable stash identities, and the discard fingerprint provide additional checks. Commands invoked outside these application adapters must honor the shared lock to participate in this coordination.
+
+- `GIT_CONFLICTS` (409) means Git left conflicting/partially applied work. Refresh changes, resolve the conflict, and finish or abort the corresponding merge/rebase/revert. For stash pop, the stash is retained. These routes do not supply a conflict editor or continue/abort endpoints.
+- `WORKSPACE_CHANGED` / `GIT_STASH_CHANGED` (409) require a fresh workspace/stash selection. A stash-state change detected after application can mean the stash was applied but retained; refresh both the stash list and working changes before retrying.
+- `GIT_REMOTE_REJECTED` (409) covers explicit push rejection, including stale leases and branch protection. Do not silently escalate to an unrestricted force push.
+- `GIT_OUTCOME_UNKNOWN` (502) means a mutation may have completed or partially succeeded. Refresh remote refs, history, status, and/or stashes as appropriate before deciding whether to retry. Adapters never automatically repeat mutating commands.
+- `GIT_BUSY` (409), or the established commit/save/checkout busy code, means another application operation or native Git lock is present. The lock is released on normal completion and handled errors. A forcibly killed process can leave a lock file; do not automatically steal it. Recovery requires confirming the owning operation has stopped before removing its abandoned lock.
+- `GIT_UNSUPPORTED_CONFIG` (422) rejects linked/sparse/alternate-object configurations and executable custom filters/merge drivers rather than running workspace-provided programs. `GIT_HISTORY_INCOMPLETE` requires complete history for operations that depend on ancestry.
+
+Commands have an 80-second Git deadline, a 90-second Daytona process timeout, and a 95-second HTTP timeout. These are bounded synchronous APIs, not durable background jobs. Aborting an HTTP request does not prove the sandbox or remote mutation was cancelled. Large/long-running work can produce an unknown outcome and needs reconciliation; deployment request limits must accommodate the route deadlines.
+
+### Verification performed
+
+Tests exercise the actual command strings against disposable Git workspaces and bare remotes, replacing only the authenticated network transport. Route tests exercise authentication, ownership ordering, input limits, strict flags, permission failures, response validation, and uncertain outcomes. Additional regression tests cover existing checkout behavior and Git/file-write coordination. Live GitHub and Daytona execution are not part of these fixture tests. TypeScript and the Expo API-only server export are checked separately. Platform-specific Linux filesystem tests retain their existing conditional execution requirements.

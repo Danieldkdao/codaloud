@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { commitHashSchema } from "../actions/commit-schemas";
+import { gitExpectedStateSchema } from "./git-schemas";
 
 export const gitStashQuerySchema = z.strictObject({
   offset: z.coerce.number().int().min(0).max(10000).default(0),
@@ -15,7 +16,6 @@ export const gitStashListSchema = z.object({
 });
 export type GitStashListSchema = z.infer<typeof gitStashListSchema>;
 
-import { gitExpectedStateSchema } from "./git-schemas";
 export const gitStashPushSchema = gitExpectedStateSchema.extend({ message: z.string().trim().min(1).max(5000).optional() });
 export type GitStashPushSchema = z.infer<typeof gitStashPushSchema>;
 export const gitStashPushedSchema = z.object({ created: z.boolean(), remainingChanges: z.boolean(), stashSha: commitHashSchema.nullable() });

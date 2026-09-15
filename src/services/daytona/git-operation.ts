@@ -11,7 +11,7 @@ const operationError = (code: string) => {
     case "GIT_OPERATION_IN_PROGRESS": return new SandboxFilesError(409, code, "Finish or abort the existing Git operation first.");
     case "GIT_DIRTY_WORKTREE": return new SandboxFilesError(409, code, "Commit or stash your work before this operation.");
     case "GIT_BRANCH_EXISTS": return new SandboxFilesError(409, code, "A branch with that name already exists.");
-    case "GIT_STASH_CHANGED": return new SandboxFilesError(409, code, "The stash selection changed. Reload the stash list.");
+    case "GIT_STASH_CHANGED": return new SandboxFilesError(409, code, "The stash selection changed. Reload stashes and working changes before retrying; the stash may already have been applied and retained.");
     case "GIT_STASH_NOT_FOUND": return new SandboxFilesError(404, code, "The selected stash was not found.");
     case "GIT_REMOTE_REJECTED": return new SandboxFilesError(409, code, "The remote rejected the push. Check branch protection, permissions, and the expected remote commit before retrying.");
     case "GIT_REMOTE_MISMATCH": return new SandboxFilesError(409, code, "The workspace origin does not match the connected GitHub repository.");

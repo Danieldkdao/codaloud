@@ -47,6 +47,24 @@ The existing clone helper does not request a depth, but workspaces can still con
 
 For the UI's “Stash All”, recommended scope is staged/unstaged tracked changes and untracked files using `stash push --include-untracked`; ignored files remain. Git's `--all` also stashes and cleans ignored files, which could include dependencies and environment files. A clean repository produces a successful no-op. Pop applies a selected stash and removes it only on success; conflicts retain the entry and may leave partially applied work. Decide explicitly whether to use `--index` to restore staging. View needs both bounded stash listing and selected-entry contents: `stash list` supports log formatting, and `stash show --patch --include-untracked` shows stored changes. Bind selection to the stash commit hash to detect reflog-index movement before mutation. [Git stash](https://git-scm.com/docs/git-stash)
 
+#### Stash message search research
+
+Git's stash listing delegates to `log -g --first-parent`, so it supports reflog message filtering without loading all entries into the API server. [Git 2.55 stash source](https://github.com/git/git/blob/v2.55.0/builtin/stash.c#L893-L914)
+
+Recommended argument sequence, with validated values passed as individual process arguments:
+
+```text
+stash list --fixed-strings --regexp-ignore-case --grep-reflog=<search>
+  --skip=<offset> --max-count=<pageSize+1>
+  --format=%gd%x00%H%x00%gs%x00%aI -z
+```
+
+`--grep-reflog` searches the reflog subject displayed by `%gs`; `--grep` searches commit messages instead. Fixed strings give literal substring matching, including punctuation; ignore-case enables case-insensitive matching. `%gd` returns the actual shortened reflog selector, such as `stash@{4}`. Parse that index rather than deriving it from the filtered row position. Avoid `--date`, which can make selectors use timestamps. [Git log](https://git-scm.com/docs/git-log)
+
+Filtering occurs before skip/count: Git's revision walker rejects message mismatches before returning entries to the skip/count logic. Thus pagination offsets count matching entries; retain `offset + pageSize` for continuation when the extra matching entry exists. [Git 2.55 revision source](https://github.com/git/git/blob/v2.55.0/revision.c#L3870-L4305)
+
+A temporary Git 2.55.0 repository verified literal case-insensitive search for `alpha [draft]`: skipping one matching entry returned real indices `2` and `4`, despite intervening nonmatches. The temporary repository was removed afterward. Keep search out of detail lookup, omit filtering for empty normalized search, and retain SHA checks because stash mutations can shift indices between requests. These are application recommendations, not a snapshot-pagination guarantee from Git.
+
 ### Discard changes
 
 Restore both index and tracked worktree from the expected HEAD using `restore --source=HEAD --staged --worktree`; this does not move branch history. Newly added paths absent from the source are removed. An unborn branch has no HEAD and needs explicit behavior, such as an empty-tree source or a clear unsupported-state response. [Git restore](https://git-scm.com/docs/git-restore)
@@ -93,8 +111,8 @@ All POST requests require `Content-Type: application/json`, a body of at most 64
 | --- | --- | --- |
 | `GET /counts` | None | `currentBranch`, `headSha`, `upstream`, `upstreamSha`, `outgoing`, `incoming`, `isShallow`, `observedAt`. Counts use local tracking refs, not a network request. Missing upstream/head or shallow history yields null counts. |
 | `POST /branches` | `branchName` | Creates from the expected current commit and checks out the branch; returns previous/current branch and HEAD. Never resets an existing branch. |
-| `GET /stash` | Query `offset` (default 0), `pageSize` (default 20, maximum 100) | Returns `stashes`, `nextOffset`, and `patch: null`. Entries include zero-based `index`, `sha`, `message`, and `createdAt`. Offset is bounded to 10,000. |
-| `GET /stash` (detail) | Query `index` and `stashSha` together | Verifies the selected slot still has that SHA, then returns its entry and patch, including untracked files. Patches are bounded to 3 MiB. |
+| `GET /stash` | Query `search` (optional), `offset` (default 0), `pageSize` (default 20, maximum 100) | Returns `stashes`, `nextOffset`, and `patch: null`. Search matches the displayed stash message using Git's case-insensitive literal matching, before pagination. Entries retain their real zero-based stash `index`, `sha`, `message`, and `createdAt`. Offset is bounded to 10,000. |
+| `GET /stash` (detail) | Query `index` and `stashSha` together | Verifies the selected slot still has that SHA, then returns its entry and patch, including untracked files. Patches are bounded to 3 MiB. Nonempty `search` cannot be combined with detail lookup. |
 | `POST /stash` | Optional `message` (1–5,000 trimmed characters) | Saves tracked/staged/untracked work, preserving ignored files. Returns `created`, `stashSha`, and `remainingChanges`. A clean workspace is a successful no-op. If Git reuses an identical saved commit without adding an entry, `created` is false and `stashSha` identifies the saved work. Uses the account's name/email. A restored ignore rule can make a preserved file newly untracked, which is reported through `remainingChanges`. |
 | `POST /stash-pop` | `stashIndex`, `stashSha`, optional `restoreIndex` (default false) | Applies the verified stash by immutable SHA, rechecks its reflog slot, and removes it only after success. Requires a clean workspace. Returns `stashSha` and `dropped: true`. Conflicts retain the stash. |
 | `GET /discard` | None | Returns `expectedBranch`, `expectedHeadSha`, `fingerprint`, and `changedPaths` for review. The token includes the index and changed file contents/modes, not just filenames. Preview is limited to 10,000 paths and 64 MiB of changed regular-file content. |
@@ -107,6 +125,10 @@ All POST requests require `Content-Type: application/json`, a body of at most 64
 For push/pull, `remoteBranch` must agree with an existing configured origin upstream. Remote access is verified using the project's stored GitHub repository ID; callers cannot supply a URL, token, sandbox ID, or repository filesystem path. Push additionally checks write permission and archived status. Local operations do not request GitHub credentials.
 
 ### Examples
+
+Search saved stash messages with `GET /api/projects/:projectId/git/stash?search=login&offset=0&pageSize=20`. Search is trimmed and limited to 200 characters; omitted or blank search lists all stashes. Newlines and NUL inside a search are rejected. Regex characters are literal. Matching uses the full displayed message, including Git's branch prefix, rather than file names or patch contents.
+
+Use the returned `nextOffset` with the same search for the next page; `null` means there are no more matches. Offsets count matching entries, while each entry's `index` remains its actual stash slot for detail/pop requests. Restart at offset 0 when changing search. Offset pagination reflects the current stash list on each request, so refresh from the first page after a stash is added or removed.
 
 Push the branch whose state the caller last observed:
 

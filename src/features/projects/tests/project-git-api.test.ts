@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { gunzipSync } from "node:zlib";
 import { GET } from "@/app/api/projects/[projectId]/git/counts+api";
 import { SandboxFilesError } from "@/services/daytona/api";
 import { POST as createBranch } from "@/app/api/projects/[projectId]/git/branches+api";
@@ -120,6 +121,39 @@ it("view stash: validates pagination and returns an empty collection", async () 
   expect((await viewStash(request(), { projectId })).status).toBe(200);
   expect((await viewStash(new Request("https://codaloud.test/?pageSize=1000"), { projectId })).status).toBe(400);
   expect((await viewStash(new Request("https://codaloud.test/?index=0"), { projectId })).status).toBe(400);
+});
+
+it("view stash: forwards trimmed search and pagination through requestDaytona", async () => {
+  const output = { stashes: [{ index: 7, sha: "b".repeat(40), message: "On main: Login", createdAt: "2026-09-15T00:00:00Z" }], nextOffset: 3, patch: null };
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify(output) });
+  const response = await viewStash(new Request("https://codaloud.test/?search=%20Login%20&offset=2&pageSize=1"), { projectId });
+  expect(response.status).toBe(200);
+  expect((await response.json()).data).toEqual(output);
+  const { envs } = JSON.parse(mocks.request.mock.calls[0][1].body);
+  const encoded = Array.from({ length: Number(envs.CODALOUD_INPUT_CHUNKS) }, (_, index) => envs[`CODALOUD_INPUT_${index}`]).join("");
+  expect(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8"))).toMatchObject({ search: "Login", offset: 2, pageSize: 1 });
+});
+
+it.each(["", "   "])("view stash: accepts blank search %j", async (search) => {
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextOffset: null, patch: null }) });
+  expect((await viewStash(new Request("https://codaloud.test/?" + new URLSearchParams({ search })), { projectId })).status).toBe(200);
+});
+
+it.each<Record<string, string>>([
+  { search: "x".repeat(201) },
+  { search: "one\ntwo" },
+  { search: "one\0two" },
+  { search: "login", index: "0", stashSha: "b".repeat(40) },
+])("view stash: rejects invalid or ambiguous search %j before workspace access", async (query) => {
+  const params = new URLSearchParams(query);
+  expect((await viewStash(new Request("https://codaloud.test/?" + params), { projectId })).status).toBe(400);
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("view stash: rejects duplicate search parameters", async () => {
+  expect((await viewStash(new Request("https://codaloud.test/?search=one&search=two"), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
 });
 
 it("revert: requires a valid server-resolved commit identity", async () => {

@@ -1,154 +1,195 @@
-import { View } from "react-native";
+import { useMemo } from "react";
+import { ActivityIndicator, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { CodeText, HeadingText, PText } from "@/components/ui/text";
 import type { CommitSource } from "../actions/commit-schemas";
 import {
-  formatCommitHash,
+  formatCommitParent,
+  formatCommitSubject,
   formatCommitTimestamp,
   formatProjectChangeCount,
 } from "../lib/formatters";
-import { createProjectWorkspaceDiff } from "../lib/workspace-diff";
+import { createProjectCommitDiff } from "../lib/commit-diff";
+import { projectCommitDetailsParamsSchema } from "../actions/commit-details-schemas";
+import { useProjectCommitDetails } from "../hooks/use-project-commit-details";
 import { ProjectDiffList } from "./project-diff-list";
 import { ProjectWorkspaceDiffSummary } from "./project-workspace-diff-summary";
 
 type ProjectCommitDiffProps = {
+  projectId: string;
   commitSha: string;
   source: CommitSource;
 };
 
-// Temporary presentation data while the commit screen is built independently of its API read.
-const commitPreview = {
-  subject: "improve workspace startup feedback",
-  author: "Alex Morgan",
-  authorEmail: "alex@example.com",
-  committedAt: "2026-09-14T14:32:00Z",
-  parentSha: "8f2c9d1a6b340e5f72819c0d6a4e3b9f12c08567",
-};
+export const ProjectCommitDiff = ({
+  projectId,
+  commitSha,
+  source,
+}: ProjectCommitDiffProps) => {
+  const query = useProjectCommitDetails(projectId, { commitSha, source });
+  const data = query.data;
+  const diff = useMemo(
+    () => (data ? createProjectCommitDiff(data) : null),
+    [data],
+  );
+  const validParams = projectCommitDetailsParamsSchema.safeParse({
+    projectId,
+    commitSha,
+    source,
+  }).success;
+  const isPaused = query.fetchStatus === "paused";
+  const error = validParams
+    ? query.error
+    : new Error("Invalid project, commit SHA, or source.");
+  const refresh = () => {
+    void query.refetch();
+  };
 
-const commitDiffPreview = createProjectWorkspaceDiff({
-  repositoryState: "ready",
-  currentBranch: null,
-  headSha: null,
-  isDetached: false,
-  observedAt: commitPreview.committedAt,
-  changes: [
-    {
-      path: "src/features/projects/components/project-setup-status.tsx",
-      originalPath: null,
-      indexStatus: "modified",
-      worktreeStatus: "unchanged",
-      isUntracked: false,
-      isConflicted: false,
-      kind: "file",
-      headMode: "100644",
-      indexMode: "100644",
-      worktreeMode: "100644",
-      unstaged: null,
-      staged: {
-        patch:
-          '@@ -1,5 +1,7 @@\n export const ProjectSetupStatus = ({ ready }) => {\n-  const message = "Loading project…";\n+  const message = ready\n+    ? "Your workspace is ready to go"\n+    : "We’re starting your workspace";\n \n   return <PText>{message}</PText>;\n };\n',
-        additions: 3,
-        deletions: 1,
-        unavailableReason: null,
-      },
-    },
-    {
-      path: "src/features/projects/lib/workspace-messages.ts",
-      originalPath: null,
-      indexStatus: "added",
-      worktreeStatus: "unchanged",
-      isUntracked: false,
-      isConflicted: false,
-      kind: "file",
-      headMode: "000000",
-      indexMode: "100644",
-      worktreeMode: "100644",
-      unstaged: null,
-      staged: {
-        patch:
-          '@@ -0,0 +1,4 @@\n+export const formatWorkspaceLoadingMessage = (restoring: boolean) =>\n+  restoring\n+    ? "We’re restoring your workspace"\n+    : "We’re starting your workspace";\n',
-        additions: 4,
-        deletions: 0,
-        unavailableReason: null,
-      },
-    },
-  ],
-});
+  return (
+    <ProjectDiffList
+      accessibilityLabel="Commit diff"
+      files={diff?.files ?? []}
+      header={
+        data && diff ? (
+          <View className="gap-5 px-4 pt-4 pb-5">
+            {isPaused || query.isFetching || error ? (
+              <View className="gap-3" accessibilityLiveRegion="polite">
+                <PText className="text-base text-muted-foreground">
+                  {isPaused
+                    ? "Waiting for a connection… Showing previously loaded commit details."
+                    : query.isFetching
+                      ? "Updating commit details…"
+                      : "Couldn’t refresh commit details. Showing previously loaded commit details."}
+                </PText>
+                {error && !query.isFetching && !isPaused ? (
+                  <Button
+                    variant="outline"
+                    accessibilityLabel="Retry commit details"
+                    onPress={refresh}
+                  >
+                    Try again
+                  </Button>
+                ) : null}
+              </View>
+            ) : null}
+            <HeadingText
+              selectable
+              accessibilityRole="header"
+              className="text-3xl"
+            >
+              {formatCommitSubject(data.commit.message)}
+            </HeadingText>
 
-export const ProjectCommitDiff = ({ commitSha }: ProjectCommitDiffProps) => (
-  <ProjectDiffList
-    accessibilityLabel="Commit diff"
-    files={commitDiffPreview.files}
-    header={
-      <View className="gap-5 px-4 pt-4 pb-5">
-        <HeadingText selectable accessibilityRole="header" className="text-3xl">
-          {commitPreview.subject}
-        </HeadingText>
-
-        <View className="gap-3 rounded-xl border border-border bg-card/40 p-4">
-          <View className="flex-row items-center gap-3">
-            <View className="size-11 items-center justify-center rounded-full bg-secondary">
-              <Icon
-                family="Feather"
-                name="user"
-                size={20}
-                className="text-muted-foreground"
-                accessible={false}
-              />
-            </View>
-            <View className="min-w-0 flex-1 gap-1">
-              <PText selectable className="text-base font-semibold">
-                {commitPreview.author}
-              </PText>
+            <View className="gap-3 rounded-xl border border-border bg-card/40 p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="size-11 items-center justify-center rounded-full bg-secondary">
+                  <Icon
+                    family="Feather"
+                    name="user"
+                    size={20}
+                    className="text-muted-foreground"
+                    accessible={false}
+                  />
+                </View>
+                <View className="min-w-0 flex-1 gap-1">
+                  <PText selectable className="text-base font-semibold">
+                    {data.commit.author}
+                  </PText>
+                  <PText selectable className="text-base text-muted-foreground">
+                    {data.commit.authorEmail}
+                  </PText>
+                </View>
+              </View>
               <PText selectable className="text-base text-muted-foreground">
-                {commitPreview.authorEmail}
+                Committed {formatCommitTimestamp(data.commit.committedAt)}
               </PText>
+              <View className="flex-row flex-wrap items-center gap-2">
+                <PText className="text-base text-muted-foreground">
+                  Parent
+                </PText>
+                <CodeText
+                  selectable
+                  className="text-base text-muted-foreground"
+                >
+                  {formatCommitParent(data.baseSha)}
+                </CodeText>
+              </View>
+            </View>
+
+            <View className="flex-row flex-wrap gap-2">
+              <Button variant="outline" accessibilityLabel="Copy commit SHA">
+                <Icon
+                  family="Feather"
+                  name="copy"
+                  size={18}
+                  className="text-foreground"
+                  accessible={false}
+                />
+                Copy SHA
+              </Button>
+              <Button
+                variant="outline"
+                accessibilityLabel="View commit on GitHub"
+                disabled={!data.githubUrl}
+              >
+                <Icon
+                  family="Feather"
+                  name="github"
+                  size={18}
+                  className="text-foreground"
+                  accessible={false}
+                />
+                View on GitHub
+              </Button>
+            </View>
+
+            <View className="flex-row flex-wrap items-center justify-between gap-3 pt-1">
+              <PText className="text-base font-semibold">
+                {formatProjectChangeCount(diff.summary.fileCount)} changed
+              </PText>
+              <ProjectWorkspaceDiffSummary summary={diff.summary} />
             </View>
           </View>
-          <PText selectable className="text-base text-muted-foreground">
-            Committed {formatCommitTimestamp(commitPreview.committedAt)}
+        ) : null
+      }
+      empty={
+        <View
+          className="flex-1 items-center justify-center gap-4 px-6 py-8"
+          accessibilityLiveRegion="polite"
+        >
+          {!data && query.isFetching && !isPaused ? (
+            <ActivityIndicator className="text-primary" accessible={false} />
+          ) : null}
+          <HeadingText
+            accessibilityRole="header"
+            className="text-center text-3xl"
+          >
+            {data
+              ? "No file changes"
+              : isPaused
+                ? "Waiting for a connection…"
+                : error && !query.isFetching
+                  ? "Unable to load commit details"
+                  : "Loading commit details…"}
+          </HeadingText>
+          <PText className="text-center text-base text-muted-foreground">
+            {data
+              ? "This commit has no file changes."
+              : isPaused
+                ? "Commit details will load when you reconnect."
+                : error && !query.isFetching
+                  ? error.message
+                  : "Reading this commit’s details and file changes."}
           </PText>
-          <View className="flex-row flex-wrap items-center gap-2">
-            <PText className="text-base text-muted-foreground">Parent</PText>
-            <CodeText selectable className="text-base text-muted-foreground">
-              {formatCommitHash(commitPreview.parentSha)}
-            </CodeText>
-          </View>
+          {!data && error && validParams && !query.isFetching && !isPaused ? (
+            <Button accessibilityLabel="Retry commit details" onPress={refresh}>
+              Try again
+            </Button>
+          ) : null}
         </View>
-
-        <View className="flex-row flex-wrap gap-2">
-          <Button variant="outline" accessibilityLabel="Copy commit SHA">
-            <Icon
-              family="Feather"
-              name="copy"
-              size={18}
-              className="text-foreground"
-              accessible={false}
-            />
-            Copy SHA
-          </Button>
-          <Button variant="outline" accessibilityLabel="View commit on GitHub">
-            <Icon
-              family="Feather"
-              name="github"
-              size={18}
-              className="text-foreground"
-              accessible={false}
-            />
-            View on GitHub
-          </Button>
-        </View>
-
-        <View className="flex-row flex-wrap items-center justify-between gap-3 pt-1">
-          <PText className="text-base font-semibold">
-            {formatProjectChangeCount(commitDiffPreview.summary.fileCount)}{" "}
-            changed
-          </PText>
-          <ProjectWorkspaceDiffSummary summary={commitDiffPreview.summary} />
-        </View>
-      </View>
-    }
-  />
-);
+      }
+    />
+  );
+};

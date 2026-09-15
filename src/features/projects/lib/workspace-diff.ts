@@ -1,4 +1,8 @@
-import type { ProjectRepositoryChangeSchema, ProjectRepositoryChangesSchema } from "../actions/change-schemas";
+import type {
+  ProjectChangeDiffSchema,
+  ProjectRepositoryChangeSchema,
+  ProjectRepositoryChangesSchema,
+} from "../actions/change-schemas";
 import type {
   ProjectDiffComparison,
   ProjectDiffScope,
@@ -9,7 +13,7 @@ import type {
 } from "../types";
 import { parseProjectDiffPatch } from "./diff-patch";
 
-const createProjectDiffComparison = (
+const createProjectWorkspaceComparison = (
   change: ProjectRepositoryChangeSchema,
   scope: ProjectDiffScope,
 ): ProjectDiffComparison | null => {
@@ -20,23 +24,62 @@ const createProjectDiffComparison = (
   const comparison = {
     key: JSON.stringify([change.path, scope]),
     scope,
-    beforePath: beforeMode === "000000" ? null : scope === "staged" ? change.originalPath ?? change.path : change.path,
+    beforePath:
+      beforeMode === "000000"
+        ? null
+        : scope === "staged"
+          ? (change.originalPath ?? change.path)
+          : change.path,
     afterPath: afterMode === "000000" ? null : change.path,
     beforeMode,
     afterMode,
   };
+  return createProjectDiffComparison(diff, comparison);
+};
+
+export const createProjectDiffComparison = (
+  diff: ProjectChangeDiffSchema,
+  comparison: Pick<
+    ProjectDiffComparison,
+    "key" | "scope" | "beforePath" | "afterPath" | "beforeMode" | "afterMode"
+  >,
+): ProjectDiffComparison => {
   if (diff.unavailableReason !== null) {
-    return { ...comparison, kind: "unavailable", reason: diff.unavailableReason, additions: null, deletions: null };
+    return {
+      ...comparison,
+      kind: "unavailable",
+      reason: diff.unavailableReason,
+      additions: null,
+      deletions: null,
+    };
   }
   const patch = parseProjectDiffPatch(diff.patch);
-  if (!patch || patch.additions !== diff.additions || patch.deletions !== diff.deletions) {
-    return { ...comparison, kind: "unavailable", reason: "invalid-patch", additions: null, deletions: null };
+  if (
+    !patch ||
+    patch.additions !== diff.additions ||
+    patch.deletions !== diff.deletions
+  ) {
+    return {
+      ...comparison,
+      kind: "unavailable",
+      reason: "invalid-patch",
+      additions: null,
+      deletions: null,
+    };
   }
   return { ...comparison, kind: "available", ...patch };
 };
 
-const getProjectDiffTotals = (files: ProjectWorkspaceDiffEntry[], scope: ProjectDiffScope): ProjectDiffTotals => {
-  const total: ProjectDiffTotals = { fileCount: 0, additions: 0, deletions: 0, unavailableCount: 0 };
+export const getProjectDiffTotals = (
+  files: ProjectWorkspaceDiffEntry[],
+  scope: ProjectDiffScope,
+): ProjectDiffTotals => {
+  const total: ProjectDiffTotals = {
+    fileCount: 0,
+    additions: 0,
+    deletions: 0,
+    unavailableCount: 0,
+  };
   for (const file of files) {
     const comparison = file[scope];
     if (comparison === null) continue;
@@ -52,12 +95,14 @@ const getProjectDiffTotals = (files: ProjectWorkspaceDiffEntry[], scope: Project
 };
 
 /** Consumes the already-validated data from readProjectChangesAction/useProjectChanges. */
-export const createProjectWorkspaceDiff = (data: ProjectRepositoryChangesSchema): ProjectWorkspaceDiffData => {
+export const createProjectWorkspaceDiff = (
+  data: ProjectRepositoryChangesSchema,
+): ProjectWorkspaceDiffData => {
   const { changes, ...repository } = data;
   const files = changes.map((change): ProjectWorkspaceDiffEntry => ({
     ...change,
-    staged: createProjectDiffComparison(change, "staged"),
-    unstaged: createProjectDiffComparison(change, "unstaged"),
+    staged: createProjectWorkspaceComparison(change, "staged"),
+    unstaged: createProjectWorkspaceComparison(change, "unstaged"),
   }));
   return {
     ...repository,
@@ -76,20 +121,39 @@ export const createProjectWorkspaceDiffRows = (
 ): ProjectWorkspaceDiffRow[] => {
   const rows: ProjectWorkspaceDiffRow[] = [];
   for (const file of files) {
-    rows.push({ kind: "file", key: JSON.stringify([file.path, "file"]), path: file.path, file });
+    rows.push({
+      kind: "file",
+      key: JSON.stringify([file.path, "file"]),
+      path: file.path,
+      file,
+    });
     if (collapsedPaths.has(file.path)) continue;
     for (const comparison of [file.staged, file.unstaged]) {
       if (!comparison) continue;
       rows.push({
-        kind: "comparison", key: comparison.key, path: file.path, comparison,
-        status: comparison.scope === "staged" ? file.indexStatus : file.worktreeStatus,
+        kind: "comparison",
+        key: comparison.key,
+        path: file.path,
+        comparison,
+        status:
+          comparison.scope === "staged"
+            ? file.indexStatus
+            : file.worktreeStatus,
       });
       if (comparison.kind !== "available") continue;
       for (const hunk of comparison.hunks) {
         for (const [index, line] of hunk.lines.entries()) {
           rows.push({
-            kind: "line", path: file.path, line,
-            key: JSON.stringify([file.path, comparison.scope, hunk.oldStart, hunk.newStart, index]),
+            kind: "line",
+            path: file.path,
+            line,
+            key: JSON.stringify([
+              file.path,
+              comparison.scope,
+              hunk.oldStart,
+              hunk.newStart,
+              index,
+            ]),
           });
         }
       }

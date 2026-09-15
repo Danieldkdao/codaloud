@@ -21,6 +21,12 @@ import {
 } from "./commit-schemas";
 import { projectCommitParamsSchema } from "../lib/commit-params";
 import {
+  projectCommitDetailsParamsSchema,
+  readProjectCommitDetailsResponseSchema,
+  type ProjectCommitDetailsParamsSchema,
+  type ProjectCommitDetailsSchema,
+} from "./commit-details-schemas";
+import {
   createProjectCommitResponseSchema,
   createProjectCommitSchema,
   type CreateProjectCommitResponseSchema,
@@ -202,6 +208,41 @@ export const readProjectBranchesAction = async (
         next.after !== page.branches[page.branches.length - 1]) return null;
     }
     return page;
+  } catch {
+    return null;
+  }
+};
+
+export const readProjectCommitDetailsAction = async (
+  projectId: string,
+  params: Omit<ProjectCommitDetailsParamsSchema, "projectId">,
+  signal?: AbortSignal,
+): Promise<ProjectCommitDetailsSchema | null> => {
+  try {
+    if (signal?.aborted) return null;
+    const { userId, error: sessionError } = await getCurrentUserClient();
+    if (sessionError || !userId) return null;
+    const input = projectCommitDetailsParamsSchema.safeParse({ ...params, projectId });
+    if (!input.success) return null;
+
+    const headers = await createRequestHeaders();
+    if (!headers.get("Cookie")?.trim() || signal?.aborted) return null;
+
+    const { projectId: validatedProjectId, commitSha, source } = input.data;
+    const query = createSearchParams({ source });
+    const response = await fetchBase(`/api/projects/${validatedProjectId}/commit/${commitSha}?${query}`, {
+      method: "GET",
+      headers,
+      credentials: "omit",
+      signal,
+    });
+    if (!response.ok || signal?.aborted) return null;
+
+    const payload: unknown = await response.json();
+    if (signal?.aborted) return null;
+    const { data } = readProjectCommitDetailsResponseSchema.parse(payload);
+    if (data.commit.hash !== commitSha || data.source !== source) return null;
+    return data;
   } catch {
     return null;
   }

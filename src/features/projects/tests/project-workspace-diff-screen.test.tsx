@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import WorkspaceDiffScreen from "@/app/projects/[projectId]/git/workspace-diff";
+import type { ProjectCommitDetailsSchema } from "../actions/commit-details-schemas";
 import type { ProjectRepositoryChangeSchema, ProjectRepositoryChangesSchema } from "../actions/change-schemas";
 
 const query = vi.hoisted(() => ({
@@ -11,6 +12,14 @@ const query = vi.hoisted(() => ({
   refreshAfterSaves: vi.fn(),
   error: null as Error | null,
   data: undefined as ProjectRepositoryChangesSchema | undefined,
+}));
+const commitQuery = vi.hoisted(() => ({
+  read: vi.fn(), refetch: vi.fn(), isFetching: false, fetchStatus: "idle",
+  error: null as Error | null,
+  data: undefined as ProjectCommitDetailsSchema | null | undefined,
+}));
+vi.mock("@/features/projects/hooks/use-project-commit-details", () => ({
+  useProjectCommitDetails: (...args: unknown[]) => { commitQuery.read(...args); return commitQuery; },
 }));
 const saves = vi.hoisted(() => ({ flushPendingSaves: vi.fn() }));
 const focus = vi.hoisted(() => ({ effect: undefined as (() => (() => void) | void) | undefined }));
@@ -145,6 +154,8 @@ beforeEach(() => {
   Object.assign(query, { data: undefined, error: null, isFetching: false, fetchStatus: "idle" });
   route.projectId = "11111111-1111-4111-8111-111111111111";
   route.commitSha = undefined; route.source = undefined;
+  Object.assign(commitQuery, { data: undefined, error: null, isFetching: false, fetchStatus: "idle" });
+  commitQuery.read.mockClear(); commitQuery.refetch.mockReset().mockResolvedValue({});
   query.read.mockClear(); query.refetch.mockClear();
   saves.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   query.refreshAfterSaves.mockReset().mockImplementation(async (flush: () => Promise<void>) => { await flush(); return query.refetch(); });
@@ -459,27 +470,123 @@ it("starts expanded when switching to another project with the same filename", (
   expect(container.querySelector('[aria-label="Added line 1: after"]')).not.toBeNull();
 });
 
-it.each(["local", "remote"])("opens the commit layout for a SHA and %s source without reading workspace changes", (source) => {
-  route.commitSha = "b".repeat(40); route.source = source;
+const commitDetails = (): ProjectCommitDetailsSchema => ({
+  source: "local",
+  commit: {
+    hash: "b".repeat(40), message: "fix: preserve editor selection\n\nKeep the active range after saving.",
+    author: "Riley Chen", authorEmail: "riley@example.com", committer: "Riley Chen", committerEmail: "riley@example.com",
+    authoredAt: "2026-09-15T12:00:00Z", committedAt: "2026-09-15T12:00:00Z", parentHashes: ["c".repeat(40)], isMerge: false,
+  },
+  baseSha: "c".repeat(40), githubUrl: "https://github.com/team/editor/commit/" + "b".repeat(40),
+  files: [{ path: "src/selection.ts", originalPath: null, status: "modified", beforeMode: "100644", afterMode: "100644",
+    diff: { patch: "@@ -1 +1 @@\n-before\n+after\n", additions: 1, deletions: 1, unavailableReason: null } }],
+  summary: { fileCount: 1, additions: 1, deletions: 1, unavailableCount: 0 },
+});
+const selectCommit = () => { route.commitSha = "b".repeat(40); route.source = "local"; };
+
+it.each(["local", "remote"] as const)("renders %s server data in the existing commit layout", (source) => {
+  selectCommit(); route.source = source;
+  commitQuery.data = { ...commitDetails(), source };
   render();
+  expect(commitQuery.read).toHaveBeenCalledWith(route.projectId, { commitSha: route.commitSha, source });
   expect(query.read).not.toHaveBeenCalled();
   expect(saves.flushPendingSaves).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("improve workspace startup feedback");
-  expect(container.textContent).toContain("Alex Morgan");
-  expect(container.textContent).toContain("alex@example.com");
-  // The SHA is rendered by the native header, covered in project-setup-gate.test.tsx.
-  expect(container.textContent).toContain("Committed Sep 14, 2026 at");
-  expect(container.textContent).not.toMatch(/Local commit|Remote commit/);
+  expect(container.textContent).toContain("fix: preserve editor selection");
+  expect(container.textContent).not.toContain("Keep the active range after saving.");
+  expect(container.textContent).toContain("Riley Chen");
+  expect(container.textContent).toContain("riley@example.com");
+  expect(container.textContent).toContain("ccccccc");
+  expect(container.textContent).toContain("Committed Sep 15, 2026 at");
+  expect(container.textContent).not.toMatch(/Local commit|Remote commit|Alex Morgan|workspace startup feedback/);
   expect(container.querySelector('[aria-label="Copy commit SHA"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="View commit on GitHub"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Refresh workspace diff"]')).toBeNull();
   expect(container.querySelector('[aria-label="Pull to refresh"]')).toBeNull();
-  expect(container.querySelectorAll('[aria-label^="Added line"]')).not.toHaveLength(0);
-  expect(container.textContent).not.toMatch(/mock|fixture|demo/i);
-  expect(container.textContent).not.toContain("Keep startup messages clear");
+  expect(container.querySelector('[aria-label="Added line 1: after"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="1 added lines"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("@@");
+  click("Collapse src/selection.ts diff");
+  expect(container.querySelector('[aria-label="Expand src/selection.ts diff"]')).not.toBeNull();
+});
 
-  click("Collapse src/features/projects/components/project-setup-status.tsx diff");
-  expect(container.querySelector('[aria-label="Expand src/features/projects/components/project-setup-status.tsx diff"]')).not.toBeNull();
+it("shows loading without sample metadata or code", () => {
+  selectCommit(); commitQuery.isFetching = true; render();
+  expect(container.textContent).toContain("Loading commit details…");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Copy commit SHA"]')).toBeNull();
+  expect(container.querySelector('[aria-label^="Added line"]')).toBeNull();
+});
+
+it.each([undefined, null])("shows a recoverable commit error when data is %s", async (data) => {
+  selectCommit(); commitQuery.data = data; commitQuery.error = new Error("Unable to load commit details. Please try again."); render();
+  expect(container.textContent).toContain("Unable to load commit details");
+  await act(async () => click("Retry commit details"));
+  expect(commitQuery.refetch).toHaveBeenCalledOnce();
+  commitQuery.isFetching = true; render();
+  expect(container.textContent).toContain("Loading commit details…");
+  expect(container.querySelector('[aria-label="Retry commit details"]')).toBeNull();
+  commitQuery.data = commitDetails(); commitQuery.isFetching = false; commitQuery.error = null; render();
+  expect(container.textContent).toContain("Riley Chen");
+});
+
+it.each([false, true])("handles a paused commit read with cached data=%s", (cached) => {
+  selectCommit(); commitQuery.data = cached ? commitDetails() : undefined; commitQuery.fetchStatus = "paused"; render();
+  expect(container.textContent).toContain("Waiting for a connection…");
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Retry commit details"]')).toBeNull();
+  if (cached) expect(container.textContent).toContain("Riley Chen");
+});
+
+it("retains loaded commit details during background refresh and offers retry on failure", async () => {
+  selectCommit(); commitQuery.data = commitDetails(); commitQuery.isFetching = true; render();
+  expect(container.textContent).toContain("Updating commit details…");
+  expect(container.textContent).toContain("Riley Chen");
+  commitQuery.isFetching = false; commitQuery.error = new Error("Request failed"); render();
+  expect(container.textContent).toContain("Showing previously loaded commit details");
+  expect(container.querySelector('[aria-label="Added line 1: after"]')).not.toBeNull();
+  await act(async () => click("Retry commit details"));
+  expect(commitQuery.refetch).toHaveBeenCalledOnce();
+});
+
+it("renders root commits with no files and no GitHub URL", () => {
+  selectCommit(); const data = commitDetails();
+  commitQuery.data = { ...data, commit: { ...data.commit, parentHashes: [] }, baseSha: null, githubUrl: null, files: [],
+    summary: { fileCount: 0, additions: 0, deletions: 0, unavailableCount: 0 } };
+  render();
+  expect(container.textContent).toContain("Riley Chen");
+  expect(container.textContent).toContain("ParentNone");
+  expect(container.textContent).toContain("0 files changed");
+  expect(container.textContent).toContain("No file changes");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="View commit on GitHub"]')?.disabled).toBe(true);
+});
+
+it("renders remote renames and unavailable diffs without inventing file modes", () => {
+  selectCommit(); route.source = "remote"; const data = commitDetails();
+  commitQuery.data = { ...data, source: "remote", files: [{ ...data.files[0], status: "renamed", originalPath: "src/old.ts",
+    beforeMode: null, afterMode: "100755", diff: { patch: null, additions: null, deletions: null, unavailableReason: "binary" } }],
+    summary: { fileCount: 1, additions: 0, deletions: 0, unavailableCount: 1 } };
+  render();
+  expect(container.textContent).toContain("From src/old.ts");
+  expect(container.textContent).toContain("Binary file");
+  expect(container.textContent).not.toContain("→");
+  expect(container.querySelector('[aria-label="Line counts unavailable"]')).not.toBeNull();
+});
+
+it("does not carry previous metadata or collapsed state to another commit", () => {
+  selectCommit(); commitQuery.data = commitDetails(); render(); click("Collapse src/selection.ts diff");
+  route.commitSha = "d".repeat(40); commitQuery.data = undefined; commitQuery.isFetching = true; render();
+  expect(container.textContent).not.toContain("Riley Chen");
+  const data = commitDetails();
+  commitQuery.data = { ...data, commit: { ...data.commit, hash: route.commitSha, author: "Sam" } }; commitQuery.isFetching = false; render();
+  expect(container.textContent).toContain("Sam");
+  expect(container.querySelector('[aria-label="Collapse src/selection.ts diff"]')).not.toBeNull();
+});
+
+it("shows invalid commit parameters instead of waiting forever on a disabled query", () => {
+  selectCommit(); route.commitSha = "HEAD"; render();
+  expect(container.textContent).toContain("Invalid project, commit SHA, or source");
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Retry commit details"]')).toBeNull();
 });
 
 it.each([

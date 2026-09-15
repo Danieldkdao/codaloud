@@ -13,7 +13,7 @@ const WorkspaceDiffScreen = () => {
 
   const commit = getProjectCommitDiffParams(commitSha, source);
   if (commit) {
-    return <ProjectCommitDiff key={`${projectId}:${commit.source}:${commit.commitSha}`} {...commit} />;
+    return <ProjectCommitDiff key={`${projectId}:${commit.source}:${commit.commitSha}`} projectId={projectId} {...commit} />;
   }
 
   return <ProjectWorkspaceChangesDiff key={projectId} projectId={projectId} />;

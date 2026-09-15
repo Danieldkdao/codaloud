@@ -17,9 +17,18 @@ it("does not reset an existing branch", () => {
   expect(() => fixture.run(sandboxGitCreateBranchCommand, { branchName: "existing" })).toThrow(expect.objectContaining({ code: "GIT_BRANCH_EXISTS" }));
   expect(fixture.git("branch", "--show-current")).toBe("main");
 });
-it("rejects stale expected state", () => {
-  expect(() => fixture.run(sandboxGitCreateBranchCommand, { branchName: "feature/new", expectedHeadSha: "a".repeat(40) })).toThrow(expect.objectContaining({ code: "WORKSPACE_CHANGED" }));
-  expect(fixture.git("branch", "--list", "feature/new")).toBe("");
+it("derives the source from the checked-out feature branch and current HEAD", () => {
+  fixture.git("switch", "-c", "feature/source");
+  fixture.git("commit", "--allow-empty", "-m", "Source tip");
+  const tip = fixture.git("rev-parse", "HEAD");
+  const result = fixture.run(sandboxGitCreateBranchCommand, { branchName: "feature/new", expectedBranch: undefined, expectedHeadSha: undefined });
+  expect(result).toEqual({ previousBranch: "feature/source", currentBranch: "feature/new", headSha: tip });
+});
+it.each(["detached", "unborn"])("rejects %s state without creating a branch", (state) => {
+  if (state === "detached") fixture.git("switch", "--detach", "HEAD");
+  else fixture.git("switch", "--orphan", "empty");
+  expect(() => fixture.run(sandboxGitCreateBranchCommand, { branchName: "new" })).toThrow(expect.objectContaining({ code: "GIT_BRANCH_REQUIRED" }));
+  expect(fixture.git("branch", "--list", "new")).toBe("");
 });
 it("does not run checkout hooks", () => {
   fixture.write(".git/hooks/post-checkout", "#!/bin/sh\ntouch hooked\n");

@@ -79,7 +79,7 @@ const mutationRoutes = [
   { name: "discard", handler: discard, input: { ...expected, confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { ...expected, stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
   { name: "stash all", handler: stashPush, input: { ...expected, message: "Saved" }, output: { created: true, remainingChanges: false, stashSha: "b".repeat(40) } },
-  { name: "create branch", handler: createBranch, input: { ...expected, branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
+  { name: "create branch", handler: createBranch, input: { branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
 ];
 for (const route of mutationRoutes) {
   it(`${route.name}: executes valid input`, async () => {
@@ -93,10 +93,10 @@ for (const route of mutationRoutes) {
     expect((await route.handler(mutationRequest(route.input), { projectId })).status).toBe(401);
     expect(mocks.project).not.toHaveBeenCalled();
   });
-  it(`${route.name}: rejects invalid IDs, media types, missing state and extra fields`, async () => {
+  it(`${route.name}: rejects invalid IDs, media types, invalid bodies and extra fields`, async () => {
     expect((await route.handler(mutationRequest(route.input), { projectId: "bad" })).status).toBe(400);
     expect((await route.handler(mutationRequest(route.input, "text/plain"), { projectId })).status).toBe(415);
-    expect((await route.handler(mutationRequest({}), { projectId })).status).toBe(400);
+    expect((await route.handler(mutationRequest(null), { projectId })).status).toBe(400);
     expect((await route.handler(mutationRequest({ ...route.input, command: "rm" }), { projectId })).status).toBe(400);
     expect(mocks.project).not.toHaveBeenCalled();
   });
@@ -216,4 +216,9 @@ it("rejects mutation query flags rather than silently ignoring them", async () =
   const input = new Request(`https://codaloud.test/?force=true`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...expected, remoteBranch: "main" }) });
   expect((await pushGit(input, { projectId })).status).toBe(400);
   expect(mocks.project).not.toHaveBeenCalled();
+});
+
+it.each([{}, { branchName: "new", expectedBranch: "main" }, { branchName: "new", expectedHeadSha: "a".repeat(40) }, { branchName: "new", startPoint: "other" }])("create branch: rejects missing name and caller-selected source %j", async (input) => {
+  expect((await createBranch(mutationRequest(input), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
 });

@@ -35,8 +35,18 @@ const ensureIdle = () => {
   }
   if (git(["ls-files", "--unmerged", "-z"])) fail("GIT_CONFLICTS");
 };
+let capturedState;
 const checkExpected = () => {
-  if (!input.expectedBranch || branch() !== input.expectedBranch || head() !== input.expectedHeadSha) fail("WORKSPACE_CHANGED");
+  const state = capturedState ?? { branchName: input.expectedBranch, headSha: input.expectedHeadSha };
+  if (!state.branchName || branch() !== state.branchName || head() !== state.headSha) fail("WORKSPACE_CHANGED");
+};
+// Called inside the repository lock, so the operation uses the branch checked out
+// when it starts. Later checks compare against this server-captured state.
+const captureCurrentState = () => {
+  capturedState = { branchName: branch(), headSha: head() };
+  if (!capturedState.branchName || !capturedState.headSha) fail("GIT_BRANCH_REQUIRED");
+  checkExpected();
+  return capturedState;
 };
 const ensureClean = () => { if (git(["status", "--porcelain=v1", "--untracked-files=all"])) fail("GIT_DIRTY_WORKTREE"); };
 const counts = () => {

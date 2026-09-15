@@ -28,3 +28,11 @@ it("keeps dirty work intact", () => {
   fixture.write("file.txt", "current\n");
   expect(() => fixture.run(sandboxGitStashPopCommand, { stashIndex: 0, stashSha })).toThrow(expect.objectContaining({ code: "GIT_DIRTY_WORKTREE" }));
 });
+
+it("applies the selected stash to the currently checked-out branch", () => {
+  fixture.git("switch", "-c", "feature/target");
+  fixture.git("commit", "--allow-empty", "-m", "Target");
+  expect(fixture.run(sandboxGitStashPopCommand, { stashIndex: 0, stashSha, expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ dropped: true });
+  expect(fixture.git("branch", "--show-current")).toBe("feature/target");
+  expect(fixture.git("diff")).toContain("saved");
+});

@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { commitHashSchema } from "../actions/commit-schemas";
-import { gitExpectedStateSchema } from "./git-schemas";
 
 export const gitStashQuerySchema = z.strictObject({
   cursor: z.string().min(1).max(4096).regex(/^[A-Za-z0-9_-]+$/).optional(),
@@ -23,7 +22,7 @@ export type GitStashPushSchema = z.infer<typeof gitStashPushSchema>;
 export const gitStashPushedSchema = z.object({ created: z.boolean(), remainingChanges: z.boolean(), stashSha: commitHashSchema.nullable() });
 export type GitStashPushedSchema = z.infer<typeof gitStashPushedSchema>;
 
-export const gitStashPopSchema = gitExpectedStateSchema.extend({
+export const gitStashPopSchema = z.strictObject({
   stashIndex: z.number().int().min(0).max(10000), stashSha: commitHashSchema, restoreIndex: z.boolean().default(false),
 });
 export type GitStashPopSchema = z.infer<typeof gitStashPopSchema>;

@@ -33,3 +33,18 @@ it("confirms a stash when restoring ignore rules makes a preserved file untracke
   expect(fixture.run(sandboxGitStashPushCommand, { expectedHeadSha })).toMatchObject({ created: true, remainingChanges: true });
   expect(readFileSync(join(fixture.repositoryPath, "precious.txt"), "utf8")).toBe("preserved\n");
 });
+
+it("confirms work is saved when Git reuses an identical stash commit", () => {
+  const hook = `
+const cp = require("node:child_process");
+const executeGit = cp.execFileSync;
+cp.execFileSync = (file, args, options) => executeGit(file, args, { ...options, env: { ...options.env,
+  GIT_AUTHOR_DATE: "2026-09-15T00:00:00Z", GIT_COMMITTER_DATE: "2026-09-15T00:00:00Z" } });
+`;
+  fixture.write("file.txt", "repeat\n");
+  const first = fixture.run(sandboxGitStashPushCommand, { message: "Same" }, hook);
+  fixture.write("file.txt", "repeat\n");
+  const second = fixture.run(sandboxGitStashPushCommand, { message: "Same" }, hook);
+  expect(second).toMatchObject({ created: false, stashSha: first.stashSha, remainingChanges: false });
+  expect(fixture.git("stash", "list").split("\n")).toHaveLength(1);
+});

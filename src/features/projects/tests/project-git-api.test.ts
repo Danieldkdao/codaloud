@@ -66,7 +66,9 @@ import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+a
 import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api";
 import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
 import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
+import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
 const mutationRoutes = [
+  { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: { ...expected }, output: counts },
   { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { ...expected, confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
@@ -126,5 +128,17 @@ it("revert: requires a valid server-resolved commit identity", async () => {
 it("fetch: requires connected repository access before command execution", async () => {
   mocks.credentials.mockRejectedValue(new Error("token-secret"));
   expect((await fetchGit(mutationRequest(expected), { projectId })).status).toBe(403);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("push: rejects string booleans and force without a lease", async () => {
+  for (const input of [{ ...expected, remoteBranch: "main", force: "false" }, { ...expected, remoteBranch: "main", force: true }]) {
+    expect((await pushGit(mutationRequest(input), { projectId })).status).toBe(400);
+  }
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+it("push: checks write permission before transport", async () => {
+  mocks.access.mockResolvedValue({ fullName: "example/repo", permissions: { push: false } });
+  expect((await pushGit(mutationRequest({ ...expected, remoteBranch: "main" }), { projectId })).status).toBe(403);
   expect(mocks.request).not.toHaveBeenCalled();
 });

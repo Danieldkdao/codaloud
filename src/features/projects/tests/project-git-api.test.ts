@@ -74,7 +74,7 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
 const mutationRoutes = [
   { name: "pull", handler: pullGit, input: { ...expected, remoteBranch: "main", rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
-  { name: "fetch", handler: fetchGit, input: { ...expected }, output: counts },
+  { name: "fetch", handler: fetchGit, input: {}, output: counts },
   { name: "revert", handler: revert, input: {}, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
@@ -181,7 +181,7 @@ it("revert: requires a valid server-resolved commit identity", async () => {
 
 it("fetch: requires connected repository access before command execution", async () => {
   mocks.credentials.mockRejectedValue(new Error("token-secret"));
-  expect((await fetchGit(mutationRequest(expected), { projectId })).status).toBe(403);
+  expect((await fetchGit(mutationRequest({}), { projectId })).status).toBe(403);
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
@@ -244,5 +244,10 @@ it("discard: previews server-derived state and rejects state overrides", async (
 
 it("revert: rejects caller-selected branch and commit", async () => {
   expect((await revert(mutationRequest(expected), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("fetch: rejects caller-selected branch state", async () => {
+  expect((await fetchGit(mutationRequest(expected), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });

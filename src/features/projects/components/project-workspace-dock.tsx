@@ -1,30 +1,34 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "expo-router";
-import { Pressable, View } from "react-native";
+import { Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
-import { CodeText } from "@/components/ui/text";
 import { GlassSurface } from "@/components/ui/glass-surface";
 
 import { ProjectWorkspaceTabSelect } from "@/features/projects/components/project-workspace-tab-select";
 import { ProjectActionButtonsLeft, ProjectActionButtonsRight } from "@/features/projects/components/project-action-buttons";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
-import { formatProjectBranchLabel, formatProjectBranchSource } from "@/features/projects/lib/formatters";
+import { ProjectBranchMenu } from "./project-branch-menu";
 
 export const ProjectWorkspaceDock = () => {
   const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const dockRef = useRef<View>(null);
   const branchIndicatorRef = useRef<View>(null);
   const [isGitSearchOpen, setIsGitSearchOpen] = useState(false);
+  const [branchPickerOpen, setBranchPickerOpen] = useState(false);
   const pathname = usePathname();
   // The workspace tab precedes any nested screens, such as files/preview.
   const routeName = pathname.split("/")[3];
   const activeTab = routeName === "code" || routeName === "git" || routeName === "agent" ? routeName : "files";
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
+  useEffect(() => {
+    setBranchPickerOpen(false);
+  }, [branchSelection.projectId, activeTab]);
 
   return (
     <View
@@ -47,14 +51,10 @@ export const ProjectWorkspaceDock = () => {
         {isGit ? (
           <View ref={branchIndicatorRef} collapsable={false} className="items-center justify-center" style={{ height: 56 }}>
             {!isGitSearchOpen ? (
-              <View testID="branch-indicator" accessibilityLiveRegion="polite"
-                className="max-w-full flex-row items-center justify-center gap-2 rounded-full border border-border bg-secondary px-3 py-1.5">
-                <Icon family="Feather" name={formatProjectBranchSource(branchSelection.branchSource ?? "local").icon} size={18} className="text-secondary-foreground" accessible={false} />
-                <CodeText className="min-w-0 shrink text-center text-lg font-medium text-secondary-foreground"
-                  numberOfLines={1} ellipsizeMode="middle">
-                  {formatProjectBranchLabel(branchSelection.branch, branchSelection.isBranchLoading)}
-                </CodeText>
-              </View>
+              <ProjectBranchMenu
+                maxWidth={width - 32 - insets.left - insets.right}
+                onChangeBranch={() => setBranchPickerOpen(true)}
+              />
             ) : null}
           </View>
         ) : null}
@@ -63,7 +63,7 @@ export const ProjectWorkspaceDock = () => {
             <GlassSurface borderRadius={36}>
               <View className="flex-row items-center py-2" style={{ paddingHorizontal: activeTab === "code" ? 0 : 8 }}>
                 <View style={{ flex: 1, minWidth: 0, flexDirection: "row", justifyContent: "center" }}>
-                  <ProjectActionButtonsLeft tab={activeTab} />
+                  <ProjectActionButtonsLeft tab={activeTab} branchPickerOpen={branchPickerOpen} onBranchPickerOpenChange={setBranchPickerOpen} />
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Microphone"
                   className="size-14 items-center justify-center rounded-full bg-primary active:bg-primary/90">

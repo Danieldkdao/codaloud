@@ -22,7 +22,7 @@ import { useProjectChanges } from "../hooks/use-project-changes";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 
-export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
+export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
   const [message, setMessage] = useState("");
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -39,8 +39,8 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
   const showSuccess = useSuccessFeedback();
   const blocked = useRef(false);
   useEffect(() => {
-    blocked.current = !visible || isCheckingOut || !userId;
-  }, [visible, isCheckingOut, userId]);
+    blocked.current = !enabled || isCheckingOut || !userId;
+  }, [enabled, isCheckingOut, userId]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -53,7 +53,7 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
   });
   const busy = submitting || commit.isPending;
   const canSubmit =
-    visible &&
+    enabled &&
     Boolean(userId) &&
     !isCheckingOut &&
     commitSelection.isReady &&
@@ -61,9 +61,6 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
     !busy;
   const { width } = useWindowDimensions();
   const card = useThemeColor("card");
-  useEffect(() => {
-    if (!visible) setOpen(false);
-  }, [visible]);
   const submit = async () => {
     if (!canSubmit || !input.success || inFlight.current) return;
     // Capture the selection and close the same-tick gap before the button disables.
@@ -129,32 +126,30 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
   };
   return (
     <>
-      {visible ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open commit form"
-          accessibilityHint="Opens the commit message form"
-          accessibilityState={{ expanded: open }}
-          onPress={() => setOpen(true)}
-          className="items-center justify-center rounded-full active:bg-secondary"
-          style={{ width: 48, height: 48 }}
-        >
-          <Icon
-            family="Feather"
-            name="git-commit"
-            size={22}
-            accessible={false}
-            className="text-foreground"
-          />
-        </Pressable>
-      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open commit form"
+        accessibilityHint="Opens the commit message form"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(true)}
+        className="items-center justify-center rounded-full active:bg-secondary"
+        style={{ width: 48, height: 48 }}
+      >
+        <Icon
+          family="MaterialCommunityIcons"
+          name="source-commit"
+          size={28}
+          accessible={false}
+          className="text-foreground"
+        />
+      </Pressable>
       <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
         <KeyboardAvoidingView
           behavior={process.env.EXPO_OS === "android" ? "height" : undefined}
           style={{ width }}
         >
           <View
-            className="gap-3 bg-card px-5 pb-6 pt-4"
+            className="gap-3 px-5 pb-6 pt-4"
             accessibilityViewIsModal
             onAccessibilityEscape={() => setOpen(false)}
           >

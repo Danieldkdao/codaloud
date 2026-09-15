@@ -562,7 +562,7 @@ export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
     case "git":
       return {
         label: "Git",
-        icon: { family: "Feather", name: "git-branch" },
+        icon: { family: "MaterialCommunityIcons", name: "source-branch" },
       } as const;
     case "agent":
       return {

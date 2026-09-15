@@ -2,7 +2,6 @@ import { BottomSheet, Group, Host, RNHostView } from "@expo/ui/swift-ui";
 import {
   frame,
   ignoreSafeArea,
-  presentationBackground,
   presentationDetents,
   presentationDragIndicator,
 } from "@expo/ui/swift-ui/modifiers";
@@ -14,7 +13,7 @@ import type { ContentSheetProps } from "./content-sheet";
 export const ContentSheet = ({
   open,
   onOpenChange,
-  backgroundColor,
+  onDismiss,
   children,
 }: ContentSheetProps) => {
   const { width } = useWindowDimensions();
@@ -25,7 +24,7 @@ export const ContentSheet = ({
       <BottomSheet
         isPresented={open}
         onIsPresentedChange={onOpenChange}
-        onDismiss={() => onOpenChange(false)}
+        onDismiss={() => { onOpenChange(false); onDismiss?.(); }}
       >
         <Group
           modifiers={[
@@ -36,7 +35,7 @@ export const ContentSheet = ({
             // subtracting it makes the sheet shorter than its measured content.
             presentationDetents([{ height: Math.max(1, contentHeight) }]),
             presentationDragIndicator("visible"),
-            presentationBackground(backgroundColor),
+            // Preview the system sheet material for every sheet, with no second glass layer.
           ]}
         >
           <RNHostView matchContents>

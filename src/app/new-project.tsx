@@ -22,8 +22,8 @@ const NewProjectScreen = () => {
       <Stack.Screen
         options={{
           title: "New project",
-          contentStyle: { backgroundColor: background },
-          headerStyle: { backgroundColor: background },
+          contentStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : background },
+          headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : background },
           headerTintColor: foreground,
           headerShadowVisible: false,
           headerRight: () => (
@@ -41,7 +41,6 @@ const NewProjectScreen = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         collapsable={false}
-        className="bg-background"
         style={{
           maxHeight: height - insets.top - insets.bottom,
           // The iOS sheet header overlays content; these sibling scroll areas use explicit insets.

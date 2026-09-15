@@ -29,7 +29,12 @@ const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
 const getBranches = (page: ProjectBranchPageSchema) => page.branches;
 const getBranchKey = (branch: string) => branch;
 
-export const ProjectBranchSelect = () => {
+type ProjectBranchSelectProps = {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
+
+export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: ProjectBranchSelectProps = {}) => {
   const { width } = useWindowDimensions();
   const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isCheckingOut, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
@@ -52,7 +57,9 @@ export const ProjectBranchSelect = () => {
   useEffect(() => {
     if (branch === null && currentBranch) setBranch(currentBranch);
   }, [branch, currentBranch, setBranch]);
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const card = useThemeColor("card");
   const close = () => setOpen(false);
   useEffect(() => {
@@ -103,12 +110,21 @@ export const ProjectBranchSelect = () => {
         accessibilityState={{ expanded: open, disabled: isCheckingOut && !isCheckoutRecoveryRequired, busy: isCheckingOut }}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"
       >
-        {isCheckingOut && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />}
+        {isCheckingOut && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="MaterialCommunityIcons" name="source-branch" size={26} className="text-foreground" accessible={false} />}
       </Pressable>
       <ContentSheet open={open && !isCheckingOut} onOpenChange={(value) => { if (!value || !isCheckingOut) setOpen(value); }} backgroundColor={card}>
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
         <View style={{ width }}>
-          <View className="bg-card" accessibilityViewIsModal onAccessibilityEscape={close}>
+          <View accessibilityViewIsModal onAccessibilityEscape={close}>
+            <View className="shrink-0 border-b border-border px-5 pt-2 pb-3">
+              <View className="flex-row items-center gap-2">
+                <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
+                <Input type="search" variant="ghost" size="sm" placeholder="Search branches or type to create a new one."
+                  accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
+                  value={search} onChangeText={setSearch} editable={!isCheckingOut} maxLength={200}
+                  containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
+              </View>
+            </View>
             <View>
               <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
                 search={search} open={open} query={query} disabled={isCheckingOut} onSelect={selectBranch} />
@@ -128,13 +144,6 @@ export const ProjectBranchSelect = () => {
                   {projectQuery.error && <Button variant="outline" onPress={() => { void projectQuery.refetch(); }}>Try again</Button>}
                 </View>
               )}
-            </View>
-            <View className="flex-row items-center gap-2 border-t border-border px-5 py-1">
-              <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
-              <Input type="search" variant="ghost" size="sm" placeholder="Search branches"
-                accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
-                value={search} onChangeText={setSearch} editable={!isCheckingOut} maxLength={200}
-                containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
             </View>
           </View>
         </View>

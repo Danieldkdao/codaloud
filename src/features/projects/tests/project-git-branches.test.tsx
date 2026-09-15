@@ -478,7 +478,11 @@ it("shows changes immediately and keeps tracked and untracked selections without
   expect(checked("Select tracked changes")).toBe("mixed");
   click("Swipe down");
   click("Commit History");
-  expect(container.querySelector('[aria-label="Open commit form"]')).toBeNull();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Open commit form"]')?.disabled).toBe(false);
+  click("Open commit form");
+  expect(container.querySelector('[aria-label="Commit message"]')).not.toBeNull();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Commit selected changes"]')?.disabled).toBe(true);
+  click("Swipe down");
   click("Changes");
   expect(container.querySelector('[aria-label="Open commit form"]')).not.toBeNull();
   expect(checked("Select tracked changes")).toBe("mixed");

@@ -1,8 +1,7 @@
-import { ActivityIndicator, Pressable, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, View, useWindowDimensions } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { ScrollFadeFlatList } from "@/components/ui/scroll-fade-flat-list";
 import { PText } from "@/components/ui/text";
 import type { useProjectBranches } from "../hooks/use-project-branches";
 import type { ProjectBranchSource } from "../hooks/use-project-workspace-branch";
@@ -33,17 +32,17 @@ export const ProjectBranchSection = ({ source, branches, selectedBranch, search,
   const { title, icon } = formatProjectBranchSource(source);
   const { height } = useWindowDimensions();
   // Use a screen-based cap: a percentage of the content-sized sheet creates a circular measurement.
-  const maxHeight = Math.min(240, height * 0.25);
+  const maxHeight = Math.min(320, height * 0.35);
   return (
     <View style={{ maxHeight, flexShrink: 1, minHeight: 0 }}>
       <View className="flex-row items-center gap-2 px-5 pt-3 pb-2">
         <Icon family="Feather" name={icon} size={18} className="text-muted-foreground" accessible={false} />
         <PText accessibilityRole="header" className="text-base font-medium">{title}</PText>
       </View>
-      <ScrollFadeFlatList
+      {/* Solid-color edge fades create opaque bands over the native sheet material. */}
+      <FlatList
         key={search.trim().toLowerCase()}
-        containerStyle={{ flex: 0, flexShrink: 1 }}
-        style={{ flexGrow: 0 }}
+        style={{ flexGrow: 0, flexShrink: 1 }}
         accessibilityLabel={title}
         data={branches}
         extraData={{ selectedBranch, disabled }}
@@ -86,10 +85,10 @@ export const ProjectBranchSection = ({ source, branches, selectedBranch, search,
             accessibilityState={{ checked: selectedBranch === name, disabled }}
             disabled={disabled}
             onPress={() => onSelect(name)}
-            className="min-h-14 flex-row items-center gap-3 px-5 py-3 active:bg-secondary"
+            className="min-h-20 flex-row items-center gap-4 px-5 py-4 active:bg-secondary"
           >
-            <PText className="min-w-0 flex-1 text-base text-foreground">{name}</PText>
-            {selectedBranch === name && <Icon family="Feather" name="check" size={22} className="text-foreground" accessible={false} />}
+            <PText className="min-w-0 flex-1 text-xl font-medium text-foreground">{name}</PText>
+            {selectedBranch === name && <Icon family="Feather" name="check" size={26} className="text-foreground" accessible={false} />}
           </Pressable>
         )}
       />

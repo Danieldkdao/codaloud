@@ -5,11 +5,12 @@ import type { ColorValue } from "react-native";
 export type ContentSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDismiss?: () => void;
   backgroundColor: ColorValue;
   children: ReactNode;
 };
 
-export const ContentSheet = ({ open, onOpenChange, backgroundColor, children }: ContentSheetProps) => {
+export const ContentSheet = ({ open, onOpenChange, onDismiss, backgroundColor, children }: ContentSheetProps) => {
   const ref = useRef<BottomSheet>(null);
   useEffect(() => {
     if (open) ref.current?.present();
@@ -19,7 +20,7 @@ export const ContentSheet = ({ open, onOpenChange, backgroundColor, children }: 
   return (
     <BottomSheet ref={ref} index={-1} enableDynamicSizing enablePanDownToClose
       backgroundStyle={{ backgroundColor }} onChange={(index) => onOpenChange(index >= 0)}
-      onClose={() => onOpenChange(false)}>
+      onClose={() => { onOpenChange(false); onDismiss?.(); }}>
       {children}
     </BottomSheet>
   );

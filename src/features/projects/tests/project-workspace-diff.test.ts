@@ -9,7 +9,7 @@ import type {
   ProjectRepositoryChangesSchema,
 } from "../actions/change-schemas";
 import { parseProjectDiffPatch } from "../lib/diff-patch";
-import { createProjectWorkspaceDiff } from "../lib/workspace-diff";
+import { createProjectWorkspaceDiff, createProjectWorkspaceDiffRows } from "../lib/workspace-diff";
 
 const replacement = "@@ -1 +1 @@\n-before\n+after\n";
 const change = (
@@ -38,6 +38,25 @@ const snapshot = (
   isDetached: false,
   observedAt: "2026-09-13T12:00:00.000Z",
   changes,
+});
+
+it("windows a large file as individual rows and preserves every line and stable identities", () => {
+  const count = 10_000;
+  const patch = `@@ -0,0 +1,${count} @@\n` + Array.from({ length: count }, (_, index) => `+line ${index}\n`).join("");
+  const data = createProjectWorkspaceDiff(snapshot([
+    change({ path: "large.ts", unstaged: { patch, additions: count, deletions: 0, unavailableReason: null } }),
+    change({ path: "other.ts" }),
+  ]));
+  const rows = createProjectWorkspaceDiffRows(data.files, new Set());
+  const lines = rows.filter((row) => row.kind === "line");
+  expect(lines).toHaveLength(count + 2);
+  expect(lines[0].line.text).toBe("line 0");
+  expect(lines[count - 1].line.text).toBe("line 9999");
+  expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
+  const collapsed = createProjectWorkspaceDiffRows(data.files, new Set(["large.ts"]));
+  expect(collapsed.filter((row) => row.kind === "line")).toHaveLength(2);
+  expect(collapsed.map((row) => row.key)).toEqual(rows.filter((row) => row.path !== "large.ts" || row.kind === "file").map((row) => row.key));
+  expect(createProjectWorkspaceDiffRows(data.files, new Set()).map((row) => row.key)).toEqual(rows.map((row) => row.key));
 });
 
 describe("parseProjectDiffPatch", () => {

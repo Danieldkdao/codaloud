@@ -80,6 +80,40 @@ it("does not mutate when selecting the already selected local branch", async () 
   expect(current.isCheckingOut).toBe(false);
 });
 
+it("keeps an uncertain checkout blocked until recovery confirms the actual branch", async () => {
+  const recovery = deferred();
+  const checkout = vi.fn().mockRejectedValue(Object.assign(new Error("Response lost."), { code: "CHECKOUT_OUTCOME_UNKNOWN" }));
+  const recover = vi.fn(() => recovery.promise);
+  await act(async () => current.checkoutBranch("feature", checkout, recover));
+  expect(recover).toHaveBeenCalledOnce();
+  expect(current.isCheckingOut).toBe(true);
+  await act(async () => current.setBranch("main"));
+  expect(current.branch).not.toBe("main");
+  await act(async () => recovery.resolve({ previousBranch: "main", currentBranch: "feature" }));
+  expect(current.branch).toBe("feature");
+  expect(current.isCheckingOut).toBe(false);
+  expect(current.checkoutError).toBeNull();
+  expect(checkout).toHaveBeenCalledOnce();
+});
+
+it("retries only recovery and does not trust stale branch reads after recovery fails", async () => {
+  const checkout = vi.fn().mockRejectedValue(Object.assign(new Error("Response lost."), { code: "CHECKOUT_OUTCOME_UNKNOWN" }));
+  const recover = vi.fn().mockRejectedValueOnce(new Error("Reconnect to confirm the branch."))
+    .mockResolvedValue({ previousBranch: "main", currentBranch: "feature" });
+  await act(async () => current.checkoutBranch("feature", checkout, recover));
+  expect(current.isCheckingOut).toBe(true);
+  expect(current.isCheckoutRecoveryRequired).toBe(true);
+  expect(current.branch).toBeNull();
+  await act(async () => current.setBranch("main"));
+  expect(current.branch).toBeNull();
+  expect(current.checkoutError).toContain("Reconnect");
+  await act(async () => current.retryCheckoutRecovery());
+  expect(recover).toHaveBeenCalledTimes(2);
+  expect(checkout).toHaveBeenCalledOnce();
+  expect(current.branch).toBe("feature");
+  expect(current.isCheckingOut).toBe(false);
+});
+
 it.each(["projectId", "userId"] as const)("ignores completion from an earlier %s", async (field) => {
   const request = deferred();
   await act(async () => current.checkoutBranch("feature", () => request.promise));

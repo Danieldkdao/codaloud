@@ -100,7 +100,7 @@ export const formatProjectSource = (source: CreateProjectSchema["source"]): {
         value: source,
         icon: "box",
         title: "New project",
-        description: "Start from scratch in an empty cloud sandbox.",
+        description: "Start from scratch in an empty cloud workspace.",
       };
     case "github":
       return {

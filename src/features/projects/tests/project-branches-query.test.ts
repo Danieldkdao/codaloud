@@ -348,6 +348,24 @@ it("keeps the changes snapshot valid when checkout fails", async () => {
   expect(client.getQueryData(queryKey)).toEqual({ currentBranch: "main" });
 });
 
+it("refreshes changes after an unknown checkout outcome without retrying the checkout", async () => {
+  const queryKey = ["projects", "changes", "user-one", projectId];
+  client.setQueryData(queryKey, { currentBranch: "main" });
+  const readChanges = vi.fn().mockResolvedValue({ currentBranch: "feature/checkout" });
+  const observer = new QueryObserver(client, { queryKey, queryFn: readChanges, staleTime: Infinity });
+  const unsubscribe = observer.subscribe(() => {});
+  checkout.mockResolvedValueOnce({ error: true, code: "CHECKOUT_OUTCOME_UNKNOWN", message: "Response lost." });
+  try {
+    await render({ enabled: false });
+    await run(async () => {
+      await expect(current.checkout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Response lost");
+    });
+    expect(checkout).toHaveBeenCalledOnce();
+    expect(readChanges).toHaveBeenCalledOnce();
+    expect(client.getQueryData(queryKey)).toEqual({ currentBranch: "feature/checkout" });
+  } finally { unsubscribe(); }
+});
+
 it("replaces an unfinished changes read started before checkout", async () => {
   const queryKey = ["projects", "changes", "user-one", projectId];
   let finishOldRead!: (value: { currentBranch: string }) => void;

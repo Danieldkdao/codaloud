@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -11,7 +11,8 @@ import {
   formatProjectDiffDisclosure,
 } from "../lib/formatters";
 import type { ProjectWorkspaceDiffData } from "../types";
-import { ProjectWorkspaceDiffComparison } from "./project-workspace-diff-comparison";
+import { createProjectWorkspaceDiffRows } from "../lib/workspace-diff";
+import { ProjectWorkspaceDiffComparison, ProjectWorkspaceDiffLine } from "./project-workspace-diff-comparison";
 
 type ProjectWorkspaceDiffProps = {
   data: ProjectWorkspaceDiffData | undefined;
@@ -39,14 +40,18 @@ export const ProjectWorkspaceDiff = ({
       return next;
     });
   };
+  const rows = useMemo(() => createProjectWorkspaceDiffRows(data?.files ?? [], collapsedPaths), [data, collapsedPaths]);
   const notInitialized = data?.repositoryState === "not-initialized";
 
   return (
     <FlatList
       className="flex-1"
       accessibilityLabel="Full workspace diff"
-      data={data?.files ?? []}
-      keyExtractor={(file) => file.path}
+      data={rows}
+      keyExtractor={(row) => row.key}
+      initialNumToRender={24}
+      maxToRenderPerBatch={24}
+      windowSize={5}
       extraData={collapsedPaths}
       contentInsetAdjustmentBehavior="automatic"
       refreshing={Boolean(data) && isFetching}
@@ -85,6 +90,7 @@ export const ProjectWorkspaceDiff = ({
                     : "Couldn’t refresh changes. Showing previously loaded changes."}
               </PText>
             ) : null}
+            {error && !isFetching ? <PText className="text-base text-muted-foreground">{error.message}</PText> : null}
           </View>
         ) : null
       }
@@ -122,16 +128,22 @@ export const ProjectWorkspaceDiff = ({
                   : "Reading the workspace’s saved changes."}
           </PText>
           {!data && error && !isFetching && !isPaused ? (
-            <Button
-              accessibilityLabel="Retry workspace diff"
-              onPress={onRefresh}
-            >
-              Try again
-            </Button>
+            <View className="gap-3">
+              <PText className="text-center text-base text-muted-foreground">{error.message}</PText>
+              <Button accessibilityLabel="Retry workspace diff" onPress={onRefresh}>
+                Try again
+              </Button>
+            </View>
           ) : null}
         </View>
       }
-      renderItem={({ item: file }) => {
+      renderItem={({ item: row }) => {
+        switch (row.kind) {
+          case "line": return <ProjectWorkspaceDiffLine line={row.line} />;
+          case "comparison": return <ProjectWorkspaceDiffComparison comparison={row.comparison} status={row.status} />;
+          case "file": break;
+        }
+        const file = row.file;
         const path = formatProjectChangePath(file.path);
         const expanded = !collapsedPaths.has(file.path);
         const disclosure = formatProjectDiffDisclosure(file.path, expanded);
@@ -161,18 +173,7 @@ export const ProjectWorkspaceDiff = ({
               </View>
               <Icon family="Feather" name={disclosure.icon} size={22} className="text-muted-foreground" accessible={false} />
             </Pressable>
-            {expanded && file.staged ? (
-              <ProjectWorkspaceDiffComparison
-                comparison={file.staged}
-                status={file.indexStatus}
-              />
-            ) : null}
-            {expanded && file.unstaged ? (
-              <ProjectWorkspaceDiffComparison
-                comparison={file.unstaged}
-                status={file.worktreeStatus}
-              />
-            ) : null}
+
           </View>
         );
       }}

@@ -53,6 +53,7 @@ const live = vi.hoisted(() => ({
   repositoryId: "123" as string | null,
   query: vi.fn(),
   checkout: { mutateAsync: vi.fn() },
+  recoverCheckout: vi.fn(),
   loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
@@ -223,6 +224,7 @@ beforeEach(() => {
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
   live.checkout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
+  live.recoverCheckout.mockReset().mockResolvedValue({ previousBranch: "main", currentBranch: "feature/live" });
   Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
   changesQuery.query.mockClear(); changesQuery.refetch.mockReset().mockImplementation(async () => ({ data: changesQuery.data, isError: false }));
   Object.assign(history, { data: { pages: [commitPage()] }, isPending: false, isFetching: false, isFetchingNextPage: false,
@@ -688,6 +690,29 @@ it("reverts without checkout when saving fails", async () => {
   expect(workspaceFiles.alert).toHaveBeenCalledWith("Couldn’t switch branches", "Save failed. Open Code to retry.");
 });
 
+it("clears old documents after an unknown checkout and retries recovery without another checkout", async () => {
+  live.checkout.mutateAsync.mockRejectedValueOnce(Object.assign(new Error("Response lost."), { code: "CHECKOUT_OUTCOME_UNKNOWN" }));
+  live.recoverCheckout.mockRejectedValueOnce(new Error("Reconnect to confirm the branch."));
+  const fileKey = ["projects", "file", live.userId, live.projectId, "app.ts"];
+  const searchKey = ["projects", "file-search", "infinite", live.userId, live.projectId, "old"];
+  const branchKey = ["projects", "branches", "infinite", "cursor", live.userId, live.projectId, "local", "old"];
+  const otherKey = ["projects", "file", "another-user", live.projectId, "app.ts"];
+  for (const key of [fileKey, searchKey, branchKey, otherKey]) queryClient.setQueryData(key, "old bytes");
+  click("Branch: main");
+  click("feature/live");
+  await act(async () => {});
+  for (const key of [fileKey, searchKey, branchKey]) expect(queryClient.getQueryData(key)).toBeUndefined();
+  expect(queryClient.getQueryData(otherKey)).toBe("old bytes");
+  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(container.querySelector('[aria-label="Retry branch recovery"]')).not.toBeNull();
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).not.toBe("main");
+  click("Retry branch recovery");
+  await act(async () => {});
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
+  expect(live.checkout.mutateAsync).toHaveBeenCalledOnce();
+  expect(live.recoverCheckout).toHaveBeenCalledTimes(2);
+});
+
 it("keeps workspace readiness intact while checkout refreshes the root folder", async () => {
   const projectKey = ["projects", "detail", live.userId, live.projectId];
   const filesKey = ["projects", "files", live.userId, live.projectId, ""];
@@ -864,6 +889,16 @@ const enterCommitMessage = (message: string) => {
   act(() => { input.value = message; input.dispatchEvent(new Event("input", { bubbles: true })); });
 };
 const commitButton = () => container.querySelector<HTMLButtonElement>('[aria-label="Commit selected changes"]')!;
+
+it.each(["API: fix timeout", "fix: handle timeout", "Refactor HTTP client"])("preserves the user's commit message capitalization: %s", async (message) => {
+  click("Include new.txt");
+  click("Open commit form");
+  enterCommitMessage(message);
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe(message);
+  click("Commit selected changes");
+  await act(async () => {});
+  expect(history.commit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message, paths: ["new.txt"] });
+});
 
 it("enables committing only with a valid message and a nonempty selected path list", () => {
   click("Open commit form");

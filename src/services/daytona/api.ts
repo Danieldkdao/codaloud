@@ -47,7 +47,7 @@ export type SandboxDetailsSchema = z.infer<typeof sandboxDetailsSchema>;
 export const ensureSandboxReady = async (details: unknown, sandboxId: string, projectId: string) => {
   const sandbox = sandboxDetailsSchema.parse(details);
   if (sandbox.id !== sandboxId || sandbox.labels.codaloudApp !== "codaloud" || sandbox.labels.codaloudProjectId !== projectId) {
-    throw new SandboxFilesError(409, "SANDBOX_MISMATCH", "The sandbox does not belong to this project.");
+    throw new SandboxFilesError(409, "SANDBOX_MISMATCH", "The workspace does not belong to this project.");
   }
   if (sandbox.state === "stopped" || sandbox.state === "archived") {
     await requestDaytona(`https://app.daytona.io/api/sandbox/${encodeURIComponent(sandboxId)}/start`, { method: "POST" });
@@ -69,7 +69,7 @@ export const getSandboxToolboxUrl = async (sandboxId: string, projectId: string)
     result = await requestDaytona(sandboxUrl);
   } catch (error) {
     if (error instanceof SandboxFilesError && error.status === 404) {
-      throw new SandboxFilesError(409, "SANDBOX_MISSING", "Your saved sandbox could not be found. It has not been replaced.");
+      throw new SandboxFilesError(409, "SANDBOX_MISSING", "Your saved workspace could not be found. It has not been replaced.");
     }
     throw error;
   }

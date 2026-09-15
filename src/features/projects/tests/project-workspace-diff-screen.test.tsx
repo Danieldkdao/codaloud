@@ -8,11 +8,16 @@ import type { ProjectRepositoryChangeSchema, ProjectRepositoryChangesSchema } fr
 
 const query = vi.hoisted(() => ({
   read: vi.fn(), refetch: vi.fn(), isFetching: false, fetchStatus: "idle",
+  refreshAfterSaves: vi.fn(),
   error: null as Error | null,
   data: undefined as ProjectRepositoryChangesSchema | undefined,
 }));
+const saves = vi.hoisted(() => ({ flushPendingSaves: vi.fn() }));
+const focus = vi.hoisted(() => ({ effect: undefined as (() => (() => void) | void) | undefined }));
+const listWindow = vi.hoisted(() => ({ start: 0, limit: Infinity, count: 0 }));
+vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => saves }));
 const route = vi.hoisted(() => ({ projectId: "11111111-1111-4111-8111-111111111111" }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => route }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => route, useFocusEffect: (effect: () => (() => void) | void) => { focus.effect = effect; } }));
 vi.mock("@/features/projects/hooks/use-project-changes", () => ({ useProjectChanges: (...args: unknown[]) => { query.read(...args); return query; } }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 16, left: 0, right: 0 }) }));
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
@@ -37,9 +42,12 @@ vi.mock("react-native", () => ({
     data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode;
     keyExtractor: (item: unknown, index: number) => string;
     ListHeaderComponent?: ReactNode; ListEmptyComponent?: ReactNode; onRefresh?: () => void; refreshing?: boolean;
-  }) => createElement("div", { "data-refreshing": refreshing }, ListHeaderComponent,
-    data.length ? data.map((item, index) => createElement("div", { key: keyExtractor(item, index) }, renderItem({ item, index }))) : ListEmptyComponent,
-    onRefresh && createElement("button", { "aria-label": "Pull to refresh", onClick: onRefresh })),
+  }) => {
+    listWindow.count = data.length;
+    return createElement("div", { "data-refreshing": refreshing }, ListHeaderComponent,
+      data.length ? data.slice(listWindow.start, listWindow.start + listWindow.limit).map((item, index) => createElement("div", { key: keyExtractor(item, index) }, renderItem({ item, index }))) : ListEmptyComponent,
+      onRefresh && createElement("button", { "aria-label": "Pull to refresh", onClick: onRefresh }));
+  },
 }));
 
 const change = (overrides: Partial<ProjectRepositoryChangeSchema> = {}): ProjectRepositoryChangeSchema => ({
@@ -67,22 +75,63 @@ beforeEach(() => {
   Object.assign(query, { data: undefined, error: null, isFetching: false, fetchStatus: "idle" });
   route.projectId = "11111111-1111-4111-8111-111111111111";
   query.read.mockClear(); query.refetch.mockClear();
+  saves.flushPendingSaves.mockReset().mockResolvedValue(undefined);
+  query.refreshAfterSaves.mockReset().mockImplementation(async (flush: () => Promise<void>) => { await flush(); return query.refetch(); });
+  focus.effect = undefined;
+  Object.assign(listWindow, { start: 0, limit: Infinity, count: 0 });
   container = document.createElement("div"); document.body.append(container);
   root = createRoot(container);
+});
+
+it("renders only the requested line window of a large expanded diff", () => {
+  const count = 10_000;
+  const patch = `@@ -0,0 +1,${count} @@\n` + Array.from({ length: count }, (_, index) => `+line ${index}\n`).join("");
+  query.data = snapshot([change({ unstaged: { patch, additions: count, deletions: 0, unavailableReason: null } })]);
+  listWindow.limit = 12;
+  render();
+  expect(listWindow.count).toBe(count + 2);
+  expect(container.querySelectorAll('[aria-label^="Added line"]')).toHaveLength(10);
+  expect(container.textContent).not.toContain("line 9999");
+  listWindow.start = count;
+  render();
+  expect(container.querySelectorAll('[aria-label^="Added line"]')).toHaveLength(2);
+  expect(container.textContent).toContain("line 9999");
+});
+
+it("flushes on focus and refresh, showing pending saves and a recoverable save error", async () => {
+  query.data = snapshot();
+  let finishSave!: () => void;
+  saves.flushPendingSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve; }));
+  render();
+  let cleanup!: (() => void) | void;
+  await act(async () => { cleanup = focus.effect!(); });
+  expect(saves.flushPendingSaves).toHaveBeenCalledOnce();
+  expect(query.refetch).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Updating changes");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Refresh workspace diff"]')?.disabled).toBe(true);
+  await act(async () => finishSave());
+  expect(query.refetch).toHaveBeenCalledOnce();
+  saves.flushPendingSaves.mockRejectedValueOnce(new Error("Save failed. Open Code to retry."));
+  await act(async () => click("Refresh workspace diff"));
+  expect(query.refetch).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain("Couldn’t refresh changes");
+  await act(async () => click("Refresh workspace diff"));
+  expect(query.refetch).toHaveBeenCalledTimes(2);
+  cleanup?.();
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 it("loads the current project's changes instead of rendering fixture files", () => {
   query.isFetching = true;
   render();
-  expect(query.read).toHaveBeenCalledWith(route.projectId);
+  expect(query.read).toHaveBeenCalledWith(route.projectId, { enabled: false });
   expect(container.textContent).toContain("Loading changes…");
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   expect(container.textContent).not.toContain("project-commit-list.tsx");
   expect(container.textContent).not.toContain("No uncommitted changes");
 });
 
-it("renders backend files without branch or scope labels", () => {
+it("renders backend files without branch or scope labels", async () => {
   query.data = snapshot(); render();
   expect(container.textContent).toContain("live.ts");
   expect(container.textContent).not.toContain("actual-checkout");
@@ -92,7 +141,7 @@ it("renders backend files without branch or scope labels", () => {
   expect(container.querySelector('[aria-label="Added line 1: after"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Removed line 1: before"]')).not.toBeNull();
   expect(container.textContent).not.toContain("project-commit-list.tsx");
-  click("Refresh workspace diff");
+  await act(async () => click("Refresh workspace diff"));
   expect(query.refetch).toHaveBeenCalledTimes(1);
 });
 
@@ -108,19 +157,19 @@ it("keeps both comparisons of the same file and displays renames", () => {
   expect(container.textContent).toContain("1 file");
 });
 
-it("shows an initial failure with a working retry", () => {
+it("shows an initial failure with a working retry", async () => {
   query.error = new Error("Request failed"); render();
   expect(container.textContent).toContain("Unable to load changes");
   expect(container.textContent).not.toContain("No uncommitted changes");
-  click("Retry workspace diff");
+  await act(async () => click("Retry workspace diff"));
   expect(query.refetch).toHaveBeenCalledTimes(1);
 });
 
-it("retains the previous diff with an explicit refresh error", () => {
+it("retains the previous diff with an explicit refresh error", async () => {
   query.data = snapshot(); query.error = new Error("Request failed"); render();
   expect(container.textContent).toContain("Showing previously loaded changes");
   expect(container.textContent).toContain("after");
-  click("Refresh workspace diff");
+  await act(async () => click("Refresh workspace diff"));
   expect(query.refetch).toHaveBeenCalledOnce();
 });
 
@@ -181,7 +230,7 @@ it("does not retain a previous project's parsed files when the hook data changes
   query.data = snapshot(); render();
   route.projectId = "22222222-2222-4222-8222-222222222222";
   query.data = undefined; query.isFetching = true; render();
-  expect(query.read).toHaveBeenLastCalledWith(route.projectId);
+  expect(query.read).toHaveBeenLastCalledWith(route.projectId, { enabled: false });
   expect(container.textContent).not.toContain("live.ts");
   expect(container.textContent).toContain("Loading changes…");
 });

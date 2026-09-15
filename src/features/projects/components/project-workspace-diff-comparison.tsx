@@ -6,12 +6,11 @@ import {
   formatProjectDiffLineNumber,
   formatProjectDiffMode,
   formatProjectDiffRow,
-  formatProjectDiffScope,
   formatProjectDiffUnavailable,
   formatProjectGitFileState,
 } from "../lib/formatters";
 import type { ProjectGitFileState } from "../actions/change-schemas";
-import type { ProjectDiffComparison } from "../types";
+import type { ProjectDiffComparison, ProjectDiffLine } from "../types";
 import { cn } from "@/lib/utils";
 
 type ProjectWorkspaceDiffComparisonProps = {
@@ -20,7 +19,6 @@ type ProjectWorkspaceDiffComparisonProps = {
 };
 
 export const ProjectWorkspaceDiffComparison = ({ comparison, status }: ProjectWorkspaceDiffComparisonProps) => {
-  const scope = formatProjectDiffScope(comparison.scope);
   const counts = comparison.kind === "available" ? formatProjectChangeLines(comparison.additions, comparison.deletions) : null;
 
   return (
@@ -45,27 +43,19 @@ export const ProjectWorkspaceDiffComparison = ({ comparison, status }: ProjectWo
         <PText className="px-4 text-base text-muted-foreground">{formatProjectDiffUnavailable(comparison.reason)}</PText>
       ) : comparison.hunks.length === 0 ? (
         <PText className="px-4 text-base text-muted-foreground">No text changes.</PText>
-      ) : (
-        <ScrollView horizontal directionalLockEnabled
-          accessibilityLabel={`${scope} diff for ${comparison.afterPath ?? comparison.beforePath}`}
-          contentContainerStyle={{ minWidth: "100%" }}>
-          <View style={{ flexGrow: 1 }}>
-            {comparison.hunks.map((hunk, hunkIndex) => (
-              <View key={hunkIndex}>
-                {hunk.lines.map((line, lineIndex) => {
-                  const presentation = formatProjectDiffRow(line);
-                  return (
-                    <View key={lineIndex} className={cn("flex-row px-4 py-1", presentation.className)}>
-                      <CodeText className="min-w-12 pr-4 text-right text-base text-muted-foreground" accessible={false}>{formatProjectDiffLineNumber(line.newLine ?? line.oldLine)}</CodeText>
-                      <CodeText selectable accessibilityLabel={presentation.label} className={cn("flex-1 text-base", presentation.textClassName)}>{presentation.prefix}{line.text || " "}</CodeText>
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      )}
+      ) : null}
     </View>
+  );
+};
+
+export const ProjectWorkspaceDiffLine = ({ line }: { line: ProjectDiffLine }) => {
+  const presentation = formatProjectDiffRow(line);
+  return (
+    <ScrollView horizontal directionalLockEnabled nestedScrollEnabled contentContainerStyle={{ minWidth: "100%" }}>
+      <View className={cn("flex-row flex-1 px-4 py-1", presentation.className)}>
+        <CodeText className="min-w-12 pr-4 text-right text-base text-muted-foreground" accessible={false}>{formatProjectDiffLineNumber(line.newLine ?? line.oldLine)}</CodeText>
+        <CodeText selectable accessibilityLabel={presentation.label} className={cn("text-base", presentation.textClassName)}>{presentation.prefix}{line.text || " "}</CodeText>
+      </View>
+    </ScrollView>
   );
 };

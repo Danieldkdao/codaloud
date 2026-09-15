@@ -18,7 +18,7 @@ const fetchFailure = (code: string): SandboxFilesError => {
     case "WORKSPACE_REMOTE_MISMATCH":
       return new SandboxFilesError(409, code, "The workspace origin does not match this project's GitHub repository. Restore the correct origin before fetching branches.");
     default:
-      return new SandboxFilesError(502, "REMOTE_FETCH_FAILED", "Unable to fetch the remote branch. Check the connection and sandbox disk space, then refresh the branch list and try again.");
+      return new SandboxFilesError(502, "REMOTE_FETCH_FAILED", "Unable to fetch the remote branch. Check the connection and workspace disk space, then refresh the branch list and try again.");
   }
 };
 

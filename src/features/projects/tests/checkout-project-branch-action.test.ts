@@ -89,7 +89,7 @@ it.each([new Headers(), new Headers({ Cookie: " " })])("requires a usable sessio
 it.each([
   [409, { error: true, code: "CHECKOUT_CHANGES_CONFLICT", message: "Commit or stash your changes. Affected files: src/app.ts" }],
   [401, { error: true, message: "Sign in to switch branches." }],
-  [502, { ...unconfirmed, message: "The sandbox may already have switched branches. Refresh before retrying." }],
+  [502, { ...unconfirmed, message: "The workspace may already have switched branches. Refresh before retrying." }],
 ])("preserves validated server failures for HTTP %i", async (status, failure) => {
   network.mockResolvedValueOnce(Response.json(failure, { status }));
   expect(await checkoutProjectBranchAction(projectId, input)).toEqual(failure);

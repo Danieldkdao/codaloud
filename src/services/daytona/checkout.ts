@@ -8,7 +8,7 @@ const unknownCheckoutOutcome = () =>
   new SandboxFilesError(
     502,
     "CHECKOUT_OUTCOME_UNKNOWN",
-    "The checkout could not be confirmed and the sandbox may already have switched branches. Refresh the current branch and files before trying again.",
+    "The checkout could not be confirmed and the workspace may already have switched branches. Refresh the current branch and files before trying again.",
   );
 
 const checkoutFailureResponse = async (
@@ -88,7 +88,7 @@ const checkoutFailureResponse = async (
     return new SandboxFilesError(
       404,
       "BRANCH_NOT_FOUND",
-      "The selected branch is no longer available in this sandbox. Refresh the branch list and select an existing local branch.",
+      "The selected branch is no longer available in this workspace. Refresh the branch list and select an existing local branch.",
     );
   }
   if (
@@ -106,7 +106,7 @@ const checkoutFailureResponse = async (
     return new SandboxFilesError(
       409,
       "CHECKOUT_DISK_FULL",
-      "The sandbox has run out of disk space. Free up space in the workspace, then refresh its Git status before retrying.",
+      "The workspace has run out of disk space. Free up space in the workspace, then refresh its Git status before retrying.",
     );
   }
   if (
@@ -148,7 +148,7 @@ export const checkoutSandboxBranch = async (
     throw new SandboxFilesError(
       404,
       "BRANCH_NOT_FOUND",
-      "The selected branch does not exist locally in this sandbox. Refresh the branches or fetch the remote branch before trying again.",
+      "The selected branch does not exist locally in this workspace. Refresh the branches or fetch the remote branch before trying again.",
     );
   }
   const previousBranch = existingBranches.currentBranch;
@@ -190,7 +190,7 @@ export const checkoutSandboxBranch = async (
     throw new SandboxFilesError(
       409,
       "CHECKOUT_NOT_CONFIRMED",
-      "The sandbox did not report the requested branch after checkout. Another Git operation may have changed it. Refresh the current branch and files before retrying.",
+      "The workspace did not report the requested branch after checkout. Another Git operation may have changed it. Refresh the current branch and files before retrying.",
     );
   }
   return projectBranchCheckoutSchema.parse({

@@ -228,7 +228,7 @@ it("rejects missing local branches, including remote-only names and commit hashe
     const result = await checkout({ branchName });
     expect(result.response.status).toBe(404);
     expect(result.body.code).toBe("BRANCH_NOT_FOUND");
-    expect(result.body.message).toMatch(/sandbox/i);
+    expect(result.body.message).toMatch(/workspace/i);
   }
   expect(mocks.checkout).not.toHaveBeenCalled();
 });

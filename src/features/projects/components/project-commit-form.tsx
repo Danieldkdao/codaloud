@@ -164,13 +164,7 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
             <Input
               multiline
               value={message}
-              onChangeText={(text) => {
-                setMessage(
-                  text.length
-                    ? text.at(0)?.toLowerCase() + text.slice(1)
-                    : text,
-                );
-              }}
+              onChangeText={setMessage}
               editable={!busy}
               maxLength={5000}
               accessibilityLabel="Commit message"

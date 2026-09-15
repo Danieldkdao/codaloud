@@ -5,6 +5,7 @@ import type {
   ProjectDiffTotals,
   ProjectWorkspaceDiffData,
   ProjectWorkspaceDiffEntry,
+  ProjectWorkspaceDiffRow,
 } from "../types";
 import { parseProjectDiffPatch } from "./diff-patch";
 
@@ -67,4 +68,32 @@ export const createProjectWorkspaceDiff = (data: ProjectRepositoryChangesSchema)
       unstaged: getProjectDiffTotals(files, "unstaged"),
     },
   };
+};
+
+export const createProjectWorkspaceDiffRows = (
+  files: ProjectWorkspaceDiffEntry[],
+  collapsedPaths: ReadonlySet<string>,
+): ProjectWorkspaceDiffRow[] => {
+  const rows: ProjectWorkspaceDiffRow[] = [];
+  for (const file of files) {
+    rows.push({ kind: "file", key: JSON.stringify([file.path, "file"]), path: file.path, file });
+    if (collapsedPaths.has(file.path)) continue;
+    for (const comparison of [file.staged, file.unstaged]) {
+      if (!comparison) continue;
+      rows.push({
+        kind: "comparison", key: comparison.key, path: file.path, comparison,
+        status: comparison.scope === "staged" ? file.indexStatus : file.worktreeStatus,
+      });
+      if (comparison.kind !== "available") continue;
+      for (const hunk of comparison.hunks) {
+        for (const [index, line] of hunk.lines.entries()) {
+          rows.push({
+            kind: "line", path: file.path, line,
+            key: JSON.stringify([file.path, comparison.scope, hunk.oldStart, hunk.newStart, index]),
+          });
+        }
+      }
+    }
+  }
+  return rows;
 };

@@ -31,7 +31,7 @@ const getBranchKey = (branch: string) => branch;
 
 export const ProjectBranchSelect = () => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isCheckingOut, checkoutError } = useProjectWorkspaceBranch();
+  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isCheckingOut, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = session.data?.user.id;
@@ -58,6 +58,25 @@ export const ProjectBranchSelect = () => {
   useEffect(() => {
     if (checkoutError) Alert.alert("Couldn’t switch branches", checkoutError);
   }, [checkoutError]);
+  const refreshWorkspace = async () => {
+    if (userId) {
+      const folders = { queryKey: ["projects", "files", userId, projectId] };
+      await queryClient.cancelQueries(folders);
+      // Keep folder data as readiness evidence, but discard branch-specific bytes
+      // and pagination even when checkout's response was lost.
+      await Promise.allSettled([
+        queryClient.invalidateQueries(folders),
+        queryClient.resetQueries({ queryKey: ["projects", "file", userId, projectId] }),
+        queryClient.resetQueries({ queryKey: ["projects", "file-search", "infinite", userId, projectId] }),
+        queryClient.resetQueries({
+          queryKey: ["projects", "commits", "infinite", "cursor", userId, projectId],
+          predicate: ({ queryKey }) => projectCommitParamsSchema.safeParse(queryKey[6]).data?.source === "local",
+        }),
+        queryClient.resetQueries({ queryKey: ["projects", "branches", "infinite", "cursor", userId, projectId, "local"] }),
+      ]);
+    }
+    if (filePath) refreshFile(filePath);
+  };
   const selectBranch = (name: string, source: ProjectBranchSource = "local") => {
     if (isCheckingOut) return;
     close();
@@ -65,42 +84,26 @@ export const ProjectBranchSelect = () => {
     checkoutBranch(name, async () => {
       await flushPendingSaves();
       const result = await query.checkout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
-      if (userId) {
-        const folders = { queryKey: ["projects", "files", userId, projectId] };
-        // Folder data also proves readiness to ProjectSetupGate. Keep it visible
-        // while refreshing; resetting project details would unmount the workspace.
-        await queryClient.cancelQueries(folders);
-        // Clear old document bytes and pagination snapshots, which cannot be
-        // reused across checkouts. The mutation already refreshes changes.
-        await Promise.allSettled([
-          queryClient.invalidateQueries(folders),
-          queryClient.resetQueries({ queryKey: ["projects", "file", userId, projectId] }),
-          queryClient.resetQueries({ queryKey: ["projects", "file-search", "infinite", userId, projectId] }),
-          queryClient.resetQueries({
-            queryKey: ["projects", "commits", "infinite", "cursor", userId, projectId],
-            predicate: ({ queryKey }) => projectCommitParamsSchema.safeParse(queryKey[6]).data?.source === "local",
-          }),
-          queryClient.resetQueries({ queryKey: ["projects", "branches", "infinite", "cursor", userId, projectId, "local"] }),
-        ]);
-        // Read errors belong to their queries and cannot undo a confirmed checkout.
-      }
-      if (filePath) refreshFile(filePath);
+      await refreshWorkspace();
       return result;
+    }, async () => {
+      await refreshWorkspace();
+      return query.recoverCheckout();
     });
   };
 
   return (
     <>
       <Pressable
-        onPress={() => { if (!isCheckingOut) setOpen(true); }}
-        disabled={isCheckingOut}
+        onPress={() => { if (isCheckoutRecoveryRequired) retryCheckoutRecovery(); else if (!isCheckingOut) setOpen(true); }}
+        disabled={isCheckingOut && !isCheckoutRecoveryRequired}
         accessibilityRole="button"
-        accessibilityLabel={`Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
-        accessibilityHint={isCheckingOut ? "Switching branches. Please wait." : "Opens available branches"}
-        accessibilityState={{ expanded: open, disabled: isCheckingOut, busy: isCheckingOut }}
+        accessibilityLabel={isCheckoutRecoveryRequired ? "Retry branch recovery" : `Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
+        accessibilityHint={isCheckoutRecoveryRequired ? "Confirms the current branch before editing resumes" : isCheckingOut ? "Switching branches. Please wait." : "Opens available branches"}
+        accessibilityState={{ expanded: open, disabled: isCheckingOut && !isCheckoutRecoveryRequired, busy: isCheckingOut }}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"
       >
-        {isCheckingOut ? <ActivityIndicator className="text-foreground" /> : <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />}
+        {isCheckingOut && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="Feather" name="git-branch" size={22} className="text-foreground" accessible={false} />}
       </Pressable>
       <ContentSheet open={open && !isCheckingOut} onOpenChange={(value) => { if (!value || !isCheckingOut) setOpen(value); }} backgroundColor={card}>
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}

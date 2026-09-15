@@ -135,8 +135,8 @@ export const useProjectBranches = (
         throw new ProjectBranchCheckoutError(result.message, result.code);
       return result.data;
     },
-    onSuccess: async (_data, _input, context) => {
-      if (!context) return;
+    onSettled: async (_data, error, _input, context) => {
+      if (!context || (error && error.code !== "CHECKOUT_OUTCOME_UNKNOWN")) return;
       // Refresh the submitted workspace even if the hook has since navigated.
       const changesQuery = {
         queryKey: ["projects", "changes", context.userId, context.projectId],
@@ -147,6 +147,15 @@ export const useProjectBranches = (
       await queryClient.invalidateQueries(changesQuery);
     },
   });
+
+  const recoverCheckout = async (): Promise<ProjectBranchCheckoutSchema> => {
+    if (!userId || !projectId) throw new Error("Sign in to confirm the current branch.");
+    // Capture this hook's workspace, rather than refetching an observer that may
+    // have moved to another project while the checkout response was in flight.
+    const branches = await readProjectBranchesAction(projectId, { search: "", pageSize: 1, cursor: null });
+    if (!branches?.currentBranch) throw new Error("Unable to confirm the current branch. Reconnect and retry recovery.");
+    return { previousBranch: null, currentBranch: branches.currentBranch };
+  };
 
   const loadMore = () => {
     if (
@@ -177,5 +186,5 @@ export const useProjectBranches = (
       : query.refetch();
   };
 
-  return { ...query, loadMore, retry, checkout };
+  return { ...query, loadMore, retry, checkout, recoverCheckout };
 };

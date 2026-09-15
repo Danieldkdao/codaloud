@@ -104,10 +104,10 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
                 className="text-center"
               >
                 {isError
-                  ? "Unable to load your sandbox. Please try again."
+                  ? "Unable to load your workspace. Please try again."
                   : workspaceError
-                    ? "Unable to start your sandbox. Please try again."
-                    : "Sandbox setup couldn’t finish. Please check back later."}
+                    ? "Unable to start your workspace. Please try again."
+                    : "Workspace setup couldn’t finish. Please check back later."}
               </PText>
               <Button
                 variant="outline"

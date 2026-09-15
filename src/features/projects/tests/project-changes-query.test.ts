@@ -92,6 +92,45 @@ it("keeps the prior snapshot while a manual refresh is pending", async () => {
   expect(current.data?.currentBranch).toBe("updated");
 });
 
+it("drains saves then cancels an initial obsolete read before refreshing", async () => {
+  let finishOld!: (value: ProjectRepositoryChangesSchema) => void;
+  let finishSave!: () => void;
+  read.mockImplementationOnce(() => new Promise((resolve) => { finishOld = resolve; }));
+  await render();
+  const oldSignal = read.mock.calls[0][1]!;
+  const flushSaves = vi.fn(() => new Promise<void>((resolve) => { finishSave = resolve; }));
+  let refresh!: Promise<unknown>;
+  await act(async () => { refresh = current.refreshAfterSaves(flushSaves); });
+  expect(read).toHaveBeenCalledOnce();
+  expect(oldSignal.aborted).toBe(false);
+  read.mockResolvedValueOnce({ ...snapshot, currentBranch: "fresh" });
+  await act(async () => { finishSave(); await refresh; });
+  await tick();
+  expect(oldSignal.aborted).toBe(true);
+  expect(read).toHaveBeenCalledTimes(2);
+  await act(async () => finishOld(snapshot));
+  await tick();
+  expect(current.data?.currentBranch).toBe("fresh");
+});
+
+it("does not refresh when a save fails or the requesting screen leaves", async () => {
+  await render();
+  const failure = new Error("Save failed.");
+  await act(async () => {
+    await expect(current.refreshAfterSaves(async () => { throw failure; })).rejects.toBe(failure);
+  });
+  const controller = new AbortController();
+  let finishSave!: () => void;
+  let refresh!: Promise<unknown>;
+  await act(async () => {
+    refresh = current.refreshAfterSaves(() => new Promise<void>((resolve) => { finishSave = resolve; }), controller.signal);
+  });
+  controller.abort();
+  await render(otherProjectId, false);
+  await act(async () => { finishSave(); await refresh; });
+  expect(read).toHaveBeenCalledOnce();
+});
+
 it("exposes refresh failures with cached data until manually retried", async () => {
   await render();
   read.mockResolvedValueOnce(null);

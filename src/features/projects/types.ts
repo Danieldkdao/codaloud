@@ -66,6 +66,12 @@ export type ProjectWorkspaceDiffEntry = Omit<
   unstaged: ProjectDiffComparison | null;
 };
 
+export type ProjectWorkspaceDiffRow = { key: string; path: string } & (
+  | { kind: "file"; file: ProjectWorkspaceDiffEntry }
+  | { kind: "comparison"; comparison: ProjectDiffComparison; status: ProjectWorkspaceDiffEntry["indexStatus"] }
+  | { kind: "line"; line: ProjectDiffLine }
+);
+
 export type ProjectDiffTotals = {
   fileCount: number;
   /** Counts cover available text previews; unavailableCount discloses omissions. */

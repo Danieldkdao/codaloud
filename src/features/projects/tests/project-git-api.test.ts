@@ -58,7 +58,9 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
   method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
 });
 import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
+import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
 const mutationRoutes = [
+  { name: "pop stash", handler: stashPop, input: { ...expected, stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
   { name: "stash all", handler: stashPush, input: { ...expected, message: "Saved" }, output: { created: true, stashSha: "b".repeat(40) } },
   { name: "create branch", handler: createBranch, input: { ...expected, branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
 ];

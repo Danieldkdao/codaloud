@@ -20,3 +20,10 @@ export const gitStashPushSchema = gitExpectedStateSchema.extend({ message: z.str
 export type GitStashPushSchema = z.infer<typeof gitStashPushSchema>;
 export const gitStashPushedSchema = z.object({ created: z.boolean(), stashSha: commitHashSchema.nullable() });
 export type GitStashPushedSchema = z.infer<typeof gitStashPushedSchema>;
+
+export const gitStashPopSchema = gitExpectedStateSchema.extend({
+  stashIndex: z.number().int().min(0).max(10000), stashSha: commitHashSchema, restoreIndex: z.boolean().default(false),
+});
+export type GitStashPopSchema = z.infer<typeof gitStashPopSchema>;
+export const gitStashPoppedSchema = z.object({ stashSha: commitHashSchema, dropped: z.literal(true) });
+export type GitStashPoppedSchema = z.infer<typeof gitStashPoppedSchema>;

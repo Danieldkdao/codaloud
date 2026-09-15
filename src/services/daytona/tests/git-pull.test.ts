@@ -8,7 +8,7 @@ const remoteCommit = (file = "remote.txt", content = "remote\n") => {
   fixture.write(file, content); fixture.git("add", "."); fixture.git("commit", "-m", "Remote");
   const sha = fixture.git("rev-parse", "HEAD"); fixture.git("push", fixture.remotePath, "main"); fixture.git("reset", "--hard", fixture.headSha); return sha;
 };
-const run = (rebase = false) => fixture.run(sandboxGitPullCommand, { remoteBranch: "main", rebase, expectedHeadSha: fixture.git("rev-parse", "HEAD") });
+const run = (rebase = false) => fixture.run(sandboxGitPullCommand, { rebase });
 it.each([false, true])("fast-forwards clean work with rebase=%s and refreshes counts", (rebase) => {
   const sha = remoteCommit(); expect(run(rebase)).toMatchObject({ headSha: sha, counts: { incoming: 0, outgoing: 0 } });
   expect(fixture.git("show", "HEAD:remote.txt")).toBe("remote");
@@ -41,12 +41,12 @@ it("pulls into the checked-out branch from its differently named upstream", () =
   fixture.git("switch", "-c", "feature/current");
   fixture.git("config", "branch.feature/current.remote", "origin");
   fixture.git("config", "branch.feature/current.merge", "refs/heads/review");
-  expect(fixture.run(sandboxGitPullCommand, { rebase: false, expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ currentBranch: "feature/current", headSha: remoteSha });
+  expect(fixture.run(sandboxGitPullCommand, { rebase: false })).toMatchObject({ currentBranch: "feature/current", headSha: remoteSha });
   expect(fixture.git("rev-parse", "main")).toBe(fixture.headSha);
 });
 it("requires an upstream before pulling instead of guessing a remote branch", () => {
   fixture.git("switch", "-c", "feature/untracked");
-  expect(() => fixture.run(sandboxGitPullCommand, { rebase: false, expectedBranch: undefined, expectedHeadSha: undefined })).toThrow(expect.objectContaining({ code: "GIT_UPSTREAM_REQUIRED" }));
+  expect(() => fixture.run(sandboxGitPullCommand, { rebase: false })).toThrow(expect.objectContaining({ code: "GIT_UPSTREAM_REQUIRED" }));
   expect(fixture.git("for-each-ref", "refs/remotes/origin")).toBe("");
 });
 it("rejects multiple upstreams before fetching", () => {

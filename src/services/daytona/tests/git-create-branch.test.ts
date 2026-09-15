@@ -21,7 +21,7 @@ it("derives the source from the checked-out feature branch and current HEAD", ()
   fixture.git("switch", "-c", "feature/source");
   fixture.git("commit", "--allow-empty", "-m", "Source tip");
   const tip = fixture.git("rev-parse", "HEAD");
-  const result = fixture.run(sandboxGitCreateBranchCommand, { branchName: "feature/new", expectedBranch: undefined, expectedHeadSha: undefined });
+  const result = fixture.run(sandboxGitCreateBranchCommand, { branchName: "feature/new" });
   expect(result).toEqual({ previousBranch: "feature/source", currentBranch: "feature/new", headSha: tip });
 });
 it.each(["detached", "unborn"])("rejects %s state without creating a branch", (state) => {

@@ -4,10 +4,10 @@ import { createGitRemoteFixture } from "./git-remote-fixture";
 let fixture: ReturnType<typeof createGitRemoteFixture>;
 beforeEach(() => { fixture = createGitRemoteFixture(); });
 afterEach(() => fixture.cleanup());
-const run = (input = {}) => fixture.run(sandboxGitPushCommand, { remoteBranch: "main", force: false, ...input });
+const run = (input = {}) => fixture.run(sandboxGitPushCommand, { force: false, ...input });
 it("pushes a fast-forward and returns refreshed counts", () => {
   fixture.git("commit", "--allow-empty", "-m", "Outgoing"); const tip = fixture.git("rev-parse", "HEAD");
-  expect(run({ expectedHeadSha: tip })).toMatchObject({ pushed: true, remoteSha: tip, trackingUpdated: true, counts: { outgoing: 0, incoming: 0 } });
+  expect(run({})).toMatchObject({ pushed: true, remoteSha: tip, trackingUpdated: true, counts: { outgoing: 0, incoming: 0 } });
   expect(fixture.remoteGit("rev-parse", "main")).toBe(tip);
 });
 it("rejects ordinary non-fast-forward pushes", () => {
@@ -23,7 +23,7 @@ it("force pushes only when the explicitly observed remote SHA still matches", ()
 });
 it("publishes a new branch and records its upstream", () => {
   fixture.git("switch", "-c", "new-branch");
-  expect(run({ expectedBranch: "new-branch", remoteBranch: "new-branch" })).toMatchObject({ pushed: true, counts: { upstream: "origin/new-branch", outgoing: 0 } });
+  expect(run({})).toMatchObject({ pushed: true, counts: { upstream: "origin/new-branch", outgoing: 0 } });
   expect(fixture.remoteGit("rev-parse", "new-branch")).toBe(fixture.headSha);
 });
 it("ignores a configured push URL when choosing the trusted destination", () => {
@@ -41,7 +41,7 @@ cp.execFileSync = (file, args, options) => {
   }
   return result;
 };`;
-  const result = fixture.run(sandboxGitPushCommand, { remoteBranch: "main", force: false }, hook);
+  const result = fixture.run(sandboxGitPushCommand, { force: false }, hook);
   expect(result).toMatchObject({ pushed: true, trackingUpdated: false, counts: null });
   expect(fixture.remoteGit("rev-parse", "main")).toBe(fixture.headSha);
 });
@@ -54,7 +54,7 @@ cp.execFileSync = (file, args, options) => {
   if (args.includes("push") && args.includes("https://github.com/example/repo.git")) throw new Error("Response lost");
   return result;
 };`;
-  expect(() => fixture.run(sandboxGitPushCommand, { expectedHeadSha: tip, remoteBranch: "main", force: false }, hook)).toThrow(expect.objectContaining({ code: "GIT_OUTCOME_UNKNOWN" }));
+  expect(() => fixture.run(sandboxGitPushCommand, { force: false }, hook)).toThrow(expect.objectContaining({ code: "GIT_OUTCOME_UNKNOWN" }));
   expect(fixture.remoteGit("rev-parse", "main")).toBe(tip);
 });
 
@@ -65,13 +65,13 @@ it("pushes the checked-out branch to its differently named upstream", () => {
   fixture.git("config", "branch.feature/current.merge", "refs/heads/review");
   fixture.git("commit", "--allow-empty", "-m", "Feature");
   const tip = fixture.git("rev-parse", "HEAD");
-  expect(fixture.run(sandboxGitPushCommand, { force: false, expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ pushed: true, remoteBranch: "review", remoteSha: tip });
+  expect(fixture.run(sandboxGitPushCommand, { force: false })).toMatchObject({ pushed: true, remoteBranch: "review", remoteSha: tip });
   expect(fixture.remoteGit("rev-parse", "review")).toBe(tip);
   expect(fixture.remoteGit("rev-parse", "main")).toBe(fixture.headSha);
 });
 it("first push derives the destination name from the checked-out branch", () => {
   fixture.git("switch", "-c", "feature/first");
-  expect(fixture.run(sandboxGitPushCommand, { expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ pushed: true, remoteBranch: "feature/first" });
+  expect(fixture.run(sandboxGitPushCommand, {})).toMatchObject({ pushed: true, remoteBranch: "feature/first" });
   expect(fixture.git("config", "branch.feature/first.merge")).toBe("refs/heads/feature/first");
 });
 it.each(["other remote", "multiple upstreams", "partial configuration"])("rejects ambiguous upstream: %s", (scenario) => {

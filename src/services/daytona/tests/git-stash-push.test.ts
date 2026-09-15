@@ -24,16 +24,15 @@ it("stashes changes from the currently checked-out feature branch", () => {
   fixture.git("switch", "-c", "feature/work");
   fixture.git("commit", "--allow-empty", "-m", "Latest");
   fixture.write("file.txt", "work\n");
-  expect(fixture.run(sandboxGitStashPushCommand, { expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ created: true });
+  expect(fixture.run(sandboxGitStashPushCommand, {})).toMatchObject({ created: true });
   expect(fixture.git("stash", "list")).toContain("feature/work");
   expect(fixture.git("branch", "--show-current")).toBe("feature/work");
 });
 
 it("confirms a stash when restoring ignore rules makes a preserved file untracked", () => {
   fixture.write(".gitignore", "old-ignore\n"); fixture.git("add", ".gitignore"); fixture.git("commit", "-m", "Ignore rules");
-  const expectedHeadSha = fixture.git("rev-parse", "HEAD");
   fixture.write(".gitignore", "precious.txt\n"); fixture.write("precious.txt", "preserved\n");
-  expect(fixture.run(sandboxGitStashPushCommand, { expectedHeadSha })).toMatchObject({ created: true, remainingChanges: true });
+  expect(fixture.run(sandboxGitStashPushCommand, {})).toMatchObject({ created: true, remainingChanges: true });
   expect(readFileSync(join(fixture.repositoryPath, "precious.txt"), "utf8")).toBe("preserved\n");
 });
 

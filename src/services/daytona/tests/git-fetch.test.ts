@@ -27,7 +27,7 @@ it("rejects a mismatched remote before authenticated transport", () => {
 it("unshallows from complete origin history before returning exact counts", () => {
   fixture.git("commit", "--allow-empty", "-m", "Second"); const tip = fixture.git("rev-parse", "HEAD");
   fixture.git("push", fixture.remotePath, "main"); fixture.write(".git/shallow", tip + "\n");
-  expect(fixture.run(sandboxGitFetchCommand, { expectedHeadSha: tip })).toMatchObject({ isShallow: false, outgoing: 0, incoming: 0 });
+  expect(fixture.run(sandboxGitFetchCommand, {})).toMatchObject({ isShallow: false, outgoing: 0, incoming: 0 });
   expect(fixture.git("rev-list", "--count", "HEAD")).toBe("2");
 });
 
@@ -35,6 +35,6 @@ it("fetches and reports state for the checked-out feature branch without client 
   fixture.git("switch", "-c", "feature/current");
   fixture.git("commit", "--allow-empty", "-m", "Local feature");
   const tip = fixture.git("rev-parse", "HEAD");
-  expect(fixture.run(sandboxGitFetchCommand, { expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ currentBranch: "feature/current", headSha: tip });
+  expect(fixture.run(sandboxGitFetchCommand, {})).toMatchObject({ currentBranch: "feature/current", headSha: tip });
   expect(fixture.git("rev-parse", "main")).toBe(fixture.headSha);
 });

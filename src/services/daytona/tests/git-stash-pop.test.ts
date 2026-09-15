@@ -16,7 +16,7 @@ it("applies the selected stash and drops it only after success", () => {
 });
 it("retains the stash and reports conflicts", () => {
   fixture.write("file.txt", "competing\n"); fixture.git("add", "."); fixture.git("commit", "-m", "Competing");
-  expect(() => fixture.run(sandboxGitStashPopCommand, { stashIndex: 0, stashSha, expectedHeadSha: fixture.git("rev-parse", "HEAD") })).toThrow(expect.objectContaining({ code: "GIT_CONFLICTS" }));
+  expect(() => fixture.run(sandboxGitStashPopCommand, { stashIndex: 0, stashSha })).toThrow(expect.objectContaining({ code: "GIT_CONFLICTS" }));
   expect(fixture.git("rev-parse", "refs/stash")).toBe(stashSha);
   expect(fixture.git("ls-files", "--unmerged")).not.toBe("");
 });
@@ -32,7 +32,7 @@ it("keeps dirty work intact", () => {
 it("applies the selected stash to the currently checked-out branch", () => {
   fixture.git("switch", "-c", "feature/target");
   fixture.git("commit", "--allow-empty", "-m", "Target");
-  expect(fixture.run(sandboxGitStashPopCommand, { stashIndex: 0, stashSha, expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ dropped: true });
+  expect(fixture.run(sandboxGitStashPopCommand, { stashIndex: 0, stashSha })).toMatchObject({ dropped: true });
   expect(fixture.git("branch", "--show-current")).toBe("feature/target");
   expect(fixture.git("diff")).toContain("saved");
 });

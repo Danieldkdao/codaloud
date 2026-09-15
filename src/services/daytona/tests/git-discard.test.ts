@@ -32,7 +32,7 @@ it("preserves files ignored at preview time even when restoring .gitignore chang
   fixture.write(".gitignore", "old-ignore\n"); fixture.git("add", ".gitignore"); fixture.git("commit", "-m", "Ignore rules");
   fixture.write(".gitignore", "precious.txt\n"); fixture.write("precious.txt", "must survive\n");
   const preview = fixture.run(sandboxGitDiscardPreviewCommand);
-  fixture.run(sandboxGitDiscardCommand, { expectedHeadSha: preview.headSha, fingerprint: preview.fingerprint, confirm: true, includeUntracked: true });
+  fixture.run(sandboxGitDiscardCommand, { fingerprint: preview.fingerprint, confirm: true, includeUntracked: true });
   expect(readFileSync(join(fixture.repositoryPath, "precious.txt"), "utf8")).toBe("must survive\n");
 });
 
@@ -42,7 +42,7 @@ it("discards only from the branch captured at execution", () => {
   fixture.write("file.txt", "changed\n");
   const preview = fixture.run(sandboxGitDiscardPreviewCommand);
   expect(preview).toMatchObject({ currentBranch: "feature/current", headSha: fixture.git("rev-parse", "HEAD") });
-  fixture.run(sandboxGitDiscardCommand, { confirm: true, includeUntracked: false, fingerprint: preview.fingerprint, expectedBranch: undefined, expectedHeadSha: undefined });
+  fixture.run(sandboxGitDiscardCommand, { confirm: true, includeUntracked: false, fingerprint: preview.fingerprint });
   expect(readFileSync(join(fixture.repositoryPath, "file.txt"), "utf8")).toBe("feature base\n");
 });
 it("rejects a preview after switching branches even when HEAD is identical", () => {

@@ -4,6 +4,7 @@ import { apiResponse, getContentType, isValidIds } from "@/lib/utils";
 import type { ApiResponse } from "@/lib/types";
 import { SandboxFilesError } from "@/services/daytona/api";
 import { executeGitOperation } from "@/services/daytona/git-operation";
+import { readGitJson } from "./git-request";
 import { getProjectGitRemote } from "./git-remote";
 import { getUserReadyProject } from "./project-workspace";
 
@@ -28,9 +29,9 @@ export const createGitRoute = <I, O>(options: {
       return respond({ error: true, code: "INVALID_CONTENT_TYPE", message: "Send an application/json request body." }, 415);
     }
     const query = new URL(request.url).searchParams;
-    const raw = options.mutation ? await request.json().catch(() => null) : Object.fromEntries(query);
+    const raw = options.mutation ? await readGitJson(request) : Object.fromEntries(query);
     const input = options.input.safeParse(raw);
-    if (!input.success || (!options.mutation && new Set(query.keys()).size !== [...query.keys()].length)) {
+    if (!input.success || (options.mutation && query.size > 0) || (!options.mutation && new Set(query.keys()).size !== [...query.keys()].length)) {
       return respond({ error: true, code: "INVALID_GIT_INPUT", message: "Invalid Git parameters or unexpected fields." }, 400);
     }
     const existingProject = await getUserReadyProject(userId, projectId);

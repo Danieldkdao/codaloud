@@ -155,3 +155,13 @@ it("stash all: uses the account identity rather than requiring repository identi
   expect((await stashPush(mutationRequest(expected), { projectId })).status).toBe(422);
   expect(mocks.request).not.toHaveBeenCalled();
 });
+
+it("rejects oversized JSON before accessing the workspace", async () => {
+  expect((await stashPush(mutationRequest({ ...expected, message: "a".repeat(70000) }), { projectId })).status).toBe(413);
+  expect(mocks.project).not.toHaveBeenCalled();
+});
+it("rejects mutation query flags rather than silently ignoring them", async () => {
+  const input = new Request(`https://codaloud.test/?force=true`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...expected, remoteBranch: "main" }) });
+  expect((await pushGit(input, { projectId })).status).toBe(400);
+  expect(mocks.project).not.toHaveBeenCalled();
+});

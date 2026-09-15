@@ -57,3 +57,26 @@ cp.execFileSync = (file, args, options) => {
   expect(() => fixture.run(sandboxGitPushCommand, { expectedHeadSha: tip, remoteBranch: "main", force: false }, hook)).toThrow(expect.objectContaining({ code: "GIT_OUTCOME_UNKNOWN" }));
   expect(fixture.remoteGit("rev-parse", "main")).toBe(tip);
 });
+
+it("pushes the checked-out branch to its differently named upstream", () => {
+  fixture.remoteGit("branch", "review", "main");
+  fixture.git("switch", "-c", "feature/current");
+  fixture.git("config", "branch.feature/current.remote", "origin");
+  fixture.git("config", "branch.feature/current.merge", "refs/heads/review");
+  fixture.git("commit", "--allow-empty", "-m", "Feature");
+  const tip = fixture.git("rev-parse", "HEAD");
+  expect(fixture.run(sandboxGitPushCommand, { force: false, expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ pushed: true, remoteBranch: "review", remoteSha: tip });
+  expect(fixture.remoteGit("rev-parse", "review")).toBe(tip);
+  expect(fixture.remoteGit("rev-parse", "main")).toBe(fixture.headSha);
+});
+it("first push derives the destination name from the checked-out branch", () => {
+  fixture.git("switch", "-c", "feature/first");
+  expect(fixture.run(sandboxGitPushCommand, { expectedBranch: undefined, expectedHeadSha: undefined })).toMatchObject({ pushed: true, remoteBranch: "feature/first" });
+  expect(fixture.git("config", "branch.feature/first.merge")).toBe("refs/heads/feature/first");
+});
+it.each(["other remote", "multiple upstreams", "partial configuration"])("rejects ambiguous upstream: %s", (scenario) => {
+  if (scenario === "other remote") fixture.git("config", "branch.main.remote", "other");
+  else if (scenario === "multiple upstreams") fixture.git("config", "--add", "branch.main.merge", "refs/heads/other");
+  else fixture.git("config", "--unset", "branch.main.merge");
+  expect(() => run()).toThrow(expect.objectContaining({ code: "GIT_UPSTREAM_REQUIRED" }));
+});

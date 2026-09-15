@@ -73,7 +73,7 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
 });
 const mutationRoutes = [
   { name: "pull", handler: pullGit, input: { ...expected, remoteBranch: "main", rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
-  { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
+  { name: "push", handler: pushGit, input: { force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: {}, output: counts },
   { name: "revert", handler: revert, input: {}, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
@@ -186,14 +186,14 @@ it("fetch: requires connected repository access before command execution", async
 });
 
 it("push: rejects string booleans and force without a lease", async () => {
-  for (const input of [{ ...expected, remoteBranch: "main", force: "false" }, { ...expected, remoteBranch: "main", force: true }]) {
+  for (const input of [{ force: "false" }, { force: true }]) {
     expect((await pushGit(mutationRequest(input), { projectId })).status).toBe(400);
   }
   expect(mocks.request).not.toHaveBeenCalled();
 });
 it("push: checks write permission before transport", async () => {
   mocks.access.mockResolvedValue({ fullName: "example/repo", permissions: { push: false } });
-  expect((await pushGit(mutationRequest({ ...expected, remoteBranch: "main" }), { projectId })).status).toBe(403);
+  expect((await pushGit(mutationRequest({}), { projectId })).status).toBe(403);
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
@@ -249,5 +249,10 @@ it("revert: rejects caller-selected branch and commit", async () => {
 
 it("fetch: rejects caller-selected branch state", async () => {
   expect((await fetchGit(mutationRequest(expected), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it.each([{ expectedBranch: "main" }, { expectedHeadSha: "a".repeat(40) }, { remoteBranch: "other" }])("push: rejects caller-selected branch state %j", async (input) => {
+  expect((await pushGit(mutationRequest(input), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });

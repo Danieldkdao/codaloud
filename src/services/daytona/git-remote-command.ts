@@ -22,6 +22,21 @@ export const sandboxGitRemoteRuntime = String.raw`
       ...(shallow ? ["--unshallow"] : []), temporary, "+refs/heads/*:refs/remotes/origin/*"]);
     checkExpected();
   };
+  const resolveRemoteBranch = (currentBranch, allowFirstPush = false) => {
+    const remotes = optional(["config", "--get-all", "branch." + currentBranch + ".remote"])?.split("\n") ?? [];
+    const merges = optional(["config", "--get-all", "branch." + currentBranch + ".merge"])?.split("\n") ?? [];
+    if (!remotes.length && !merges.length) {
+      if (!allowFirstPush) fail("GIT_UPSTREAM_REQUIRED");
+      return currentBranch;
+    }
+    // Respect a differently named upstream, but never guess between remotes or
+    // multiple merge refs. This project synchronizes only its trusted origin.
+    if (remotes.length !== 1 || remotes[0] !== "origin" || merges.length !== 1 || !merges[0].startsWith("refs/heads/")) fail("GIT_UPSTREAM_REQUIRED");
+    const name = merges[0].slice("refs/heads/".length);
+    try { git(["check-ref-format", "--branch", name]); }
+    catch { fail("GIT_UPSTREAM_REQUIRED"); }
+    return name;
+  };
   const remoteBranch = () => {
     const configuredRemote = optional(["config", "--get", "branch." + input.expectedBranch + ".remote"]);
     const configuredMerge = optional(["config", "--get", "branch." + input.expectedBranch + ".merge"]);

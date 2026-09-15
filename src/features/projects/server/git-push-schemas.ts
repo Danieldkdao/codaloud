@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { gitExpectedStateSchema, gitCountsSchema } from "./git-schemas";
+import { gitCountsSchema } from "./git-schemas";
 import { projectBranchNameSchema } from "../actions/branch-schemas";
 import { commitHashSchema } from "../actions/commit-schemas";
 
-export const gitPushSchema = gitExpectedStateSchema.extend({
-  remoteBranch: projectBranchNameSchema,
+export const gitPushSchema = z.strictObject({
   force: z.boolean().default(false),
   expectedRemoteSha: commitHashSchema.nullable().optional(),
 }).refine((input) => !input.force || input.expectedRemoteSha !== undefined);

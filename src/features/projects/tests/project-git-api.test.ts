@@ -67,7 +67,9 @@ import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api"
 import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
 import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
 import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
+import { POST as pullGit } from "@/app/api/projects/[projectId]/git/pull+api";
 const mutationRoutes = [
+  { name: "pull", handler: pullGit, input: { ...expected, remoteBranch: "main", rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { ...expected, remoteBranch: "main", force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: { ...expected }, output: counts },
   { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
@@ -140,5 +142,10 @@ it("push: rejects string booleans and force without a lease", async () => {
 it("push: checks write permission before transport", async () => {
   mocks.access.mockResolvedValue({ fullName: "example/repo", permissions: { push: false } });
   expect((await pushGit(mutationRequest({ ...expected, remoteBranch: "main" }), { projectId })).status).toBe(403);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("pull: rejects string rebase options", async () => {
+  expect((await pullGit(mutationRequest({ ...expected, remoteBranch: "main", rebase: "true" }), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });

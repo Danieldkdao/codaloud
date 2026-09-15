@@ -94,3 +94,11 @@ for (const route of mutationRoutes) {
     expect(mocks.request).toHaveBeenCalledTimes(2);
   });
 }
+
+import { GET as viewStash } from "@/app/api/projects/[projectId]/git/stash+api";
+it("view stash: validates pagination and returns an empty collection", async () => {
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextOffset: null, patch: null }) });
+  expect((await viewStash(request(), { projectId })).status).toBe(200);
+  expect((await viewStash(new Request("https://codaloud.test/?pageSize=1000"), { projectId })).status).toBe(400);
+  expect((await viewStash(new Request("https://codaloud.test/?index=0"), { projectId })).status).toBe(400);
+});

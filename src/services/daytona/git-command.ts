@@ -70,7 +70,7 @@ const initialize = () => {
     if (fs.existsSync(path.join(gitDirectory, name))) fail("GIT_UNSUPPORTED_CONFIG");
   }
   const config = git(["config", "--local", "--no-includes", "--name-only", "--list"]).split("\n");
-  if (config.some((key) => /^(include\.|includeif\.|filter\.|merge\..*\.driver$|diff\..*\.(command|textconv)$|extensions\.|core\.(worktree|bare|sshcommand|gitproxy|alternaterefscommand)$)/i.test(key) && key !== "core.bare")) fail("GIT_UNSUPPORTED_CONFIG");
+  if (config.some((key) => /^(include\.|includeif\.|uploadpack\.|receive\.|filter\.|merge\..*\.driver$|diff\..*\.(command|textconv)$|extensions\.|core\.(worktree|bare|sshcommand|gitproxy|alternaterefscommand)$)/i.test(key) && key !== "core.bare")) fail("GIT_UNSUPPORTED_CONFIG");
   if (fs.realpathSync(git(["rev-parse", "--show-toplevel"]).trim()) !== fs.realpathSync(workspace) ||
     fs.realpathSync(git(["rev-parse", "--absolute-git-dir"]).trim()) !== fs.realpathSync(gitDirectory)) fail("GIT_REPOSITORY_UNAVAILABLE");
   try { lock = fs.openSync(path.join(gitDirectory, "codaloud-operation.lock"), "wx", 0o600); }

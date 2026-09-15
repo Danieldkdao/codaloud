@@ -4,6 +4,7 @@ import { apiResponse, getContentType, isValidIds } from "@/lib/utils";
 import type { ApiResponse } from "@/lib/types";
 import { SandboxFilesError } from "@/services/daytona/api";
 import { executeGitOperation } from "@/services/daytona/git-operation";
+import { getProjectGitRemote } from "./git-remote";
 import { getUserReadyProject } from "./project-workspace";
 
 const respond = <T>(body: ApiResponse<T>, status = 200) => {
@@ -16,7 +17,7 @@ const respond = <T>(body: ApiResponse<T>, status = 200) => {
 
 export const createGitRoute = <I, O>(options: {
   input: z.ZodType<I>; output: z.ZodType<O>; script: string;
-  message: string; mutation?: boolean; author?: boolean;
+  message: string; mutation?: boolean; author?: boolean; remote?: "read" | "write";
 }) => async (request: Request, { projectId }: { projectId: string }) => {
   let started = false;
   try {
@@ -40,10 +41,11 @@ export const createGitRoute = <I, O>(options: {
       if (!name.success || !email.success) return respond({ error: true, code: "COMMIT_AUTHOR_REQUIRED", message: "Add a valid name and email to your account." }, 422);
       author = { name: name.data, email: email.data };
     }
+    const remote = options.remote ? await getProjectGitRemote(request.headers, existingProject.githubRepositoryId, options.remote === "write", request.signal) : undefined;
     started = true;
     const data = await executeGitOperation({
       sandboxId: existingProject.sandboxId, projectId, script: options.script,
-      input: { ...input.data as object, author }, output: options.output,
+      input: { ...input.data as object, author, remote }, output: options.output,
       signal: request.signal, mutation: options.mutation ?? false,
     });
     return respond({ error: false, message: options.message, data });

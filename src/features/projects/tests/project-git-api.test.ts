@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/git/counts+api";
 import { SandboxFilesError } from "@/services/daytona/api";
-const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), repository: vi.fn(), request: vi.fn() }));
+const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), repository: vi.fn(), request: vi.fn(), credentials: vi.fn(), access: vi.fn() }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/features/projects/server/project-workspace", () => ({ getUserReadyProject: mocks.project }));
 vi.mock("@/services/daytona/branches", () => ({ getSandboxGitRepository: mocks.repository }));
@@ -9,12 +9,16 @@ vi.mock("@/services/daytona/api", async (original) => ({ ...await original<objec
 vi.mock("@/data/env/server", () => ({ serverEnv: {} }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+vi.mock("@/services/github/server/access", () => ({ getGitHubCredentials: mocks.credentials, getGitHubErrorResponse: () => ({ status: 403, body: { error: true, code: "GITHUB_ACCESS_DENIED", message: "Access denied." } }) }));
+vi.mock("@/services/github/server/repositories", () => ({ verifyGitHubRepositoryAccess: mocks.access }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 const counts = { currentBranch: "main", headSha: "a".repeat(40), upstream: null, upstreamSha: null, outgoing: null, incoming: null, isShallow: false, observedAt: "2026-09-15T00:00:00.000Z" };
 const request = () => new Request(`https://codaloud.test/api/projects/${projectId}/git/counts`);
 beforeEach(() => {
   mocks.user.mockReset().mockResolvedValue({ userId: "user-one", user: { name: "Ada", email: "ada@example.com" } });
-  mocks.project.mockReset().mockResolvedValue({ id: projectId, sandboxId: "sandbox" });
+  mocks.project.mockReset().mockResolvedValue({ id: projectId, sandboxId: "sandbox", githubRepositoryId: "123" });
+  mocks.credentials.mockReset().mockResolvedValue({ accessToken: "secret" });
+  mocks.access.mockReset().mockResolvedValue({ fullName: "example/repo", permissions: { push: true, pull: true }, archived: false });
   mocks.repository.mockReset().mockResolvedValue({ toolboxUrl: "https://toolbox.test/sandbox", repositoryPath: "/home/daytona/.codaloud/workspace" });
   mocks.request.mockReset().mockResolvedValue({ exitCode: 0, result: JSON.stringify(counts) });
 });
@@ -61,7 +65,9 @@ import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api"
 import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
 import { POST as discard } from "@/app/api/projects/[projectId]/git/discard+api";
 import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
+import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
 const mutationRoutes = [
+  { name: "fetch", handler: fetchGit, input: { ...expected }, output: counts },
   { name: "revert", handler: revert, input: { ...expected }, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { ...expected, confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
   { name: "pop stash", handler: stashPop, input: { ...expected, stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
@@ -114,5 +120,11 @@ it("view stash: validates pagination and returns an empty collection", async () 
 it("revert: requires a valid server-resolved commit identity", async () => {
   mocks.user.mockResolvedValue({ userId: "user-one", user: { name: "Ada", email: "bad" } });
   expect((await revert(mutationRequest(expected), { projectId })).status).toBe(422);
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("fetch: requires connected repository access before command execution", async () => {
+  mocks.credentials.mockRejectedValue(new Error("token-secret"));
+  expect((await fetchGit(mutationRequest(expected), { projectId })).status).toBe(403);
   expect(mocks.request).not.toHaveBeenCalled();
 });

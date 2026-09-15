@@ -96,7 +96,7 @@
     "db:auth": "pnpm dlx auth@1.7.3 generate --config ./src/lib/auth/auth.ts --output ./src/db/schemas/new-user.ts --yes",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
-    "ios": "expo run:ios",
+    "ios": "exec expo run:ios",
     "export:api": "EXPO_NO_WEB_SETUP=1 expo export --platform web --api-only",
     "lint": "expo lint",
     "test": "vitest run",

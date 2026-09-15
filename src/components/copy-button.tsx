@@ -128,9 +128,7 @@ export const CopyButton = ({
             importantForAccessibility="no-hide-descendants"
             className="absolute inset-0 items-center justify-center"
           >
-            <View className="rounded-full bg-success p-1">
-              <Icon family="Feather" name="check" size={20} className="text-success-foreground" accessible={false} />
-            </View>
+            <Icon family="Feather" name="check" size={20} className="text-success-foreground" accessible={false} />
           </Animated.View>
         </View>
       )}

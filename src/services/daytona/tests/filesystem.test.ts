@@ -628,3 +628,13 @@ contentTest.each(["path", "size", "contentHash"])("rejects an unconfirmed save r
     : implementation(url, init));
   await expect(saveContent("new")).rejects.toMatchObject({ code: "FILESYSTEM_ERROR" });
 });
+
+it("blocks file creation and saves while a Git operation owns the workspace", async () => {
+  await mkdir(join(home, ".codaloud/workspace/.git"), { recursive: true });
+  await writeFile(join(home, ".codaloud/workspace/.git/codaloud-operation.lock"), "busy");
+  await writeFile(join(home, ".codaloud/workspace/file.txt"), "original");
+  await expect(createSandboxFile(context, { parentPath: "", name: "new.txt", kind: "file" })).rejects.toMatchObject({ code: "SAVE_BUSY", status: 409 });
+  await expect(saveSandboxFileContent(context, { path: "file.txt", content: "changed", expectedContentHash: createHash("sha256").update("original").digest("hex") })).rejects.toMatchObject({ code: "SAVE_BUSY", status: 409 });
+  expect(await readFile(join(home, ".codaloud/workspace/file.txt"), "utf8")).toBe("original");
+  expect(await readFile(join(home, ".codaloud/workspace/.git/codaloud-operation.lock"), "utf8")).toBe("busy");
+});

@@ -1,8 +1,9 @@
+import { sandboxGitLockRuntime } from "./git-lock-command";
 import { sandboxCommandInput } from "./create-command";
 
 // Runs inside Daytona. Network credentials are confined to an isolated Git
 // repository so workspace Git configuration cannot redirect or intercept them.
-export const sandboxFetchBranchCommand = sandboxCommandInput + String.raw`
+export const sandboxFetchBranchCommand = sandboxCommandInput + sandboxGitLockRuntime + String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -10,6 +11,7 @@ const { execFileSync } = require("node:child_process");
 const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
 let temporary;
 try {
+  withGitOperationLock(input.repositoryPath, () => {
   const workspace = input.repositoryPath;
   for (const directory of [workspace, path.join(workspace, ".git")]) {
     const info = fs.lstatSync(directory);
@@ -63,8 +65,9 @@ try {
     git(["config", "branch." + input.branchName + ".merge", "refs/heads/" + input.branchName]);
   }
   process.stdout.write(JSON.stringify({ branchName: input.branchName }));
+  });
 } catch (error) {
-  const known = ["REMOTE_BRANCH_NOT_FOUND", "REMOTE_FETCH_AUTH_FAILED", "REMOTE_FETCH_FAILED", "WORKSPACE_REMOTE_MISMATCH"];
+  const known = ["GIT_BUSY", "REMOTE_BRANCH_NOT_FOUND", "REMOTE_FETCH_AUTH_FAILED", "REMOTE_FETCH_FAILED", "WORKSPACE_REMOTE_MISMATCH"];
   process.stdout.write(JSON.stringify({ code: known.includes(error.code) ? error.code : "REMOTE_FETCH_FAILED" }));
   process.exitCode = 1;
 } finally {

@@ -1,3 +1,4 @@
+import { sandboxGitLockRuntime } from "./git-lock-command";
 import { z } from "zod";
 import { sandboxFileContentCommand } from "./file-content-command";
 import {
@@ -18,6 +19,7 @@ const filesystemCommand = String.raw`
 const fs = require("node:fs");
 const path = require("node:path").posix;
 ${sandboxCommandInput}
+${sandboxGitLockRuntime}
 const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
 const validateName = (name) => {
   if (!name || name === "." || name === ".." || /[\/\\\x00-\x1f\x7f]/.test(name)) fail("INVALID_PATH");
@@ -79,7 +81,7 @@ const saveContent = (parentFd, target) => {
 const accessWorkspaceContent = () => withWorkspaceFile(input, (parentFd, target) =>
   input.saveContent ? saveContent(parentFd, target) : readContent(target, input));
 
-try {
+const runFilesystemOperation = () => {
   if (input.readContent || input.saveContent) {
     process.stdout.write(JSON.stringify(accessWorkspaceContent()));
   } else {
@@ -127,6 +129,11 @@ try {
       process.stdout.write(JSON.stringify({ name: input.name, path: [input.parentPath, input.name].filter(Boolean).join("/"), isDir: info.isDirectory(), size: info.size, modifiedAt: info.mtime.toISOString() }));
     }
   }
+};
+try {
+  if (input.saveContent || (!input.readContent && input.name !== undefined)) {
+    withGitOperationLock(path.join(input.home, ".codaloud", "workspace"), runFilesystemOperation, "SAVE_BUSY");
+  } else runFilesystemOperation();
 } catch (error) {
   process.stdout.write(JSON.stringify({ code: error.code || "FILESYSTEM_ERROR" }));
   process.exitCode = 1;

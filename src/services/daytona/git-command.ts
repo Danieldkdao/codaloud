@@ -1,8 +1,9 @@
+import { sandboxGitLockRuntime } from "./git-lock-command";
 import { sandboxCommandInput } from "./create-command";
 
 // Shared sandbox runtime. Operation snippets receive argument-safe Git helpers;
 // provider output and credentials never become public API error messages.
-export const sandboxGitRuntime = sandboxCommandInput + String.raw`
+export const sandboxGitRuntime = sandboxCommandInput + sandboxGitLockRuntime + String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -11,7 +12,6 @@ const fail = (code) => { const error = new Error(code); error.code = code; throw
 const workspace = input.repositoryPath;
 const gitDirectory = path.join(workspace, ".git");
 let mutationStarted = false;
-let lock;
 let temporary;
 const deadline = Date.now() + 80000;
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -73,8 +73,6 @@ const initialize = () => {
   if (config.some((key) => /^(include\.|includeif\.|branch\..*\.mergeoptions$|uploadpack\.|receive\.|filter\.|merge\..*\.driver$|diff\..*\.(command|textconv)$|extensions\.|core\.(worktree|bare|sshcommand|gitproxy|alternaterefscommand)$)/i.test(key) && key !== "core.bare")) fail("GIT_UNSUPPORTED_CONFIG");
   if (fs.realpathSync(git(["rev-parse", "--show-toplevel"]).trim()) !== fs.realpathSync(workspace) ||
     fs.realpathSync(git(["rev-parse", "--absolute-git-dir"]).trim()) !== fs.realpathSync(gitDirectory)) fail("GIT_REPOSITORY_UNAVAILABLE");
-  try { lock = fs.openSync(path.join(gitDirectory, "codaloud-operation.lock"), "wx", 0o600); }
-  catch (error) { if (error.code === "EEXIST") fail("GIT_BUSY"); throw error; }
   for (const name of ["index.lock", "HEAD.lock", "config.lock", "packed-refs.lock", "shallow.lock"]) {
     if (fs.existsSync(path.join(gitDirectory, name))) fail("GIT_BUSY");
   }
@@ -83,15 +81,17 @@ const initialize = () => {
 
 export const createGitOperationCommand = (operation: string) => sandboxGitRuntime + String.raw`
 try {
+  const result = withGitOperationLock(workspace, () => {
   initialize();
   const run = () => { ` + operation + String.raw` };
-  process.stdout.write(JSON.stringify(run()));
+  return run();
+  });
+  process.stdout.write(JSON.stringify(result));
 } catch (error) {
   const known = ["GIT_BUSY", "GIT_UNSUPPORTED_CONFIG", "GIT_REPOSITORY_UNAVAILABLE", "WORKSPACE_CHANGED", "GIT_OPERATION_IN_PROGRESS", "GIT_CONFLICTS", "GIT_DIRTY_WORKTREE", "GIT_BRANCH_EXISTS", "GIT_BRANCH_REQUIRED", "GIT_STASH_NOT_FOUND", "GIT_STASH_CHANGED", "GIT_MERGE_MAINLINE_REQUIRED", "GIT_REMOTE_REQUIRED", "GIT_REMOTE_MISMATCH", "GIT_REMOTE_REJECTED", "GIT_REMOTE_FAILED", "GIT_UPSTREAM_REQUIRED", "GIT_HISTORY_INCOMPLETE", "GIT_RESULT_TOO_LARGE"];
   process.stdout.write(JSON.stringify({ code: known.includes(error.code) ? error.code : mutationStarted ? "GIT_OUTCOME_UNKNOWN" : "GIT_REQUEST_FAILED" }));
   process.exitCode = 1;
 } finally {
-  if (lock !== undefined) { fs.closeSync(lock); fs.rmSync(path.join(gitDirectory, "codaloud-operation.lock"), { force: true }); }
   if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
 }
 `;

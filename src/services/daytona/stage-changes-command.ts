@@ -1,7 +1,8 @@
+import { sandboxGitLockRuntime } from "./git-lock-command";
 import { sandboxCommandInput } from "./create-command";
 
 // Keep the real index untouched until every selected path has staged successfully.
-export const sandboxStageChangesCommand = sandboxCommandInput + String.raw`
+export const sandboxStageChangesCommand = sandboxCommandInput + sandboxGitLockRuntime + String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
@@ -130,7 +131,7 @@ const run = () => {
     if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
   }
 };
-try { process.stdout.write(JSON.stringify(run())); }
+try { process.stdout.write(JSON.stringify(withGitOperationLock(input.repositoryPath, run, "COMMIT_STAGING_BUSY"))); }
 catch (error) {
   const known = ["WORKSPACE_CHANGED", "COMMIT_UNRESOLVED_CONFLICTS", "COMMIT_UNSUPPORTED_FILE", "COMMIT_UNSUPPORTED_FILTER", "COMMIT_STAGING_BUSY", "COMMIT_SELECTION_CHANGED", "COMMIT_UNSELECTED_STAGED_CHANGES"];
   process.stdout.write(JSON.stringify({ code: indexPublished ? "COMMIT_STAGING_OUTCOME_UNKNOWN" : known.includes(error.code) ? error.code : "COMMIT_STAGING_FAILED" }));

@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, useRouter, useSegments } from "expo-router";
+import { Stack, useGlobalSearchParams, useLocalSearchParams, useRouter, useSegments } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,12 +11,17 @@ import { ProjectSandboxState } from "@/features/projects/components/project-sand
 import { useProject } from "@/features/projects/hooks/use-project";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useThemeColor } from "@/hooks/use-theme";
+import { getProjectCommitDiffParams } from "../lib/commit-params";
+import { formatCommitHash } from "../lib/formatters";
 
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const { commitSha, source } = useGlobalSearchParams();
   const router = useRouter();
   const segments = useSegments();
   const isWorkspaceDiff = segments[2] === "git" && segments[3] === "workspace-diff";
+  const commit = getProjectCommitDiffParams(commitSha, source);
+  const diffTitle = commit ? formatCommitHash(commit.commitSha) : "Workspace diff";
   const insets = useSafeAreaInsets();
   const verticalPadding = Math.max(insets.top, insets.bottom) + 24;
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
@@ -46,7 +51,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerShadowVisible: false,
           headerShown: true,
           headerTransparent: !ready,
-          headerTitle: ready ? (isWorkspaceDiff ? "Workspace diff" : project?.name) : "",
+          headerTitle: ready ? (isWorkspaceDiff ? diffTitle : project?.name) : "",
           headerTitleStyle: {
             fontSize: 22,
             fontFamily: "Fraunces_500Medium",

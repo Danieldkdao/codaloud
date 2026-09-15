@@ -46,8 +46,8 @@ export type ProjectDiffComparison = {
   scope: ProjectDiffScope;
   beforePath: string | null;
   afterPath: string | null;
-  beforeMode: string;
-  afterMode: string;
+  beforeMode: string | null;
+  afterMode: string | null;
 } & (
   | ({ kind: "available" } & ProjectDiffPatch)
   | {
@@ -58,9 +58,9 @@ export type ProjectDiffComparison = {
     }
 );
 
-export type ProjectWorkspaceDiffEntry = Omit<
+export type ProjectWorkspaceDiffEntry = Pick<
   ProjectRepositoryChangeSchema,
-  "staged" | "unstaged"
+  "path" | "originalPath" | "indexStatus" | "worktreeStatus"
 > & {
   staged: ProjectDiffComparison | null;
   unstaged: ProjectDiffComparison | null;

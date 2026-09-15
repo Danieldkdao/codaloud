@@ -504,6 +504,22 @@ it("opens the real full diff with live totals without changing the selection", (
   expect(container.textContent).not.toContain("Checkout:");
 });
 
+it.each(["local", "remote"])("opens a history commit from a %s branch with its full SHA and current history source", async (source) => {
+  if (source === "remote") {
+    click("Branch: main");
+    click("Remote branch: remote-only");
+    await act(async () => {});
+  }
+  click("Commit History");
+  const commit = container.querySelector<HTMLButtonElement>('[aria-label^="Live commit,"]');
+  expect(commit).not.toBeNull();
+  act(() => commit!.click());
+  expect(navigation.push).toHaveBeenLastCalledWith({
+    pathname: "/projects/[projectId]/git/workspace-diff",
+    params: { projectId: live.projectId, commitSha: "a".repeat(40), source: "local" },
+  });
+});
+
 it("renders the empty state from an empty changes list", () => {
   changesQuery.data = { ...repositoryChanges(), changes: [] };
   act(() => root.render(createElement(ProjectWorkspaceDockHeightProvider, null,

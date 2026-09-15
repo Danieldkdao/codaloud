@@ -23,3 +23,11 @@ export const projectFileSearchLimits = {
 export const projectFileSearchExcludedDirectories = [
   ".git", "node_modules", ".expo", ".next", "dist", "build", "coverage", "__pycache__", ".venv",
 ] as const;
+
+export const projectCommitDetailsLimits = {
+  maxFiles: 5000,
+  maxFileBytes: 1024 * 1024,
+  maxPatchBytes: 256 * 1024,
+  maxResponseBytes: 8 * 1024 * 1024,
+  commandTimeoutMs: 8000,
+} as const;

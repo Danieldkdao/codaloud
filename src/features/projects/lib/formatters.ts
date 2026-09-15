@@ -1,6 +1,19 @@
+import { format, isValid, parseISO } from "date-fns";
+
 import type { CodeEditorMatchState } from "@/components/code-editor-matches";
-import type { ProjectAgentActivityKind, ProjectAgentActivityStatus, ProjectFileSearchScope, ProjectGitTab, ProjectWorkspaceTab } from "@/features/projects/types";
-import type { ProjectDiffComparison, ProjectDiffLine, ProjectDiffScope, ProjectWorkspaceDiffData } from "@/features/projects/types";
+import type {
+  ProjectAgentActivityKind,
+  ProjectAgentActivityStatus,
+  ProjectFileSearchScope,
+  ProjectGitTab,
+  ProjectWorkspaceTab,
+} from "@/features/projects/types";
+import type {
+  ProjectDiffComparison,
+  ProjectDiffLine,
+  ProjectDiffScope,
+  ProjectWorkspaceDiffData,
+} from "@/features/projects/types";
 import type { ProjectGitFileState } from "../actions/change-schemas";
 import type { ProjectSetupStatus } from "@/db/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
@@ -16,40 +29,85 @@ import type {
 
 export const formatProjectBranchSource = (source: ProjectBranchSource) => {
   switch (source) {
-    case "local": return { title: "Local branches", icon: "git-branch" as const };
-    case "remote": return { title: "Remote branches", icon: "cloud" as const };
+    case "local":
+      return { title: "Local branches", icon: "git-branch" as const };
+    case "remote":
+      return { title: "Remote branches", icon: "cloud" as const };
   }
 };
 
 export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
   switch (status) {
-    case "loading": return { label: "Loading file…", busy: true, icon: "cloud-sync-outline" as const, className: "text-muted-foreground" };
-    case "pending": return { label: "Changes waiting to save…", busy: true, icon: "cloud-sync-outline" as const, className: "text-muted-foreground" };
-    case "saving": return { label: "Saving file…", busy: true, icon: "cloud-sync-outline" as const, className: "text-muted-foreground" };
-    case "saved": return { label: "File saved", busy: false, icon: "cloud-check-outline" as const, className: "text-success-foreground" };
-    case "error": return { label: "Couldn't save file. Tap to retry.", busy: false, icon: "cloud-remove-outline" as const, className: "text-destructive" };
+    case "loading":
+      return {
+        label: "Loading file…",
+        busy: true,
+        icon: "cloud-sync-outline" as const,
+        className: "text-muted-foreground",
+      };
+    case "pending":
+      return {
+        label: "Changes waiting to save…",
+        busy: true,
+        icon: "cloud-sync-outline" as const,
+        className: "text-muted-foreground",
+      };
+    case "saving":
+      return {
+        label: "Saving file…",
+        busy: true,
+        icon: "cloud-sync-outline" as const,
+        className: "text-muted-foreground",
+      };
+    case "saved":
+      return {
+        label: "File saved",
+        busy: false,
+        icon: "cloud-check-outline" as const,
+        className: "text-success-foreground",
+      };
+    case "error":
+      return {
+        label: "Couldn't save file. Tap to retry.",
+        busy: false,
+        icon: "cloud-remove-outline" as const,
+        className: "text-destructive",
+      };
   }
 };
 
 export const formatCodeDiagnostic = (severity: DiagnosticSeverity) => {
   switch (severity) {
-    case "error": return { icon: "x-circle" as const, className: "text-destructive" };
-    case "warning": return { icon: "alert-triangle" as const, className: "text-warning" };
-    case "info": return { icon: "info" as const, className: "text-info" };
+    case "error":
+      return { icon: "x-circle" as const, className: "text-destructive" };
+    case "warning":
+      return { icon: "alert-triangle" as const, className: "text-warning" };
+    case "info":
+      return { icon: "info" as const, className: "text-info" };
   }
 };
 
-export const formatCodeDiagnosticCount = (count: number) => count > 99 ? "99+" : String(count);
+export const formatCodeDiagnosticCount = (count: number) =>
+  count > 99 ? "99+" : String(count);
 
 export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
   switch (analysis.status) {
-    case "checking": return "Checking code…";
-    case "unavailable": return "Code analysis unavailable. Tap to retry.";
-    case "unsupported": return "Code analysis is not available for this language.";
+    case "checking":
+      return "Checking code…";
+    case "unavailable":
+      return "Code analysis unavailable. Tap to retry.";
+    case "unsupported":
+      return "Code analysis is not available for this language.";
     case "ready": {
-      const errors = analysis.diagnostics.filter((item) => item.severity === "error").length;
-      const warnings = analysis.diagnostics.filter((item) => item.severity === "warning").length;
-      const information = analysis.diagnostics.filter((item) => item.severity === "info").length;
+      const errors = analysis.diagnostics.filter(
+        (item) => item.severity === "error",
+      ).length;
+      const warnings = analysis.diagnostics.filter(
+        (item) => item.severity === "warning",
+      ).length;
+      const information = analysis.diagnostics.filter(
+        (item) => item.severity === "info",
+      ).length;
       return `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}, ${information} information message${information === 1 ? "" : "s"}. Show problems.`;
     }
   }
@@ -58,9 +116,21 @@ export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
 export const formatProjectFileKind = (kind: ProjectFileKind) => {
   switch (kind) {
     case "file":
-      return { inputLabel: "File name", placeholder: "new-file.ts", successMessage: "File created", updateSuccessMessage: "File updated", deleteSuccessMessage: "File deleted" };
+      return {
+        inputLabel: "File name",
+        placeholder: "new-file.ts",
+        successMessage: "File created",
+        updateSuccessMessage: "File updated",
+        deleteSuccessMessage: "File deleted",
+      };
     case "folder":
-      return { inputLabel: "Folder name", placeholder: "new-folder", successMessage: "Folder created", updateSuccessMessage: "Folder updated", deleteSuccessMessage: "Folder deleted" };
+      return {
+        inputLabel: "Folder name",
+        placeholder: "new-folder",
+        successMessage: "Folder created",
+        updateSuccessMessage: "Folder updated",
+        deleteSuccessMessage: "Folder deleted",
+      };
     default:
       throw new Error(`Unsupported file kind: ${kind satisfies never}`);
   }
@@ -69,26 +139,45 @@ export const formatProjectFileKind = (kind: ProjectFileKind) => {
 export const formatProjectFileNameAction = (mode: "create" | "update") => {
   switch (mode) {
     case "create":
-      return { cancelLabel: "Cancel creation", pendingLabel: "Creating item", errorTitle: "Couldn't create this item" };
+      return {
+        cancelLabel: "Cancel creation",
+        pendingLabel: "Creating item",
+        errorTitle: "Couldn't create this item",
+      };
     case "update":
-      return { cancelLabel: "Cancel update", pendingLabel: "Updating item", errorTitle: "Couldn't update this item" };
+      return {
+        cancelLabel: "Cancel update",
+        pendingLabel: "Updating item",
+        errorTitle: "Couldn't update this item",
+      };
     default:
       throw new Error(`Unsupported file name action: ${mode satisfies never}`);
   }
 };
 
-export const formatProjectFileDeletion = (kind: ProjectFileKind, name: string) => {
+export const formatProjectFileDeletion = (
+  kind: ProjectFileKind,
+  name: string,
+) => {
   switch (kind) {
     case "file":
-      return { title: "Delete file?", description: `Are you sure you want to delete "${name}"? This action cannot be undone.` };
+      return {
+        title: "Delete file?",
+        description: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+      };
     case "folder":
-      return { title: "Delete folder?", description: `Are you sure you want to delete "${name}" and all files and folders inside it? This action cannot be undone.` };
+      return {
+        title: "Delete folder?",
+        description: `Are you sure you want to delete "${name}" and all files and folders inside it? This action cannot be undone.`,
+      };
     default:
       throw new Error(`Unsupported file kind: ${kind satisfies never}`);
   }
 };
 
-export const formatProjectSource = (source: CreateProjectSchema["source"]): {
+export const formatProjectSource = (
+  source: CreateProjectSchema["source"],
+): {
   value: CreateProjectSchema["source"];
   icon: "box" | "github";
   title: string;
@@ -114,7 +203,9 @@ export const formatProjectSource = (source: CreateProjectSchema["source"]): {
   }
 };
 
-export const formatProjectSetupStatus = (status: ProjectSetupStatus): {
+export const formatProjectSetupStatus = (
+  status: ProjectSetupStatus,
+): {
   label: string;
   className: string;
   textClassName: string;
@@ -145,7 +236,9 @@ export const formatProjectSetupStatus = (status: ProjectSetupStatus): {
         textClassName: "text-destructive",
       };
     default:
-      throw new Error(`Unsupported project setup status: ${status satisfies never}`);
+      throw new Error(
+        `Unsupported project setup status: ${status satisfies never}`,
+      );
   }
 };
 
@@ -158,7 +251,9 @@ export const formatProjectSortField = (sortField: ProjectSortField): string => {
     case "updatedAt":
       return "Last updated";
     default:
-      throw new Error(`Unsupported project sort field: ${sortField satisfies never}`);
+      throw new Error(
+        `Unsupported project sort field: ${sortField satisfies never}`,
+      );
   }
 };
 
@@ -169,122 +264,212 @@ export const formatProjectSortOrder = (sortOrder: ProjectSortOrder): string => {
     case "desc":
       return "Descending";
     default:
-      throw new Error(`Unsupported project sort order: ${sortOrder satisfies never}`);
+      throw new Error(
+        `Unsupported project sort order: ${sortOrder satisfies never}`,
+      );
   }
 };
 
-
 export const formatCommitHash = (hash: string): string => hash.slice(0, 7);
 
-// Full Git messages include a body and often a trailing newline. List titles use only the subject.
-export const formatCommitSubject = (message: string): string => message.split(/\r?\n/, 1)[0].trim();
+export const formatCommitParent = (hash: string | null): string =>
+  hash === null ? "None" : formatCommitHash(hash);
 
-export const formatProjectBranchLabel = (branch: string | null, isLoading: boolean): string =>
-  branch ?? (isLoading ? "Loading branches…" : "Select branch");
+export const formatCommitTimestamp = (timestamp: string): string => {
+  const date = parseISO(timestamp);
+  return isValid(date)
+    ? format(date, "MMM d, yyyy 'at' h:mm a")
+    : "Date unavailable";
+};
+
+export const formatProjectUpdatedDate = (updatedAt: string): string => {
+  const date = parseISO(updatedAt);
+  return isValid(date)
+    ? `Updated ${format(date, "MMM d, yyyy")}`
+    : "Update date unavailable";
+};
+
+// Full Git messages include a body and often a trailing newline. List titles use only the subject.
+export const formatCommitSubject = (message: string): string =>
+  message.split(/\r?\n/, 1)[0].trim();
+
+export const formatProjectBranchLabel = (
+  branch: string | null,
+  isLoading: boolean,
+): string => branch ?? (isLoading ? "Loading branches…" : "Select branch");
 
 export const formatProjectGitTab = (tab: ProjectGitTab) => {
   switch (tab) {
-    case "changes": return "Changes";
-    case "history": return "Commit History";
+    case "changes":
+      return "Changes";
+    case "history":
+      return "Commit History";
   }
 };
 
 export const formatProjectChangePath = (path: string) => {
   const separator = path.lastIndexOf("/");
-  return { name: path.slice(separator + 1), directory: separator < 0 ? "Project root" : path.slice(0, separator) };
+  return {
+    name: path.slice(separator + 1),
+    directory: separator < 0 ? "Project root" : path.slice(0, separator),
+  };
 };
 
-export const formatProjectChangeCount = (count: number) => `${count} file${count === 1 ? "" : "s"}`;
+export const formatProjectChangeCount = (count: number) =>
+  `${count} file${count === 1 ? "" : "s"}`;
 
-export const formatProjectChangeSelection = (selected: number, total: number) => `${selected} of ${formatProjectChangeCount(total)} selected`;
+export const formatProjectChangeSelection = (selected: number, total: number) =>
+  `${selected} of ${formatProjectChangeCount(total)} selected`;
 
-export const formatProjectChangeLines = (additions: number, deletions: number) => ({
+export const formatProjectChangeLines = (
+  additions: number,
+  deletions: number,
+) => ({
   additions: `+${additions}`,
   deletions: `−${deletions}`,
 });
 
-export const formatProjectDiffAccessibility = (additions: number, deletions: number) => ({
+export const formatProjectDiffAccessibility = (
+  additions: number,
+  deletions: number,
+) => ({
   additions: `${additions} added lines`,
   deletions: `${deletions} removed lines`,
 });
 
-export const formatProjectDiffSummary = (summary: ProjectWorkspaceDiffData["summary"]) => {
+export const formatProjectDiffSummary = (
+  summary: ProjectWorkspaceDiffData["summary"],
+) => {
   const additions = summary.staged.additions + summary.unstaged.additions;
   const deletions = summary.staged.deletions + summary.unstaged.deletions;
-  const unavailable = summary.staged.unavailableCount + summary.unstaged.unavailableCount;
+  const unavailable =
+    summary.staged.unavailableCount + summary.unstaged.unavailableCount;
   const comparisons = summary.staged.fileCount + summary.unstaged.fileCount;
   if (comparisons > 0 && comparisons === unavailable) return null;
   const labels = formatProjectDiffAccessibility(additions, deletions);
   return {
     ...formatProjectChangeLines(additions, deletions),
     // Keep the compact visible totals while disclosing omitted previews to assistive technology.
-    additionsLabel: unavailable ? `${labels.additions} in available previews` : labels.additions,
-    deletionsLabel: unavailable ? `${labels.deletions} in available previews` : labels.deletions,
+    additionsLabel: unavailable
+      ? `${labels.additions} in available previews`
+      : labels.additions,
+    deletionsLabel: unavailable
+      ? `${labels.deletions} in available previews`
+      : labels.deletions,
   };
 };
 
 export const formatProjectGitFileState = (status: ProjectGitFileState) => {
   switch (status) {
-    case "unchanged": return "Unchanged";
-    case "modified": return "Modified";
-    case "added": return "Added";
-    case "deleted": return "Deleted";
-    case "renamed": return "Renamed";
-    case "copied": return "Copied";
-    case "type-changed": return "File type changed";
-    case "unmerged": return "Merge conflict";
-    case "untracked": return "New file";
+    case "unchanged":
+      return "Unchanged";
+    case "modified":
+      return "Modified";
+    case "added":
+      return "Added";
+    case "deleted":
+      return "Deleted";
+    case "renamed":
+      return "Renamed";
+    case "copied":
+      return "Copied";
+    case "type-changed":
+      return "File type changed";
+    case "unmerged":
+      return "Merge conflict";
+    case "untracked":
+      return "New file";
   }
 };
 
 export const formatProjectDiffScope = (scope: ProjectDiffScope) => {
   switch (scope) {
-    case "staged": return "Staged";
-    case "unstaged": return "Unstaged";
+    case "staged":
+      return "Staged";
+    case "unstaged":
+      return "Unstaged";
   }
 };
 
-export const formatProjectDiffUnavailable = (reason: Extract<ProjectDiffComparison, { kind: "unavailable" }>["reason"]) => {
+export const formatProjectDiffUnavailable = (
+  reason: Extract<ProjectDiffComparison, { kind: "unavailable" }>["reason"],
+) => {
   switch (reason) {
-    case "binary": return "Binary file or unsupported text encoding. Text preview unavailable.";
-    case "too-large": return "This change is too large to preview.";
-    case "unsupported": return "Text preview is unavailable for this file type.";
-    case "conflict": return "Merge conflict. A two-way diff is unavailable until the conflict is resolved.";
-    case "invalid-patch": return "Unable to display this patch. Refresh to try again.";
+    case "binary":
+      return "Binary file or unsupported text encoding. Text preview unavailable.";
+    case "too-large":
+      return "This change is too large to preview.";
+    case "unsupported":
+      return "Text preview is unavailable for this file type.";
+    case "conflict":
+      return "Merge conflict. A two-way diff is unavailable until the conflict is resolved.";
+    case "invalid-patch":
+      return "Unable to display this patch. Refresh to try again.";
   }
 };
 
 export const formatProjectDiffRow = (line: ProjectDiffLine) => {
   switch (line.kind) {
-    case "addition": return { prefix: "+ ", className: "bg-success", textClassName: "text-success-foreground", label: `Added line ${line.newLine}: ${line.text}` };
-    case "deletion": return { prefix: "− ", className: "bg-destructive/10", textClassName: "text-destructive", label: `Removed line ${line.oldLine}: ${line.text}` };
-    case "context": return { prefix: "  ", className: "", textClassName: "text-foreground", label: `Unchanged line ${line.newLine}: ${line.text}` };
+    case "addition":
+      return {
+        prefix: "+ ",
+        className: "bg-success",
+        textClassName: "text-success-foreground",
+        label: `Added line ${line.newLine}: ${line.text}`,
+      };
+    case "deletion":
+      return {
+        prefix: "− ",
+        className: "bg-destructive/10",
+        textClassName: "text-destructive",
+        label: `Removed line ${line.oldLine}: ${line.text}`,
+      };
+    case "context":
+      return {
+        prefix: "  ",
+        className: "",
+        textClassName: "text-foreground",
+        label: `Unchanged line ${line.newLine}: ${line.text}`,
+      };
   }
 };
 
-export const formatProjectDiffDisclosure = (path: string, expanded: boolean) => ({
+export const formatProjectDiffDisclosure = (
+  path: string,
+  expanded: boolean,
+) => ({
   label: `${expanded ? "Collapse" : "Expand"} ${path} diff`,
-  icon: expanded ? "chevron-up" as const : "chevron-down" as const,
+  icon: expanded ? ("chevron-up" as const) : ("chevron-down" as const),
 });
 
-export const formatProjectDiffLineNumber = (line: number | null) => line === null ? "" : String(line);
+export const formatProjectDiffLineNumber = (line: number | null) =>
+  line === null ? "" : String(line);
 
 export const formatProjectDiffMode = (mode: string) => {
   switch (mode) {
-    case "000000": return "Missing file";
-    case "100644": return "Regular file";
-    case "100755": return "Executable file";
-    case "120000": return "Symbolic link";
-    case "160000": return "Submodule";
-    default: return `Mode ${mode}`;
+    case "000000":
+      return "Missing file";
+    case "100644":
+      return "Regular file";
+    case "100755":
+      return "Executable file";
+    case "120000":
+      return "Symbolic link";
+    case "160000":
+      return "Submodule";
+    default:
+      return `Mode ${mode}`;
   }
 };
 
-export const formatCommitDate = (committedAt: string): string =>
-  new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(committedAt));
+export const formatCommitDate = (committedAt: string): string => {
+  const date = parseISO(committedAt);
+  return isValid(date) ? format(date, "MMM d") : "Date unavailable";
+};
 
-
-export const formatAgentActivityKind = (kind: ProjectAgentActivityKind): {
+export const formatAgentActivityKind = (
+  kind: ProjectAgentActivityKind,
+): {
   label: string;
   icon: "mic" | "message-square" | "code" | "terminal" | "git-pull-request";
 } => {
@@ -300,11 +485,15 @@ export const formatAgentActivityKind = (kind: ProjectAgentActivityKind): {
     case "review":
       return { label: "Code review", icon: "git-pull-request" };
     default:
-      throw new Error(`Unsupported agent activity kind: ${kind satisfies never}`);
+      throw new Error(
+        `Unsupported agent activity kind: ${kind satisfies never}`,
+      );
   }
 };
 
-export const formatAgentActivityStatus = (status: ProjectAgentActivityStatus): {
+export const formatAgentActivityStatus = (
+  status: ProjectAgentActivityStatus,
+): {
   label: string;
   icon: "clock" | "play-circle" | "check-circle" | "alert-circle";
   className: string;
@@ -312,36 +501,76 @@ export const formatAgentActivityStatus = (status: ProjectAgentActivityStatus): {
 } => {
   switch (status) {
     case "queued":
-      return { label: "Queued", icon: "clock", className: "bg-muted", textClassName: "text-muted-foreground" };
+      return {
+        label: "Queued",
+        icon: "clock",
+        className: "bg-muted",
+        textClassName: "text-muted-foreground",
+      };
     case "running":
-      return { label: "Running", icon: "play-circle", className: "bg-secondary", textClassName: "text-secondary-foreground" };
+      return {
+        label: "Running",
+        icon: "play-circle",
+        className: "bg-secondary",
+        textClassName: "text-secondary-foreground",
+      };
     case "complete":
-      return { label: "Complete", icon: "check-circle", className: "bg-success", textClassName: "text-success-foreground" };
+      return {
+        label: "Complete",
+        icon: "check-circle",
+        className: "bg-success",
+        textClassName: "text-success-foreground",
+      };
     case "failed":
-      return { label: "Failed", icon: "alert-circle", className: "bg-destructive/10", textClassName: "text-destructive" };
+      return {
+        label: "Failed",
+        icon: "alert-circle",
+        className: "bg-destructive/10",
+        textClassName: "text-destructive",
+      };
     case "needs-attention":
-      return { label: "Needs attention", icon: "alert-circle", className: "bg-accent/10", textClassName: "text-accent" };
+      return {
+        label: "Needs attention",
+        icon: "alert-circle",
+        className: "bg-accent/10",
+        textClassName: "text-accent",
+      };
     default:
-      throw new Error(`Unsupported agent activity status: ${status satisfies never}`);
+      throw new Error(
+        `Unsupported agent activity status: ${status satisfies never}`,
+      );
   }
 };
 
-export const formatAgentActivityDate = (createdAt: string): string =>
-  new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(createdAt));
-
+export const formatAgentActivityDate = (createdAt: string): string => {
+  const date = parseISO(createdAt);
+  return isValid(date) ? format(date, "MMM d 'at' h:mm a") : "Date unavailable";
+};
 
 export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
   switch (tab) {
-    case "files": return { label: "Files", icon: { family: "Feather", name: "folder" } } as const;
-    case "code": return { label: "Code", icon: { family: "Ionicons", name: "document-text-outline" } } as const;
-    case "git": return { label: "Git", icon: { family: "Feather", name: "git-branch" } } as const;
-    case "agent": return { label: "Agent", icon: { family: "Ionicons", name: "sparkles-outline" } } as const;
-    default: throw new Error(`Unsupported workspace tab: ${tab satisfies never}`);
+    case "files":
+      return {
+        label: "Files",
+        icon: { family: "Feather", name: "folder" },
+      } as const;
+    case "code":
+      return {
+        label: "Code",
+        icon: { family: "Ionicons", name: "document-text-outline" },
+      } as const;
+    case "git":
+      return {
+        label: "Git",
+        icon: { family: "Feather", name: "git-branch" },
+      } as const;
+    case "agent":
+      return {
+        label: "Agent",
+        icon: { family: "Ionicons", name: "sparkles-outline" },
+      } as const;
+    default:
+      throw new Error(`Unsupported workspace tab: ${tab satisfies never}`);
   }
 };
 
@@ -350,9 +579,15 @@ export const formatWorkspaceSearch = (tab: string | undefined) => {
     case "git":
       return { placeholder: "Search Git", accessibilityLabel: "Search Git" };
     case "agent":
-      return { placeholder: "Search Activity", accessibilityLabel: "Search activity" };
+      return {
+        placeholder: "Search Activity",
+        accessibilityLabel: "Search activity",
+      };
     default:
-      return { placeholder: "Search Files", accessibilityLabel: "Search files" };
+      return {
+        placeholder: "Search Files",
+        accessibilityLabel: "Search files",
+      };
   }
 };
 
@@ -385,9 +620,12 @@ export const formatProjectFileSearchError = (code: string | undefined) => {
 
 export const formatProjectFileSearchScope = (scope: ProjectFileSearchScope) => {
   switch (scope) {
-    case "all": return "Title & content";
-    case "title": return "File title";
-    case "content": return "File content";
+    case "all":
+      return "Title & content";
+    case "title":
+      return "File title";
+    case "content":
+      return "File content";
   }
 };
 
@@ -396,39 +634,61 @@ export const formatProjectFileMatchCount = (count: number) => {
   return `${count} ${count === 1 ? "match" : "matches"} found in this file`;
 };
 
-export const formatProjectFileSearchCount = (count: number) => `${count} ${count === 1 ? "file" : "files"}`;
+export const formatProjectFileSearchCount = (count: number) =>
+  `${count} ${count === 1 ? "file" : "files"}`;
 
-export const formatProjectFileSearchCoverage = (scope: ProjectFileSearchScope, skippedContentFiles: number) => {
+export const formatProjectFileSearchCoverage = (
+  scope: ProjectFileSearchScope,
+  skippedContentFiles: number,
+) => {
   const hasSkippedContent = scope !== "title" && skippedContentFiles > 0;
   return {
     notice: hasSkippedContent
       ? `Contents of ${formatProjectFileSearchCount(skippedContentFiles)} could not be searched.`
       : null,
-    emptyTitle: hasSkippedContent ? "No matches in searched files" : "No matching files",
+    emptyTitle: hasSkippedContent
+      ? "No matches in searched files"
+      : "No matching files",
   };
 };
 
 export const formatProjectFileSearchPath = (path: string) => {
   const separator = path.lastIndexOf("/");
-  return { name: path.slice(separator + 1), directory: separator < 0 ? "Workspace" : path.slice(0, separator) };
+  return {
+    name: path.slice(separator + 1),
+    directory: separator < 0 ? "Workspace" : path.slice(0, separator),
+  };
 };
 
-export const formatProjectFileSearchTitle = (name: string, query: string, scope: ProjectFileSearchScope) => {
+export const formatProjectFileSearchTitle = (
+  name: string,
+  query: string,
+  scope: ProjectFileSearchScope,
+) => {
   const search = query.trim();
-  if (scope === "content" || !search) return [{ text: name, highlighted: false }];
+  if (scope === "content" || !search)
+    return [{ text: name, highlighted: false }];
 
   // Escape the literal query so filenames such as [id].tsx are not regex patterns.
   const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return name.split(new RegExp(`(${escapedSearch})`, "gi")).map((text, index) => ({
-    text,
-    highlighted: index % 2 === 1,
-  }));
+  return name
+    .split(new RegExp(`(${escapedSearch})`, "gi"))
+    .map((text, index) => ({
+      text,
+      highlighted: index % 2 === 1,
+    }));
 };
 
-
-export const formatProjectFilePreviewMatches = (state: CodeEditorMatchState | null) => {
-  if (state === null) return { label: "…", accessibilityLabel: "Finding matches" };
-  if (state.activeIndex === null || state.total === 0) return { label: "No matches", accessibilityLabel: "No matches in this file" };
+export const formatProjectFilePreviewMatches = (
+  state: CodeEditorMatchState | null,
+) => {
+  if (state === null)
+    return { label: "…", accessibilityLabel: "Finding matches" };
+  if (state.activeIndex === null || state.total === 0)
+    return {
+      label: "No matches",
+      accessibilityLabel: "No matches in this file",
+    };
   return {
     label: `${state.activeIndex + 1} / ${state.total}`,
     accessibilityLabel: `Match ${state.activeIndex + 1} of ${state.total}`,

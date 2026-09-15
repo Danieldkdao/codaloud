@@ -27,3 +27,11 @@ it("refuses a changed preview even when HEAD and filenames are unchanged", () =>
   expect(() => discard(false, fingerprint)).toThrow(expect.objectContaining({ code: "WORKSPACE_CHANGED" }));
   expect(fixture.git("diff")).toContain("newer");
 });
+
+it("preserves files ignored at preview time even when restoring .gitignore changes the rules", () => {
+  fixture.write(".gitignore", "old-ignore\n"); fixture.git("add", ".gitignore"); fixture.git("commit", "-m", "Ignore rules");
+  fixture.write(".gitignore", "precious.txt\n"); fixture.write("precious.txt", "must survive\n");
+  const preview = fixture.run(sandboxGitDiscardPreviewCommand);
+  fixture.run(sandboxGitDiscardCommand, { expectedHeadSha: preview.expectedHeadSha, fingerprint: preview.fingerprint, confirm: true, includeUntracked: true });
+  expect(readFileSync(join(fixture.repositoryPath, "precious.txt"), "utf8")).toBe("must survive\n");
+});

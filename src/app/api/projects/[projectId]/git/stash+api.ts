@@ -12,5 +12,5 @@ import { sandboxGitStashPushCommand } from "@/services/daytona/git-stash-push-co
 
 export const POST = createGitRoute({
   input: gitStashPushSchema, output: gitStashPushedSchema, script: sandboxGitStashPushCommand,
-  mutation: true, message: "Stash completed; ignored files were preserved.",
+  mutation: true, author: true, message: "Stash completed; ignored files were preserved.",
 });

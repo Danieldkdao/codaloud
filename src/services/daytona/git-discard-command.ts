@@ -42,10 +42,17 @@ export const sandboxGitDiscardCommand = createGitOperationCommand(snapshot + Str
   if (snapshot().fingerprint !== input.fingerprint) fail("WORKSPACE_CHANGED");
   if (!input.confirm) fail("WORKSPACE_CHANGED");
   if (git(["ls-files", "--stage"]).split("\n").some((line) => line.startsWith("160000 "))) fail("GIT_UNSUPPORTED_CONFIG");
+  const untracked = git(["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
   mutationStarted = true;
   git(["restore", "--source=" + input.expectedHeadSha, "--staged", "--worktree", "--", "."]);
   // Single force deliberately preserves nested repositories; no -x preserves ignored files.
-  if (input.includeUntracked) git(["clean", "-fd", "--", "."]);
+  if (input.includeUntracked) {
+    // Restoring .gitignore can expose files that were ignored in the preview.
+    // Only clean the original untracked paths, in bounded argument batches.
+    for (let offset = 0; offset < untracked.length; offset += 50) {
+      git(["--literal-pathspecs", "clean", "-fd", "--", ...untracked.slice(offset, offset + 50)]);
+    }
+  }
   checkExpected();
   return { headSha: head(), remainingChanges: Boolean(git(["status", "--porcelain=v1", "--untracked-files=all"])) };
 `);

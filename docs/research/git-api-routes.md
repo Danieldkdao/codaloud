@@ -69,17 +69,17 @@ A temporary Git 2.55.0 repository verified literal case-insensitive search for `
 
 ### Discard changes
 
-Restore both index and tracked worktree from the expected HEAD using `restore --source=HEAD --staged --worktree`; this does not move branch history. Newly added paths absent from the source are removed. An unborn branch has no HEAD and needs explicit behavior, such as an empty-tree source or a clear unsupported-state response. [Git restore](https://git-scm.com/docs/git-restore)
+Restore both index and tracked worktree from the captured current HEAD using `restore --source=HEAD --staged --worktree`; this does not move branch history. Newly added paths absent from the source are removed. An unborn branch has no HEAD and needs explicit behavior, such as an empty-tree source or a clear unsupported-state response. [Git restore](https://git-scm.com/docs/git-restore)
 
 If discard includes untracked files, `clean -fd` removes them and untracked directories while preserving ignored paths. Do not use `-x` or double force; the latter permits deleting nested repositories. Check unsupported nested/submodule states before destructive work. Document the operation's scope and require stale-state protection so it does not discard a different workspace state than the caller selected. [Git clean](https://git-scm.com/docs/git-clean)
 
 ### Revert last commit
 
-Revert records an inverse commit and preserves existing history; it is not a reset. Require clean tracked/index state, the expected HEAD, and a server-resolved author identity. Use noninteractive message handling. A merge commit requires an explicit mainline parent; reject that state unless the API exposes a deliberate mainline choice. Reverting a root commit is valid; an empty/unborn repository has nothing to revert. Conflicts and existing sequencer operations require actionable responses. [Git revert](https://git-scm.com/docs/git-revert)
+Revert records an inverse commit and preserves existing history; it is not a reset. Require clean tracked/index state, the captured current HEAD, and a server-resolved author identity. Use noninteractive message handling. A merge commit requires an explicit mainline parent; reject that state unless the API exposes a deliberate mainline choice. Reverting a root commit is valid; an empty/unborn repository has nothing to revert. Conflicts and existing sequencer operations require actionable responses. [Git revert](https://git-scm.com/docs/git-revert)
 
 ### Create branch
 
-Create from the expected current commit and check it out using `switch -c`, unless the API deliberately specifies creation without checkout. The create-and-switch form is transactional: failed switching does not leave a newly created branch. Do not use `-C`, which can reset an existing branch. [Git switch](https://git-scm.com/docs/git-switch)
+Create from the captured current commit and check it out using `switch -c`, unless the API deliberately specifies creation without checkout. The create-and-switch form is transactional: failed switching does not leave a newly created branch. Do not use `-C`, which can reset an existing branch. [Git switch](https://git-scm.com/docs/git-switch)
 
 Reuse the existing branch schema and validate with Git as well. `check-ref-format --branch` accepts previous-checkout shorthand by expanding it, so schema validation must reject that syntax before execution. Avoid accepting arbitrary revision expressions, option-like names, or remote destinations. [Git check-ref-format](https://git-scm.com/docs/git-check-ref-format)
 
@@ -107,24 +107,24 @@ Exercise ordinary push, rejected non-fast-forward push, explicit force lease suc
 
 Base path: `/api/projects/:projectId/git`. These routes use the existing authenticated session and project ownership/readiness checks. Responses retain `{ error, message, data? }` on success and `{ error: true, code, message }` on failure, with `Cache-Control: private, no-store` and `Vary: Cookie`. Restoration responses include `Retry-After: 3`.
 
-All POST requests require `Content-Type: application/json`, a body of at most 64 KiB, and no query parameters or unknown body fields. Booleans must be JSON booleans, not strings. All mutations require `expectedBranch` and `expectedHeadSha` from the last observed workspace state. They operate on initialized repositories with an existing commit. Creating a repository and initializing Git remain separate operations.
+All POST requests require `Content-Type: application/json`, a body of at most 64 KiB, and no query parameters or unknown body fields. Booleans must be JSON booleans, not strings. All mutations derive the checked-out local branch and HEAD inside the sandbox while holding the repository lock. The removed `expectedBranch`, `expectedHeadSha`, and push/pull `remoteBranch` request fields are rejected. Operations act on the branch checked out when execution starts; captured state is rechecked during the operation. They require an initialized repository, an attached local branch, and an existing commit. Creating a repository and initializing Git remain separate operations.
 
-| Method and endpoint | Additional request fields | Result and behavior |
+| Method and endpoint | Request fields | Result and behavior |
 | --- | --- | --- |
 | `GET /counts` | None | `currentBranch`, `headSha`, `upstream`, `upstreamSha`, `outgoing`, `incoming`, `isShallow`, `observedAt`. Counts use local tracking refs, not a network request. Missing upstream/head or shallow history yields null counts. |
-| `POST /branches` | `branchName` | Creates from the expected current commit and checks out the branch; returns previous/current branch and HEAD. Never resets an existing branch. |
+| `POST /branches` | `branchName` | Creates from the captured current commit and checks out the branch; returns previous/current branch and HEAD. Never resets an existing branch. |
 | `GET /stash` | Query `search` (optional), `cursor` (optional), `pageSize` (default 20, maximum 100) | Returns `stashes`, `nextCursor`, and `patch: null`. Search matches the displayed stash message using case-insensitive literal matching, before pagination. The cursor binds the last entry to the complete list snapshot, project, sandbox, search and page size. Entries retain their real zero-based stash `index`, `sha`, `message`, and `createdAt`. Legacy `offset` and `page` parameters are rejected. |
 | `GET /stash` (detail) | Query `index` and `stashSha` together | Verifies the selected slot still has that SHA, then returns its entry and patch, including untracked files, with `nextCursor: null`. Patches are bounded to 3 MiB. A cursor or nonempty `search` cannot be combined with detail lookup. |
 | `POST /stash` | Optional `message` (1–5,000 trimmed characters) | Saves tracked/staged/untracked work, preserving ignored files. Returns `created`, `stashSha`, and `remainingChanges`. A clean workspace is a successful no-op. If Git reuses an identical saved commit without adding an entry, `created` is false and `stashSha` identifies the saved work. Uses the account's name/email. A restored ignore rule can make a preserved file newly untracked, which is reported through `remainingChanges`. |
 | `POST /stash-pop` | `stashIndex`, `stashSha`, optional `restoreIndex` (default false) | Applies the verified stash by immutable SHA, rechecks its reflog slot, and removes it only after success. Requires a clean workspace. Returns `stashSha` and `dropped: true`. Conflicts retain the stash. |
-| `GET /discard` | None | Returns `expectedBranch`, `expectedHeadSha`, `fingerprint`, and `changedPaths` for review. The token includes the index and changed file contents/modes, not just filenames. Preview is limited to 10,000 paths and 64 MiB of changed regular-file content. |
-| `POST /discard` | `fingerprint`, `confirm: true`, `includeUntracked` (required boolean) | Verifies the preview, restores tracked/index content from expected HEAD, and optionally cleans only previously identified untracked paths. Preserves ignored files and nested repositories; does not move HEAD. Returns `headSha` and `remainingChanges`. Submodule repositories are rejected for discard. |
+| `GET /discard` | None | Returns `currentBranch`, `headSha`, `fingerprint`, and `changedPaths` for review. The token includes the index and changed file contents/modes, not just filenames. Preview is limited to 10,000 paths and 64 MiB of changed regular-file content. |
+| `POST /discard` | `fingerprint`, `confirm: true`, `includeUntracked` (required boolean) | Verifies the preview, restores tracked/index content from captured HEAD, and optionally cleans only previously identified untracked paths. Preserves ignored files and nested repositories; does not move HEAD. Returns `headSha` and `remainingChanges`. Submodule repositories are rejected for discard. |
 | `POST /revert` | Optional `mainline` for merge commits | Creates an inverse commit using the account's name/email. Requires clean work and complete history. Merge commits require an explicit valid parent number. Returns the new `hash`, `parentHash`, and `currentBranch`. |
-| `POST /fetch` | No additional fields | Fetches all origin branches through isolated authenticated transport, atomically refreshes/prunes origin-tracking refs, and attempts to unshallow from complete remote history. Leaves local branch tips and working files intact. Returns refreshed counts. |
-| `POST /push` | `remoteBranch`, optional `force` (default false), `expectedRemoteSha` required when force is true | Pushes one explicit ref. Force uses an explicit SHA lease; null means the remote branch must be absent. Returns `pushed`, `remoteBranch`, `remoteSha`, `trackingUpdated`, and `counts`. First push records the branch's upstream. A confirmed push remains successful if local metadata refresh fails (`trackingUpdated: false`, `counts: null`). |
-| `POST /pull` | `remoteBranch`, optional `rebase` (default false) | Fetches then explicitly merges with the ort strategy or rebases local commits. Requires clean work and a valid account identity. Rebase disables autostash, autosquash, unrelated-ref updates, and merge recreation. Returns `previousHeadSha`, `headSha`, `currentBranch`, `rebased`, and refreshed `counts` (null if the post-success count read fails). |
+| `POST /fetch` | Empty JSON object `{}` | Fetches all origin branches through isolated authenticated transport, atomically refreshes/prunes origin-tracking refs, and attempts to unshallow from complete remote history. Leaves local branch tips and working files intact. Returns refreshed counts. |
+| `POST /push` | Optional `force` (default false), `expectedRemoteSha` required when force is true | Pushes one explicit ref. Force uses an explicit SHA lease; null means the remote branch must be absent. Returns `pushed`, `remoteBranch`, `remoteSha`, `trackingUpdated`, and `counts`. First push records the branch's upstream. A confirmed push remains successful if local metadata refresh fails (`trackingUpdated: false`, `counts: null`). |
+| `POST /pull` | Optional `rebase` (default false) | Fetches then explicitly merges with the ort strategy or rebases local commits. Requires clean work and a valid account identity. Rebase disables autostash, autosquash, unrelated-ref updates, and merge recreation. Returns `previousHeadSha`, `headSha`, `currentBranch`, `rebased`, and refreshed `counts` (null if the post-success count read fails). |
 
-For push/pull, `remoteBranch` must agree with an existing configured origin upstream. Remote access is verified using the project's stored GitHub repository ID; callers cannot supply a URL, token, sandbox ID, or repository filesystem path. Push additionally checks write permission and archived status. Local operations do not request GitHub credentials.
+Push and pull derive the remote branch from the current local branch's single configured origin upstream, including differently named upstreams. With no upstream, first push uses the local branch name and records its upstream; pull requires an upstream. Partial, multiple, malformed, or non-origin tracking configuration is rejected. The `remoteBranch` field in push responses reports the derived destination; it is not an accepted input. Remote access is verified using the project's stored GitHub repository ID; callers cannot supply a URL, token, sandbox ID, or repository filesystem path. Push additionally checks write permission and archived status. Local operations do not request GitHub credentials.
 
 ### Examples
 
@@ -132,24 +132,27 @@ Search saved stash messages with `GET /api/projects/:projectId/git/stash?search=
 
 Pass the returned `nextCursor` back as `cursor` with the same search and page size; `null` means there are no more matches. Treat it as an opaque token. Each entry's `index` remains its actual stash slot for detail/pop requests. Omit the cursor to start over when changing filters. A changed list returns `409 GIT_STASH_CHANGED`; invalid cursors or mismatched search/page size return `400 INVALID_STASH_CURSOR`. Refresh from the first page after a stash is added or removed. Complete list metadata must fit the shared 4 MiB Git output limit; the API rejects oversized snapshots rather than continuing from a partial list.
 
-Push the branch whose state the caller last observed:
+Create a branch from the currently checked-out branch with only its new name:
+
+```json
+{ "branchName": "feature/new" }
+```
+
+Push the currently checked-out branch:
 
 ```json
 {
-  "expectedBranch": "main",
-  "expectedHeadSha": "<40-or-64-character-commit-sha>",
-  "remoteBranch": "main",
   "force": false
 }
 ```
 
-To force push, set `force` to true and include `expectedRemoteSha` from the reviewed remote-tracking state. Fetch first if a current remote snapshot is needed, but do not replace a user's reviewed lease automatically after a rejection. Pull uses the same expected branch/HEAD and remote branch fields, with `rebase: true` to select rebase.
+To force push, set `force` to true and include `expectedRemoteSha` from the reviewed remote-tracking state. Fetch first if a current remote snapshot is needed, but do not replace a user's reviewed lease automatically after a rejection. Pull accepts `{}` for merge or `{ "rebase": true }` for rebase; its branch and upstream are derived in the sandbox.
 
-For discard, first call `GET /discard`. POST only its `expectedBranch`, `expectedHeadSha`, and `fingerprint`, plus `confirm: true` and an explicit `includeUntracked` choice; `changedPaths` is preview output, not an accepted mutation field.
+For discard, first call `GET /discard`. POST only its `fingerprint`, plus `confirm: true` and an explicit `includeUntracked` choice; `currentBranch`, `headSha`, and `changedPaths` are preview output, not accepted mutation fields. The fingerprint still detects a branch switch even if both branches point to the same commit.
 
 ### Coordination and recovery
 
-The shared repository lock now covers the new routes, existing staging/committing, existing remote-branch fetch and checkout, and application file creation/rename/deletion/save. Existing checkout still uses `requestDaytona` and its established error translator, with Git execution moved under the shared command lock. Native Git locks, expected revisions, immutable stash identities, and the discard fingerprint provide additional checks. Commands invoked outside these application adapters must honor the shared lock to participate in this coordination.
+The shared repository lock now covers the new routes, existing staging/committing, existing remote-branch fetch and checkout, and application file creation/rename/deletion/save. Existing checkout still uses `requestDaytona` and its established error translator, with Git execution moved under the shared command lock. Native Git locks, internally captured revisions, immutable stash identities, and the discard fingerprint provide additional checks. Commands invoked outside these application adapters must honor the shared lock to participate in this coordination.
 
 - `GIT_CONFLICTS` (409) means Git left conflicting/partially applied work. Refresh changes, resolve the conflict, and finish or abort the corresponding merge/rebase/revert. For stash pop, the stash is retained. These routes do not supply a conflict editor or continue/abort endpoints.
 - `WORKSPACE_CHANGED` / `GIT_STASH_CHANGED` (409) require a fresh workspace/stash selection. A stash-state change detected after application can mean the stash was applied but retained; refresh both the stash list and working changes before retrying.
@@ -163,3 +166,7 @@ Commands have an 80-second Git deadline, a 90-second Daytona process timeout, an
 ### Verification performed
 
 Tests exercise the actual command strings against disposable Git workspaces and bare remotes, replacing only the authenticated network transport. Route tests exercise authentication, ownership ordering, input limits, strict flags, permission failures, response validation, and uncertain outcomes. Additional regression tests cover existing checkout behavior and Git/file-write coordination. Live GitHub and Daytona execution are not part of these fixture tests. TypeScript and the Expo API-only server export are checked separately. Platform-specific Linux filesystem tests retain their existing conditional execution requirements.
+
+### Current-branch API refactor
+
+The final request contracts follow the current-branch policy documented in [current-branch-git-api.md](current-branch-git-api.md). Local branch/HEAD values are server state, not client inputs. Stash list/detail remain repository-wide reads; selecting a saved stash does not select a source branch. Existing deliberate checkout and historical branch/commit inspection APIs keep their selectors because choosing the resource is their purpose. No UI or hook wiring was added.

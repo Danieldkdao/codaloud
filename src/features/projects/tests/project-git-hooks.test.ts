@@ -168,3 +168,10 @@ verifyMutation({
   input: undefined,
   noInput: true,
 });
+
+verifyMutation({
+  name: "push",
+  useResult: (id) => useProjectGit(id, { enabled: false }).push,
+  action: actions.pushProjectGitAction,
+  input: { force: true, expectedRemoteSha: "a".repeat(40) },
+});

@@ -1,3 +1,5 @@
+import { gitPushSchema } from "../server/git-push-schemas";
+import { pushProjectGitAction } from "../actions/git-actions";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { fetchProjectGitAction } from "../actions/git-actions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -51,5 +53,22 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  return { fetch, ...query };
+  const push = useMutation({
+    mutationKey: ["projects", "git", "push", userId, projectId],
+    retry: false,
+    // Execute now or fail; never replay a queued write against a later workspace.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: z.input<typeof gitPushSchema> = {}) => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await pushProjectGitAction(id, input);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Conflicts and lost responses can leave partial changes on the server.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context, { remote: true }),
+  });
+
+  return { push, fetch, ...query };
 };

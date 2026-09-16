@@ -1,13 +1,18 @@
+import type { GitUndoneSchema } from "../server/git-undo-schemas";
+import type { ProjectGitMutationContext } from "../types";
 import { gitUndoSchema } from "../server/git-undo-schemas";
-import { undoProjectCommitAction } from "../actions/git-actions";
+import {
+  undoProjectCommitAction,
+  revertProjectCommitAction,
+  createProjectCommitAction,
+  readProjectCommitsAction,
+} from "../actions/git-actions";
 import { gitRevertSchema } from "../server/git-revert-schemas";
 import { z } from "zod";
 import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
-import { revertProjectCommitAction } from "../actions/git-actions";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
-import { createProjectCommitAction, readProjectCommitsAction } from "../actions/git-actions";
 import { projectCommitParamsSchema, type ProjectCommitParamsSchema } from "../lib/commit-params";
 import type { CreateProjectCommitSchema, ProjectCreatedCommitSchema } from "../actions/create-commit-schemas";
 
@@ -101,8 +106,9 @@ export const useProjectCommitHistory = (
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input) => {
       if (!userId) throw new ProjectCommitError("Sign in to commit changes.");
-      if (!projectId) throw new ProjectCommitError("Invalid project ID.");
-      const result = await createProjectCommitAction(projectId, input);
+      const project = z.uuid().safeParse(projectId);
+      if (!project.success) throw new ProjectCommitError("Invalid project ID.");
+      const result = await createProjectCommitAction(project.data, input);
       if (result.error) throw new ProjectCommitError(result.message, result.code);
       return result.data;
     },
@@ -129,7 +135,7 @@ export const useProjectCommitHistory = (
       : query.refetch();
   };
 
-  const revert = useMutation({
+  const revert = useMutation<ProjectCreatedCommitSchema, ProjectGitError, z.input<typeof gitRevertSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "revert", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -146,7 +152,7 @@ export const useProjectCommitHistory = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  const undo = useMutation({
+  const undo = useMutation<GitUndoneSchema, ProjectGitError, z.input<typeof gitUndoSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "undo", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -163,7 +169,9 @@ export const useProjectCommitHistory = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { undo, revert,
+  return {
+    undo,
+    revert,
     ...query,
     onLoadMore,
     retry,

@@ -1,13 +1,20 @@
-import { gitStashPopSchema } from "../server/git-stash-schemas";
-import { popProjectStashAction } from "../actions/git-actions";
-import { gitStashPushSchema } from "../server/git-stash-schemas";
+import type { GitStashPushedSchema, GitStashPoppedSchema } from "../server/git-stash-schemas";
+import type { ProjectGitMutationContext } from "../types";
+import {
+  gitStashPopSchema,
+  gitStashPushSchema,
+  gitStashQuerySchema,
+  type GitStashQuerySchema,
+} from "../server/git-stash-schemas";
+import {
+  popProjectStashAction,
+  stashProjectChangesAction,
+  readProjectStashesAction,
+} from "../actions/git-actions";
 import { refreshProjectGitQueries } from "../lib/git-cache";
-import { stashProjectChangesAction } from "../actions/git-actions";
 import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
-import { readProjectStashesAction } from "../actions/git-actions";
-import { gitStashQuerySchema, type GitStashQuerySchema } from "../server/git-stash-schemas";
 import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 
 export const useProjectStashes = (
@@ -89,7 +96,7 @@ export const useProjectStashes = (
     return query.isFetchNextPageError ? query.fetchNextPage({ cancelRefetch: false }) : query.refetch();
   };
 
-  const stash = useMutation({
+  const stash = useMutation<GitStashPushedSchema, ProjectGitError, z.input<typeof gitStashPushSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "stash", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -106,7 +113,7 @@ export const useProjectStashes = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  const popStash = useMutation({
+  const popStash = useMutation<GitStashPoppedSchema, ProjectGitError, z.input<typeof gitStashPopSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "popStash", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -123,5 +130,5 @@ export const useProjectStashes = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { popStash, stash, ...query, loadMore, retry, stashDetails };
+  return { ...query, loadMore, retry, stashDetails, stash, popStash };
 };

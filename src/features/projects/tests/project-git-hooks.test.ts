@@ -1,14 +1,14 @@
+// @vitest-environment happy-dom
 import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectBranches } from "../hooks/use-project-branches";
-// @vitest-environment happy-dom
 import { useProjectChanges } from "../hooks/use-project-changes";
 import { useProjectStashes } from "../hooks/use-project-stashes";
+import { ProjectGitRequestError } from "../lib/git-errors";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { useProjectGit } from "../hooks/use-project-git";
-
 const { session, actions } = vi.hoisted(() => ({
   session: { data: { user: { id: "user-one" } } as { user: { id: string } } | null, isPending: false, error: null as Error | null },
   actions: {
@@ -73,12 +73,13 @@ type MutationResult<V> = {
   isPending: boolean;
   error: Error | null;
 };
-const verifyMutation = <V,>({ name, useResult, action, input, noInput = false }: {
+const verifyMutation = <V,>({ name, useResult, action, input, noInput = false, unknownCode = "GIT_OUTCOME_UNKNOWN" }: {
   name: string;
   useResult: (id: string | null) => MutationResult<V>;
   action: Mock;
   input: V;
   noInput?: boolean;
+  unknownCode?: string;
 }) => {
   describe(name, () => {
     beforeEach(() => { action.mockResolvedValue({ error: false, message: "Completed.", data: { completed: true } }); });
@@ -103,12 +104,12 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false }:
     it("preserves failures, refreshes uncertain outcomes, and never retries writes", async () => {
       const key = ["projects", "changes", "user-one", projectId];
       client.setQueryData(key, { before: true });
-      action.mockResolvedValue({ error: true, code: "GIT_OUTCOME_UNKNOWN", message: "Refresh the workspace." });
+      action.mockResolvedValue({ error: true, code: unknownCode, message: "Refresh the workspace." });
       const hook = await renderHook(() => useResult(projectId));
-      await run(async () => { await expect(hook.current.mutateAsync(input)).rejects.toMatchObject({ code: "GIT_OUTCOME_UNKNOWN", message: "Refresh the workspace." }); });
+      await run(async () => { await expect(hook.current.mutateAsync(input)).rejects.toMatchObject({ code: unknownCode, message: "Refresh the workspace." }); });
       expect(action).toHaveBeenCalledOnce();
       expect(client.getQueryState(key)?.isInvalidated).toBe(true);
-      expect(hook.current.error).toMatchObject({ code: "GIT_OUTCOME_UNKNOWN" });
+      expect(hook.current.error).toMatchObject({ code: unknownCode });
     });
     it("refreshes the submitted account and project after navigation", async () => {
       let finish!: (value: unknown) => void;
@@ -307,3 +308,50 @@ verifyMutation({
   action: actions.popProjectStashAction,
   input: { stashIndex: 0, stashSha: "a".repeat(40), restoreIndex: true },
 });
+
+verifyMutation({
+  name: "checkout",
+  useResult: (id) => useProjectBranches(id, { enabled: false }).checkout,
+  action: actions.checkoutProjectBranchAction,
+  input: { branchName: "feature/mobile" },
+  unknownCode: "CHECKOUT_OUTCOME_UNKNOWN",
+});
+
+verifyMutation({
+  name: "commit",
+  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).commit,
+  action: actions.createProjectCommitAction,
+  input: { message: "save", paths: ["file.ts"] },
+  unknownCode: "COMMIT_OUTCOME_UNKNOWN",
+});
+
+const verifyReadRetries = (name: string, useRead: () => { refetch: (options: { throwOnError: boolean }) => Promise<unknown> }, action: Mock, resource: string) => {
+  it(`${name} retries only transient failures and preserves server failure metadata`, async () => {
+    action.mockImplementation(async (...args) => {
+      args.at(-1)(409, null, "STALE_SELECTION");
+      return null;
+    });
+    const hook = await renderHook(useRead);
+    await run(async () => { await expect(hook.current.refetch({ throwOnError: true })).rejects.toMatchObject({ status: 409, code: "STALE_SELECTION" }); });
+    const options = client.getQueryCache().getAll().find((query) => query.queryKey[1] === resource)!.options;
+    const shouldRetry = options.retry;
+    const delay = options.retryDelay;
+    expect(typeof shouldRetry).toBe("function");
+    expect(typeof delay).toBe("function");
+    if (typeof shouldRetry !== "function" || typeof delay !== "function") throw new Error("Expected retry functions.");
+    expect(shouldRetry(0, new Error("invalid response"))).toBe(false);
+    expect(shouldRetry(0, new ProjectGitRequestError(409, null, "STALE_SELECTION"))).toBe(false);
+    expect(shouldRetry(0, new ProjectGitRequestError(0, null))).toBe(true);
+    expect(shouldRetry(1, new ProjectGitRequestError(502, null))).toBe(true);
+    expect(shouldRetry(2, new ProjectGitRequestError(502, null))).toBe(false);
+    expect(shouldRetry(20, new ProjectGitRequestError(503, "3", "WORKSPACE_RESTORING"))).toBe(true);
+    expect(delay(0, new ProjectGitRequestError(503, "3", "WORKSPACE_RESTORING"))).toBe(3000);
+    expect(delay(8, new ProjectGitRequestError(502, null))).toBe(30_000);
+    expect(action).toHaveBeenCalledOnce();
+  });
+};
+
+verifyReadRetries("counts", () => useProjectGit(projectId, { enabled: false }), actions.readProjectGitCountsAction, "git-counts");
+verifyReadRetries("discard preview", () => useProjectChanges(projectId, { enabled: false }).discardPreview, actions.readProjectDiscardPreviewAction, "discard-preview");
+verifyReadRetries("stash list", () => useProjectStashes(projectId, { enabled: false }), actions.readProjectStashesAction, "stashes");
+verifyReadRetries("stash details", () => useProjectStashes(projectId, { enabled: false, stashIndex: 0, stashSha: "a".repeat(40) }).stashDetails, actions.readProjectStashesAction, "stash-details");

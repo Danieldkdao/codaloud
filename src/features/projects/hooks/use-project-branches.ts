@@ -1,22 +1,21 @@
+import type { GitCreatedBranchSchema } from "../server/git-branch-schemas";
+import type { ProjectGitMutationContext } from "../types";
 import { gitCreateBranchSchema } from "../server/git-branch-schemas";
 import { z } from "zod";
 import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
-import { createProjectBranchAction } from "../actions/git-actions";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  createProjectBranchAction,
   checkoutProjectBranchAction,
   readProjectBranchesAction,
 } from "../actions/git-actions";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { projectBranchParamsSchema, type ProjectBranchParamsSchema } from "../lib/branch-params";
+import { useAuthSession } from "@/hooks/use-auth-session";
 import type {
   CheckoutProjectBranchSchema,
   ProjectBranchCheckoutSchema,
 } from "../actions/branch-schemas";
-import {
-  projectBranchParamsSchema,
-  type ProjectBranchParamsSchema,
-} from "../lib/branch-params";
-import { useAuthSession } from "@/hooks/use-auth-session";
 
 class ProjectBranchRequestError extends Error {
   constructor(
@@ -128,28 +127,23 @@ export const useProjectBranches = (
   >({
     mutationKey: ["projects", "branches", "checkout", userId, projectId],
     retry: false,
+    networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input) => {
       if (!userId)
         throw new ProjectBranchCheckoutError("Sign in to switch branches.");
-      if (!projectId)
+      const project = z.uuid().safeParse(projectId);
+      if (!project.success)
         throw new ProjectBranchCheckoutError("Invalid project ID.");
       // The action validates input and confirms the response matches the requested branch.
-      const result = await checkoutProjectBranchAction(projectId, input);
+      const result = await checkoutProjectBranchAction(project.data, input);
       if (result.error)
         throw new ProjectBranchCheckoutError(result.message, result.code);
       return result.data;
     },
     onSettled: async (_data, error, _input, context) => {
       if (!context || (error && error.code !== "CHECKOUT_OUTCOME_UNKNOWN")) return;
-      // Refresh the submitted workspace even if the hook has since navigated.
-      const changesQuery = {
-        queryKey: ["projects", "changes", context.userId, context.projectId],
-        exact: true,
-      };
-      // An initial read without cached data must not finish with the old branch's snapshot.
-      await queryClient.cancelQueries(changesQuery);
-      await queryClient.invalidateQueries(changesQuery);
+      await refreshProjectGitQueries(queryClient, context);
     },
   });
 
@@ -191,7 +185,7 @@ export const useProjectBranches = (
       : query.refetch();
   };
 
-  const createBranch = useMutation({
+  const createBranch = useMutation<GitCreatedBranchSchema, ProjectGitError, z.input<typeof gitCreateBranchSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "createBranch", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.

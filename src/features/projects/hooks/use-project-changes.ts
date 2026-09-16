@@ -1,14 +1,17 @@
+import type { GitDiscardedSchema } from "../server/git-discard-schemas";
+import type { ProjectGitMutationContext } from "../types";
 import { gitDiscardSchema } from "../server/git-discard-schemas";
 import { refreshProjectGitQueries } from "../lib/git-cache";
-import { discardProjectChangesAction } from "../actions/git-actions";
+import {
+  discardProjectChangesAction,
+  readProjectDiscardPreviewAction,
+  readProjectChangesAction,
+} from "../actions/git-actions";
 import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
-import { readProjectDiscardPreviewAction } from "../actions/git-actions";
 import { useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
-import { readProjectChangesAction } from "../actions/git-actions";
-
 export const useProjectChanges = (
   projectId: string | null | undefined,
   { enabled = true, discardPreviewEnabled = false }: { enabled?: boolean; discardPreviewEnabled?: boolean } = {},
@@ -80,7 +83,7 @@ export const useProjectChanges = (
     return refetch({ throwOnError: true });
   }, [projectId, queryClient, refetch, userId]);
 
-  const discardChanges = useMutation({
+  const discardChanges = useMutation<GitDiscardedSchema, ProjectGitError, z.input<typeof gitDiscardSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "discardChanges", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.

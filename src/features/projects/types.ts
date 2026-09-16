@@ -185,3 +185,8 @@ export type ProjectGitMutationFailure = Extract<ApiResponse, { error: true }>;
 export type ProjectGitMutationResult<T> =
   | ProjectGitMutationFailure
   | { error: false; message: string; data: T };
+
+export type ProjectGitMutationContext = {
+  userId: string | null;
+  projectId: string | null | undefined;
+};

@@ -1,13 +1,19 @@
+import type { GitPulledSchema } from "../server/git-pull-schemas";
+import type { GitPushedSchema } from "../server/git-push-schemas";
+import type { GitCountsSchema } from "../server/git-schemas";
+import type { ProjectGitMutationContext } from "../types";
 import { gitPullSchema } from "../server/git-pull-schemas";
-import { pullProjectGitAction } from "../actions/git-actions";
+import {
+  pullProjectGitAction,
+  pushProjectGitAction,
+  fetchProjectGitAction,
+  readProjectGitCountsAction,
+} from "../actions/git-actions";
 import { gitPushSchema } from "../server/git-push-schemas";
-import { pushProjectGitAction } from "../actions/git-actions";
 import { refreshProjectGitQueries } from "../lib/git-cache";
-import { fetchProjectGitAction } from "../actions/git-actions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
-import { readProjectGitCountsAction } from "../actions/git-actions";
 import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 
 export const useProjectGit = (
@@ -38,7 +44,7 @@ export const useProjectGit = (
     },
   });
 
-  const fetch = useMutation({
+  const fetch = useMutation<GitCountsSchema, ProjectGitError, void, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "fetch", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -55,7 +61,7 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  const push = useMutation({
+  const push = useMutation<GitPushedSchema, ProjectGitError, z.input<typeof gitPushSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "push", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -72,7 +78,7 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  const pull = useMutation({
+  const pull = useMutation<GitPulledSchema, ProjectGitError, z.input<typeof gitPullSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "pull", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -89,5 +95,5 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  return { pull, push, fetch, ...query };
+  return { ...query, fetch, push, pull };
 };

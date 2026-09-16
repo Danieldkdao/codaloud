@@ -77,7 +77,7 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false }:
   noInput?: boolean;
 }) => {
   describe(name, () => {
-    beforeEach(() => action.mockResolvedValue({ error: false, message: "Completed.", data: { completed: true } }));
+    beforeEach(() => { action.mockResolvedValue({ error: false, message: "Completed.", data: { completed: true } }); });
     it("exports the whole mutation and refreshes files, changes and commit details", async () => {
       const keys = ["file", "files", "changes", "git-counts", "commit-details"].map((kind) => ["projects", kind, "user-one", projectId]);
       keys.forEach((key) => client.setQueryData(key, { before: true }));
@@ -159,4 +159,12 @@ describe("Git counts", () => {
     expect(hook.current.error).toBeInstanceOf(Error);
     expect(actions.readProjectGitCountsAction).toHaveBeenCalledOnce();
   });
+});
+
+verifyMutation({
+  name: "fetch",
+  useResult: (id) => useProjectGit(id, { enabled: false }).fetch,
+  action: actions.fetchProjectGitAction,
+  input: undefined,
+  noInput: true,
 });

@@ -1,13 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
+import { refreshProjectGitQueries } from "../lib/git-cache";
+import { fetchProjectGitAction } from "../actions/git-actions";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { readProjectGitCountsAction } from "../actions/git-actions";
-import { ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
+import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 
 export const useProjectGit = (
   projectId: string | null | undefined,
   { enabled = true }: { enabled?: boolean } = {},
 ) => {
+  const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
   const project = z.uuid().safeParse(projectId);
@@ -31,5 +34,22 @@ export const useProjectGit = (
     },
   });
 
-  return { ...query };
+  const fetch = useMutation({
+    mutationKey: ["projects", "git", "fetch", userId, projectId],
+    retry: false,
+    // Execute now or fail; never replay a queued write against a later workspace.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async () => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await fetchProjectGitAction(id);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Conflicts and lost responses can leave partial changes on the server.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context, { remote: true }),
+  });
+
+  return { fetch, ...query };
 };

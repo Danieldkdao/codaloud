@@ -1,3 +1,4 @@
+import { gitUndoSchema, gitUndoneSchema } from "../server/git-undo-schemas";
 import { gitRevertSchema } from "../server/git-revert-schemas";
 import { projectCreatedCommitSchema } from "./create-commit-schemas";
 import { gitDiscardPreviewSchema, gitDiscardSchema, gitDiscardedSchema } from "../server/git-discard-schemas";
@@ -407,4 +408,13 @@ export const revertProjectCommitAction = async (
   mutateProjectGitRequest({
     projectId, path: "revert", output: projectCreatedCommitSchema,
     input: gitRevertSchema, unsafeInput,
+  });
+
+export const undoProjectCommitAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitUndoSchema>,
+) =>
+  mutateProjectGitRequest({
+    projectId, path: "undo", output: gitUndoneSchema,
+    input: gitUndoSchema, unsafeInput,
   });

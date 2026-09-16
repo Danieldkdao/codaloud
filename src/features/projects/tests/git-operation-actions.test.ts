@@ -240,3 +240,15 @@ it("passes the merge mainline to revert", async () => {
   await actions.revertProjectCommitAction(projectId, { mainline: 2 });
   expect(network.mock.calls[0][1]?.body).toBe('{"mainline":2}');
 });
+
+verifyAction({
+  name: "undoProjectCommitAction",
+  call: (id) => actions.undoProjectCommitAction(id, { mode: "soft" }),
+  path: "undo", data: { previousHeadSha: sha, headSha: sha, currentBranch: "main", mode: "soft" }, body: { mode: "soft" },
+  invalid: () => actions.undoProjectCommitAction(projectId, { mode: "invalid" } as never),
+});
+
+it.each(["mixed", "hard"] as const)("passes the requested %s undo mode", async (mode) => {
+  await actions.undoProjectCommitAction(projectId, { mode });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ mode });
+});

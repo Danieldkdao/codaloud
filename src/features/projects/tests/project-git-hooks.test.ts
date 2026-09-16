@@ -1,3 +1,4 @@
+import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectBranches } from "../hooks/use-project-branches";
 // @vitest-environment happy-dom
 import { act, createElement } from "react";
@@ -189,4 +190,11 @@ verifyMutation({
   useResult: (id) => useProjectBranches(id, { enabled: false }).createBranch,
   action: actions.createProjectBranchAction,
   input: { branchName: "feature/mobile" },
+});
+
+verifyMutation({
+  name: "revert",
+  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).revert,
+  action: actions.revertProjectCommitAction,
+  input: { mainline: 1 },
 });

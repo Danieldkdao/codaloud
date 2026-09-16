@@ -1,3 +1,4 @@
+import { gitPushSchema, gitPushedSchema } from "../server/git-push-schemas";
 import { z } from "zod";
 import { mutateProjectGitRequest, readProjectGitRequest } from "../lib/git-requests";
 import { gitCountsSchema } from "../server/git-schemas";
@@ -318,3 +319,12 @@ export const readProjectCommitsAction = async (
     return null;
   }
 };
+
+export const pushProjectGitAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitPushSchema> = {},
+) =>
+  mutateProjectGitRequest({
+    projectId, path: "push", output: gitPushedSchema,
+    input: gitPushSchema, unsafeInput,
+  });

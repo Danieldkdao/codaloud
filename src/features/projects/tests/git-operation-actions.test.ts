@@ -129,3 +129,16 @@ verifyAction({
   call: (id) => actions.fetchProjectGitAction(id),
   path: "fetch", data: counts, body: {},
 });
+
+verifyAction({
+  name: "pushProjectGitAction",
+  call: (id) => actions.pushProjectGitAction(id, {}),
+  path: "push", data: { pushed: true, remoteBranch: "main", remoteSha: sha, trackingUpdated: true, counts }, body: { force: false },
+  invalid: () => actions.pushProjectGitAction(projectId, { force: true } as never),
+});
+
+it.each([null, sha])("preserves the explicit force-push lease %s", async (expectedRemoteSha) => {
+  network.mockResolvedValue(Response.json({ error: true, code: "PUSH_REJECTED", message: "Remote changed." }));
+  await actions.pushProjectGitAction(projectId, { force: true, expectedRemoteSha });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ force: true, expectedRemoteSha });
+});

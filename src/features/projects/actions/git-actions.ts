@@ -1,4 +1,4 @@
-import { gitStashQuerySchema, gitStashListSchema } from "../server/git-stash-schemas";
+import { gitStashQuerySchema, gitStashListSchema, gitStashPushSchema, gitStashPushedSchema } from "../server/git-stash-schemas";
 import { gitCreateBranchSchema, gitCreatedBranchSchema } from "../server/git-branch-schemas";
 import { gitPullSchema, gitPulledSchema } from "../server/git-pull-schemas";
 import { gitPushSchema, gitPushedSchema } from "../server/git-push-schemas";
@@ -359,4 +359,13 @@ export const readProjectStashesAction = async (
     projectId, path: "stash", output: gitStashListSchema,
     input: gitStashQuerySchema, params,
     signal,
+  });
+
+export const stashProjectChangesAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitStashPushSchema> = {},
+) =>
+  mutateProjectGitRequest({
+    projectId, path: "stash", output: gitStashPushedSchema,
+    input: gitStashPushSchema, unsafeInput,
   });

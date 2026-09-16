@@ -184,3 +184,17 @@ it("requests a stash patch with its index and SHA together", async () => {
   expect(url.searchParams.get("index")).toBe("0");
   expect(url.searchParams.get("stashSha")).toBe(sha);
 });
+
+verifyAction({
+  name: "stashProjectChangesAction",
+  call: (id) => actions.stashProjectChangesAction(id, { message: "  Save work  " }),
+  path: "stash", data: { created: true, remainingChanges: false, stashSha: sha }, body: { message: "Save work" },
+  invalid: () => actions.stashProjectChangesAction(projectId, { message: " " } as never),
+});
+
+it("accepts a no-op stash without a message", async () => {
+  const success = { error: false, message: "Nothing to stash.", data: { created: false, remainingChanges: false, stashSha: null } };
+  network.mockResolvedValue(Response.json(success));
+  expect(await actions.stashProjectChangesAction(projectId)).toEqual(success);
+  expect(network.mock.calls[0][1]?.body).toBe("{}");
+});

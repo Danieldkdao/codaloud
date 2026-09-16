@@ -1,8 +1,9 @@
 import { SandboxFilesError } from "@/services/daytona/api";
 
 // Bound allocation before parsing, including requests without Content-Length.
-// The limit leaves room for a 5,000-character Unicode message and branch names.
-export const readGitJson = async (request: Request): Promise<unknown> => {
+// Most Git requests need only a message or branch name. Selected-file commits
+// explicitly allow a larger bounded body for their existing path-list contract.
+export const readGitJson = async (request: Request, maxBytes = 64 * 1024): Promise<unknown> => {
   if (!request.body) return null;
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -12,9 +13,9 @@ export const readGitJson = async (request: Request): Promise<unknown> => {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 64 * 1024) {
+      if (size > maxBytes) {
         await reader.cancel();
-        throw new SandboxFilesError(413, "GIT_REQUEST_TOO_LARGE", "Git request bodies must be no larger than 64 KiB.");
+        throw new SandboxFilesError(413, "GIT_REQUEST_TOO_LARGE", `Git request bodies must be no larger than ${maxBytes} bytes.`);
       }
       chunks.push(value);
     }

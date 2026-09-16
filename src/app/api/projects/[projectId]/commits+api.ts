@@ -1,96 +1,38 @@
-import {
-  projectCommitPageSchema,
-  type ProjectCommitPageSchema,
-} from "@/features/projects/actions/commit-schemas";
+import { projectCommitPageSchema } from "@/features/projects/actions/commit-schemas";
 import { projectCommitParamsSchema } from "@/features/projects/lib/commit-params";
-import { createProjectCommitSchema, projectCreatedCommitSchema, type ProjectCreatedCommitSchema } from "@/features/projects/actions/create-commit-schemas";
+import { createProjectCommitSchema, projectCreatedCommitSchema } from "@/features/projects/actions/create-commit-schemas";
+import { createGitRoute } from "@/features/projects/server/git-route";
 import { commitUserProject } from "@/features/projects/server/project-commit";
-import { CommitHistoryError } from "@/features/projects/server/commit-pagination";
-import { getCurrentUser } from "@/lib/auth/helpers";
-import type { ApiResponse } from "@/lib/types";
-import { apiResponse, getContentType, isValidIds } from "@/lib/utils";
-import { SandboxFilesError } from "@/services/daytona/api";
 import { readSandboxCommits } from "@/services/daytona/commits";
 import { readGitHubCommits } from "@/services/github/server/commits";
 
-const commitsResponse = (body: ApiResponse<ProjectCommitPageSchema | ProjectCreatedCommitSchema>, status = 200) => {
-  const response = apiResponse(body, status);
-  response.headers.set("Cache-Control", "private, no-store");
-  response.headers.set("Vary", "Cookie");
-  if (body.error && body.code === "WORKSPACE_RESTORING") {
-    response.headers.set("Retry-After", "3");
-  }
-  return response;
-};
+export const POST = createGitRoute({
+  input: createProjectCommitSchema,
+  output: projectCreatedCommitSchema,
+  mutation: true,
+  // 5,000 paths of up to 4,096 characters, including JSON Unicode escapes.
+  maxBodyBytes: 128 * 1024 * 1024,
+  message: "Selected changes committed.",
+  errors: {
+    input: { code: "INVALID_COMMIT_INPUT", message: "Send a nonempty commit message and a nonempty list of unique repository-relative paths, without extra fields." },
+    unavailable: { status: 500, code: "COMMIT_REQUEST_UNAVAILABLE", message: "Unable to validate the commit request. Please try again." },
+    unknownOutcome: { code: "COMMIT_OUTCOME_UNKNOWN", message: "Unable to confirm the commit. Refresh commit history and Git changes before retrying; the commit may already exist." },
+  },
+  execute: ({ request, params, input }) =>
+    commitUserProject(request.headers, params.projectId, input, request.signal),
+});
 
-export const POST = async (request: Request, { projectId }: { projectId: string }) => {
-  let commitStarted = false;
-  try {
-    const { userId } = await getCurrentUser(request.headers);
-    if (!userId) {
-      return commitsResponse({ error: true, code: "UNAUTHENTICATED", message: "Sign in to commit changes." }, 401);
-    }
-    if (!isValidIds(projectId)) {
-      return commitsResponse({ error: true, code: "INVALID_PROJECT", message: "Invalid project ID." }, 400);
-    }
-    if (getContentType(request.headers) !== "application/json") {
-      return commitsResponse({ error: true, code: "INVALID_CONTENT_TYPE", message: "Send a JSON body containing message and paths." }, 415);
-    }
-
-    const input = createProjectCommitSchema.safeParse(await request.json().catch(() => null));
-    if (!input.success) {
-      return commitsResponse({ error: true, code: "INVALID_COMMIT_INPUT", message: "Send a nonempty commit message and a nonempty list of unique repository-relative paths, without extra fields." }, 400);
-    }
-
-    commitStarted = true;
-    const result = await commitUserProject(request.headers, projectId, input.data, request.signal);
-    const data = projectCreatedCommitSchema.parse(result);
-    return commitsResponse({ error: false, message: "Selected changes committed.", data });
-  } catch (error) {
-    if (error instanceof SandboxFilesError) {
-      return commitsResponse({ error: true, code: error.code, message: error.message }, error.status);
-    }
-    if (commitStarted) {
-      return commitsResponse({ error: true, code: "COMMIT_OUTCOME_UNKNOWN", message: "Unable to confirm the commit. Refresh commit history and Git changes before retrying; the commit may already exist." }, 502);
-    }
-    return commitsResponse({ error: true, code: "COMMIT_REQUEST_UNAVAILABLE", message: "Unable to validate the commit request. Please try again." }, 500);
-  }
-};
-
-export const GET = async (request: Request, { projectId }: { projectId: string }) => {
-  try {
-    const { userId } = await getCurrentUser(request.headers);
-    if (!userId) {
-      return commitsResponse({ error: true, code: "UNAUTHENTICATED", message: "Sign in to view commit history." }, 401);
-    }
-    if (!isValidIds(projectId)) {
-      return commitsResponse({ error: true, code: "INVALID_PROJECT", message: "Invalid project ID." }, 400);
-    }
-
-    const query = new URL(request.url).searchParams;
-    const params = projectCommitParamsSchema.safeParse({
-      projectId,
-      source: query.get("source") ?? undefined,
-      branch: query.get("branch") ?? undefined,
-      search: query.get("search") ?? undefined,
-      author: query.get("author") ?? undefined,
-      cursor: query.get("cursor") ?? undefined,
-      pageSize: query.get("pageSize") ?? undefined,
-    });
-    if (!params.success) {
-      return commitsResponse({ error: true, code: "INVALID_COMMIT_PARAMS", message: "Invalid commit source, branch, search or pagination." }, 400);
-    }
-
-    const { source, projectId: validatedProjectId, ...input } = params.data;
+export const GET = createGitRoute({
+  input: projectCommitParamsSchema,
+  output: projectCommitPageSchema,
+  query: (query, params) => ({ ...Object.fromEntries(query), projectId: params.projectId }),
+  message: "Project commits loaded.",
+  errors: {
+    input: { code: "INVALID_COMMIT_PARAMS", message: "Invalid commit source, branch, search or pagination." },
+    unavailable: { code: "COMMITS_UNAVAILABLE", message: "Unable to load project commits. Please try again." },
+  },
+  execute: ({ request, input: { source, projectId, ...input } }) => {
     const readCommits = source === "local" ? readSandboxCommits : readGitHubCommits;
-    // Each reader rechecks the session and project ownership before provider access.
-    const commits = await readCommits(request.headers, validatedProjectId, input, request.signal);
-    const data = projectCommitPageSchema.parse(commits);
-    return commitsResponse({ error: false, message: "Project commits loaded.", data });
-  } catch (error) {
-    if (error instanceof CommitHistoryError || error instanceof SandboxFilesError) {
-      return commitsResponse({ error: true, code: error.code, message: error.message }, error.status);
-    }
-    return commitsResponse({ error: true, code: "COMMITS_UNAVAILABLE", message: "Unable to load project commits. Please try again." }, 502);
-  }
-};
+    return readCommits(request.headers, projectId, input, request.signal);
+  },
+});

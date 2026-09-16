@@ -49,3 +49,22 @@ it("dispatches remote requests to the GitHub reader", async () => {
   expect(mocks.remote).toHaveBeenCalledWith(input.headers, projectId, commitSha, input.signal);
   expect(mocks.read).not.toHaveBeenCalled();
 });
+
+it.each([
+  { ...details, source: "remote" },
+  { ...details, summary: { ...details.summary, fileCount: 1 } },
+  { ...details, baseSha: "b".repeat(40) },
+])("retains identity and summary validation beyond the response shape", async (result) => {
+  mocks.read.mockResolvedValue(result);
+  const response = await GET(request(), { projectId, commitSha });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toMatchObject({ code: "COMMIT_DETAILS_UNAVAILABLE" });
+  expect(mocks.read).toHaveBeenCalledOnce();
+});
+
+it("strips service-only fields from the validated result", async () => {
+  mocks.read.mockResolvedValue({ ...details, secret: "hidden" });
+  const response = await GET(request(), { projectId, commitSha });
+  expect(response.status).toBe(200);
+  expect((await response.json()).data).toEqual(details);
+});

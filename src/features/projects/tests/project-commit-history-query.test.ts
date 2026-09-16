@@ -320,7 +320,7 @@ it("refreshes the submitted account and project when navigation changes during a
   });
   expect(client.getQueryState(originalChanges)?.isInvalidated).toBe(true);
   expect(client.getQueryState(otherChanges)?.isInvalidated).toBe(false);
-  expect(client.getQueryData(remoteKey)).toBeDefined();
+  expect(client.getQueryData(remoteKey)).toBeUndefined();
   expect(current.data?.pages).toEqual([page("first")]);
 });
 
@@ -358,8 +358,11 @@ it("invalidates every file, directory and local branch query for the submitted w
   await render({ enabled: false });
   await run(() => current.commit.mutateAsync(commitInput));
   for (const key of affected) {
-    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
-    expect(client.getQueryData(key)).toEqual({ cached: true });
+    if (key[1] === "branches") expect(client.getQueryData(key)).toBeUndefined();
+    else {
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+      expect(client.getQueryData(key)).toEqual({ cached: true });
+    }
   }
   for (const key of unrelated) expect(client.getQueryState(key)?.isInvalidated).toBe(false);
 });

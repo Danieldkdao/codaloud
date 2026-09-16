@@ -1,3 +1,4 @@
+import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { createProjectCommitAction, readProjectCommitsAction } from "../actions/git-actions";
@@ -99,33 +100,8 @@ export const useProjectCommitHistory = (
       if (result.error) throw new ProjectCommitError(result.message, result.code);
       return result.data;
     },
-    onSettled: async (_data, _error, _input, context) => {
-      if (!context?.userId || !context.projectId) return;
-      const workspaceQueries = [
-        ["projects", "file", context.userId, context.projectId],
-        ["projects", "files", context.userId, context.projectId],
-        ["projects", "changes", context.userId, context.projectId],
-        ["projects", "branches", "infinite", "cursor", context.userId, context.projectId, "local"],
-      ];
-      // Staging may succeed even when committing fails or its response is lost.
-      // Refresh the submitted workspace, including all file contents/metadata and
-      // diff data. Never replace file contents with a guessed clean-state value.
-      await Promise.allSettled([
-        queryClient.resetQueries({
-          queryKey: ["projects", "commits", "infinite", "cursor", context.userId, context.projectId],
-          predicate: (query) => projectCommitParamsSchema.safeParse(query.queryKey[6]).data?.source === "local",
-        }),
-        // Paginated history and file searches must start with a fresh snapshot.
-        queryClient.resetQueries({
-          queryKey: ["projects", "file-search", "infinite", context.userId, context.projectId],
-        }),
-        ...workspaceQueries.map(async (queryKey) => {
-          // Cancel even initial reads with no cached data before refetching.
-          await queryClient.cancelQueries({ queryKey });
-          await queryClient.invalidateQueries({ queryKey });
-        }),
-      ]);
-    },
+    // Staging can change even if committing fails or its response is lost.
+    onSettled: (_data, _error, _input, context) => refreshProjectGitQueries(queryClient, context),
   });
 
   const onLoadMore = () => {

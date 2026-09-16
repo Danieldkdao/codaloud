@@ -170,7 +170,7 @@ describe("Git counts", () => {
 
 verifyMutation({
   name: "fetch",
-  useResult: (id) => useProjectGit(id, { enabled: false }).fetch,
+  useResult: (id) => useProjectGit(id, { enabled: false }).gitFetch,
   action: actions.fetchProjectGitAction,
   input: undefined,
   noInput: true,
@@ -178,14 +178,14 @@ verifyMutation({
 
 verifyMutation({
   name: "push",
-  useResult: (id) => useProjectGit(id, { enabled: false }).push,
+  useResult: (id) => useProjectGit(id, { enabled: false }).gitPush,
   action: actions.pushProjectGitAction,
   input: { force: true, expectedRemoteSha: "a".repeat(40) },
 });
 
 verifyMutation({
   name: "pull",
-  useResult: (id) => useProjectGit(id, { enabled: false }).pull,
+  useResult: (id) => useProjectGit(id, { enabled: false }).gitPull,
   action: actions.pullProjectGitAction,
   input: { rebase: true },
 });
@@ -232,7 +232,7 @@ describe("discard preview", () => {
 
 verifyMutation({
   name: "discardChanges",
-  useResult: (id) => useProjectChanges(id, { enabled: false }).discardChanges,
+  useResult: (id) => useProjectChanges(id, { enabled: false }).gitDiscardChanges,
   action: actions.discardProjectChangesAction,
   input: { fingerprint: "a".repeat(64), confirm: true, includeUntracked: true },
 });
@@ -299,14 +299,14 @@ describe("stash details", () => {
 
 verifyMutation({
   name: "stash",
-  useResult: (id) => useProjectStashes(id, { enabled: false }).stash,
+  useResult: (id) => useProjectStashes(id, { enabled: false }).gitStash,
   action: actions.stashProjectChangesAction,
   input: { message: "save work" },
 });
 
 verifyMutation({
   name: "popStash",
-  useResult: (id) => useProjectStashes(id, { enabled: false }).popStash,
+  useResult: (id) => useProjectStashes(id, { enabled: false }).gitPopStash,
   action: actions.popProjectStashAction,
   input: { stashIndex: 0, stashSha: "a".repeat(40), restoreIndex: true },
 });

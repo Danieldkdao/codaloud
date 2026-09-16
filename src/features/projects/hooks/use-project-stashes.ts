@@ -97,7 +97,7 @@ export const useProjectStashes = (
     return query.isFetchNextPageError ? query.fetchNextPage({ cancelRefetch: false }) : query.refetch();
   };
 
-  const stash = useMutation<GitStashPushedSchema, ProjectGitError, z.input<typeof gitStashPushSchema>, ProjectGitMutationContext>({
+  const gitStash = useMutation<GitStashPushedSchema, ProjectGitError, z.input<typeof gitStashPushSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "stash", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -114,7 +114,7 @@ export const useProjectStashes = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  const popStash = useMutation<GitStashPoppedSchema, ProjectGitError, z.input<typeof gitStashPopSchema>, ProjectGitMutationContext>({
+  const gitPopStash = useMutation<GitStashPoppedSchema, ProjectGitError, z.input<typeof gitStashPopSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "popStash", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -131,5 +131,5 @@ export const useProjectStashes = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { ...query, loadMore, retry, stashDetails, stash, popStash };
+  return { ...query, loadMore, retry, stashDetails, gitStash, gitPopStash };
 };

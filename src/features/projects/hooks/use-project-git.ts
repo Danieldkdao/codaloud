@@ -45,7 +45,7 @@ export const useProjectGit = (
     },
   });
 
-  const fetch = useMutation<GitCountsSchema, ProjectGitError, void, ProjectGitMutationContext>({
+  const gitFetch = useMutation<GitCountsSchema, ProjectGitError, void, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "fetch", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -62,7 +62,7 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  const push = useMutation<GitPushedSchema, ProjectGitError, z.input<typeof gitPushSchema>, ProjectGitMutationContext>({
+  const gitPush = useMutation<GitPushedSchema, ProjectGitError, z.input<typeof gitPushSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "push", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -79,7 +79,7 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  const pull = useMutation<GitPulledSchema, ProjectGitError, z.input<typeof gitPullSchema>, ProjectGitMutationContext>({
+  const gitPull = useMutation<GitPulledSchema, ProjectGitError, z.input<typeof gitPullSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "pull", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -96,5 +96,5 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  return { ...query, fetch, push, pull };
+  return { ...query, gitFetch, gitPush, gitPull };
 };

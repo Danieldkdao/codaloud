@@ -84,7 +84,7 @@ export const useProjectChanges = (
     return refetch({ throwOnError: true });
   }, [projectId, queryClient, refetch, userId]);
 
-  const discardChanges = useMutation<GitDiscardedSchema, ProjectGitError, z.input<typeof gitDiscardSchema>, ProjectGitMutationContext>({
+  const gitDiscardChanges = useMutation<GitDiscardedSchema, ProjectGitError, z.input<typeof gitDiscardSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "discardChanges", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -101,5 +101,5 @@ export const useProjectChanges = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { discardChanges, ...query, refreshAfterSaves, discardPreview };
+  return { gitDiscardChanges, ...query, refreshAfterSaves, discardPreview };
 };

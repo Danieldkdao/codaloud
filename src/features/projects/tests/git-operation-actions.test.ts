@@ -161,3 +161,26 @@ verifyAction({
   path: "branches", data: { previousBranch: "main", currentBranch: "feature/mobile", headSha: sha }, body: { branchName: "feature/mobile" },
   invalid: () => actions.createProjectBranchAction(projectId, { branchName: "../invalid" } as never),
 });
+
+verifyAction({
+  name: "readProjectStashesAction",
+  call: (id, signal) => actions.readProjectStashesAction(id, {}, signal),
+  path: "stash?pageSize=20&search=", data: { stashes: [], nextCursor: null, patch: null },
+  invalid: () => actions.readProjectStashesAction(projectId, { index: 0 } as never),
+});
+
+it("serializes stash search and pagination", async () => {
+  const data = { stashes: [{ index: 0, sha, message: "work", createdAt: "2026-09-15T12:00:00Z" }], nextCursor: "next", patch: null };
+  network.mockResolvedValue(Response.json({ error: false, message: "Stashes loaded.", data }));
+  expect(await actions.readProjectStashesAction(projectId, { search: "  a & b  ", pageSize: 5, cursor: "previous" })).toEqual(data);
+  const url = new URL(network.mock.calls[0][0] as string, "https://example.test");
+  expect(Object.fromEntries(url.searchParams)).toEqual({ search: "a & b", pageSize: "5", cursor: "previous" });
+});
+it("requests a stash patch with its index and SHA together", async () => {
+  const data = { stashes: [], nextCursor: null, patch: "diff --git a/file b/file" };
+  network.mockResolvedValue(Response.json({ error: false, message: "Stash loaded.", data }));
+  expect(await actions.readProjectStashesAction(projectId, { index: 0, stashSha: sha })).toEqual(data);
+  const url = new URL(network.mock.calls[0][0] as string, "https://example.test");
+  expect(url.searchParams.get("index")).toBe("0");
+  expect(url.searchParams.get("stashSha")).toBe(sha);
+});

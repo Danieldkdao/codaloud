@@ -175,3 +175,10 @@ verifyMutation({
   action: actions.pushProjectGitAction,
   input: { force: true, expectedRemoteSha: "a".repeat(40) },
 });
+
+verifyMutation({
+  name: "pull",
+  useResult: (id) => useProjectGit(id, { enabled: false }).pull,
+  action: actions.pullProjectGitAction,
+  input: { rebase: true },
+});

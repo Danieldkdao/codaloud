@@ -1,3 +1,5 @@
+import { gitPullSchema } from "../server/git-pull-schemas";
+import { pullProjectGitAction } from "../actions/git-actions";
 import { gitPushSchema } from "../server/git-push-schemas";
 import { pushProjectGitAction } from "../actions/git-actions";
 import { refreshProjectGitQueries } from "../lib/git-cache";
@@ -70,5 +72,22 @@ export const useProjectGit = (
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
 
-  return { push, fetch, ...query };
+  const pull = useMutation({
+    mutationKey: ["projects", "git", "pull", userId, projectId],
+    retry: false,
+    // Execute now or fail; never replay a queued write against a later workspace.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: z.input<typeof gitPullSchema> = {}) => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await pullProjectGitAction(id, input);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Conflicts and lost responses can leave partial changes on the server.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context, { remote: true }),
+  });
+
+  return { pull, push, fetch, ...query };
 };

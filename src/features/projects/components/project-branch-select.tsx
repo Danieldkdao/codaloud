@@ -1,3 +1,4 @@
+import { ProjectBranchCreate } from "./project-branch-create";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Keyboard, Pressable, View, useWindowDimensions } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,7 +37,7 @@ type ProjectBranchSelectProps = {
 
 export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: ProjectBranchSelectProps = {}) => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isWorkspaceBusy, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
+  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isWorkspaceBusy, workspaceOperation, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = session.data?.user.id;
@@ -112,7 +113,7 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
       >
         {isWorkspaceBusy && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="MaterialCommunityIcons" name="source-branch" size={26} className="text-foreground" accessible={false} />}
       </Pressable>
-      <ContentSheet open={open && !isWorkspaceBusy} onOpenChange={(value) => { if (!value || !isWorkspaceBusy) setOpen(value); }} backgroundColor={card}>
+      <ContentSheet open={open && (!isWorkspaceBusy || workspaceOperation === "Creating branch…")} onOpenChange={(value) => { if (!value || !isWorkspaceBusy) setOpen(value); }} backgroundColor={card}>
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
         <View style={{ width }}>
           <View accessibilityViewIsModal onAccessibilityEscape={close}>
@@ -126,6 +127,7 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
               </View>
             </View>
             <View>
+              <ProjectBranchCreate name={search} exists={branches.includes(search)} onCreated={() => { close(); setSearch(""); Keyboard.dismiss(); }} />
               <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
                 search={search} open={open} query={query} disabled={isWorkspaceBusy} onSelect={selectBranch} />
               <View className="h-px shrink-0 bg-border" />

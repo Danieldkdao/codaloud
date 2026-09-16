@@ -59,6 +59,7 @@ const live = vi.hoisted(() => ({
   repositoryId: "123" as string | null,
   query: vi.fn(),
   gitCheckout: { mutateAsync: vi.fn() },
+  gitCreateBranch: { mutateAsync: vi.fn() },
   recoverCheckout: vi.fn(),
   loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
@@ -80,7 +81,7 @@ const remote = vi.hoisted(() => ({
 vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => ({ data: { githubRepositoryId: live.repositoryId }, isPending: false, error: null }) }));
 vi.mock("@/services/github/hooks/use-github-repository-branches", () => ({ useGitHubRepositoryBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: { user: { id: live.userId } }, isPending: false, error: null }) }));
-vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { live.query(...args); return { ...live, data: live.data }; } }));
+vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false)) live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const switchTab = vi.fn((name: string) => { activeTab = name; });
@@ -229,6 +230,7 @@ beforeEach(() => {
   git.error = null; git.isPending = false; git.isFetching = false;
 
   feedback.success.mockReset();
+  live.gitCreateBranch.mutateAsync.mockReset().mockImplementation(async ({ branchName }) => ({ currentBranch: branchName, previousBranch: "main" }));
   history.gitCommit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
   history.gitCommit.isPending = false;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1069,4 +1071,27 @@ it("cancels a pending force push confirmation after switching accounts", async (
   live.userId = "user-two"; act(() => root.render(<Workspace />));
   await act(async () => buttons.find((button: { text: string }) => button.text === "Force Push").onPress());
   expect(git.gitPush.mutateAsync).not.toHaveBeenCalled();
+});
+
+const enterBranchName = (value: string) => {
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!;
+  act(() => { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); });
+};
+it("creates a branch from the current workspace and selects the confirmed result", async () => {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  enterBranchName("feature/new-work"); click("Create branch"); await act(async () => {});
+  expect(live.gitCreateBranch.mutateAsync).toHaveBeenCalledExactlyOnceWith({ branchName: "feature/new-work" });
+  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(live.gitCreateBranch.mutateAsync.mock.invocationCallOrder[0]);
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/new-work");
+  expect(feedback.success).toHaveBeenCalledWith("Branch created and checked out.");
+});
+it("disables invalid branch names and retains the name after server rejection", async () => {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  enterBranchName("bad..name");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Create branch"]')!.disabled).toBe(true);
+  enterBranchName("already-exists");
+  live.gitCreateBranch.mutateAsync.mockRejectedValueOnce(new Error("A branch with that name already exists."));
+  click("Create branch"); await act(async () => {});
+  expect(workspaceFiles.alert).toHaveBeenCalledWith("Git operation failed", "A branch with that name already exists.");
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!.value).toBe("already-exists");
 });

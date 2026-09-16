@@ -1,3 +1,5 @@
+import { gitRevertSchema } from "../server/git-revert-schemas";
+import { projectCreatedCommitSchema } from "./create-commit-schemas";
 import { gitDiscardPreviewSchema, gitDiscardSchema, gitDiscardedSchema } from "../server/git-discard-schemas";
 import { gitStashQuerySchema, gitStashListSchema, gitStashPushSchema, gitStashPushedSchema, gitStashPopSchema, gitStashPoppedSchema } from "../server/git-stash-schemas";
 import { gitCreateBranchSchema, gitCreatedBranchSchema } from "../server/git-branch-schemas";
@@ -396,4 +398,13 @@ export const discardProjectChangesAction = async (
   mutateProjectGitRequest({
     projectId, path: "discard", output: gitDiscardedSchema,
     input: gitDiscardSchema, unsafeInput,
+  });
+
+export const revertProjectCommitAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitRevertSchema> = {},
+) =>
+  mutateProjectGitRequest({
+    projectId, path: "revert", output: projectCreatedCommitSchema,
+    input: gitRevertSchema, unsafeInput,
   });

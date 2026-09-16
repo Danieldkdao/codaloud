@@ -228,3 +228,15 @@ it("requires the preview fingerprint and preserves the untracked-file choice", a
   await actions.discardProjectChangesAction(projectId, { fingerprint: "b".repeat(64), confirm: true, includeUntracked: true });
   expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ fingerprint: "b".repeat(64), confirm: true, includeUntracked: true });
 });
+
+verifyAction({
+  name: "revertProjectCommitAction",
+  call: (id) => actions.revertProjectCommitAction(id, {}),
+  path: "revert", data: { hash: sha, currentBranch: "main", parentHash: sha }, body: {},
+  invalid: () => actions.revertProjectCommitAction(projectId, { mainline: 0 } as never),
+});
+
+it("passes the merge mainline to revert", async () => {
+  await actions.revertProjectCommitAction(projectId, { mainline: 2 });
+  expect(network.mock.calls[0][1]?.body).toBe('{"mainline":2}');
+});

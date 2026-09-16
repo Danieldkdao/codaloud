@@ -1,3 +1,4 @@
+import type { GitUndoMode } from "../server/git-undo-schemas";
 import { format, isValid, parseISO } from "date-fns";
 
 import type { CodeEditorMatchState } from "@/components/code-editor-matches";
@@ -723,3 +724,13 @@ export const formatProjectStashPatchLine = (line: string) => {
     default: return "text-foreground";
   }
 };
+
+
+export const formatProjectUndoMode = (mode: GitUndoMode) => {
+  switch (mode) {
+    case "soft": return { label: "Keep changes staged", description: "Remove the last commit and keep its changes staged. Existing working changes are kept.", success: "Last commit undone. Changes remain staged." };
+    case "mixed": return { label: "Keep changes unstaged", description: "Remove the last commit and keep its changes as uncommitted files. All staged changes become unstaged.", success: "Last commit undone. Changes remain in your files." };
+    case "hard": return { label: "Discard commit changes", description: "Remove the last commit AND discard tracked uncommitted changes. Untracked files in the way may also be removed. This cannot be restored from the app.", success: "Last commit and working changes discarded." };
+  }
+};
+export const formatProjectDiscardChoice = (includeUntracked: boolean) => includeUntracked ? "Discard tracked and untracked changes" : "Discard tracked changes";

@@ -10,7 +10,8 @@ import { Icon } from "@/components/ui/icon";
 import { useProjectStashOperations } from "../hooks/use-project-stash-operations";
 import { ProjectStashSheet } from "./project-stash-sheet";
 
-// History and discard controls are connected in the next integration step.
+import { useProjectHistoryOperations } from "../hooks/use-project-history-operations";
+import { ProjectGitResetSheet } from "./project-git-reset-sheet";
 const otherActions: readonly ActionSheetItem[] = [
   { id: "stash-all", label: "Stash All", icon: "archive" },
   { id: "pop-stash", label: "Pop Stash", icon: "package" },
@@ -22,14 +23,19 @@ const otherActions: readonly ActionSheetItem[] = [
 
 export const ProjectOtherOptions = () => {
   const [open, setOpen] = useState(false);
-  const [viewStashes, setViewStashes] = useState(false);
-  const showStashesAfterDismiss = useRef(false);
+  const [panel, setPanel] = useState<"stash" | "undo" | "discard" | null>(null);
+  const panelAfterDismiss = useRef<typeof panel>(null);
+  const { revert } = useProjectHistoryOperations();
+  const openPanel = (value: typeof panel) => { panelAfterDismiss.current = value; setOpen(false); };
   const { stashAll, pop, operation } = useProjectStashOperations();
   const items = otherActions.map((item) => {
     switch (item.id) {
       case "stash-all": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, busy: operation.workspaceOperation === "Stashing changes…", onPress: () => { void stashAll(); } };
       case "pop-stash": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, busy: operation.workspaceOperation === "Restoring stash…", onPress: () => { void pop(); } };
-      case "view-stash": return { ...item, disabled: operation.isWorkspaceBusy, onPress: () => { showStashesAfterDismiss.current = true; setOpen(false); } };
+      case "view-stash": return { ...item, disabled: operation.isWorkspaceBusy, onPress: () => openPanel("stash") };
+      case "discard-changes": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, onPress: () => openPanel("discard") };
+      case "undo-last-commit": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, onPress: () => openPanel("undo") };
+      case "revert-last-commit": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, busy: operation.workspaceOperation === "Reverting last commit…", onPress: () => { void revert(); } };
       default: return { ...item, disabled: true };
     }
   });
@@ -53,9 +59,10 @@ export const ProjectOtherOptions = () => {
         />}
       </Pressable>
       <ActionSheet open={open} onOpenChange={setOpen} items={items} onDismiss={() => {
-        if (showStashesAfterDismiss.current) { showStashesAfterDismiss.current = false; setViewStashes(true); }
+        if (panelAfterDismiss.current) { setPanel(panelAfterDismiss.current); panelAfterDismiss.current = null; }
       }} />
-      {viewStashes && <ProjectStashSheet onClose={() => setViewStashes(false)} />}
+      {panel === "stash" && <ProjectStashSheet onClose={() => setPanel(null)} />}
+      {(panel === "undo" || panel === "discard") && <ProjectGitResetSheet kind={panel} onClose={() => setPanel(null)} />}
     </>
   );
 };

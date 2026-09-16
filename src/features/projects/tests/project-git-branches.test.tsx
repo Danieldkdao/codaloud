@@ -28,6 +28,7 @@ const git = vi.hoisted(() => ({
 }));
 vi.mock("@/features/projects/hooks/use-project-git", () => ({ useProjectGit: () => git }));
 const changesQuery = vi.hoisted(() => ({
+  discardPreview: { refetch: vi.fn() }, gitDiscardChanges: { mutateAsync: vi.fn() },
   query: vi.fn(), refetch: vi.fn(), isPending: false, isFetching: false,
   fetchStatus: "idle", error: null as Error | null,
   data: undefined as ProjectRepositoryChangesSchema | undefined,
@@ -46,13 +47,14 @@ const repositoryChanges = (): ProjectRepositoryChangesSchema => ({
 
 const history = vi.hoisted(() => ({
   gitCommit: { mutateAsync: vi.fn(), isPending: false },
+  gitUndoLastCommit: { mutateAsync: vi.fn() }, gitRevertLastCommit: { mutateAsync: vi.fn() }, refetch: vi.fn(),
   query: vi.fn(), onLoadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: undefined as { pages: ProjectCommitPageSchema[] } | undefined,
 }));
 vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: (...args: unknown[]) => {
-  if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false && !("branch" in args[1]))) history.query(...args);
+  if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false && (!("branch" in args[1]) || ("pageSize" in args[1] && args[1].pageSize === 1)))) history.query(...args);
   return history;
 } }));
 const commitPage = (message = "Live commit"): ProjectCommitPageSchema => ({
@@ -231,6 +233,12 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  changesQuery.discardPreview.refetch.mockReset().mockResolvedValue({ data: { fingerprint: "d".repeat(64), changedPaths: ["file.txt"], currentBranch: "main", headSha: "a".repeat(40) } });
+  changesQuery.gitDiscardChanges.mutateAsync.mockReset().mockResolvedValue({ remainingChanges: false });
+  history.gitUndoLastCommit.mutateAsync.mockReset().mockResolvedValue({});
+  history.gitRevertLastCommit.mutateAsync.mockReset().mockResolvedValue({});
+  history.refetch.mockReset().mockImplementation(async () => ({ data: history.data }));
+
   stashes.gitStash.mutateAsync.mockReset().mockResolvedValue({ created: true, remainingChanges: false });
   stashes.gitPopStash.mutateAsync.mockReset().mockResolvedValue({ dropped: true });
   stashes.refetch.mockReset().mockImplementation(async () => ({ data: stashes.data }));
@@ -1136,4 +1144,36 @@ it("shows stash conflicts without a success toast", async () => {
   click("Other Options"); click("Pop Stash"); await act(async () => {}); await confirmAlert("Pop Stash");
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Conflicts found. Your stash was retained.");
   expect(feedback.success).not.toHaveBeenCalled();
+});
+
+it("uses the discard fingerprint only after the destructive confirmation", async () => {
+  click("Other Options"); click("Discard Changes"); await act(async () => {});
+  click("Discard tracked and untracked changes"); await act(async () => {});
+  expect(changesQuery.gitDiscardChanges.mutateAsync).not.toHaveBeenCalled();
+  await confirmAlert("Discard Changes");
+  expect(changesQuery.gitDiscardChanges.mutateAsync).toHaveBeenCalledWith({ fingerprint: "d".repeat(64), confirm: true, includeUntracked: true });
+});
+it.each([["Keep changes staged", "soft"], ["Keep changes unstaged", "mixed"], ["Discard commit changes", "hard"]])("confirms undo mode: %s", async (label, mode) => {
+  history.data!.pages[0].commits[0].parentHashes = ["b".repeat(40)];
+  click("Other Options"); click("Undo Last Commit"); await act(async () => {});
+  click(label); await act(async () => {});
+  expect(history.gitUndoLastCommit.mutateAsync).not.toHaveBeenCalled();
+  await confirmAlert("Undo Commit");
+  expect(history.gitUndoLastCommit.mutateAsync).toHaveBeenCalledWith({ mode });
+});
+it("confirms reverting a merge relative to its first parent", async () => {
+  history.data!.pages[0].commits[0].parentHashes = ["b".repeat(40), "c".repeat(40)];
+  click("Other Options"); click("Revert Last Commit"); await act(async () => {});
+  expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("first parent");
+  await confirmAlert("Revert Commit");
+  expect(history.gitRevertLastCommit.mutateAsync).toHaveBeenCalledWith({ mainline: 1 });
+});
+it("rejects a changed HEAD after confirming undo", async () => {
+  history.data!.pages[0].commits[0].parentHashes = ["b".repeat(40)];
+  click("Other Options"); click("Undo Last Commit"); await act(async () => {});
+  click("Keep changes unstaged"); await act(async () => {});
+  history.data = { pages: [{ ...commitPage(), commits: [{ ...commitPage().commits[0], hash: "e".repeat(40) }] }] };
+  await confirmAlert("Undo Commit");
+  expect(history.gitUndoLastCommit.mutateAsync).not.toHaveBeenCalled();
+  expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("changed");
 });

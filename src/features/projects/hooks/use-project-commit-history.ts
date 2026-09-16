@@ -1,3 +1,4 @@
+import { isValidIds } from "@/lib/utils";
 import type { GitUndoneSchema } from "../server/git-undo-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitUndoSchema } from "../server/git-undo-schemas";
@@ -8,7 +9,7 @@ import {
   readProjectCommitsAction,
 } from "../actions/git-actions";
 import { gitRevertSchema } from "../server/git-revert-schemas";
-import { z } from "zod";
+import type { z } from "zod";
 import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -106,9 +107,9 @@ export const useProjectCommitHistory = (
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input) => {
       if (!userId) throw new ProjectCommitError("Sign in to commit changes.");
-      const project = z.uuid().safeParse(projectId);
-      if (!project.success) throw new ProjectCommitError("Invalid project ID.");
-      const result = await createProjectCommitAction(project.data, input);
+      if (!projectId || !isValidIds(projectId))
+        throw new ProjectCommitError("Invalid project ID.");
+      const result = await createProjectCommitAction(projectId, input);
       if (result.error) throw new ProjectCommitError(result.message, result.code);
       return result.data;
     },

@@ -1,7 +1,8 @@
+import { isValidIds } from "@/lib/utils";
 import type { GitCreatedBranchSchema } from "../server/git-branch-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitCreateBranchSchema } from "../server/git-branch-schemas";
-import { z } from "zod";
+import type { z } from "zod";
 import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
@@ -132,11 +133,10 @@ export const useProjectBranches = (
     mutationFn: async (input) => {
       if (!userId)
         throw new ProjectBranchCheckoutError("Sign in to switch branches.");
-      const project = z.uuid().safeParse(projectId);
-      if (!project.success)
+      if (!projectId || !isValidIds(projectId))
         throw new ProjectBranchCheckoutError("Invalid project ID.");
       // The action validates input and confirms the response matches the requested branch.
-      const result = await checkoutProjectBranchAction(project.data, input);
+      const result = await checkoutProjectBranchAction(projectId, input);
       if (result.error)
         throw new ProjectBranchCheckoutError(result.message, result.code);
       return result.data;

@@ -1,3 +1,4 @@
+import { gitPullSchema, gitPulledSchema } from "../server/git-pull-schemas";
 import { gitPushSchema, gitPushedSchema } from "../server/git-push-schemas";
 import { z } from "zod";
 import { mutateProjectGitRequest, readProjectGitRequest } from "../lib/git-requests";
@@ -327,4 +328,13 @@ export const pushProjectGitAction = async (
   mutateProjectGitRequest({
     projectId, path: "push", output: gitPushedSchema,
     input: gitPushSchema, unsafeInput,
+  });
+
+export const pullProjectGitAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitPullSchema> = {},
+) =>
+  mutateProjectGitRequest({
+    projectId, path: "pull", output: gitPulledSchema,
+    input: gitPullSchema, unsafeInput,
   });

@@ -142,3 +142,15 @@ it.each([null, sha])("preserves the explicit force-push lease %s", async (expect
   await actions.pushProjectGitAction(projectId, { force: true, expectedRemoteSha });
   expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ force: true, expectedRemoteSha });
 });
+
+verifyAction({
+  name: "pullProjectGitAction",
+  call: (id) => actions.pullProjectGitAction(id, {}),
+  path: "pull", data: { previousHeadSha: sha, headSha: sha, currentBranch: "main", rebased: false, counts: null }, body: { rebase: false },
+  invalid: () => actions.pullProjectGitAction(projectId, { rebase: "yes" } as never),
+});
+
+it("requests pull with rebase", async () => {
+  await actions.pullProjectGitAction(projectId, { rebase: true });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ rebase: true });
+});

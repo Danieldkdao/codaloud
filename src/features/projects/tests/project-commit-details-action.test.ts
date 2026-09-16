@@ -1,5 +1,4 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { z } from "zod";
 
 import { readProjectCommitDetailsAction } from "../actions/git-actions";
 import type { ProjectCommitDetailsParamsSchema, ProjectCommitDetailsSchema } from "../actions/commit-details-schemas";
@@ -8,8 +7,8 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
   network: vi.fn<typeof fetch>(), session: vi.fn(), requestHeaders: vi.fn<() => Promise<Headers>>(),
 }));
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
-vi.mock("@/lib/utils", () => ({
-  isValidIds: (id: string) => z.uuid().safeParse(id).success,
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
   fetchBase: network,
   createRequestHeaders: requestHeaders,
   createSearchParams: (params: Record<string, string>) => new URLSearchParams(params),
@@ -130,3 +129,6 @@ it.each(["before", "headers", "response", "json"])("discards a request cancelled
   expect(await readProjectCommitDetailsAction(projectId, params, controller.signal)).toBeNull();
   if (stage === "before" || stage === "headers") expect(network).not.toHaveBeenCalled();
 });
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));

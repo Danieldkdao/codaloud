@@ -8,12 +8,12 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
-vi.mock("@/lib/utils", async () => {
-  const { z } = await import("zod");
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const { isValidIds } = await importOriginal<typeof import("@/lib/utils")>();
   return {
     fetchBase: network,
     createRequestHeaders: requestHeaders,
-    isValidIds: (id: string) => z.uuid().safeParse(id).success,
+    isValidIds,
     createSearchParams: (params: Record<string, unknown>) => new URLSearchParams(Object.entries(params).filter(([, value]) => value != null).map(([key, value]) => [key, String(value)])),
   };
 });
@@ -198,3 +198,6 @@ it.each([200, 503])("ignores branch responses canceled during JSON parsing at HT
   expect(await readProjectBranchesAction(projectId, {}, controller.signal, onFailure)).toBeNull();
   expect(onFailure).not.toHaveBeenCalled();
 });
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));

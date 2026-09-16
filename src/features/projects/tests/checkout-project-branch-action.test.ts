@@ -9,12 +9,12 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
-vi.mock("@/lib/utils", async () => {
-  const { z } = await import("zod");
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const { isValidIds } = await importOriginal<typeof import("@/lib/utils")>();
   return {
     fetchBase: network,
     createRequestHeaders: requestHeaders,
-    isValidIds: (id: string) => z.uuid().safeParse(id).success,
+    isValidIds,
   };
 });
 
@@ -127,3 +127,6 @@ it("handles malformed JSON and a lost response without retrying the mutation", a
   expect(await checkoutProjectBranchAction(projectId, input)).toEqual(unconfirmed);
   expect(network).toHaveBeenCalledTimes(2);
 });
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));

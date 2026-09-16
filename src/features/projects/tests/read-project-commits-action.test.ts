@@ -1,5 +1,4 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { z } from "zod";
 import { readProjectCommitsAction } from "@/features/projects/actions/git-actions";
 import type { CommitSource, ProjectCommitQueryInput } from "@/features/projects/actions/commit-schemas";
 
@@ -7,8 +6,8 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
   network: vi.fn<typeof fetch>(), session: vi.fn(), requestHeaders: vi.fn<() => Promise<Headers>>(),
 }));
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
-vi.mock("@/lib/utils", () => ({
-  isValidIds: (id: string) => z.uuid().safeParse(id).success,
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
   fetchBase: network,
   createRequestHeaders: requestHeaders,
   createSearchParams: (params: Record<string, unknown>) => new URLSearchParams(
@@ -166,3 +165,6 @@ it.each(["session", "headers", "callback"])("catches %s failures", async (source
   if (source === "callback") network.mockResolvedValueOnce(new Response("error", { status: 502 }));
   expect(await readProjectCommitsAction(projectId, params, undefined, () => { throw failure; })).toBeNull();
 });
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));

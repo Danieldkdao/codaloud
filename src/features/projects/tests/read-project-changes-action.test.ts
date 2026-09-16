@@ -7,12 +7,12 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
   requestHeaders: vi.fn<() => Promise<Headers>>(),
 }));
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
-vi.mock("@/lib/utils", async () => {
-  const { z } = await import("zod");
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const { isValidIds } = await importOriginal<typeof import("@/lib/utils")>();
   return {
     fetchBase: network,
     createRequestHeaders: requestHeaders,
-    isValidIds: (id: string) => z.uuid().safeParse(id).success,
+    isValidIds,
   };
 });
 
@@ -110,3 +110,6 @@ it("avoids cancelled requests and discards data cancelled while decoding", async
   network.mockResolvedValueOnce(response);
   expect(await readProjectChangesAction(projectId, pending.signal)).toBeNull();
 });
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));

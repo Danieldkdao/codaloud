@@ -7,12 +7,12 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
   requestHeaders: vi.fn<() => Promise<Headers>>(),
 }));
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
-vi.mock("@/lib/utils", async () => {
-  const { z } = await import("zod");
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const { isValidIds } = await importOriginal<typeof import("@/lib/utils")>();
   return {
     fetchBase: network,
     createRequestHeaders: requestHeaders,
-    isValidIds: (id: string) => z.uuid().safeParse(id).success,
+    isValidIds,
     createSearchParams: (params: Record<string, unknown>) => new URLSearchParams(
       Object.entries(params).filter(([, value]) => value != null).map(([key, value]) => [key, String(value)]),
     ),
@@ -252,3 +252,6 @@ it.each(["mixed", "hard"] as const)("passes the requested %s undo mode", async (
   await actions.undoProjectCommitAction(projectId, { mode });
   expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ mode });
 });
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));

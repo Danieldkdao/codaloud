@@ -14,6 +14,13 @@ import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit
 
 import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
 
+const stashes = vi.hoisted(() => ({
+  data: { pages: [{ stashes: [{ index: 0, sha: "c".repeat(40), message: "Saved mobile work", createdAt: "2026-09-16T12:00:00Z" }], patch: null, nextCursor: null }] },
+  refetch: vi.fn(), retry: vi.fn(), loadMore: vi.fn(), isFetching: false, isPending: false, hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
+  stashDetails: { data: { patch: "diff --git a/test.txt b/test.txt\n+saved change\n", stashes: [], nextCursor: null }, refetch: vi.fn(), isFetching: false, isPending: false, error: null as Error | null, fetchStatus: "idle" },
+  gitStash: { mutateAsync: vi.fn() }, gitPopStash: { mutateAsync: vi.fn() },
+}));
+vi.mock("@/features/projects/hooks/use-project-stashes", () => ({ useProjectStashes: () => stashes }));
 const git = vi.hoisted(() => ({
   data: { currentBranch: "main", headSha: "a".repeat(40), upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3, isShallow: false, observedAt: "2026-09-16T12:00:00Z" },
   isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn(),
@@ -224,6 +231,10 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  stashes.gitStash.mutateAsync.mockReset().mockResolvedValue({ created: true, remainingChanges: false });
+  stashes.gitPopStash.mutateAsync.mockReset().mockResolvedValue({ dropped: true });
+  stashes.refetch.mockReset().mockImplementation(async () => ({ data: stashes.data }));
+
   git.gitFetch.mutateAsync.mockReset().mockImplementation(async () => git.data);
   git.gitPush.mutateAsync.mockReset().mockResolvedValue({ trackingUpdated: true });
   git.gitPull.mutateAsync.mockReset().mockResolvedValue({});
@@ -1094,4 +1105,35 @@ it("disables invalid branch names and retains the name after server rejection", 
   click("Create branch"); await act(async () => {});
   expect(workspaceFiles.alert).toHaveBeenCalledWith("Git operation failed", "A branch with that name already exists.");
   expect(container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!.value).toBe("already-exists");
+});
+
+const confirmAlert = async (label: string) => {
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  await act(async () => buttons.find((button: { text: string }) => button.text === label).onPress());
+};
+it("stashes saved tracked and untracked changes only after confirmation", async () => {
+  click("Other Options"); click("Stash All"); await act(async () => {});
+  expect(stashes.gitStash.mutateAsync).not.toHaveBeenCalled();
+  await confirmAlert("Stash All");
+  expect(stashes.gitStash.mutateAsync).toHaveBeenCalledWith({});
+  expect(feedback.success).toHaveBeenCalledWith("Changes saved in a stash.");
+});
+it("refreshes the latest stash and confirms its identity before popping", async () => {
+  click("Other Options"); click("Pop Stash"); await act(async () => {});
+  expect(stashes.refetch).toHaveBeenCalledOnce();
+  expect(stashes.gitPopStash.mutateAsync).not.toHaveBeenCalled();
+  await confirmAlert("Pop Stash");
+  expect(stashes.gitPopStash.mutateAsync).toHaveBeenCalledWith({ stashIndex: 0, stashSha: "c".repeat(40), restoreIndex: false });
+});
+it("browses saved stashes and opens their patch", async () => {
+  click("Other Options"); click("View Stash"); await act(async () => {});
+  click("View stash 0"); await act(async () => {});
+  expect(container.textContent).toContain("+saved change");
+  expect(container.querySelector('[aria-label="Pop selected stash"]')).not.toBeNull();
+});
+it("shows stash conflicts without a success toast", async () => {
+  stashes.gitPopStash.mutateAsync.mockRejectedValueOnce(new Error("Conflicts found. Your stash was retained."));
+  click("Other Options"); click("Pop Stash"); await act(async () => {}); await confirmAlert("Pop Stash");
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Conflicts found. Your stash was retained.");
+  expect(feedback.success).not.toHaveBeenCalled();
 });

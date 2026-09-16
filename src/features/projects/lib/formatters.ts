@@ -707,3 +707,19 @@ export const formatProjectSyncAction = (action: "push" | "force-push" | "pull" |
     case "fetch": return { label: "Fetch", pending: "Fetching…", icon: "download-cloud" as const };
   }
 };
+
+
+export const formatProjectStashResult = (result: { created: boolean; remainingChanges: boolean } | null) => {
+  if (!result) return null;
+  if (result.remainingChanges) return "Stash saved. Some changes remain; review the Changes tab.";
+  return result.created ? "Changes saved in a stash." : "No new changes to stash.";
+};
+export const formatProjectStashLabel = (index: number) => `View stash ${index}`;
+export const formatProjectStashPatchLine = (line: string) => {
+  switch (line[0]) {
+    case "+": return "bg-success text-success-foreground";
+    case "-": return "bg-destructive/10 text-destructive";
+    case "@": return "bg-secondary text-secondary-foreground";
+    default: return "text-foreground";
+  }
+};

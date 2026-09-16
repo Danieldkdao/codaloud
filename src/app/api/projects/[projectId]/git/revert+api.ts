@@ -4,6 +4,10 @@ import { projectCreatedCommitSchema } from "@/features/projects/actions/create-c
 import { sandboxGitRevertCommand } from "@/services/daytona/git-revert-command";
 
 export const POST = createGitRoute({
-  input: gitRevertSchema, output: projectCreatedCommitSchema, script: sandboxGitRevertCommand,
-  mutation: true, author: true, message: "Last commit reverted with a new commit.",
+  input: gitRevertSchema,
+  output: projectCreatedCommitSchema,
+  script: sandboxGitRevertCommand,
+  mutation: true,
+  author: true,
+  message: "Last commit reverted with a new commit.",
 });

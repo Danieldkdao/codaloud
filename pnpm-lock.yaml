@@ -6,6 +6,9 @@ importers:
   .:
     configDependencies: {}
     packageManagerDependencies:
+      '@pnpm/exe':
+        specifier: 12.4.1
+        version: 12.4.1
       pnpm:
         specifier: 12.4.1
         version: 12.4.1
@@ -89,6 +92,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@pnpm/exe@12.4.1':
+    resolution: {integrity: sha512-J3tgb70MBqAujwk+7CjD2a2kL7M6qfTkb2tsb97q8qfIQMlsbEqN+UCvf7GELw2SQPQ8KtFhXypgzMBp86zYKg==}
+    engines: {node: '>=18.*'}
+    hasBin: true
+
   pnpm@12.4.1:
     resolution: {integrity: sha512-LoHjmdc/6DkNqyXgaqeIq3pZCCSNL1o3D4K0gRR6ano2e/gEj5pv22Rg8hpm8FQt7bi5TKLIcjWWdBkgsWVtTA==}
     engines: {node: '>=18.*'}
@@ -137,6 +145,23 @@ snapshots:
 
   '@pnpm/exe.win32-x64@12.4.1':
     optional: true
+
+  '@pnpm/exe@12.4.1':
+    optionalDependencies:
+      '@pnpm/exe.android-arm64': 12.4.1
+      '@pnpm/exe.android-x64': 12.4.1
+      '@pnpm/exe.darwin-arm64': 12.4.1
+      '@pnpm/exe.darwin-x64': 12.4.1
+      '@pnpm/exe.freebsd-x64': 12.4.1
+      '@pnpm/exe.linux-arm64': 12.4.1
+      '@pnpm/exe.linux-arm64-musl': 12.4.1
+      '@pnpm/exe.linux-ppc64': 12.4.1
+      '@pnpm/exe.linux-riscv64': 12.4.1
+      '@pnpm/exe.linux-s390x': 12.4.1
+      '@pnpm/exe.linux-x64': 12.4.1
+      '@pnpm/exe.linux-x64-musl': 12.4.1
+      '@pnpm/exe.win32-arm64': 12.4.1
+      '@pnpm/exe.win32-x64': 12.4.1
 
   pnpm@12.4.1:
     optionalDependencies:
@@ -242,8 +267,8 @@ importers:
         specifier: ^5.102.8
         version: 5.102.8(react@19.2.3)
       '@trigger.dev/sdk':
-        specifier: 4.5.16
-        version: 4.5.16(react@19.2.3)(supports-color@8.1.1)(zod@4.5.4)
+        specifier: 4.6.0
+        version: 4.6.0(react@19.2.3)(supports-color@8.1.1)(zod@4.5.4)
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -384,8 +409,8 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
       '@trigger.dev/build':
-        specifier: 4.5.16
-        version: 4.5.16(supports-color@8.1.1)(typescript@6.0.3)
+        specifier: 4.6.0
+        version: 4.6.0(supports-color@8.1.1)(typescript@6.0.3)(zod@4.5.4)
       '@types/react':
         specifier: ~19.2.2
         version: 19.2.18
@@ -3023,8 +3048,8 @@ packages:
   '@tanstack/store@0.11.1':
     resolution: {integrity: sha512-mzTOBhypOuDJAy/D8n2MfUZ1HFkXnmSETviRyhqEC8LUE7/IZQExOTxMANj3KjTofYTkFNpBY67qaVrT41YccA==}
 
-  '@trigger.dev/build@4.5.16':
-    resolution: {integrity: sha512-iy/KJylq3BdNlDt3++HhkncPRDHzkuNOnK1SxhkTtRc1Hj+kV5zNtaBuTxrxUCyS1hwOLLbQl7rBaSPoGzSyUg==}
+  '@trigger.dev/build@4.6.0':
+    resolution: {integrity: sha512-CzSRfmZitz4gy5+mJTDwS1Ah8CpXliJGa0TtOpK2Q0YRqEfIHrF/7IgN0sJMGUXvZE6xZ2HRvw+2uJLR1dwA2w==}
     engines: {node: '>=18.20.0'}
     peerDependencies:
       '@typescript/typescript6': ^6.0.0
@@ -3035,18 +3060,20 @@ packages:
       typescript:
         optional: true
 
-  '@trigger.dev/core@4.5.16':
-    resolution: {integrity: sha512-7Gcv8rl+DnPxvguiWSp+KUeA7HVM9Xp46YYEeBGgViahL/Ml3WIv2hXXEiHrP8L3aM9C9YtStmmRmz5yOzW4fw==}
+  '@trigger.dev/core@4.6.0':
+    resolution: {integrity: sha512-uyo23zVwC2fRQmilaNnOdYdQ8YnxYzQCyGBGrrt3eQMhhv0rKfWB9u+PzokS6y3QMZsmbjTauv/31S+OA82BSg==}
     engines: {node: '>=18.20.0'}
+    peerDependencies:
+      zod: ^3.25.56 || ^4.0.0
 
-  '@trigger.dev/sdk@4.5.16':
-    resolution: {integrity: sha512-YjHz3Zv/yyLAS6tqFZMTVD2yTP6FopbPaLgtECLUqYx/pV2LQftgs7XI5o6NvtJxaDDLEz2wHqegCte1Ww2lKg==}
+  '@trigger.dev/sdk@4.6.0':
+    resolution: {integrity: sha512-67NY7O4nnv0zRYccYeQK75PgT5/qoSPmNFHreRCUuFP7ixjbxEWWAmKUqxEm5bE3zg06OxiTd63nJw61GtBkkg==}
     engines: {node: '>=18.20.0'}
     peerDependencies:
       '@ai-sdk/otel': '>=1.0.0-0 <2'
       ai: ^5.0.0 || ^6.0.0 || >=7.0.0-canary <8
       react: ^18.0 || ^19.0
-      zod: ^3.0.0 || ^4.0.0
+      zod: ^3.25.56 || ^4.0.0
     peerDependenciesMeta:
       '@ai-sdk/otel':
         optional: true
@@ -5937,11 +5964,11 @@ packages:
     resolution: {integrity: sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==}
     engines: {node: '>=12'}
 
-  zod-validation-error@1.5.0:
-    resolution: {integrity: sha512-/7eFkAI4qV0tcxMBB/3+d2c1P6jzzZYdYSlBuAklzMuCrJu5bzJfHS0yVAS87dRHVlhftd6RFJDIvv03JgkSbw==}
-    engines: {node: '>=16.0.0'}
+  zod-validation-error@5.0.0:
+    resolution: {integrity: sha512-hmk+pkyKq7Q71PiWVSDUc3VfpzpvcRHZ3QPw9yEMVvmtCekaMeOHnbr3WbxfrgEnQTv6haGP4cmv0Ojmihzsxw==}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
-      zod: ^3.18.0
+      zod: ^3.25.0 || ^4.0.0
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
@@ -8930,10 +8957,10 @@ snapshots:
 
   '@tanstack/store@0.11.1': {}
 
-  '@trigger.dev/build@4.5.16(supports-color@8.1.1)(typescript@6.0.3)':
+  '@trigger.dev/build@4.6.0(supports-color@8.1.1)(typescript@6.0.3)(zod@4.5.4)':
     dependencies:
       '@prisma/config': 6.19.3
-      '@trigger.dev/core': 4.5.16(supports-color@8.1.1)
+      '@trigger.dev/core': 4.6.0(supports-color@8.1.1)(zod@4.5.4)
       mlly: 1.8.2
       pkg-types: 1.3.1
       tinyglobby: 0.2.17
@@ -8945,8 +8972,9 @@ snapshots:
       - magicast
       - supports-color
       - utf-8-validate
+      - zod
 
-  '@trigger.dev/core@4.5.16(supports-color@8.1.1)':
+  '@trigger.dev/core@4.6.0(supports-color@8.1.1)(zod@4.5.4)':
     dependencies:
       '@bugsnag/cuid': 3.2.2
       '@electric-sql/client': 1.0.14
@@ -8977,18 +9005,18 @@ snapshots:
       std-env: 3.10.0
       tinyexec: 0.3.2
       uncrypto: 0.1.3
-      zod: 3.25.76
-      zod-validation-error: 1.5.0(zod@3.25.76)
+      zod: 4.5.4
+      zod-validation-error: 5.0.0(zod@4.5.4)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  '@trigger.dev/sdk@4.5.16(react@19.2.3)(supports-color@8.1.1)(zod@4.5.4)':
+  '@trigger.dev/sdk@4.6.0(react@19.2.3)(supports-color@8.1.1)(zod@4.5.4)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/semantic-conventions': 1.41.1
-      '@trigger.dev/core': 4.5.16(supports-color@8.1.1)
+      '@trigger.dev/core': 4.6.0(supports-color@8.1.1)(zod@4.5.4)
       uncrypto: 0.1.3
       zod: 4.5.4
     optionalDependencies:
@@ -11993,9 +12021,9 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 21.1.1
 
-  zod-validation-error@1.5.0(zod@3.25.76):
+  zod-validation-error@5.0.0(zod@4.5.4):
     dependencies:
-      zod: 3.25.76
+      zod: 4.5.4
 
   zod@3.25.76: {}
 

@@ -1,3 +1,5 @@
+import { readProjectGitRequest } from "../lib/git-requests";
+import { gitCountsSchema } from "../server/git-schemas";
 import {
   checkoutProjectBranchResponseSchema,
   checkoutProjectBranchSchema,
@@ -32,6 +34,9 @@ import {
   type CreateProjectCommitResponseSchema,
   type CreateProjectCommitSchema,
 } from "./create-commit-schemas";
+
+export const readProjectGitCountsAction = async (projectId: string, signal?: AbortSignal) =>
+  readProjectGitRequest({ projectId, path: "counts", output: gitCountsSchema, signal });
 
 export const createProjectCommitAction = async (
   projectId: string,

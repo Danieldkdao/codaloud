@@ -293,3 +293,10 @@ describe("stash details", () => {
     expect(actions.readProjectStashesAction).not.toHaveBeenCalled();
   });
 });
+
+verifyMutation({
+  name: "stash",
+  useResult: (id) => useProjectStashes(id, { enabled: false }).stash,
+  action: actions.stashProjectChangesAction,
+  input: { message: "save work" },
+});

@@ -1,9 +1,12 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { gitStashPushSchema } from "../server/git-stash-schemas";
+import { refreshProjectGitQueries } from "../lib/git-cache";
+import { stashProjectChangesAction } from "../actions/git-actions";
+import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { readProjectStashesAction } from "../actions/git-actions";
 import { gitStashQuerySchema, type GitStashQuerySchema } from "../server/git-stash-schemas";
-import { ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
+import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 
 export const useProjectStashes = (
   projectId: string | null | undefined,
@@ -84,5 +87,22 @@ export const useProjectStashes = (
     return query.isFetchNextPageError ? query.fetchNextPage({ cancelRefetch: false }) : query.refetch();
   };
 
-  return { ...query, loadMore, retry, stashDetails };
+  const stash = useMutation({
+    mutationKey: ["projects", "git", "stash", userId, projectId],
+    retry: false,
+    // Execute now or fail; never replay a queued write against a later workspace.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: z.input<typeof gitStashPushSchema> = {}) => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await stashProjectChangesAction(id, input);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Conflicts and lost responses can leave partial changes on the server.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
+  return { stash, ...query, loadMore, retry, stashDetails };
 };

@@ -172,3 +172,29 @@ it("reports HTTP and network failures without retrying invalid response data or 
   await readProjectBranchesAction(projectId, {}, undefined, onFailure);
   expect(onFailure).not.toHaveBeenCalled();
 });
+
+it("does not start a canceled branch request", async () => {
+  const onFailure = vi.fn();
+  expect(await readProjectBranchesAction(projectId, {}, AbortSignal.abort(), onFailure)).toBeNull();
+  expect(network).not.toHaveBeenCalled();
+  expect(onFailure).not.toHaveBeenCalled();
+});
+
+it("requires a nonblank cookie for branch reads", async () => {
+  requestHeaders.mockResolvedValueOnce(new Headers({ Cookie: " " }));
+  expect(await readProjectBranchesAction(projectId)).toBeNull();
+  expect(network).not.toHaveBeenCalled();
+});
+
+it.each([200, 503])("ignores branch responses canceled during JSON parsing at HTTP %s", async (status) => {
+  const onFailure = vi.fn();
+  const controller = new AbortController();
+  const response = Response.json(success(), { status });
+  vi.spyOn(response, "json").mockImplementation(async () => {
+    controller.abort();
+    return status === 200 ? success() : { error: true, code: "WORKSPACE_RESTORING" };
+  });
+  network.mockResolvedValueOnce(response);
+  expect(await readProjectBranchesAction(projectId, {}, controller.signal, onFailure)).toBeNull();
+  expect(onFailure).not.toHaveBeenCalled();
+});

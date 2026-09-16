@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { readProjectCommitDetailsAction } from "../actions/git-actions";
 import type { ProjectCommitDetailsParamsSchema, ProjectCommitDetailsSchema } from "../actions/commit-details-schemas";
@@ -8,6 +9,7 @@ const { network, session, requestHeaders } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
 vi.mock("@/lib/utils", () => ({
+  isValidIds: (id: string) => z.uuid().safeParse(id).success,
   fetchBase: network,
   createRequestHeaders: requestHeaders,
   createSearchParams: (params: Record<string, string>) => new URLSearchParams(params),

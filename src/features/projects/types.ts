@@ -1,3 +1,4 @@
+import type { ApiResponse } from "@/lib/types";
 import type { ProjectSelectData } from "@/db/schemas/project";
 import type { ProjectFileEntrySchema } from "./actions/file-schemas";
 import type { ProjectFileSearchPageSchema } from "./actions/file-search-schemas";
@@ -172,3 +173,15 @@ export type ProjectFileSearchResult = {
   titleMatches: boolean;
   contentMatchCount: number;
 };
+
+export type ProjectGitReadFailureHandler = (
+  status: number,
+  retryAfter: string | null,
+  code?: string,
+) => void;
+
+export type ProjectGitMutationFailure = Extract<ApiResponse, { error: true }>;
+
+export type ProjectGitMutationResult<T> =
+  | ProjectGitMutationFailure
+  | { error: false; message: string; data: T };

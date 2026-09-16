@@ -317,3 +317,19 @@ it("rejects malformed branch data before mutation", async () => {
   expect((await checkout()).response.status).toBe(502);
   expect(mocks.checkout).not.toHaveBeenCalled();
 });
+it("rejects checkout query options before accessing the project", async () => {
+  const input = request();
+  const response = await POST(new Request(`${input.url}?force=true`, input), { projectId });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "INVALID_BRANCH" });
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.fetch).not.toHaveBeenCalled();
+});
+
+it("bounds checkout JSON before accessing the project", async () => {
+  const input = new Request(request().url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchName: "a".repeat(65536) }) });
+  const response = await POST(input, { projectId });
+  expect(response.status).toBe(413);
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.fetch).not.toHaveBeenCalled();
+});

@@ -2,6 +2,8 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { readGitHubCommits } from "@/services/github/server/commits";
 
 const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), accounts: vi.fn(), token: vi.fn() }));
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/features/projects/server/projects", () => ({ confirmUserProjectOwnership: mocks.project }));
 vi.mock("@/lib/auth/auth", () => ({ auth: { api: { listUserAccounts: mocks.accounts, getAccessToken: mocks.token } } }));

@@ -1,3 +1,4 @@
+import { isValidIds } from "@/lib/utils";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { getUserReadyProject } from "@/features/projects/server/project-workspace";
@@ -26,7 +27,7 @@ export const readSandboxChanges = async (headers: Headers, projectId: string, si
     signal?.throwIfAborted();
     const { userId } = await getCurrentUser(headers);
     if (!userId) throw new SandboxFilesError(401, "UNAUTHENTICATED", "Sign in to view project changes.");
-    if (!z.uuid().safeParse(projectId).success) throw new SandboxFilesError(400, "INVALID_PROJECT", "Invalid project ID.");
+    if (!isValidIds(projectId)) throw new SandboxFilesError(400, "INVALID_PROJECT", "Invalid project ID.");
     const existingProject = await getUserReadyProject(userId, projectId);
     const deadline = AbortSignal.timeout(30_000);
     const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;

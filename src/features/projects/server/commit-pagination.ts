@@ -1,3 +1,4 @@
+import { isValidIds } from "@/lib/utils";
 import { Buffer } from "node:buffer";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -25,7 +26,7 @@ export class CommitHistoryError extends Error {
 
 export const parseCommitQuery = (projectId: string, input: unknown) => {
   const parsed = projectCommitQuerySchema.safeParse(input);
-  if (!z.uuid().safeParse(projectId).success || !parsed.success) {
+  if (!isValidIds(projectId) || !parsed.success) {
     throw new CommitHistoryError(
       400,
       "INVALID_COMMIT_PARAMS",

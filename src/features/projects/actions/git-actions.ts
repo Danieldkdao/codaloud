@@ -66,6 +66,7 @@ import {
 export const readProjectGitCountsAction = async (
   projectId: string,
   signal?: AbortSignal,
+  onFailure?: ProjectGitReadFailureHandler,
 ) =>
   readProjectGitRequest({
     projectId,
@@ -73,6 +74,7 @@ export const readProjectGitCountsAction = async (
     input: z.strictObject({}),
     output: gitCountsSchema,
     signal,
+    onFailure,
   });
 
 export const fetchProjectGitAction = async (projectId: string) =>
@@ -95,19 +97,27 @@ export const createProjectCommitAction = async (
     unsafeInput,
     output: projectCreatedCommitSchema,
     errors: {
-      unauthenticated: { error: true, code: "UNAUTHENTICATED", message: "Sign in to commit changes." },
+      unauthenticated: {
+        error: true,
+        code: "UNAUTHENTICATED",
+        message: "Sign in to commit changes.",
+      },
       input: {
         error: true,
         code: "INVALID_COMMIT_INPUT",
-        message: "Send a nonempty commit message and a nonempty list of unique repository-relative paths, without extra fields.",
+        message:
+          "Send a nonempty commit message and a nonempty list of unique repository-relative paths, without extra fields.",
       },
       preparation: {
-        error: true, code: "COMMIT_REQUEST_UNAVAILABLE",
+        error: true,
+        code: "COMMIT_REQUEST_UNAVAILABLE",
         message: "Unable to prepare the commit request. Please try again.",
       },
       unknownOutcome: {
-        error: true, code: "COMMIT_OUTCOME_UNKNOWN",
-        message: "Unable to confirm the commit. Refresh commit history and Git changes before retrying; the commit may already exist.",
+        error: true,
+        code: "COMMIT_OUTCOME_UNKNOWN",
+        message:
+          "Unable to confirm the commit. Refresh commit history and Git changes before retrying; the commit may already exist.",
       },
     },
   });
@@ -119,7 +129,8 @@ export const checkoutProjectBranchAction = async (
   const unconfirmed = {
     error: true as const,
     code: "CHECKOUT_OUTCOME_UNKNOWN",
-    message: "Unable to confirm the branch switch. Refresh the current branch and files before trying again.",
+    message:
+      "Unable to confirm the branch switch. Refresh the current branch and files before trying again.",
   };
   return mutateProjectGitRequest({
     projectId,
@@ -129,10 +140,17 @@ export const checkoutProjectBranchAction = async (
     output: projectBranchCheckoutSchema,
     validate: (data, input) => data.currentBranch === input.branchName,
     errors: {
-      session: { error: true, message: "Unable to verify your session. Please try again." },
+      session: {
+        error: true,
+        message: "Unable to verify your session. Please try again.",
+      },
       unauthenticated: { error: true, message: "Sign in to switch branches." },
       project: { error: true, message: "Invalid project ID." },
-      input: { error: true, message: "Send a valid branchName without checkout options or extra fields." },
+      input: {
+        error: true,
+        message:
+          "Send a valid branchName without checkout options or extra fields.",
+      },
       preparation: unconfirmed,
       unknownOutcome: unconfirmed,
     },
@@ -165,22 +183,39 @@ export const readProjectBranchesAction = async (
     query: ({ search, cursor, pageSize }) => ({ search, cursor, pageSize }),
     output: readProjectBranchesResponseSchema.shape.data,
     signal,
-    onFailure: onFailure ? (status, retryAfter, code) => {
-      // Branch queries only use the restoration code to customize retries.
-      if (status === 0) onFailure(status, retryAfter);
-      else onFailure(status, retryAfter, code === "WORKSPACE_RESTORING" ? code : undefined);
-    } : undefined,
+    onFailure: onFailure
+      ? (status, retryAfter, code) => {
+          // Branch queries only use the restoration code to customize retries.
+          if (status === 0) onFailure(status, retryAfter);
+          else
+            onFailure(
+              status,
+              retryAfter,
+              code === "WORKSPACE_RESTORING" ? code : undefined,
+            );
+        }
+      : undefined,
     validate: (page, { search, cursor, pageSize }) => {
       const position = cursor ? readProjectBranchCursor(cursor) : null;
-      if (page.branches.length > pageSize || page.branches.some((branch, index) =>
-        !branch.toLowerCase().includes(search) ||
-        (position !== null && branch <= position.after) ||
-        (index > 0 && branch <= page.branches[index - 1])
-      )) return false;
+      if (
+        page.branches.length > pageSize ||
+        page.branches.some(
+          (branch, index) =>
+            !branch.toLowerCase().includes(search) ||
+            (position !== null && branch <= position.after) ||
+            (index > 0 && branch <= page.branches[index - 1]),
+        )
+      )
+        return false;
       if (page.nextCursor !== null) {
         const next = readProjectBranchCursor(page.nextCursor);
-        if (!next || next.projectId !== projectId || next.search !== search ||
-          next.after !== page.branches[page.branches.length - 1]) return false;
+        if (
+          !next ||
+          next.projectId !== projectId ||
+          next.search !== search ||
+          next.after !== page.branches[page.branches.length - 1]
+        )
+          return false;
       }
       return true;
     },
@@ -199,7 +234,8 @@ export const readProjectCommitDetailsAction = async (
     query: ({ source }) => ({ source }),
     output: readProjectCommitDetailsResponseSchema.shape.data,
     signal,
-    validate: (data, { commitSha, source }) => data.commit.hash === commitSha && data.source === source,
+    validate: (data, { commitSha, source }) =>
+      data.commit.hash === commitSha && data.source === source,
   });
 
 export const readProjectCommitsAction = async (
@@ -218,9 +254,14 @@ export const readProjectCommitsAction = async (
     signal,
     onFailure,
     validate: (page, { pageSize, cursor }) => {
-      if (page.commits.length > pageSize ||
-        (page.nextCursor !== null && (!page.nextCursor || page.nextCursor === cursor)) ||
-        (page.snapshotSha === null && (page.commits.length > 0 || page.nextCursor !== null))) return false;
+      if (
+        page.commits.length > pageSize ||
+        (page.nextCursor !== null &&
+          (!page.nextCursor || page.nextCursor === cursor)) ||
+        (page.snapshotSha === null &&
+          (page.commits.length > 0 || page.nextCursor !== null))
+      )
+        return false;
       // Bounded searches can return no matches yet still have more history to scan.
       return true;
     },

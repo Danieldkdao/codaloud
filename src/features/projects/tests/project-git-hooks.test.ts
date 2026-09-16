@@ -300,3 +300,10 @@ verifyMutation({
   action: actions.stashProjectChangesAction,
   input: { message: "save work" },
 });
+
+verifyMutation({
+  name: "popStash",
+  useResult: (id) => useProjectStashes(id, { enabled: false }).popStash,
+  action: actions.popProjectStashAction,
+  input: { stashIndex: 0, stashSha: "a".repeat(40), restoreIndex: true },
+});

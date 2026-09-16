@@ -225,3 +225,10 @@ describe("discard preview", () => {
     expect(actions.readProjectDiscardPreviewAction).not.toHaveBeenCalled();
   });
 });
+
+verifyMutation({
+  name: "discardChanges",
+  useResult: (id) => useProjectChanges(id, { enabled: false }).discardChanges,
+  action: actions.discardProjectChangesAction,
+  input: { fingerprint: "a".repeat(64), confirm: true, includeUntracked: true },
+});

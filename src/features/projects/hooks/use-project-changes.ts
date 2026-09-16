@@ -1,7 +1,10 @@
-import { ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
+import { gitDiscardSchema } from "../server/git-discard-schemas";
+import { refreshProjectGitQueries } from "../lib/git-cache";
+import { discardProjectChangesAction } from "../actions/git-actions";
+import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 import { readProjectDiscardPreviewAction } from "../actions/git-actions";
 import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { readProjectChangesAction } from "../actions/git-actions";
@@ -77,5 +80,22 @@ export const useProjectChanges = (
     return refetch({ throwOnError: true });
   }, [projectId, queryClient, refetch, userId]);
 
-  return { ...query, refreshAfterSaves, discardPreview };
+  const discardChanges = useMutation({
+    mutationKey: ["projects", "git", "discardChanges", userId, projectId],
+    retry: false,
+    // Execute now or fail; never replay a queued write against a later workspace.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: z.input<typeof gitDiscardSchema>) => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await discardProjectChangesAction(id, input);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Conflicts and lost responses can leave partial changes on the server.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
+  return { discardChanges, ...query, refreshAfterSaves, discardPreview };
 };

@@ -216,3 +216,15 @@ verifyAction({
   call: (id, signal) => actions.readProjectDiscardPreviewAction(id, signal),
   path: "discard", data: { currentBranch: "main", headSha: sha, fingerprint: "b".repeat(64), changedPaths: [] },
 });
+
+verifyAction({
+  name: "discardProjectChangesAction",
+  call: (id) => actions.discardProjectChangesAction(id, { fingerprint: "b".repeat(64), confirm: true, includeUntracked: false }),
+  path: "discard", data: { headSha: sha, remainingChanges: false }, body: { fingerprint: "b".repeat(64), confirm: true, includeUntracked: false },
+  invalid: () => actions.discardProjectChangesAction(projectId, { fingerprint: "b".repeat(64), confirm: false, includeUntracked: true } as never),
+});
+
+it("requires the preview fingerprint and preserves the untracked-file choice", async () => {
+  await actions.discardProjectChangesAction(projectId, { fingerprint: "b".repeat(64), confirm: true, includeUntracked: true });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ fingerprint: "b".repeat(64), confirm: true, includeUntracked: true });
+});

@@ -198,3 +198,15 @@ it("accepts a no-op stash without a message", async () => {
   expect(await actions.stashProjectChangesAction(projectId)).toEqual(success);
   expect(network.mock.calls[0][1]?.body).toBe("{}");
 });
+
+verifyAction({
+  name: "popProjectStashAction",
+  call: (id) => actions.popProjectStashAction(id, { stashIndex: 0, stashSha: sha }),
+  path: "stash-pop", data: { stashSha: sha, dropped: true }, body: { stashIndex: 0, stashSha: sha, restoreIndex: false },
+  invalid: () => actions.popProjectStashAction(projectId, { stashIndex: 0 } as never),
+});
+
+it("preserves restoreIndex for stash pop", async () => {
+  await actions.popProjectStashAction(projectId, { stashIndex: 1, stashSha: sha, restoreIndex: true });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ stashIndex: 1, stashSha: sha, restoreIndex: true });
+});

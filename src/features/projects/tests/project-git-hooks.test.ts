@@ -1,3 +1,4 @@
+import { useProjectBranches } from "../hooks/use-project-branches";
 // @vitest-environment happy-dom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -181,4 +182,11 @@ verifyMutation({
   useResult: (id) => useProjectGit(id, { enabled: false }).pull,
   action: actions.pullProjectGitAction,
   input: { rebase: true },
+});
+
+verifyMutation({
+  name: "createBranch",
+  useResult: (id) => useProjectBranches(id, { enabled: false }).createBranch,
+  action: actions.createProjectBranchAction,
+  input: { branchName: "feature/mobile" },
 });

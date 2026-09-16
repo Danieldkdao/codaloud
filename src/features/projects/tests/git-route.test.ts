@@ -84,7 +84,7 @@ it("validates output and preserves operation-specific unknown outcomes without r
 it("bounds service request bodies before execution, including streaming bodies without Content-Length", async () => {
   const execute = vi.fn();
   const cancel = vi.fn();
-  const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('{"value":"oversized"}')); }, cancel });
+  const body = new ReadableStream({ start: (controller) => controller.enqueue(new TextEncoder().encode('{"value":"oversized"}')), cancel });
   const route = createGitRoute({ input: z.unknown(), output: z.unknown(), message: "Saved.", mutation: true, maxBodyBytes: 10, execute });
   const input = new Request(request().url, { method: "POST", headers: { "Content-Type": "application/json" }, body, duplex: "half" } as RequestInit);
   expect((await route(input, { projectId })).status).toBe(413);

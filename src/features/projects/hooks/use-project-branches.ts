@@ -10,8 +10,15 @@ import {
   checkoutProjectBranchAction,
   readProjectBranchesAction,
 } from "../actions/git-actions";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { projectBranchParamsSchema, type ProjectBranchParamsSchema } from "../lib/branch-params";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  projectBranchParamsSchema,
+  type ProjectBranchParamsSchema,
+} from "../lib/branch-params";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import type {
   CheckoutProjectBranchSchema,
@@ -142,17 +149,26 @@ export const useProjectBranches = (
       return result.data;
     },
     onSettled: async (_data, error, _input, context) => {
-      if (!context || (error && error.code !== "CHECKOUT_OUTCOME_UNKNOWN")) return;
+      if (!context || (error && error.code !== "CHECKOUT_OUTCOME_UNKNOWN"))
+        return;
       await refreshProjectGitQueries(queryClient, context);
     },
   });
 
   const recoverCheckout = async (): Promise<ProjectBranchCheckoutSchema> => {
-    if (!userId || !projectId) throw new Error("Sign in to confirm the current branch.");
+    if (!userId || !projectId)
+      throw new Error("Sign in to confirm the current branch.");
     // Capture this hook's workspace, rather than refetching an observer that may
     // have moved to another project while the checkout response was in flight.
-    const branches = await readProjectBranchesAction(projectId, { search: "", pageSize: 1, cursor: null });
-    if (!branches?.currentBranch) throw new Error("Unable to confirm the current branch. Reconnect and retry recovery.");
+    const branches = await readProjectBranchesAction(projectId, {
+      search: "",
+      pageSize: 1,
+      cursor: null,
+    });
+    if (!branches?.currentBranch)
+      throw new Error(
+        "Unable to confirm the current branch. Reconnect and retry recovery.",
+      );
     return { previousBranch: null, currentBranch: branches.currentBranch };
   };
 
@@ -185,7 +201,12 @@ export const useProjectBranches = (
       : query.refetch();
   };
 
-  const gitCreateBranch = useMutation<GitCreatedBranchSchema, ProjectGitError, z.input<typeof gitCreateBranchSchema>, ProjectGitMutationContext>({
+  const gitCreateBranch = useMutation<
+    GitCreatedBranchSchema,
+    ProjectGitError,
+    z.input<typeof gitCreateBranchSchema>,
+    ProjectGitMutationContext
+  >({
     mutationKey: ["projects", "git", "createBranch", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.

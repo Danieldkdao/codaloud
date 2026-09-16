@@ -13,6 +13,7 @@ const otherActions: readonly ActionSheetItem[] = [
   { id: "pop-stash", label: "Pop Stash", icon: "package" },
   { id: "view-stash", label: "View Stash", icon: "layers" },
   { id: "discard-changes", label: "Discard Changes", icon: "trash-2" },
+  { id: "undo-last-commit", label: "Undo Last Commit", icon: "corner-up-left" },
   { id: "revert-last-commit", label: "Revert Last Commit", icon: "rotate-ccw" },
 ];
 

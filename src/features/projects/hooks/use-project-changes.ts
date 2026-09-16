@@ -8,14 +8,21 @@ import {
   readProjectDiscardPreviewAction,
   readProjectChangesAction,
 } from "../actions/git-actions";
-import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
+import {
+  ProjectGitError,
+  ProjectGitRequestError,
+  requireProjectGitSession,
+} from "../lib/git-errors";
 import { useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 export const useProjectChanges = (
   projectId: string | null | undefined,
-  { enabled = true, discardPreviewEnabled = false }: { enabled?: boolean; discardPreviewEnabled?: boolean } = {},
+  {
+    enabled = true,
+    discardPreviewEnabled = false,
+  }: { enabled?: boolean; discardPreviewEnabled?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
   const session = useAuthSession();
@@ -53,38 +60,59 @@ export const useProjectChanges = (
   });
   const discardPreview = useQuery({
     queryKey: ["projects", "discard-preview", userId, projectId],
-    enabled: enabled && discardPreviewEnabled && Boolean(userId) && validProject,
+    enabled:
+      enabled && discardPreviewEnabled && Boolean(userId) && validProject,
     staleTime: 0,
-    retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
-      (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
-      (failureCount < 2 && (error.status === 0 || error.status >= 500))
-    ),
-    retryDelay: (attempt, error) => error instanceof ProjectGitRequestError
-      ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000) : 0,
+    retry: (failureCount, error) =>
+      error instanceof ProjectGitRequestError &&
+      ((error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
+        (failureCount < 2 && (error.status === 0 || error.status >= 500))),
+    retryDelay: (attempt, error) =>
+      error instanceof ProjectGitRequestError
+        ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
+        : 0,
     queryFn: async ({ signal }) => {
       const id = requireProjectGitSession(userId, projectId);
       let failure: ProjectGitRequestError | undefined;
-      const preview = await readProjectDiscardPreviewAction(id, signal, (status, retryAfter, code) => {
-        failure = new ProjectGitRequestError(status, retryAfter, code);
-      });
-      if (preview === null) throw failure ?? new Error("Unable to prepare discard. Please try again.");
+      const preview = await readProjectDiscardPreviewAction(
+        id,
+        signal,
+        (status, retryAfter, code) => {
+          failure = new ProjectGitRequestError(status, retryAfter, code);
+        },
+      );
+      if (preview === null)
+        throw (
+          failure ?? new Error("Unable to prepare discard. Please try again.")
+        );
       return preview;
     },
   });
 
   const { refetch } = query;
-  const refreshAfterSaves = useCallback(async (flushPendingSaves: () => Promise<void>, signal?: AbortSignal) => {
-    if (signal?.aborted) return;
-    await flushPendingSaves();
-    if (signal?.aborted) return;
-    // Explicit cancellation also replaces an initial read without cached data;
-    // refetch alone can reuse that request and return a pre-save snapshot.
-    await queryClient.cancelQueries({ queryKey: ["projects", "changes", userId, projectId], exact: true });
-    if (signal?.aborted) return;
-    return refetch({ throwOnError: true });
-  }, [projectId, queryClient, refetch, userId]);
+  const refreshAfterSaves = useCallback(
+    async (flushPendingSaves: () => Promise<void>, signal?: AbortSignal) => {
+      if (signal?.aborted) return;
+      await flushPendingSaves();
+      if (signal?.aborted) return;
+      // Explicit cancellation also replaces an initial read without cached data;
+      // refetch alone can reuse that request and return a pre-save snapshot.
+      await queryClient.cancelQueries({
+        queryKey: ["projects", "changes", userId, projectId],
+        exact: true,
+      });
+      if (signal?.aborted) return;
+      return refetch({ throwOnError: true });
+    },
+    [projectId, queryClient, refetch, userId],
+  );
 
-  const gitDiscardChanges = useMutation<GitDiscardedSchema, ProjectGitError, z.input<typeof gitDiscardSchema>, ProjectGitMutationContext>({
+  const gitDiscardChanges = useMutation<
+    GitDiscardedSchema,
+    ProjectGitError,
+    z.input<typeof gitDiscardSchema>,
+    ProjectGitMutationContext
+  >({
     mutationKey: ["projects", "git", "discardChanges", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.

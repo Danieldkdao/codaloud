@@ -1,0 +1,64 @@
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+import { useAuthSession } from "@/hooks/use-auth-session";
+import { readProjectStashesAction } from "../actions/git-actions";
+import { gitStashQuerySchema, type GitStashQuerySchema } from "../server/git-stash-schemas";
+import { ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
+
+export const useProjectStashes = (
+  projectId: string | null | undefined,
+  { enabled = true, maxPages = 0, ...filters }: Partial<Pick<GitStashQuerySchema, "search" | "pageSize">> & {
+    enabled?: boolean;
+    maxPages?: number;
+  } = {},
+) => {
+  const queryClient = useQueryClient();
+  const session = useAuthSession();
+  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
+  const project = z.uuid().safeParse(projectId);
+  const params = gitStashQuerySchema.safeParse({
+    ...filters,
+    search: typeof filters.search === "string" ? filters.search.trim().toLowerCase() : filters.search,
+  });
+  const validPageLimit = Number.isSafeInteger(maxPages) && maxPages >= 0;
+  const queryKey = ["projects", "stashes", "infinite", userId, projectId, params.success ? params.data : filters] as const;
+  const query = useInfiniteQuery({
+    queryKey,
+    enabled: enabled && Boolean(userId) && project.success && params.success && validPageLimit,
+    initialPageParam: undefined as string | undefined,
+    maxPages: validPageLimit ? maxPages : 0,
+    retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
+      (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
+      (failureCount < 2 && (error.status === 0 || error.status >= 500))
+    ),
+    retryDelay: (attempt, error) => error instanceof ProjectGitRequestError
+      ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000) : 0,
+    queryFn: async ({ pageParam, signal }) => {
+      const id = requireProjectGitSession(userId, projectId);
+      if (!params.success || !validPageLimit) throw new Error("Invalid stash search or pagination.");
+      let failure: ProjectGitRequestError | undefined;
+      const page = await readProjectStashesAction(id, { ...params.data, cursor: pageParam }, signal, (status, retryAfter, code) => {
+        failure = new ProjectGitRequestError(status, retryAfter, code);
+      });
+      if (page === null) throw failure ?? new Error("Unable to load stashes. Please try again.");
+      if (page.stashes.length > params.data.pageSize || (page.nextCursor !== null && page.nextCursor === pageParam))
+        throw new Error("Invalid stash pagination response.");
+      return page;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+  const loadMore = () => {
+    if (enabled && userId && project.success && params.success && validPageLimit && query.hasNextPage &&
+      !query.isFetching && !query.error && query.fetchStatus !== "paused")
+      return query.fetchNextPage({ cancelRefetch: false });
+  };
+  const retry = () => {
+    if (!enabled || !userId || !project.success || !params.success || !validPageLimit || query.isFetching || query.fetchStatus === "paused") return;
+    if (query.error instanceof ProjectGitRequestError &&
+      (query.error.code === "INVALID_STASH_CURSOR" || query.error.code === "GIT_STASH_CHANGED"))
+      return queryClient.resetQueries({ queryKey, exact: true });
+    return query.isFetchNextPageError ? query.fetchNextPage({ cancelRefetch: false }) : query.refetch();
+  };
+
+  return { ...query, loadMore, retry };
+};

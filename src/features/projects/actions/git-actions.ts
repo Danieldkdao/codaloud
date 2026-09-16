@@ -307,6 +307,7 @@ export const readProjectStashesAction = async (
   projectId: string,
   params: z.input<typeof gitStashQuerySchema> = {},
   signal?: AbortSignal,
+  onFailure?: ProjectGitReadFailureHandler,
 ) =>
   readProjectGitRequest({
     projectId,
@@ -315,6 +316,7 @@ export const readProjectStashesAction = async (
     input: gitStashQuerySchema,
     params,
     signal,
+    onFailure,
   });
 
 export const stashProjectChangesAction = async (

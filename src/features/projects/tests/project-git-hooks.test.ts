@@ -2,6 +2,7 @@ import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectBranches } from "../hooks/use-project-branches";
 // @vitest-environment happy-dom
 import { useProjectChanges } from "../hooks/use-project-changes";
+import { useProjectStashes } from "../hooks/use-project-stashes";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
@@ -231,4 +232,44 @@ verifyMutation({
   useResult: (id) => useProjectChanges(id, { enabled: false }).discardChanges,
   action: actions.discardProjectChangesAction,
   input: { fingerprint: "a".repeat(64), confirm: true, includeUntracked: true },
+});
+
+describe("stash list", () => {
+  it("normalizes search, paginates, and keeps successful empty pages", async () => {
+    actions.readProjectStashesAction.mockResolvedValueOnce({ stashes: [], patch: null, nextCursor: "next" })
+      .mockResolvedValue({ stashes: [], patch: null, nextCursor: null });
+    const hook = await renderHook(() => useProjectStashes(projectId, { search: " WORK ", pageSize: 5 }));
+    expect(hook.current.data?.pages).toHaveLength(1);
+    expect(hook.current.hasNextPage).toBe(true);
+    await run(async () => { await hook.current.loadMore(); });
+    expect(hook.current.data?.pages).toHaveLength(2);
+    expect(hook.current.hasNextPage).toBe(false);
+    expect(actions.readProjectStashesAction.mock.calls.map(([, input]) => input)).toEqual([
+      { search: "work", pageSize: 5, cursor: undefined }, { search: "work", pageSize: 5, cursor: "next" },
+    ]);
+  });
+  it.each(["disabled", "signed-out", "invalid-project", "invalid-page-size", "invalid-page-limit"])("guards stash reads when %s", async (state) => {
+    if (state === "signed-out") session.data = null;
+    const hook = await renderHook(() => useProjectStashes(state === "invalid-project" ? "invalid" : projectId, {
+      enabled: state !== "disabled", pageSize: state === "invalid-page-size" ? 0 : 20,
+      maxPages: state === "invalid-page-limit" ? -1 : 0,
+    }));
+    expect(actions.readProjectStashesAction).not.toHaveBeenCalled();
+    expect(hook.current.loadMore()).toBeUndefined();
+    if (state !== "disabled") await run(async () => { await expect(hook.current.refetch({ throwOnError: true })).rejects.toThrow(); });
+    expect(actions.readProjectStashesAction).not.toHaveBeenCalled();
+  });
+  it.each(["INVALID_STASH_CURSOR", "GIT_STASH_CHANGED"])("restarts expired %s pagination after first-page eviction", async (code) => {
+    actions.readProjectStashesAction.mockResolvedValueOnce({ stashes: [], patch: null, nextCursor: "next" })
+      .mockResolvedValueOnce({ stashes: [], patch: null, nextCursor: "last" })
+      .mockImplementationOnce(async (_id, _input, _signal, onFailure) => { onFailure(409, null, code); return null; })
+      .mockResolvedValue({ stashes: [], patch: null, nextCursor: null });
+    const hook = await renderHook(() => useProjectStashes(projectId, { maxPages: 1 }));
+    await run(async () => { await hook.current.loadMore(); });
+    await run(async () => { await hook.current.loadMore(); });
+    expect(hook.current.error).toMatchObject({ code });
+    await run(async () => { await hook.current.retry(); });
+    expect(actions.readProjectStashesAction.mock.calls.map(([, input]) => input.cursor)).toEqual([undefined, "next", "last", undefined]);
+    expect(hook.current.data?.pageParams).toEqual([undefined]);
+  });
 });

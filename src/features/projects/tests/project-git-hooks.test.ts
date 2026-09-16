@@ -192,7 +192,7 @@ verifyMutation({
 
 verifyMutation({
   name: "createBranch",
-  useResult: (id) => useProjectBranches(id, { enabled: false }).createBranch,
+  useResult: (id) => useProjectBranches(id, { enabled: false }).gitCreateBranch,
   action: actions.createProjectBranchAction,
   input: { branchName: "feature/mobile" },
 });
@@ -313,7 +313,7 @@ verifyMutation({
 
 verifyMutation({
   name: "checkout",
-  useResult: (id) => useProjectBranches(id, { enabled: false }).checkout,
+  useResult: (id) => useProjectBranches(id, { enabled: false }).gitCheckout,
   action: actions.checkoutProjectBranchAction,
   input: { branchName: "feature/mobile" },
   unknownCode: "CHECKOUT_OUTCOME_UNKNOWN",

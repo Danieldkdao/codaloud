@@ -120,7 +120,7 @@ export const useProjectBranches = (
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const checkout = useMutation<
+  const gitCheckout = useMutation<
     ProjectBranchCheckoutSchema,
     ProjectBranchCheckoutError,
     CheckoutProjectBranchSchema,
@@ -185,7 +185,7 @@ export const useProjectBranches = (
       : query.refetch();
   };
 
-  const createBranch = useMutation<GitCreatedBranchSchema, ProjectGitError, z.input<typeof gitCreateBranchSchema>, ProjectGitMutationContext>({
+  const gitCreateBranch = useMutation<GitCreatedBranchSchema, ProjectGitError, z.input<typeof gitCreateBranchSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "createBranch", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -202,5 +202,5 @@ export const useProjectBranches = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { createBranch, ...query, loadMore, retry, checkout, recoverCheckout };
+  return { gitCreateBranch, ...query, loadMore, retry, gitCheckout, recoverCheckout };
 };

@@ -247,18 +247,18 @@ it("exposes checkout pending and success states and returns confirmed branch dat
   let finish!: (value: Awaited<ReturnType<typeof checkoutProjectBranchAction>>) => void;
   checkout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await render({ enabled: false });
-  let request!: ReturnType<typeof current.checkout.mutateAsync>;
-  await act(async () => { request = current.checkout.mutateAsync({ branchName: "feature/checkout" }); });
+  let request!: ReturnType<typeof current.gitCheckout.mutateAsync>;
+  await act(async () => { request = current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }); });
   await flush();
-  expect(current.checkout.isPending).toBe(true);
+  expect(current.gitCheckout.isPending).toBe(true);
   expect(checkout).toHaveBeenCalledExactlyOnceWith(projectId, { branchName: "feature/checkout" });
   const data = { previousBranch: "main", currentBranch: "feature/checkout" };
   await run(async () => {
     finish({ error: false, message: "Branch checked out successfully.", data });
     expect(await request).toEqual(data);
   });
-  expect(current.checkout.isSuccess).toBe(true);
-  expect(current.checkout.data).toEqual(data);
+  expect(current.gitCheckout.isSuccess).toBe(true);
+  expect(current.gitCheckout.data).toEqual(data);
 });
 
 it("exposes actionable checkout errors and does not inherit automatic retries", async () => {
@@ -267,12 +267,12 @@ it("exposes actionable checkout errors and does not inherit automatic retries", 
   checkout.mockResolvedValueOnce(failure);
   await render({ enabled: false });
   await run(async () => {
-    await expect(current.checkout.mutateAsync({ branchName: "feature/checkout" })).rejects.toMatchObject({
+    await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toMatchObject({
       message: failure.message, code: failure.code,
     });
   });
-  expect(current.checkout.isError).toBe(true);
-  expect(current.checkout.error).toMatchObject({ message: failure.message, code: failure.code });
+  expect(current.gitCheckout.isError).toBe(true);
+  expect(current.gitCheckout.error).toMatchObject({ message: failure.message, code: failure.code });
   expect(checkout).toHaveBeenCalledOnce();
 });
 
@@ -282,7 +282,7 @@ it.each(["pending", "signed-out", "error"])("blocks checkout while authenticatio
   if (state === "error") session.error = new Error("Session unavailable");
   await render();
   await run(async () => {
-    await expect(current.checkout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Sign in to switch branches.");
+    await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Sign in to switch branches.");
   });
   expect(checkout).not.toHaveBeenCalled();
 });
@@ -290,7 +290,7 @@ it.each(["pending", "signed-out", "error"])("blocks checkout while authenticatio
 it("rejects checkout without a project", async () => {
   await render({}, null);
   await run(async () => {
-    await expect(current.checkout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Invalid project ID.");
+    await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Invalid project ID.");
   });
   expect(checkout).not.toHaveBeenCalled();
 });
@@ -298,7 +298,7 @@ it("rejects checkout without a project", async () => {
 it("uses the current project after navigation independently of branch query filters", async () => {
   await render({ enabled: false });
   await render({ enabled: false, cursor: "invalid", search: "x".repeat(201) }, otherProjectId);
-  await run(() => current.checkout.mutateAsync({ branchName: "feature/checkout" }));
+  await run(() => current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }));
   expect(checkout).toHaveBeenCalledExactlyOnceWith(otherProjectId, { branchName: "feature/checkout" });
   expect(client.getMutationCache().getAll()[0].options.mutationKey)
     .toEqual(["projects", "branches", "checkout", "user-one", otherProjectId]);
@@ -313,7 +313,7 @@ it("refreshes active changes after checkout even when their stale time is infini
   try {
     await render({ enabled: false });
     expect(readChanges).not.toHaveBeenCalled();
-    await run(() => current.checkout.mutateAsync({ branchName: "feature/checkout" }));
+    await run(() => current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }));
     expect(readChanges).toHaveBeenCalledOnce();
     expect(client.getQueryData(queryKey)).toEqual({ currentBranch: "feature/checkout" });
   } finally { unsubscribe(); }
@@ -327,8 +327,8 @@ it("marks only the submitted account and project's inactive changes stale after 
   let finish!: (value: Awaited<ReturnType<typeof checkoutProjectBranchAction>>) => void;
   checkout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await render({ enabled: false });
-  let pending!: ReturnType<typeof current.checkout.mutateAsync>;
-  await act(async () => { pending = current.checkout.mutateAsync({ branchName: "feature/checkout" }); });
+  let pending!: ReturnType<typeof current.gitCheckout.mutateAsync>;
+  await act(async () => { pending = current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }); });
   session.data = { user: { id: "user-two" } };
   await render({ enabled: false }, otherProjectId);
   await run(async () => {
@@ -345,7 +345,7 @@ it("keeps the changes snapshot valid when checkout fails", async () => {
   client.setQueryData(queryKey, { currentBranch: "main" });
   checkout.mockResolvedValueOnce({ error: true, message: "Commit or stash your changes." });
   await render({ enabled: false });
-  await run(async () => { await expect(current.checkout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Commit or stash"); });
+  await run(async () => { await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Commit or stash"); });
   expect(client.getQueryState(queryKey)?.isInvalidated).toBe(false);
   expect(client.getQueryData(queryKey)).toEqual({ currentBranch: "main" });
 });
@@ -360,7 +360,7 @@ it("refreshes changes after an unknown checkout outcome without retrying the che
   try {
     await render({ enabled: false });
     await run(async () => {
-      await expect(current.checkout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Response lost");
+      await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Response lost");
     });
     expect(checkout).toHaveBeenCalledOnce();
     expect(readChanges).toHaveBeenCalledOnce();
@@ -380,8 +380,8 @@ it("replaces an unfinished changes read started before checkout", async () => {
   const unsubscribe = observer.subscribe(() => {});
   try {
     await render({ enabled: false });
-    let pending!: ReturnType<typeof current.checkout.mutateAsync>;
-    await act(async () => { pending = current.checkout.mutateAsync({ branchName: "feature/checkout" }); });
+    let pending!: ReturnType<typeof current.gitCheckout.mutateAsync>;
+    await act(async () => { pending = current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }); });
     const cancelled = oldSignal.aborted;
     await run(async () => { finishOldRead({ currentBranch: "main" }); await pending; });
     expect(cancelled).toBe(true);

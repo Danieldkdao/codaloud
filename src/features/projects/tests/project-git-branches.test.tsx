@@ -52,7 +52,7 @@ const live = vi.hoisted(() => ({
   userId: "user-one",
   repositoryId: "123" as string | null,
   query: vi.fn(),
-  checkout: { mutateAsync: vi.fn() },
+  gitCheckout: { mutateAsync: vi.fn() },
   recoverCheckout: vi.fn(),
   loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
@@ -223,7 +223,7 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
-  live.checkout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
+  live.gitCheckout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
   live.recoverCheckout.mockReset().mockResolvedValue({ previousBranch: "main", currentBranch: "feature/live" });
   Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
   changesQuery.query.mockClear(); changesQuery.refetch.mockReset().mockImplementation(async () => ({ data: changesQuery.data, isError: false }));
@@ -270,14 +270,14 @@ it("fetches and checks out remote selections before reading their local history"
   click("Branch: feature/live");
   click("Remote branch: remote-only");
   await act(async () => {});
-  expect(live.checkout.mutateAsync).toHaveBeenLastCalledWith({ branchName: "remote-only", source: "remote" });
+  expect(live.gitCheckout.mutateAsync).toHaveBeenLastCalledWith({ branchName: "remote-only", source: "remote" });
   expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ source: "local", branch: "remote-only" }));
   expect(container.textContent).not.toContain("Polish the dashboard layout");
 });
 
 it("waits for a remote branch to exist locally before loading its history", async () => {
   let finish!: (value: unknown) => void;
-  live.checkout.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  live.gitCheckout.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   click("Commit History");
   click("Branch: main");
   click("Remote branch: remote-only");
@@ -662,13 +662,13 @@ it("loads changes only while their Git tab is active", () => {
 
 it("updates the visible branch immediately and disables the picker until checkout succeeds", async () => {
   let finish!: (value: unknown) => void;
-  live.checkout.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  live.gitCheckout.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await selectBranch("feature/live");
   const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Branch: feature/live"]')!;
   expect(trigger.disabled).toBe(true);
   act(() => trigger.click());
   expect(container.querySelector('[role="dialog"]')).toBeNull();
-  expect(live.checkout.mutateAsync).toHaveBeenCalledExactlyOnceWith({ branchName: "feature/live" });
+  expect(live.gitCheckout.mutateAsync).toHaveBeenCalledExactlyOnceWith({ branchName: "feature/live" });
   await act(async () => finish({ previousBranch: "main", currentBranch: "feature/live" }));
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
   expect(container.querySelector<HTMLButtonElement>('[aria-label="Branch: feature/live"]')?.disabled).toBe(false);
@@ -676,7 +676,7 @@ it("updates the visible branch immediately and disables the picker until checkou
 
 it("reverts a rejected checkout and shows its message", async () => {
   let reject!: (reason: Error) => void;
-  live.checkout.mutateAsync.mockImplementationOnce(() => new Promise((_resolve, no) => { reject = no; }));
+  live.gitCheckout.mutateAsync.mockImplementationOnce(() => new Promise((_resolve, no) => { reject = no; }));
   await selectBranch("feature/live");
   await act(async () => reject(new Error("Commit or stash app.ts before switching.")));
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
@@ -692,9 +692,9 @@ it("finishes pending saves before checkout and refreshes only the submitted work
   queryClient.setQueryData(key, { content: "old branch" });
   queryClient.setQueryData(otherKey, { content: "other account" });
   await selectBranch("feature/live");
-  expect(live.checkout.mutateAsync).not.toHaveBeenCalled();
+  expect(live.gitCheckout.mutateAsync).not.toHaveBeenCalled();
   await act(async () => finishSave());
-  expect(live.checkout.mutateAsync).toHaveBeenCalledOnce();
+  expect(live.gitCheckout.mutateAsync).toHaveBeenCalledOnce();
   expect(queryClient.getQueryData(key)).toBeUndefined();
   expect(queryClient.getQueryData(otherKey)).toEqual({ content: "other account" });
   expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
@@ -706,12 +706,12 @@ it("reverts without checkout when saving fails", async () => {
   click("feature/live");
   await act(async () => {});
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("main");
-  expect(live.checkout.mutateAsync).not.toHaveBeenCalled();
+  expect(live.gitCheckout.mutateAsync).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenCalledWith("Couldn’t switch branches", "Save failed. Open Code to retry.");
 });
 
 it("clears old documents after an unknown checkout and retries recovery without another checkout", async () => {
-  live.checkout.mutateAsync.mockRejectedValueOnce(Object.assign(new Error("Response lost."), { code: "CHECKOUT_OUTCOME_UNKNOWN" }));
+  live.gitCheckout.mutateAsync.mockRejectedValueOnce(Object.assign(new Error("Response lost."), { code: "CHECKOUT_OUTCOME_UNKNOWN" }));
   live.recoverCheckout.mockRejectedValueOnce(new Error("Reconnect to confirm the branch."));
   const fileKey = ["projects", "file", live.userId, live.projectId, "app.ts"];
   const searchKey = ["projects", "file-search", "infinite", live.userId, live.projectId, "old"];
@@ -729,7 +729,7 @@ it("clears old documents after an unknown checkout and retries recovery without 
   click("Retry branch recovery");
   await act(async () => {});
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("feature/live");
-  expect(live.checkout.mutateAsync).toHaveBeenCalledOnce();
+  expect(live.gitCheckout.mutateAsync).toHaveBeenCalledOnce();
   expect(live.recoverCheckout).toHaveBeenCalledTimes(2);
 });
 

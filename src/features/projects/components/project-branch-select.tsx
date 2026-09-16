@@ -90,7 +90,7 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
     Keyboard.dismiss();
     checkoutBranch(name, async () => {
       await flushPendingSaves();
-      const result = await query.checkout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
+      const result = await query.gitCheckout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
       await refreshWorkspace();
       return result;
     }, async () => {

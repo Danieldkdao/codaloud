@@ -7,6 +7,7 @@ import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api"
 import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
 import { POST as discard, GET as previewDiscard } from "@/app/api/projects/[projectId]/git/discard+api";
 import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
+import { POST as undo } from "@/app/api/projects/[projectId]/git/undo+api";
 import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
 import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
 import { POST as pullGit } from "@/app/api/projects/[projectId]/git/pull+api";
@@ -72,6 +73,7 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
   method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
 });
 const mutationRoutes = [
+  { name: "undo", handler: undo, input: { mode: "soft" }, output: { previousHeadSha: expected.expectedHeadSha, headSha: "b".repeat(40), currentBranch: "main", mode: "soft" } },
   { name: "pull", handler: pullGit, input: { rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },
   { name: "fetch", handler: fetchGit, input: {}, output: counts },
@@ -260,4 +262,52 @@ it.each([{ expectedBranch: "main" }, { expectedHeadSha: "a".repeat(40) }, { remo
 it.each([{ expectedBranch: "main" }, { expectedHeadSha: "a".repeat(40) }, { remoteBranch: "other" }])("pull: rejects caller-selected branch state %j", async (input) => {
   expect((await pullGit(mutationRequest(input), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it.each(["soft", "mixed", "hard"])("undo: forwards explicit %s mode through requestDaytona without GitHub or author requirements", async (mode) => {
+  mocks.user.mockResolvedValue({ userId: "user-one" });
+  mocks.project.mockResolvedValue({ id: projectId, sandboxId: "sandbox", githubRepositoryId: null });
+  const output = { previousHeadSha: "a".repeat(40), headSha: "b".repeat(40), currentBranch: "feature/current", mode };
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify(output) });
+  const response = await undo(mutationRequest({ mode }), { projectId });
+  expect(response.status).toBe(200);
+  expect((await response.json()).data).toEqual(output);
+  const [url, init] = mocks.request.mock.calls[0];
+  expect(url).toBe("https://toolbox.test/sandbox/process/execute");
+  const command = JSON.parse(init.body);
+  const chunks = Array.from({ length: Number(command.envs.CODALOUD_INPUT_CHUNKS) }, (_, index) => command.envs[`CODALOUD_INPUT_${index}`]).join("");
+  expect(JSON.parse(gunzipSync(Buffer.from(chunks, "base64")).toString())).toMatchObject({ mode, projectId, sandboxId: "sandbox", repositoryPath: "/home/daytona/.codaloud/workspace" });
+  expect(mocks.project).toHaveBeenCalledWith("user-one", projectId);
+  expect(mocks.credentials).not.toHaveBeenCalled();
+  expect(mocks.access).not.toHaveBeenCalled();
+  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+});
+
+it.each([
+  {}, { mode: "" }, { mode: "--hard" }, { mode: "keep" }, { mode: "HARD" }, { mode: true },
+  { mode: "hard; echo injected" }, { mode: "soft", branch: "other" },
+  { mode: "mixed", expectedBranch: "main" }, { mode: "hard", expectedHeadSha: "a".repeat(40) },
+  { mode: "soft", commitSha: "b".repeat(40) }, { mode: "mixed", mainline: 2 },
+])("undo: rejects invalid mode or caller-selected state %j", async (input) => {
+  expect((await undo(mutationRequest(input), { projectId })).status).toBe(400);
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("undo: rejects mutation query flags and malformed command output", async () => {
+  const input = mutationRequest({ mode: "soft" });
+  expect((await undo(new Request(`${input.url}?mode=hard`, input), { projectId })).status).toBe(400);
+  expect(mocks.request).not.toHaveBeenCalled();
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ headSha: "invalid", secret: "hidden" }) });
+  const response = await undo(mutationRequest({ mode: "soft" }), { projectId });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toMatchObject({ code: "GIT_OUTCOME_UNKNOWN" });
+  expect(mocks.request).toHaveBeenCalledOnce();
+});
+
+it.each([["GIT_PARENT_REQUIRED", 409], ["GIT_HISTORY_INCOMPLETE", 422], ["GIT_OPERATION_IN_PROGRESS", 409]] as const)("undo: preserves %s as a safe %s error", async (code, status) => {
+  mocks.request.mockResolvedValue({ exitCode: 1, result: JSON.stringify({ code }) });
+  const response = await undo(mutationRequest({ mode: "hard" }), { projectId });
+  expect(response.status).toBe(status);
+  expect(await response.json()).toMatchObject({ code });
 });

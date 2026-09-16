@@ -33,7 +33,7 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
   const session = useAuthSession();
   const userId =
     !session.isPending && !session.error ? session.data?.user.id : undefined;
-  const { commit } = useProjectCommitHistory(projectId, { enabled: false });
+  const { gitCommit } = useProjectCommitHistory(projectId, { enabled: false });
   const { refetch } = useProjectChanges(projectId, { enabled: false });
   const { flushPendingSaves } = useProjectFileSaveRegistry();
   const showSuccess = useSuccessFeedback();
@@ -51,7 +51,7 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     message,
     paths: commitSelection.paths,
   });
-  const busy = submitting || commit.isPending;
+  const busy = submitting || gitCommit.isPending;
   const canSubmit =
     enabled &&
     Boolean(userId) &&
@@ -101,7 +101,7 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
         );
       }
       requestStarted = true;
-      await commit.mutateAsync(input.data);
+      await gitCommit.mutateAsync(input.data);
       commitSelection.clear();
       if (mounted.current) {
         setMessage("");

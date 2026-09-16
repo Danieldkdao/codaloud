@@ -94,7 +94,7 @@ export const useProjectCommitHistory = (
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const commitMutation = useMutation<
+  const gitCommit = useMutation<
     ProjectCreatedCommitSchema,
     ProjectCommitError,
     CreateProjectCommitSchema,
@@ -136,7 +136,7 @@ export const useProjectCommitHistory = (
       : query.refetch();
   };
 
-  const revert = useMutation<ProjectCreatedCommitSchema, ProjectGitError, z.input<typeof gitRevertSchema>, ProjectGitMutationContext>({
+  const gitRevertLastCommit = useMutation<ProjectCreatedCommitSchema, ProjectGitError, z.input<typeof gitRevertSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "revert", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -153,7 +153,7 @@ export const useProjectCommitHistory = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  const undo = useMutation<GitUndoneSchema, ProjectGitError, z.input<typeof gitUndoSchema>, ProjectGitMutationContext>({
+  const gitUndoLastCommit = useMutation<GitUndoneSchema, ProjectGitError, z.input<typeof gitUndoSchema>, ProjectGitMutationContext>({
     mutationKey: ["projects", "git", "undo", userId, projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
@@ -171,11 +171,11 @@ export const useProjectCommitHistory = (
   });
 
   return {
-    undo,
-    revert,
+    gitUndoLastCommit,
+    gitRevertLastCommit,
     ...query,
     onLoadMore,
     retry,
-    commit: commitMutation,
+    gitCommit,
   };
 };

@@ -199,14 +199,14 @@ verifyMutation({
 
 verifyMutation({
   name: "revert",
-  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).revert,
+  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).gitRevertLastCommit,
   action: actions.revertProjectCommitAction,
   input: { mainline: 1 },
 });
 
 verifyMutation({
   name: "undo",
-  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).undo,
+  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).gitUndoLastCommit,
   action: actions.undoProjectCommitAction,
   input: { mode: "mixed" },
 });
@@ -321,7 +321,7 @@ verifyMutation({
 
 verifyMutation({
   name: "commit",
-  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).commit,
+  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).gitCommit,
   action: actions.createProjectCommitAction,
   input: { message: "save", paths: ["file.ts"] },
   unknownCode: "COMMIT_OUTCOME_UNKNOWN",

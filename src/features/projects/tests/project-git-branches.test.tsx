@@ -32,7 +32,7 @@ const repositoryChanges = (): ProjectRepositoryChangesSchema => ({
 });
 
 const history = vi.hoisted(() => ({
-  commit: { mutateAsync: vi.fn(), isPending: false },
+  gitCommit: { mutateAsync: vi.fn(), isPending: false },
   query: vi.fn(), onLoadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
@@ -218,8 +218,8 @@ const selectBranch = async (name: string) => {
 
 beforeEach(() => {
   feedback.success.mockReset();
-  history.commit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
-  history.commit.isPending = false;
+  history.gitCommit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
+  history.gitCommit.isPending = false;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
@@ -917,7 +917,7 @@ it.each(["API: fix timeout", "fix: handle timeout", "Refactor HTTP client"])("pr
   expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe(message);
   click("Commit selected changes");
   await act(async () => {});
-  expect(history.commit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message, paths: ["new.txt"] });
+  expect(history.gitCommit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message, paths: ["new.txt"] });
 });
 
 it("enables committing only with a valid message and a nonempty selected path list", () => {
@@ -931,7 +931,7 @@ it("enables committing only with a valid message and a nonempty selected path li
     enterCommitMessage(message);
     expect(commitButton().disabled).toBe(true);
   }
-  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  expect(history.gitCommit.mutateAsync).not.toHaveBeenCalled();
 });
 
 it("submits the latest exact selection after saves and a fresh changes read, then clears the form", async () => {
@@ -945,9 +945,9 @@ it("submits the latest exact selection after saves and a fresh changes read, the
   enterCommitMessage("  Commit new file  ");
   click("Commit selected changes");
   await act(async () => {});
-  expect(history.commit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message: "Commit new file", paths: ["new.txt"] });
+  expect(history.gitCommit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message: "Commit new file", paths: ["new.txt"] });
   expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(changesQuery.refetch.mock.invocationCallOrder[0]);
-  expect(changesQuery.refetch.mock.invocationCallOrder[0]).toBeLessThan(history.commit.mutateAsync.mock.invocationCallOrder[0]);
+  expect(changesQuery.refetch.mock.invocationCallOrder[0]).toBeLessThan(history.gitCommit.mutateAsync.mock.invocationCallOrder[0]);
   expect(feedback.success).toHaveBeenCalledWith("Selected changes committed.");
   expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
   expect(container.querySelector('[aria-label="Select all changes"]')?.getAttribute("aria-checked")).toBe("false");
@@ -959,22 +959,22 @@ it("blocks repeated submission while saves or the commit are pending", async () 
   let finishSave!: () => void;
   let finishCommit!: (value: unknown) => void;
   workspaceFiles.flushPendingSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve; }));
-  history.commit.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finishCommit = resolve; }));
+  history.gitCommit.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => { finishCommit = resolve; }));
   click("Select all changes"); click("Open commit form"); enterCommitMessage("Update");
   act(() => { commitButton().click(); commitButton().click(); });
   expect(commitButton().disabled).toBe(true);
   expect(workspaceFiles.flushPendingSaves).toHaveBeenCalledOnce();
   expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.readOnly).toBe(true);
-  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  expect(history.gitCommit.mutateAsync).not.toHaveBeenCalled();
   await act(async () => { finishSave(); });
   expect(commitButton().disabled).toBe(true);
-  expect(history.commit.mutateAsync).toHaveBeenCalledOnce();
+  expect(history.gitCommit.mutateAsync).toHaveBeenCalledOnce();
   await act(async () => { finishCommit({ hash: "b".repeat(40) }); });
 });
 
 it.each(["save", "commit"])("keeps the draft and selection when %s fails", async (stage) => {
   const failure = new Error(stage === "save" ? "Save failed." : "Commit outcome unknown. Refresh before retrying.");
-  (stage === "save" ? workspaceFiles.flushPendingSaves : history.commit.mutateAsync).mockRejectedValueOnce(failure);
+  (stage === "save" ? workspaceFiles.flushPendingSaves : history.gitCommit.mutateAsync).mockRejectedValueOnce(failure);
   click("Select tracked changes"); click("Open commit form"); enterCommitMessage("My draft");
   click("Commit selected changes");
   await act(async () => {});
@@ -982,7 +982,7 @@ it.each(["save", "commit"])("keeps the draft and selection when %s fails", async
   expect(container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')?.value).toBe("My draft");
   expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("true");
   expect(feedback.success).not.toHaveBeenCalled();
-  if (stage === "save") expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  if (stage === "save") expect(history.gitCommit.mutateAsync).not.toHaveBeenCalled();
 });
 
 it.each(["missing-path", "branch", "head", "error"])("rejects a stale %s after saving and refreshing", async (kind) => {
@@ -994,7 +994,7 @@ it.each(["missing-path", "branch", "head", "error"])("rejects a stale %s after s
   click("Select tracked changes"); click("Open commit form"); enterCommitMessage("Update");
   click("Commit selected changes");
   await act(async () => {});
-  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  expect(history.gitCommit.mutateAsync).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenCalled();
 });
 
@@ -1018,5 +1018,5 @@ it("does not submit if the form's workspace changes while saves are pending", as
   live.projectId = "22222222-2222-4222-8222-222222222222";
   act(() => root.render(createElement(Workspace)));
   await act(async () => { finishSave(); });
-  expect(history.commit.mutateAsync).not.toHaveBeenCalled();
+  expect(history.gitCommit.mutateAsync).not.toHaveBeenCalled();
 });

@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { readProjectStashesAction } from "../actions/git-actions";
@@ -7,9 +7,11 @@ import { ProjectGitRequestError, requireProjectGitSession } from "../lib/git-err
 
 export const useProjectStashes = (
   projectId: string | null | undefined,
-  { enabled = true, maxPages = 0, ...filters }: Partial<Pick<GitStashQuerySchema, "search" | "pageSize">> & {
+  { enabled = true, maxPages = 0, stashIndex, stashSha, ...filters }: Partial<Pick<GitStashQuerySchema, "search" | "pageSize">> & {
     enabled?: boolean;
     maxPages?: number;
+    stashIndex?: number;
+    stashSha?: string;
   } = {},
 ) => {
   const queryClient = useQueryClient();
@@ -47,6 +49,28 @@ export const useProjectStashes = (
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+  const selection = gitStashQuerySchema.safeParse({ index: stashIndex, stashSha });
+  const stashDetails = useQuery({
+    queryKey: ["projects", "stash-details", userId, projectId, stashIndex, stashSha],
+    enabled: enabled && Boolean(userId) && project.success && selection.success && selection.data.index !== undefined,
+    retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
+      (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
+      (failureCount < 2 && (error.status === 0 || error.status >= 500))
+    ),
+    retryDelay: (attempt, error) => error instanceof ProjectGitRequestError
+      ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000) : 0,
+    queryFn: async ({ signal }) => {
+      const id = requireProjectGitSession(userId, projectId);
+      if (!selection.success || selection.data.index === undefined) throw new Error("Select a valid stash index and SHA.");
+      let failure: ProjectGitRequestError | undefined;
+      const details = await readProjectStashesAction(id, selection.data, signal, (status, retryAfter, code) => {
+        failure = new ProjectGitRequestError(status, retryAfter, code);
+      });
+      if (details === null) throw failure ?? new Error("Unable to load stash details. Please try again.");
+      return details;
+    },
+  });
+
   const loadMore = () => {
     if (enabled && userId && project.success && params.success && validPageLimit && query.hasNextPage &&
       !query.isFetching && !query.error && query.fetchStatus !== "paused")
@@ -60,5 +84,5 @@ export const useProjectStashes = (
     return query.isFetchNextPageError ? query.fetchNextPage({ cancelRefetch: false }) : query.refetch();
   };
 
-  return { ...query, loadMore, retry };
+  return { ...query, loadMore, retry, stashDetails };
 };

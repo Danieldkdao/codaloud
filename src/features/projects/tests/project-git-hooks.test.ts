@@ -273,3 +273,23 @@ describe("stash list", () => {
     expect(hook.current.data?.pageParams).toEqual([undefined]);
   });
 });
+
+describe("stash details", () => {
+  it("loads the selected stash by index and SHA with a separate cache key", async () => {
+    const stashSha = "a".repeat(40);
+    const details = { stashes: [{ index: 0, sha: stashSha, message: "work", createdAt: "2026-09-15T12:00:00Z" }], nextCursor: null, patch: "diff --git" };
+    actions.readProjectStashesAction.mockResolvedValue(details);
+    const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false, stashIndex: 0, stashSha }));
+    expect(hook.current.stashDetails.data).toBeUndefined();
+    await run(() => hook.current.stashDetails.refetch({ throwOnError: true }));
+    expect(hook.current.stashDetails.data).toEqual(details);
+    expect(actions.readProjectStashesAction).toHaveBeenCalledExactlyOnceWith(projectId,
+      { index: 0, stashSha, search: "", pageSize: 20 }, expect.any(AbortSignal), expect.any(Function));
+    expect(client.getQueryData(["projects", "stash-details", "user-one", projectId, 0, stashSha])).toEqual(details);
+  });
+  it("never requests an unidentified stash, even through manual refetch", async () => {
+    const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false }));
+    await run(async () => { await expect(hook.current.stashDetails.refetch({ throwOnError: true })).rejects.toThrow(); });
+    expect(actions.readProjectStashesAction).not.toHaveBeenCalled();
+  });
+});

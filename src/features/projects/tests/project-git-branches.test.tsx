@@ -14,6 +14,12 @@ import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit
 
 import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
 
+const git = vi.hoisted(() => ({
+  data: { currentBranch: "main", headSha: "a".repeat(40), upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3, isShallow: false, observedAt: "2026-09-16T12:00:00Z" },
+  isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn(),
+  gitFetch: { mutateAsync: vi.fn() }, gitPush: { mutateAsync: vi.fn() }, gitPull: { mutateAsync: vi.fn() },
+}));
+vi.mock("@/features/projects/hooks/use-project-git", () => ({ useProjectGit: () => git }));
 const changesQuery = vi.hoisted(() => ({
   query: vi.fn(), refetch: vi.fn(), isPending: false, isFetching: false,
   fetchStatus: "idle", error: null as Error | null,
@@ -217,6 +223,11 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  git.gitFetch.mutateAsync.mockReset().mockImplementation(async () => git.data);
+  git.gitPush.mutateAsync.mockReset().mockResolvedValue({ trackingUpdated: true });
+  git.gitPull.mutateAsync.mockReset().mockResolvedValue({});
+  git.error = null; git.isPending = false; git.isFetching = false;
+
   feedback.success.mockReset();
   history.gitCommit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
   history.gitCommit.isPending = false;
@@ -1019,4 +1030,43 @@ it("does not submit if the form's workspace changes while saves are pending", as
   act(() => root.render(createElement(Workspace)));
   await act(async () => { finishSave(); });
   expect(history.gitCommit.mutateAsync).not.toHaveBeenCalled();
+});
+
+const openBranchActions = () => {
+  const trigger = container.querySelector<HTMLButtonElement>('[aria-label^="Branch actions:"]')!;
+  act(() => trigger.click());
+};
+it("renders live outgoing and incoming counts", () => {
+  expect(container.querySelector('[aria-label^="Branch actions:"]')?.getAttribute("aria-label")).toContain("2 to push, 3 to pull");
+});
+it.each(["Push 2", "Pull 3", "Pull Rebase", "Fetch"])("runs %s after saves and reports success", async (label) => {
+  openBranchActions(); click(label);
+  await act(async () => {});
+  const mutation = label === "Fetch" ? git.gitFetch : label.startsWith("Pull") ? git.gitPull : git.gitPush;
+  expect(mutation.mutateAsync).toHaveBeenCalledOnce();
+  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(mutation.mutateAsync.mock.invocationCallOrder[0]);
+  expect(feedback.success).toHaveBeenCalledOnce();
+  if (label === "Pull Rebase") expect(mutation.mutateAsync).toHaveBeenCalledWith({ rebase: true });
+});
+it("confirms force push against a freshly fetched remote SHA", async () => {
+  openBranchActions(); click("Force Push"); await act(async () => {});
+  expect(git.gitFetch.mutateAsync).toHaveBeenCalledOnce();
+  expect(git.gitPush.mutateAsync).not.toHaveBeenCalled();
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Force Push").onPress());
+  expect(git.gitPush.mutateAsync).toHaveBeenCalledWith({ force: true, expectedRemoteSha: "b".repeat(40) });
+});
+it("blocks sync after save failure and presents the failure", async () => {
+  workspaceFiles.flushPendingSaves.mockRejectedValueOnce(new Error("Save failed"));
+  openBranchActions(); click("Push 2"); await act(async () => {});
+  expect(git.gitPush.mutateAsync).not.toHaveBeenCalled();
+  expect(workspaceFiles.alert).toHaveBeenCalledWith(expect.any(String), "Save failed");
+  expect(feedback.success).not.toHaveBeenCalled();
+});
+it("cancels a pending force push confirmation after switching accounts", async () => {
+  openBranchActions(); click("Force Push"); await act(async () => {});
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  live.userId = "user-two"; act(() => root.render(<Workspace />));
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Force Push").onPress());
+  expect(git.gitPush.mutateAsync).not.toHaveBeenCalled();
 });

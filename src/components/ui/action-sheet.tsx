@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 
 import { ContentSheet } from "./content-sheet";
 import { Icon, type IconProps } from "./icon";
@@ -12,6 +12,7 @@ export type ActionSheetItem = {
   count?: number | null;
   accessibilityLabel?: string;
   disabled?: boolean;
+  busy?: boolean;
   chevron?: boolean;
   onPress?: () => void;
 };
@@ -74,7 +75,7 @@ export const ActionSheet = ({
                   ? item.label
                   : `${item.label} ${item.count}`)
               }
-              accessibilityState={{ disabled: item.disabled ?? false }}
+              accessibilityState={{ disabled: item.disabled ?? false, busy: item.busy ?? false }}
               disabled={item.disabled}
               onPress={item.onPress}
               className="min-h-20 flex-row items-center gap-4 px-2 py-4 active:bg-secondary disabled:opacity-40"
@@ -98,6 +99,7 @@ export const ActionSheet = ({
                   </CodeText>
                 </View>
               )}
+              {item.busy && <ActivityIndicator className="text-primary" accessibilityLabel={item.label} />}
               {item.chevron && (
                 <Icon
                   family="Feather"

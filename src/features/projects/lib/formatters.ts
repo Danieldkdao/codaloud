@@ -694,3 +694,16 @@ export const formatProjectFilePreviewMatches = (
     accessibilityLabel: `Match ${state.activeIndex + 1} of ${state.total}`,
   };
 };
+
+
+export const formatProjectGitCount = (count: number | null | undefined) => count == null ? "—" : String(count);
+
+export const formatProjectSyncAction = (action: "push" | "force-push" | "pull" | "pull-rebase" | "fetch") => {
+  switch (action) {
+    case "push": return { label: "Push", pending: "Pushing…", icon: "upload" as const };
+    case "force-push": return { label: "Force Push", pending: "Force pushing…", icon: "chevrons-up" as const };
+    case "pull": return { label: "Pull", pending: "Pulling…", icon: "download" as const };
+    case "pull-rebase": return { label: "Pull Rebase", pending: "Rebasing…", icon: "git-merge" as const };
+    case "fetch": return { label: "Fetch", pending: "Fetching…", icon: "download-cloud" as const };
+  }
+};

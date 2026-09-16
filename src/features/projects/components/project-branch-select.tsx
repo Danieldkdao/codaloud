@@ -36,7 +36,7 @@ type ProjectBranchSelectProps = {
 
 export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: ProjectBranchSelectProps = {}) => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isCheckingOut, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
+  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isWorkspaceBusy, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = session.data?.user.id;
@@ -85,7 +85,7 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
     if (filePath) refreshFile(filePath);
   };
   const selectBranch = (name: string, source: ProjectBranchSource = "local") => {
-    if (isCheckingOut) return;
+    if (isWorkspaceBusy) return;
     close();
     Keyboard.dismiss();
     checkoutBranch(name, async () => {
@@ -102,17 +102,17 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
   return (
     <>
       <Pressable
-        onPress={() => { if (isCheckoutRecoveryRequired) retryCheckoutRecovery(); else if (!isCheckingOut) setOpen(true); }}
-        disabled={isCheckingOut && !isCheckoutRecoveryRequired}
+        onPress={() => { if (isCheckoutRecoveryRequired) retryCheckoutRecovery(); else if (!isWorkspaceBusy) setOpen(true); }}
+        disabled={isWorkspaceBusy && !isCheckoutRecoveryRequired}
         accessibilityRole="button"
         accessibilityLabel={isCheckoutRecoveryRequired ? "Retry branch recovery" : `Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
-        accessibilityHint={isCheckoutRecoveryRequired ? "Confirms the current branch before editing resumes" : isCheckingOut ? "Switching branches. Please wait." : "Opens available branches"}
-        accessibilityState={{ expanded: open, disabled: isCheckingOut && !isCheckoutRecoveryRequired, busy: isCheckingOut }}
+        accessibilityHint={isCheckoutRecoveryRequired ? "Confirms the current branch before editing resumes" : isWorkspaceBusy ? "A workspace operation is running. Please wait." : "Opens available branches"}
+        accessibilityState={{ expanded: open, disabled: isWorkspaceBusy && !isCheckoutRecoveryRequired, busy: isWorkspaceBusy }}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"
       >
-        {isCheckingOut && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="MaterialCommunityIcons" name="source-branch" size={26} className="text-foreground" accessible={false} />}
+        {isWorkspaceBusy && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="MaterialCommunityIcons" name="source-branch" size={26} className="text-foreground" accessible={false} />}
       </Pressable>
-      <ContentSheet open={open && !isCheckingOut} onOpenChange={(value) => { if (!value || !isCheckingOut) setOpen(value); }} backgroundColor={card}>
+      <ContentSheet open={open && !isWorkspaceBusy} onOpenChange={(value) => { if (!value || !isWorkspaceBusy) setOpen(value); }} backgroundColor={card}>
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
         <View style={{ width }}>
           <View accessibilityViewIsModal onAccessibilityEscape={close}>
@@ -121,17 +121,17 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
                 <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
                 <Input type="search" variant="ghost" size="sm" placeholder="Search branches or type to create a new one."
                   accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
-                  value={search} onChangeText={setSearch} editable={!isCheckingOut} maxLength={200}
+                  value={search} onChangeText={setSearch} editable={!isWorkspaceBusy} maxLength={200}
                   containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
               </View>
             </View>
             <View>
               <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
-                search={search} open={open} query={query} disabled={isCheckingOut} onSelect={selectBranch} />
+                search={search} open={open} query={query} disabled={isWorkspaceBusy} onSelect={selectBranch} />
               <View className="h-px shrink-0 bg-border" />
               {repositoryId ? (
                 <ProjectBranchSection source="remote" branches={remoteBranches.map(({ name }) => name)} selectedBranch={branchSource === "remote" ? branch : null}
-                  search={search} open={open} query={remoteQuery} disabled={isCheckingOut} onSelect={(name) => selectBranch(name, "remote")} />
+                  search={search} open={open} query={remoteQuery} disabled={isWorkspaceBusy} onSelect={(name) => selectBranch(name, "remote")} />
               ) : (
                 <View className="gap-3 px-5 py-4">
                   <View className="flex-row items-center gap-2">

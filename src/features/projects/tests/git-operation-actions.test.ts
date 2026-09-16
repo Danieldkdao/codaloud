@@ -210,3 +210,9 @@ it("preserves restoreIndex for stash pop", async () => {
   await actions.popProjectStashAction(projectId, { stashIndex: 1, stashSha: sha, restoreIndex: true });
   expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ stashIndex: 1, stashSha: sha, restoreIndex: true });
 });
+
+verifyAction({
+  name: "readProjectDiscardPreviewAction",
+  call: (id, signal) => actions.readProjectDiscardPreviewAction(id, signal),
+  path: "discard", data: { currentBranch: "main", headSha: sha, fingerprint: "b".repeat(64), changedPaths: [] },
+});

@@ -1,3 +1,4 @@
+import { gitDiscardPreviewSchema } from "../server/git-discard-schemas";
 import { gitStashQuerySchema, gitStashListSchema, gitStashPushSchema, gitStashPushedSchema, gitStashPopSchema, gitStashPoppedSchema } from "../server/git-stash-schemas";
 import { gitCreateBranchSchema, gitCreatedBranchSchema } from "../server/git-branch-schemas";
 import { gitPullSchema, gitPulledSchema } from "../server/git-pull-schemas";
@@ -377,4 +378,13 @@ export const popProjectStashAction = async (
   mutateProjectGitRequest({
     projectId, path: "stash-pop", output: gitStashPoppedSchema,
     input: gitStashPopSchema, unsafeInput,
+  });
+
+export const readProjectDiscardPreviewAction = async (
+  projectId: string,
+  signal?: AbortSignal,
+) =>
+  readProjectGitRequest({
+    projectId, path: "discard", output: gitDiscardPreviewSchema,
+    signal,
   });

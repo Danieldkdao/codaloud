@@ -25,7 +25,7 @@ const LoadedCodeEditor = ({ projectId, filePath, bottomInset }: {
 }) => {
   const { isDarkMode } = useTheme();
   const save = useProjectFileSave()!;
-  const { isCheckingOut } = useProjectWorkspaceBranch();
+  const { isWorkspaceBusy } = useProjectWorkspaceBranch();
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [analysis, setAnalysis] = useState<CodeEditorAnalysis>({ status: "checking", diagnostics: [] });
   const [analysisPanelRequest, setAnalysisPanelRequest] = useState(0);
@@ -47,7 +47,7 @@ const LoadedCodeEditor = ({ projectId, filePath, bottomInset }: {
           importantForAccessibility={isEditorReady ? "auto" : "no-hide-descendants"}
         >
           <CodeEditor
-            readOnly={isCheckingOut}
+            readOnly={isWorkspaceBusy}
             colorScheme={isDarkMode ? "dark" : "light"}
             onReady={handleEditorReady}
             onRequestAnalysis={requestAnalysis}

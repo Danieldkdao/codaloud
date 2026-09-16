@@ -154,3 +154,10 @@ it("requests pull with rebase", async () => {
   await actions.pullProjectGitAction(projectId, { rebase: true });
   expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ rebase: true });
 });
+
+verifyAction({
+  name: "createProjectBranchAction",
+  call: (id) => actions.createProjectBranchAction(id, { branchName: "feature/mobile" }),
+  path: "branches", data: { previousBranch: "main", currentBranch: "feature/mobile", headSha: sha }, body: { branchName: "feature/mobile" },
+  invalid: () => actions.createProjectBranchAction(projectId, { branchName: "../invalid" } as never),
+});

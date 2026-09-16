@@ -1,3 +1,4 @@
+import { gitCreateBranchSchema, gitCreatedBranchSchema } from "../server/git-branch-schemas";
 import { gitPullSchema, gitPulledSchema } from "../server/git-pull-schemas";
 import { gitPushSchema, gitPushedSchema } from "../server/git-push-schemas";
 import { z } from "zod";
@@ -337,4 +338,13 @@ export const pullProjectGitAction = async (
   mutateProjectGitRequest({
     projectId, path: "pull", output: gitPulledSchema,
     input: gitPullSchema, unsafeInput,
+  });
+
+export const createProjectBranchAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitCreateBranchSchema>,
+) =>
+  mutateProjectGitRequest({
+    projectId, path: "branches", output: gitCreatedBranchSchema,
+    input: gitCreateBranchSchema, unsafeInput,
   });

@@ -1,3 +1,5 @@
+import { ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
+import { readProjectDiscardPreviewAction } from "../actions/git-actions";
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -6,7 +8,7 @@ import { readProjectChangesAction } from "../actions/git-actions";
 
 export const useProjectChanges = (
   projectId: string | null | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, discardPreviewEnabled = false }: { enabled?: boolean; discardPreviewEnabled?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
   const session = useAuthSession();
@@ -42,6 +44,27 @@ export const useProjectChanges = (
       return changes;
     },
   });
+  const discardPreview = useQuery({
+    queryKey: ["projects", "discard-preview", userId, projectId],
+    enabled: enabled && discardPreviewEnabled && Boolean(userId) && project.success,
+    staleTime: 0,
+    retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
+      (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
+      (failureCount < 2 && (error.status === 0 || error.status >= 500))
+    ),
+    retryDelay: (attempt, error) => error instanceof ProjectGitRequestError
+      ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000) : 0,
+    queryFn: async ({ signal }) => {
+      const id = requireProjectGitSession(userId, projectId);
+      let failure: ProjectGitRequestError | undefined;
+      const preview = await readProjectDiscardPreviewAction(id, signal, (status, retryAfter, code) => {
+        failure = new ProjectGitRequestError(status, retryAfter, code);
+      });
+      if (preview === null) throw failure ?? new Error("Unable to prepare discard. Please try again.");
+      return preview;
+    },
+  });
+
   const { refetch } = query;
   const refreshAfterSaves = useCallback(async (flushPendingSaves: () => Promise<void>, signal?: AbortSignal) => {
     if (signal?.aborted) return;
@@ -54,5 +77,5 @@ export const useProjectChanges = (
     return refetch({ throwOnError: true });
   }, [projectId, queryClient, refetch, userId]);
 
-  return { ...query, refreshAfterSaves };
+  return { ...query, refreshAfterSaves, discardPreview };
 };

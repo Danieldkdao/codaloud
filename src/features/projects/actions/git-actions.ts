@@ -344,6 +344,7 @@ export const popProjectStashAction = async (
 export const readProjectDiscardPreviewAction = async (
   projectId: string,
   signal?: AbortSignal,
+  onFailure?: ProjectGitReadFailureHandler,
 ) =>
   readProjectGitRequest({
     projectId,
@@ -351,6 +352,7 @@ export const readProjectDiscardPreviewAction = async (
     input: z.strictObject({}),
     output: gitDiscardPreviewSchema,
     signal,
+    onFailure,
   });
 
 export const discardProjectChangesAction = async (

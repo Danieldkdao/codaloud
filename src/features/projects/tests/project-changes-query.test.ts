@@ -223,7 +223,7 @@ it("isolates project and account caches without showing a previous project's dat
   await render();
   expect(current.data?.currentBranch).toBe("other-account");
   expect(client.getQueryData(["projects", "changes", "user-one", projectId])).toEqual(snapshot);
-  expect(client.getQueryCache().getAll()).toHaveLength(3);
+  expect(client.getQueryCache().getAll().filter((query) => query.queryKey[1] === "changes")).toHaveLength(3);
 });
 
 it("reuses cached data when remounted", async () => {

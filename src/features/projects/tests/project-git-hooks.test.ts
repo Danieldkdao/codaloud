@@ -1,6 +1,7 @@
 import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectBranches } from "../hooks/use-project-branches";
 // @vitest-environment happy-dom
+import { useProjectChanges } from "../hooks/use-project-changes";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
@@ -204,4 +205,23 @@ verifyMutation({
   useResult: (id) => useProjectCommitHistory(id, { enabled: false }).undo,
   action: actions.undoProjectCommitAction,
   input: { mode: "mixed" },
+});
+
+describe("discard preview", () => {
+  it("stays disabled until requested and exports the complete query", async () => {
+    const hook = await renderHook(() => useProjectChanges(projectId, { enabled: false }));
+    expect(actions.readProjectDiscardPreviewAction).not.toHaveBeenCalled();
+    expect(hook.current.discardPreview.data).toBeUndefined();
+    const preview = { currentBranch: "main", headSha: "a".repeat(40), fingerprint: "b".repeat(64), changedPaths: [] };
+    actions.readProjectDiscardPreviewAction.mockResolvedValue(preview);
+    await run(() => hook.current.discardPreview.refetch({ throwOnError: true }));
+    expect(hook.current.discardPreview.data).toEqual(preview);
+    expect(actions.readProjectDiscardPreviewAction).toHaveBeenCalledWith(projectId, expect.any(AbortSignal), expect.any(Function));
+  });
+  it("guards manual preview reads against invalid sessions", async () => {
+    session.data = null;
+    const hook = await renderHook(() => useProjectChanges(projectId, { enabled: false }));
+    await run(async () => { await expect(hook.current.discardPreview.refetch({ throwOnError: true })).rejects.toThrow(); });
+    expect(actions.readProjectDiscardPreviewAction).not.toHaveBeenCalled();
+  });
 });

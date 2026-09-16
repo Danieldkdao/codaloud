@@ -123,3 +123,9 @@ verifyAction({
   call: (id, signal) => actions.readProjectGitCountsAction(id, signal),
   path: "counts", data: counts,
 });
+
+verifyAction({
+  name: "fetchProjectGitAction",
+  call: (id) => actions.fetchProjectGitAction(id),
+  path: "fetch", data: counts, body: {},
+});

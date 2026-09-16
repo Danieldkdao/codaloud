@@ -1,4 +1,5 @@
-import { readProjectGitRequest } from "../lib/git-requests";
+import { z } from "zod";
+import { mutateProjectGitRequest, readProjectGitRequest } from "../lib/git-requests";
 import { gitCountsSchema } from "../server/git-schemas";
 import {
   checkoutProjectBranchResponseSchema,
@@ -37,6 +38,11 @@ import {
 
 export const readProjectGitCountsAction = async (projectId: string, signal?: AbortSignal) =>
   readProjectGitRequest({ projectId, path: "counts", output: gitCountsSchema, signal });
+
+export const fetchProjectGitAction = async (projectId: string) =>
+  mutateProjectGitRequest({
+    projectId, path: "fetch", input: z.strictObject({}), unsafeInput: {}, output: gitCountsSchema,
+  });
 
 export const createProjectCommitAction = async (
   projectId: string,

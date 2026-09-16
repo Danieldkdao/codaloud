@@ -1,3 +1,4 @@
+import { isValidIds } from "@/lib/utils";
 import type { GitDiscardedSchema } from "../server/git-discard-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitDiscardSchema } from "../server/git-discard-schemas";
@@ -10,7 +11,7 @@ import {
 import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 import { useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { z } from "zod";
+import type { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 export const useProjectChanges = (
   projectId: string | null | undefined,
@@ -22,11 +23,11 @@ export const useProjectChanges = (
     !session.isPending && !session.error
       ? (session.data?.user.id ?? null)
       : null;
-  const project = z.uuid().safeParse(projectId);
+  const validProject = !!projectId && isValidIds(projectId);
 
   const query = useQuery({
     queryKey: ["projects", "changes", userId, projectId],
-    enabled: enabled && Boolean(userId) && project.success,
+    enabled: enabled && Boolean(userId) && validProject,
     // Keep snapshots until a manual refresh or an explicit invalidation after
     // a workspace write. Stale snapshots reload when this panel becomes active.
     staleTime: Infinity,
@@ -41,9 +42,9 @@ export const useProjectChanges = (
     queryFn: async ({ signal }) => {
       // Manual refetch bypasses enabled, so guard the request here too.
       if (!userId) throw new Error("Sign in to view project changes.");
-      if (!project.success) throw new Error("Invalid project ID.");
+      if (!projectId || !validProject) throw new Error("Invalid project ID.");
 
-      const changes = await readProjectChangesAction(project.data, signal);
+      const changes = await readProjectChangesAction(projectId, signal);
       if (changes === null) {
         throw new Error("Unable to load project changes. Please try again.");
       }
@@ -52,7 +53,7 @@ export const useProjectChanges = (
   });
   const discardPreview = useQuery({
     queryKey: ["projects", "discard-preview", userId, projectId],
-    enabled: enabled && discardPreviewEnabled && Boolean(userId) && project.success,
+    enabled: enabled && discardPreviewEnabled && Boolean(userId) && validProject,
     staleTime: 0,
     retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
       (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||

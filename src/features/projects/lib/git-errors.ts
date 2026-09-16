@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { isValidIds } from "@/lib/utils";
 
 export class ProjectGitError extends Error {
   constructor(message: string, readonly code?: string) {
@@ -21,7 +21,6 @@ export class ProjectGitRequestError extends ProjectGitError {
 
 export const requireProjectGitSession = (userId: string | null, projectId: string | null | undefined) => {
   if (!userId) throw new ProjectGitError("Sign in to use project Git.", "UNAUTHENTICATED");
-  const project = z.uuid().safeParse(projectId);
-  if (!project.success) throw new ProjectGitError("Invalid project ID.", "INVALID_PROJECT");
-  return project.data;
+  if (!projectId || !isValidIds(projectId)) throw new ProjectGitError("Invalid project ID.", "INVALID_PROJECT");
+  return projectId;
 };

@@ -1,3 +1,4 @@
+import { isValidIds } from "@/lib/utils";
 import type { GitPulledSchema } from "../server/git-pull-schemas";
 import type { GitPushedSchema } from "../server/git-push-schemas";
 import type { GitCountsSchema } from "../server/git-schemas";
@@ -12,7 +13,7 @@ import {
 import { gitPushSchema } from "../server/git-push-schemas";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { z } from "zod";
+import type { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 
@@ -23,10 +24,10 @@ export const useProjectGit = (
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
-  const project = z.uuid().safeParse(projectId);
+  const validProject = !!projectId && isValidIds(projectId);
   const query = useQuery({
     queryKey: ["projects", "git-counts", userId, projectId],
-    enabled: enabled && Boolean(userId) && project.success,
+    enabled: enabled && Boolean(userId) && validProject,
     retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
       (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
       (failureCount < 2 && (error.status === 0 || error.status >= 500))

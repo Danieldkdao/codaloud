@@ -11,6 +11,8 @@ const session = vi.hoisted(() => ({
   data: { user: { id: "user-one" } } as { user: { id: string } } | null,
   isPending: false, error: null as Error | null,
 }));
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
 vi.mock("../actions/git-actions", () => ({ readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn() }));
 

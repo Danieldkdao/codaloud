@@ -1,3 +1,4 @@
+import { isValidIds } from "@/lib/utils";
 import type { GitStashPushedSchema, GitStashPoppedSchema } from "../server/git-stash-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import {
@@ -13,7 +14,7 @@ import {
 } from "../actions/git-actions";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { z } from "zod";
+import type { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { ProjectGitError, ProjectGitRequestError, requireProjectGitSession } from "../lib/git-errors";
 
@@ -29,7 +30,7 @@ export const useProjectStashes = (
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
-  const project = z.uuid().safeParse(projectId);
+  const validProject = !!projectId && isValidIds(projectId);
   const params = gitStashQuerySchema.safeParse({
     ...filters,
     search: typeof filters.search === "string" ? filters.search.trim().toLowerCase() : filters.search,
@@ -38,7 +39,7 @@ export const useProjectStashes = (
   const queryKey = ["projects", "stashes", "infinite", userId, projectId, params.success ? params.data : filters] as const;
   const query = useInfiniteQuery({
     queryKey,
-    enabled: enabled && Boolean(userId) && project.success && params.success && validPageLimit,
+    enabled: enabled && Boolean(userId) && validProject && params.success && validPageLimit,
     initialPageParam: undefined as string | undefined,
     maxPages: validPageLimit ? maxPages : 0,
     retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
@@ -64,7 +65,7 @@ export const useProjectStashes = (
   const selection = gitStashQuerySchema.safeParse({ index: stashIndex, stashSha });
   const stashDetails = useQuery({
     queryKey: ["projects", "stash-details", userId, projectId, stashIndex, stashSha],
-    enabled: enabled && Boolean(userId) && project.success && selection.success && selection.data.index !== undefined,
+    enabled: enabled && Boolean(userId) && validProject && selection.success && selection.data.index !== undefined,
     retry: (failureCount, error) => error instanceof ProjectGitRequestError && (
       (error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
       (failureCount < 2 && (error.status === 0 || error.status >= 500))
@@ -84,12 +85,12 @@ export const useProjectStashes = (
   });
 
   const loadMore = () => {
-    if (enabled && userId && project.success && params.success && validPageLimit && query.hasNextPage &&
+    if (enabled && userId && validProject && params.success && validPageLimit && query.hasNextPage &&
       !query.isFetching && !query.error && query.fetchStatus !== "paused")
       return query.fetchNextPage({ cancelRefetch: false });
   };
   const retry = () => {
-    if (!enabled || !userId || !project.success || !params.success || !validPageLimit || query.isFetching || query.fetchStatus === "paused") return;
+    if (!enabled || !userId || !validProject || !params.success || !validPageLimit || query.isFetching || query.fetchStatus === "paused") return;
     if (query.error instanceof ProjectGitRequestError &&
       (query.error.code === "INVALID_STASH_CURSOR" || query.error.code === "GIT_STASH_CHANGED"))
       return queryClient.resetQueries({ queryKey, exact: true });

@@ -1,3 +1,5 @@
+import { gitUndoSchema } from "../server/git-undo-schemas";
+import { undoProjectCommitAction } from "../actions/git-actions";
 import { gitRevertSchema } from "../server/git-revert-schemas";
 import { z } from "zod";
 import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
@@ -144,7 +146,24 @@ export const useProjectCommitHistory = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { revert,
+  const undo = useMutation({
+    mutationKey: ["projects", "git", "undo", userId, projectId],
+    retry: false,
+    // Execute now or fail; never replay a queued write against a later workspace.
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input: z.input<typeof gitUndoSchema>) => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await undoProjectCommitAction(id, input);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Conflicts and lost responses can leave partial changes on the server.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
+  return { undo, revert,
     ...query,
     onLoadMore,
     retry,

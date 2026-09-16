@@ -198,3 +198,10 @@ verifyMutation({
   action: actions.revertProjectCommitAction,
   input: { mainline: 1 },
 });
+
+verifyMutation({
+  name: "undo",
+  useResult: (id) => useProjectCommitHistory(id, { enabled: false }).undo,
+  action: actions.undoProjectCommitAction,
+  input: { mode: "mixed" },
+});

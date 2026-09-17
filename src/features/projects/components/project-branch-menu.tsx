@@ -40,8 +40,9 @@ export const ProjectBranchMenu = ({
   const git = useProjectGit(projectId);
   const project = useProject(projectId);
   const connected = Boolean(project.data?.githubRepositoryId);
-  const outgoing = git.error ? null : git.data?.outgoing;
-  const incoming = git.error ? null : git.data?.incoming;
+  const countsMatchBranch = !git.error && !isCheckingOut && git.data?.currentBranch === branch;
+  const outgoing = countsMatchBranch ? git.data?.outgoing : null;
+  const incoming = countsMatchBranch ? git.data?.incoming : null;
   const sync = (action: (typeof syncActions)[number]) => {
     const presentation = formatProjectSyncAction(action);
     void run(presentation.pending, async (assertCurrent) => {

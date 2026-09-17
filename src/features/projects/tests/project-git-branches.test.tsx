@@ -233,6 +233,7 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  git.data.currentBranch = "main";
   changesQuery.discardPreview.refetch.mockReset().mockResolvedValue({ data: { fingerprint: "d".repeat(64), changedPaths: ["file.txt"], currentBranch: "main", headSha: "a".repeat(40) } });
   changesQuery.gitDiscardChanges.mutateAsync.mockReset().mockResolvedValue({ remainingChanges: false });
   history.gitUndoLastCommit.mutateAsync.mockReset().mockResolvedValue({});
@@ -1176,4 +1177,46 @@ it("rejects a changed HEAD after confirming undo", async () => {
   await confirmAlert("Undo Commit");
   expect(history.gitUndoLastCommit.mutateAsync).not.toHaveBeenCalled();
   expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("changed");
+});
+
+it("hides stale counts belonging to another branch", () => {
+  git.data.currentBranch = "old-branch";
+  act(() => root.render(<Workspace />));
+  expect(container.querySelector('[aria-label^="Branch actions:"]')?.getAttribute("aria-label")).toContain("— to push, — to pull");
+  git.data.currentBranch = "main";
+});
+
+it("keeps remote operations disabled without a connected repository", () => {
+  live.repositoryId = null;
+  act(() => root.render(<Workspace />));
+  openBranchActions();
+  for (const label of ["Push 2", "Pull 3", "Force Push", "Pull Rebase", "Fetch"])
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.disabled).toBe(true);
+});
+
+it("serializes repeated sync presses and disables dependent controls", async () => {
+  let finish!: () => void;
+  git.gitPull.mutateAsync.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  openBranchActions(); click("Pull 3"); await act(async () => {});
+  for (const label of ["Push 2", "Pull 3", "Force Push", "Fetch"])
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.disabled).toBe(true);
+  click("Pull 3");
+  expect(git.gitPull.mutateAsync).toHaveBeenCalledOnce();
+  await act(async () => finish());
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Pull 3"]')?.disabled).toBe(false);
+});
+
+it("cancels stash without changing Git or showing success", async () => {
+  click("Other Options"); click("Stash All"); await act(async () => {});
+  await confirmAlert("Cancel");
+  expect(stashes.gitStash.mutateAsync).not.toHaveBeenCalled();
+  expect(feedback.success).not.toHaveBeenCalled();
+});
+
+it("refreshes file contents after pull conflicts without success feedback", async () => {
+  git.gitPull.mutateAsync.mockRejectedValueOnce(new Error("Resolve conflicts before continuing."));
+  openBranchActions(); click("Pull 3"); await act(async () => {});
+  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(feedback.success).not.toHaveBeenCalled();
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Resolve conflicts before continuing.");
 });

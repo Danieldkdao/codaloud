@@ -12,6 +12,8 @@ import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-pr
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+
 const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
 vi.mock("@/features/projects/components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children) }));

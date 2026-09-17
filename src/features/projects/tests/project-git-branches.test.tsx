@@ -1144,18 +1144,31 @@ it("refreshes the latest stash and confirms its identity before popping", async 
   click("Other Options"); click("Pop Stash"); await act(async () => {});
   expect(stashes.refetch).toHaveBeenCalledOnce();
   expect(stashes.gitPopStash.mutateAsync).not.toHaveBeenCalled();
-  await confirmAlert("Pop Stash");
+  await confirmAlert("Yes");
   expect(stashes.gitPopStash.mutateAsync).toHaveBeenCalledWith({ stashIndex: 0, stashSha: "c".repeat(40), restoreIndex: false });
 });
-it("browses saved stashes and opens their patch", async () => {
+it("restores a tapped stash only after Yes without opening a diff panel", async () => {
   click("Other Options"); click("View Stash"); await act(async () => {});
   click("View stash 0"); await act(async () => {});
-  expect(container.textContent).toContain("+saved change");
-  expect(container.querySelector('[aria-label="Pop selected stash"]')).not.toBeNull();
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Restore stash?", expect.stringContaining("Saved mobile work"), expect.any(Array), expect.any(Object));
+  expect(container.textContent).not.toContain("+saved change");
+  expect(container.textContent).not.toContain("Stash details");
+  expect(stashes.gitPopStash.mutateAsync).not.toHaveBeenCalled();
+  await confirmAlert("Yes");
+  expect(stashes.gitPopStash.mutateAsync).toHaveBeenCalledExactlyOnceWith({ stashIndex: 0, stashSha: "c".repeat(40), restoreIndex: false });
 });
+it("leaves the stash list unchanged when restore is declined", async () => {
+  click("Other Options"); click("View Stash"); await act(async () => {});
+  click("View stash 0"); await act(async () => {});
+  await confirmAlert("No");
+  expect(stashes.gitPopStash.mutateAsync).not.toHaveBeenCalled();
+  expect(container.querySelector('[aria-label="Search stashes"]')).not.toBeNull();
+  expect(feedback.success).not.toHaveBeenCalled();
+});
+
 it("shows stash conflicts without a success toast", async () => {
   stashes.gitPopStash.mutateAsync.mockRejectedValueOnce(new Error("Conflicts found. Your stash was retained."));
-  click("Other Options"); click("Pop Stash"); await act(async () => {}); await confirmAlert("Pop Stash");
+  click("Other Options"); click("Pop Stash"); await act(async () => {}); await confirmAlert("Yes");
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Conflicts found. Your stash was retained.");
   expect(feedback.success).not.toHaveBeenCalled();
 });

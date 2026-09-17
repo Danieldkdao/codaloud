@@ -31,6 +31,7 @@ export const useProjectGitOperation = () => {
     message: string,
     actionText: string,
     destructive = false,
+    cancelText = "Cancel",
   ) =>
     new Promise<boolean>((resolve) => {
       const signal = lifetime.current?.signal;
@@ -48,7 +49,7 @@ export const useProjectGitOperation = () => {
         title,
         message,
         [
-          { text: "Cancel", style: "cancel", onPress: cancel },
+          { text: cancelText, style: "cancel", onPress: cancel },
           {
             text: actionText,
             style: destructive ? "destructive" : "default",

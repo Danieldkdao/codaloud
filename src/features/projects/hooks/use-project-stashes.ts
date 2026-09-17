@@ -263,5 +263,13 @@ export const useProjectStashes = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { ...query, loadMore, retry, stashDetails, gitStash, gitPopStash, gitDeleteStash };
+  return {
+    ...query,
+    loadMore,
+    retry,
+    stashDetails,
+    gitStash,
+    gitPopStash,
+    gitDeleteStash,
+  };
 };

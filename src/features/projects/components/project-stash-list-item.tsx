@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
-import Swipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
-import { formatCommitTimestamp, formatProjectStashLabel } from "../lib/formatters";
+import {
+  formatCommitTimestamp,
+  formatProjectStashLabel,
+} from "../lib/formatters";
 import type { GitStashListSchema } from "../server/git-stash-schemas";
 
 type ProjectStashListItemProps = {
@@ -14,19 +22,38 @@ type ProjectStashListItemProps = {
   onDelete: () => Promise<unknown>;
 };
 
-export const ProjectStashListItem = ({ stash, disabled, onSelect, onDelete }: ProjectStashListItemProps) => {
-  const swipeable = useRef<SwipeableMethods>(null);
+const deleteActionWidth = 128;
+const closedOffset = { x: deleteActionWidth, y: 0 };
+const snapOffsets = [0, deleteActionWidth, deleteActionWidth * 2];
+
+export const ProjectStashListItem = ({
+  stash,
+  disabled,
+  onSelect,
+  onDelete,
+}: ProjectStashListItemProps) => {
+  const { width } = useWindowDimensions();
+  const scrollView = useRef<ScrollView>(null);
   const deleting = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [actionsVisible, setActionsVisible] = useState(false);
+  const [visibleAction, setVisibleAction] = useState<"left" | "right" | null>(null);
   const isDisabled = disabled || isDeleting;
-  useEffect(() => { if (isDisabled) swipeable.current?.close(); }, [isDisabled]);
+  const close = () => {
+    scrollView.current?.scrollTo({ ...closedOffset, animated: true });
+    setVisibleAction(null);
+  };
+  useEffect(() => {
+    if (isDisabled) {
+      scrollView.current?.scrollTo({ ...closedOffset, animated: false });
+      setVisibleAction(null);
+    }
+  }, [isDisabled]);
 
   const remove = async () => {
     if (disabled || deleting.current) return;
     deleting.current = true;
     setIsDeleting(true);
-    swipeable.current?.close();
+    close();
     try {
       await onDelete();
     } finally {
@@ -35,54 +62,95 @@ export const ProjectStashListItem = ({ stash, disabled, onSelect, onDelete }: Pr
     }
   };
 
-  return (
-    <Swipeable
-      ref={swipeable}
-      enabled={!isDisabled}
-      friction={2}
-      leftThreshold={48}
-      overshootLeft={false}
-      overshootRight={false}
-      onSwipeableWillOpen={() => setActionsVisible(true)}
-      onSwipeableWillClose={() => setActionsVisible(false)}
-      renderLeftActions={() => (
-        <View
-          className="h-full"
-          accessibilityElementsHidden={!actionsVisible || isDisabled}
-          importantForAccessibility={actionsVisible && !isDisabled ? "auto" : "no-hide-descendants"}
-        >
-          <Button
-            variant="destructive"
-            className="h-full min-h-12 rounded-none px-5"
-            accessibilityLabel={`Delete stash: ${stash.message}`}
-            disabled={isDisabled}
-            onPress={() => { void remove(); }}
-          >
-            <Icon family="Feather" name="trash-2" size={22} className="text-destructive" accessible={false} />
-            Delete
-          </Button>
-        </View>
-      )}
+  const renderDelete = (side: "left" | "right") => (
+    <View
+      style={{ width: deleteActionWidth }}
+      accessibilityElementsHidden={visibleAction !== side || isDisabled}
+      importantForAccessibility={
+        visibleAction === side && !isDisabled ? "auto" : "no-hide-descendants"
+      }
     >
+      <Button
+        variant="destructive"
+        className="flex-1 rounded-none px-3"
+        accessibilityLabel={`Delete stash: ${stash.message}`}
+        disabled={isDisabled}
+        onPress={() => {
+          void remove();
+        }}
+      >
+        <Icon
+          family="Feather"
+          name="trash-2"
+          size={22}
+          className="text-destructive"
+          accessible={false}
+        />
+        Delete
+      </Button>
+    </View>
+  );
+
+  return (
+    // Native scrolling works inside RNHostView's separate touch root. RNGH's
+    // iOS root discovery does not recognize the SwiftUI sheet's view controller.
+    <ScrollView
+      ref={scrollView}
+      horizontal
+      style={{ width, flexGrow: 0 }}
+      contentOffset={closedOffset}
+      contentInsetAdjustmentBehavior="never"
+      snapToOffsets={snapOffsets}
+      decelerationRate="fast"
+      disableIntervalMomentum
+      directionalLockEnabled
+      nestedScrollEnabled
+      bounces={false}
+      overScrollMode="never"
+      showsHorizontalScrollIndicator={false}
+      scrollEnabled={!isDisabled}
+      keyboardShouldPersistTaps="handled"
+      scrollEventThrottle={16}
+      onScroll={({ nativeEvent }) => {
+        const offset = nativeEvent.contentOffset.x;
+        if (isDisabled) setVisibleAction(null);
+        else if (offset < deleteActionWidth - 1) setVisibleAction("left");
+        else if (offset > deleteActionWidth + 1) setVisibleAction("right");
+        else setVisibleAction(null);
+      }}
+    >
+      {renderDelete("left")}
       <Pressable
+        style={{ width }}
         disabled={isDisabled}
         accessibilityRole="button"
         accessibilityLabel={formatProjectStashLabel(stash.index)}
-        accessibilityHint="Opens the stash. Swipe right to reveal Delete."
+        accessibilityHint="Asks to restore this stash. Swipe left or right to reveal Delete."
         accessibilityState={{ disabled: isDisabled, busy: isDeleting }}
         accessibilityActions={[{ name: "delete", label: "Delete stash" }]}
         onAccessibilityAction={({ nativeEvent }) => {
           if (nativeEvent.actionName === "delete") void remove();
         }}
-        onPress={onSelect}
+        onPress={() => {
+          close();
+          onSelect();
+        }}
         className="flex-row items-center gap-3 border-b border-border px-5 py-4 active:bg-secondary disabled:opacity-40"
       >
         <View className="min-w-0 flex-1 gap-1">
           <PText className="text-xl font-medium">{stash.message}</PText>
-          <PText className="text-lg text-muted-foreground">{formatCommitTimestamp(stash.createdAt)}</PText>
+          <PText className="text-lg text-muted-foreground">
+            {formatCommitTimestamp(stash.createdAt)}
+          </PText>
         </View>
-        {isDeleting && <ActivityIndicator className="text-destructive" accessibilityLabel="Deleting stash" />}
+        {isDeleting && (
+          <ActivityIndicator
+            className="text-destructive"
+            accessibilityLabel="Deleting stash"
+          />
+        )}
       </Pressable>
-    </Swipeable>
+      {renderDelete("right")}
+    </ScrollView>
   );
 };

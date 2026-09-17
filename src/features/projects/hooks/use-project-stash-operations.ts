@@ -15,13 +15,16 @@ export const useProjectStashOperations = () => {
       async (assertCurrent) => {
         const name = await operation.promptText({
           title: "Stash all changes?",
-          message: "Name this stash to find it later, or leave the name blank. Tracked and untracked changes will be saved and cleared from this workspace. Ignored files are kept.",
+          message:
+            "Name this stash to find it later, or leave the name blank. Tracked and untracked changes will be saved and cleared from this workspace. Ignored files are kept.",
           placeholder: "Stash name",
           actionText: "Stash All",
         });
         if (name === null) return null;
         assertCurrent();
-        return stashes.gitStash.mutateAsync({ message: name.trim() || undefined });
+        return stashes.gitStash.mutateAsync({
+          message: name.trim() || undefined,
+        });
       },
       { changesFiles: true, success: formatProjectStashResult },
     );
@@ -38,9 +41,11 @@ export const useProjectStashOperations = () => {
         if (!stash) throw new Error("There are no saved stashes to restore.");
         if (
           !(await operation.confirm(
-            "Pop stash?",
+            "Restore stash?",
             `Restore “${stash.message}” into ${operation.branch ?? "the current branch"}? The saved stash will be kept so you can restore it again.`,
-            "Pop Stash",
+            "Yes",
+            false,
+            "No",
           ))
         )
           return null;
@@ -60,19 +65,22 @@ export const useProjectStashOperations = () => {
     operation.run(
       "Deleting stash…",
       async (assertCurrent) => {
-        if (!(await operation.confirm(
-          "Delete saved stash?",
-          `Delete “${stash.message}”? This removes the saved stash permanently. Changes already restored to the workspace are kept.`,
-          "Delete Stash",
-          true,
-        ))) return null;
+        if (
+          !(await operation.confirm(
+            "Delete saved stash?",
+            `Delete “${stash.message}”? This removes the saved stash permanently. Changes already restored to the workspace are kept.`,
+            "Delete Stash",
+            true,
+          ))
+        )
+          return null;
         assertCurrent();
         return stashes.gitDeleteStash.mutateAsync({
           stashIndex: stash.index,
           stashSha: stash.sha,
         });
       },
-      { success: (result) => result ? "Stash deleted." : null },
+      { success: (result) => (result ? "Stash deleted." : null) },
     );
 
   return { stashAll, pop, remove, operation };

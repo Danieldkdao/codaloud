@@ -12,6 +12,7 @@ it("stashes staged, unstaged and untracked work while preserving ignored files",
   fixture.write("file.txt", "staged\n"); fixture.git("add", "file.txt"); fixture.write("file.txt", "unstaged\n");
   const result = fixture.run(sandboxGitStashPushCommand, { message: "Save 'work' $(touch hacked)" });
   expect(result.created).toBe(true);
+  expect(fixture.git("stash", "list", "--format=%s")).toBe("On main: Save 'work' $(touch hacked)");
   expect(result.stashSha).toBe(fixture.git("rev-parse", "refs/stash"));
   expect(fixture.git("status", "--porcelain")).toBe("");
   expect(readFileSync(join(fixture.repositoryPath, "ignored.txt"), "utf8")).toBe("keep\n");

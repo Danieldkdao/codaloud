@@ -56,5 +56,24 @@ export const useProjectStashOperations = () => {
         success: (result) => (result ? "Stash restored." : null),
       },
     );
-  return { stashAll, pop, operation };
+  const remove = (stash: GitStashListSchema["stashes"][number]) =>
+    operation.run(
+      "Deleting stash…",
+      async (assertCurrent) => {
+        if (!(await operation.confirm(
+          "Delete saved stash?",
+          `Delete “${stash.message}”? This removes the saved stash permanently. Changes already restored to the workspace are kept.`,
+          "Delete Stash",
+          true,
+        ))) return null;
+        assertCurrent();
+        return stashes.gitDeleteStash.mutateAsync({
+          stashIndex: stash.index,
+          stashSha: stash.sha,
+        });
+      },
+      { success: (result) => result ? "Stash deleted." : null },
+    );
+
+  return { stashAll, pop, remove, operation };
 };

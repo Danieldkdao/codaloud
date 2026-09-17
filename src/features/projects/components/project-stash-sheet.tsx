@@ -3,10 +3,10 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
-  Pressable,
   View,
   useWindowDimensions,
 } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useThemeColor } from "@/hooks/use-theme";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,8 @@ import { CodeText, PText } from "@/components/ui/text";
 import { useProjectStashes } from "../hooks/use-project-stashes";
 import { useProjectStashOperations } from "../hooks/use-project-stash-operations";
 import type { GitStashListSchema } from "../server/git-stash-schemas";
+import { ProjectStashListItem } from "./project-stash-list-item";
 import {
-  formatCommitTimestamp,
-  formatProjectStashLabel,
   formatProjectStashPatchLine,
 } from "../lib/formatters";
 
@@ -28,7 +27,7 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
   const { width, height } = useWindowDimensions();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Stash | null>(null);
-  const { operation, pop } = useProjectStashOperations();
+  const { operation, pop, remove } = useProjectStashOperations();
   const query = useProjectStashes(operation.projectId, {
     search,
     stashIndex: selected?.index,
@@ -183,70 +182,69 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
             }
           />
         ) : (
-          <FlatList
-            key={search.trim().toLowerCase()}
-            style={{ flexGrow: 0, flexShrink: 1 }}
-            contentContainerStyle={{ paddingBottom: entries.length ? 24 : 0 }}
-            accessibilityLabel="Saved stashes"
-            data={entries}
-            extraData={operation.isWorkspaceBusy}
-            keyExtractor={(stash) => `${stash.index}/${stash.sha}`}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            contentInsetAdjustmentBehavior="automatic"
-            onEndReached={() => {
-              if (!operation.isWorkspaceBusy) void query.loadMore();
-            }}
-            onEndReachedThreshold={0.3}
-            refreshing={query.isFetching && !query.isPending}
-            onRefresh={() => {
-              if (!operation.isWorkspaceBusy) void query.refetch();
-            }}
-            renderItem={({ item }) => (
-              <Pressable
-                disabled={operation.isWorkspaceBusy}
-                accessibilityRole="button"
-                accessibilityLabel={formatProjectStashLabel(item.index)}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setSelected(item);
-                }}
-                className="gap-1 border-b border-border px-5 py-4 active:bg-secondary disabled:opacity-40"
-              >
-                <PText className="text-base font-medium">{item.message}</PText>
-                <PText className="text-base text-muted-foreground">
-                  {formatCommitTimestamp(item.createdAt)}
-                </PText>
-              </Pressable>
-            )}
-            ListEmptyComponent={
-              !query.isPending &&
-              !query.error &&
-              query.fetchStatus !== "paused" ? (
-                <View className="items-center justify-center px-5 py-8">
-                  <PText
-                    accessibilityLiveRegion="polite"
-                    className="text-center text-base text-muted-foreground"
-                  >
-                    {search.trim() ? "No matching stashes." : "No saved stashes."}
-                  </PText>
-                </View>
-              ) : null
-            }
-            ListFooterComponent={
-              query.hasNextPage ? (
-                <View className="px-5 pt-3">
-                  <Button
-                    accessibilityLabel="Load more stashes"
-                    disabled={query.isFetching || operation.isWorkspaceBusy}
-                    onPress={() => void query.loadMore()}
-                  >
-                    Load more
-                  </Button>
-                </View>
-              ) : null
-            }
-          />
+          <GestureHandlerRootView style={{ flex: 0, flexShrink: 1 }}>
+            <FlatList
+              key={search.trim().toLowerCase()}
+              style={{ flexGrow: 0, flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: entries.length ? 24 : 0 }}
+              accessibilityLabel="Saved stashes"
+              data={entries}
+              extraData={operation.isWorkspaceBusy}
+              keyExtractor={(stash) => `${stash.index}/${stash.sha}`}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentInsetAdjustmentBehavior="automatic"
+              onEndReached={() => {
+                if (!operation.isWorkspaceBusy) void query.loadMore();
+              }}
+              onEndReachedThreshold={0.3}
+              refreshing={query.isFetching && !query.isPending}
+              onRefresh={() => {
+                if (!operation.isWorkspaceBusy) void query.refetch();
+              }}
+              renderItem={({ item }) => (
+                <ProjectStashListItem
+                  stash={item}
+                  disabled={operation.isWorkspaceBusy}
+                  onSelect={() => {
+                    Keyboard.dismiss();
+                    setSelected(item);
+                  }}
+                  onDelete={() => {
+                    Keyboard.dismiss();
+                    return remove(item);
+                  }}
+                />
+              )}
+              ListEmptyComponent={
+                !query.isPending &&
+                !query.error &&
+                query.fetchStatus !== "paused" ? (
+                  <View className="items-center justify-center px-5 py-8">
+                    <PText
+                      accessibilityLiveRegion="polite"
+                      className="text-center text-base text-muted-foreground"
+                    >
+                      {search.trim() ? "No matching stashes." : "No saved stashes."}
+                    </PText>
+                  </View>
+                ) : null
+              }
+              ListFooterComponent={
+                query.hasNextPage ? (
+                  <View className="px-5 pt-3">
+                    <Button
+                      accessibilityLabel="Load more stashes"
+                      disabled={query.isFetching || operation.isWorkspaceBusy}
+                      onPress={() => void query.loadMore()}
+                    >
+                      Load more
+                    </Button>
+                  </View>
+                ) : null
+              }
+            />
+          </GestureHandlerRootView>
         )}
       </View>
     </ContentSheet>

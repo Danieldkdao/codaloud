@@ -313,3 +313,13 @@ it.each([["GIT_PARENT_REQUIRED", 409], ["GIT_HISTORY_INCOMPLETE", 422], ["GIT_OP
   expect(response.status).toBe(status);
   expect(await response.json()).toMatchObject({ code });
 });
+
+
+it("stash all: forwards the trimmed custom name to the Git command", async () => {
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ created: true, remainingChanges: false, stashSha: "b".repeat(40) }) });
+  const response = await stashPush(mutationRequest({ message: "  Login screen polish  " }), { projectId });
+  expect(response.status).toBe(200);
+  const { envs } = JSON.parse(mocks.request.mock.calls[0][1].body);
+  const encoded = Array.from({ length: Number(envs.CODALOUD_INPUT_CHUNKS) }, (_, index) => envs[`CODALOUD_INPUT_${index}`]).join("");
+  expect(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8"))).toMatchObject({ message: "Login screen polish", projectId, sandboxId: "sandbox" });
+});

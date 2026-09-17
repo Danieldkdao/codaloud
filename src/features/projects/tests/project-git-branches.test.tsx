@@ -18,7 +18,7 @@ const stashes = vi.hoisted(() => ({
   data: { pages: [{ stashes: [{ index: 0, sha: "c".repeat(40), message: "Saved mobile work", createdAt: "2026-09-16T12:00:00Z" }], patch: null, nextCursor: null }] },
   refetch: vi.fn(), retry: vi.fn(), loadMore: vi.fn(), isFetching: false, isPending: false, hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   stashDetails: { data: { patch: "diff --git a/test.txt b/test.txt\n+saved change\n", stashes: [], nextCursor: null }, refetch: vi.fn(), isFetching: false, isPending: false, error: null as Error | null, fetchStatus: "idle" },
-  gitStash: { mutateAsync: vi.fn() }, gitPopStash: { mutateAsync: vi.fn() },
+  gitStash: { mutateAsync: vi.fn() }, gitPopStash: { mutateAsync: vi.fn() }, gitDeleteStash: { mutateAsync: vi.fn() },
 }));
 vi.mock("@/features/projects/hooks/use-project-stashes", () => ({ useProjectStashes: () => stashes }));
 const git = vi.hoisted(() => ({
@@ -169,6 +169,15 @@ vi.mock("@/components/ui/input", () => ({
     createElement("input", { placeholder, "aria-label": accessibilityLabel, value, readOnly: editable === false, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "var(--card)" }));
+vi.mock("react-native-gesture-handler", () => ({
+  GestureHandlerRootView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+}));
+vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  default: (props: import("react-native-gesture-handler/ReanimatedSwipeable").SwipeableProps) => {
+    useImperativeHandle(props.ref, () => ({ close: vi.fn(), reset: vi.fn(), openLeft: vi.fn(), openRight: vi.fn() }));
+    return createElement("div", null, props.children, props.renderLeftActions?.({ value: 1 } as never, { value: 100 } as never, {} as never));
+  },
+}));
 vi.mock("react-native-svg", () => {
   const Node = ({ children }: { children?: ReactNode }) => createElement("span", null, children);
   return { default: Node, Defs: Node, LinearGradient: Node, Stop: Node, Rect: Node };
@@ -241,6 +250,7 @@ beforeEach(() => {
   history.gitRevertLastCommit.mutateAsync.mockReset().mockResolvedValue({});
   history.refetch.mockReset().mockImplementation(async () => ({ data: history.data }));
 
+  stashes.gitDeleteStash.mutateAsync.mockReset().mockResolvedValue({ dropped: true });
   stashes.gitStash.mutateAsync.mockReset().mockResolvedValue({ created: true, remainingChanges: false });
   stashes.gitPopStash.mutateAsync.mockReset().mockResolvedValue({ dropped: false });
   stashes.refetch.mockReset().mockImplementation(async () => ({ data: stashes.data }));
@@ -1235,4 +1245,42 @@ it("ignores a stash name submitted after the account changes", async () => {
   live.userId = "user-two"; act(() => root.render(<Workspace />));
   await act(async () => buttons.find((button: { text: string }) => button.text === "Stash All").onPress("Old account work"));
   expect(stashes.gitStash.mutateAsync).not.toHaveBeenCalled();
+});
+
+it("requires confirmation before deleting a selected stash", async () => {
+  click("Other Options"); click("View Stash"); await act(async () => {});
+  click("Delete stash: Saved mobile work"); await act(async () => {});
+  expect(stashes.gitDeleteStash.mutateAsync).not.toHaveBeenCalled();
+  expect(workspaceFiles.alert.mock.calls.at(-1)?.[1]).toContain("Saved mobile work");
+  await confirmAlert("Delete Stash");
+  expect(stashes.gitDeleteStash.mutateAsync).toHaveBeenCalledExactlyOnceWith({ stashIndex: 0, stashSha: "c".repeat(40) });
+  expect(feedback.success).toHaveBeenCalledWith("Stash deleted.");
+});
+it("cancels stash deletion without issuing a write", async () => {
+  click("Other Options"); click("View Stash"); await act(async () => {});
+  click("Delete stash: Saved mobile work"); await act(async () => {});
+  await confirmAlert("Cancel");
+  expect(stashes.gitDeleteStash.mutateAsync).not.toHaveBeenCalled();
+  expect(feedback.success).not.toHaveBeenCalled();
+});
+it("locks stash restore and deletion while a deletion is pending", async () => {
+  let finish!: () => void;
+  stashes.gitDeleteStash.mutateAsync.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  click("Other Options"); click("View Stash"); await act(async () => {});
+  click("Delete stash: Saved mobile work"); await act(async () => {});
+  await confirmAlert("Delete Stash");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="View stash 0"]')?.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Delete stash: Saved mobile work"]')?.disabled).toBe(true);
+  click("Delete stash: Saved mobile work");
+  expect(stashes.gitDeleteStash.mutateAsync).toHaveBeenCalledOnce();
+  await act(async () => finish());
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="View stash 0"]')?.disabled).toBe(false);
+});
+it("reports stale stash deletion failures without a success toast", async () => {
+  stashes.gitDeleteStash.mutateAsync.mockRejectedValueOnce(new Error("Stashes changed. Refresh the list."));
+  click("Other Options"); click("View Stash"); await act(async () => {});
+  click("Delete stash: Saved mobile work"); await act(async () => {});
+  await confirmAlert("Delete Stash");
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Stashes changed. Refresh the list.");
+  expect(feedback.success).not.toHaveBeenCalled();
 });

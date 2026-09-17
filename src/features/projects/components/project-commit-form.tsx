@@ -35,7 +35,7 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     !session.isPending && !session.error ? session.data?.user.id : undefined;
   const { gitCommit } = useProjectCommitHistory(projectId, { enabled: false });
   const { refetch } = useProjectChanges(projectId, { enabled: false });
-  const { flushPendingSaves } = useProjectFileSaveRegistry();
+  const { withSavedFiles } = useProjectFileSaveRegistry();
   const showSuccess = useSuccessFeedback();
   const blocked = useRef(false);
   useEffect(() => {
@@ -68,8 +68,7 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     setSubmitting(true);
     let requestStarted = false;
     try {
-      await runWorkspaceOperation("Committing changes…", async (assertCurrent) => {
-        await flushPendingSaves();
+      await runWorkspaceOperation("Committing changes…", (assertCurrent) => withSavedFiles(async () => {
         assertCurrent();
         if (!mounted.current || blocked.current) return;
         const refreshed = await refetch();
@@ -105,14 +104,14 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
         }
         requestStarted = true;
         await gitCommit.mutateAsync(input.data);
+        assertCurrent();
         commitSelection.clear();
         if (mounted.current) {
           setMessage("");
           setOpen(false);
         }
-        assertCurrent();
         showSuccess("Selected changes committed.");
-      });
+      }));
     } catch (error) {
       try { assertWorkspaceCurrent(); } catch { return; }
       // A successful commit can refresh HEAD and unmount this form before its

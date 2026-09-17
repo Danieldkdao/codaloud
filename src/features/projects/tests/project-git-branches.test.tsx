@@ -75,10 +75,10 @@ const live = vi.hoisted(() => ({
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
 }));
-const workspaceFiles = vi.hoisted(() => ({ flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
+const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
-vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({ ...workspaceFiles, withSavedFiles: async (action: () => Promise<unknown>) => { await workspaceFiles.flushPendingSaves(); return action(); } }) }));
+vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFile: workspaceFiles.refreshFile }) }));
 let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({
@@ -254,6 +254,7 @@ beforeEach(() => {
   history.gitCommit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
   history.gitCommit.isPending = false;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  workspaceFiles.withSavedFiles.mockReset().mockImplementation(async (action: () => Promise<unknown>) => { await workspaceFiles.flushPendingSaves(); return action(); });
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
   workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
   live.gitCheckout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
@@ -979,6 +980,7 @@ it("submits the latest exact selection after saves and a fresh changes read, the
   click("Commit selected changes");
   await act(async () => {});
   expect(history.gitCommit.mutateAsync).toHaveBeenCalledExactlyOnceWith({ message: "Commit new file", paths: ["new.txt"] });
+  expect(workspaceFiles.withSavedFiles).toHaveBeenCalledOnce();
   expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(changesQuery.refetch.mock.invocationCallOrder[0]);
   expect(changesQuery.refetch.mock.invocationCallOrder[0]).toBeLessThan(history.gitCommit.mutateAsync.mock.invocationCallOrder[0]);
   expect(feedback.success).toHaveBeenCalledWith("Selected changes committed.");

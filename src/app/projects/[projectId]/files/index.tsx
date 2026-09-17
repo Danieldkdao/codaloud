@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
+import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
@@ -25,6 +26,7 @@ const FilesScreen = () => {
   const router = useRouter();
   const currentFile = useProjectWorkspaceCurrentFile();
   const fileSearch = useProjectWorkspaceFileSearch();
+  const workspace = useProjectWorkspaceBranch();
   const saves = useProjectFileSaveRegistry();
   const [currentDirectory, setCurrentDirectory] = useState("");
   const { query, creation, update, deletion } = useProjectFiles(
@@ -162,15 +164,20 @@ const FilesScreen = () => {
       {fileCreation.kind && !deletion.isPending && renamingPath === null && (
         <ProjectFileCreateRow
           key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
+          disabled={workspace.isWorkspaceBusy}
           kind={fileCreation.kind}
           existingNames={existingNames}
           parentPath={currentDirectory}
           onCancel={fileCreation.finish}
           onCreate={async (input) => {
-            const createdFile = await creation.mutateAsync(input);
-            currentFile.refreshFile(createdFile.path);
-            fileCreation.finish();
-            showSuccess(formatProjectFileKind(input.kind).successMessage);
+            await workspace.runWorkspaceOperation("Creating file…", async (assertCurrent) => {
+              assertCurrent();
+              const createdFile = await creation.mutateAsync(input);
+              assertCurrent();
+              currentFile.refreshFile(createdFile.path);
+              fileCreation.finish();
+              showSuccess(formatProjectFileKind(input.kind).successMessage);
+            });
           }}
         />
       )}
@@ -193,17 +200,20 @@ const FilesScreen = () => {
             .join("/");
           setRenamingPath(previousPath);
           try {
-            const updatedFile = await saves.renameFiles(
-              previousPath,
-              nextPath,
-              () => update.mutateAsync(input),
-            );
-            currentFile.setFilePath((path) =>
-              path !== null && isProjectFilePathWithin(path, previousPath)
-                ? updatedFile.path + path.slice(previousPath.length)
-                : path,
-            );
-            showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
+            await workspace.runWorkspaceOperation("Renaming file…", async (assertCurrent) => {
+              const updatedFile = await saves.renameFiles(
+                previousPath,
+                nextPath,
+                () => { assertCurrent(); return update.mutateAsync(input); },
+              );
+              assertCurrent();
+              currentFile.setFilePath((path) =>
+                path !== null && isProjectFilePathWithin(path, previousPath)
+                  ? updatedFile.path + path.slice(previousPath.length)
+                  : path,
+              );
+              showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
+            });
           } finally {
             renameInFlight.current = false;
             setRenamingPath(null);
@@ -213,13 +223,17 @@ const FilesScreen = () => {
           if (deletionInFlight.current || renameInFlight.current) return;
           deletionInFlight.current = true;
           try {
-            const deletedFile = await deletion.mutateAsync(input);
-            currentFile.setFilePath((path) =>
-              path !== null && isProjectFilePathWithin(path, deletedFile.path)
-                ? null
-                : path,
-            );
-            showSuccess(formatProjectFileKind(input.kind).deleteSuccessMessage);
+            await workspace.runWorkspaceOperation("Deleting file…", async (assertCurrent) => {
+              assertCurrent();
+              const deletedFile = await deletion.mutateAsync(input);
+              assertCurrent();
+              currentFile.setFilePath((path) =>
+                path !== null && isProjectFilePathWithin(path, deletedFile.path)
+                  ? null
+                  : path,
+              );
+              showSuccess(formatProjectFileKind(input.kind).deleteSuccessMessage);
+            });
           } catch (error) {
             Alert.alert(
               "Couldn't delete this item",
@@ -246,7 +260,7 @@ const FilesScreen = () => {
                 .join("/")
             : undefined
         }
-        navigationDisabled={Boolean(fileCreation.kind) || deletion.isPending}
+        navigationDisabled={workspace.isWorkspaceBusy || Boolean(fileCreation.kind) || deletion.isPending}
       />
     </View>
   );

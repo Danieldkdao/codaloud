@@ -3,6 +3,7 @@ import { ProjectFileNameRow } from "@/features/projects/components/project-file-
 
 type ProjectFileCreateRowProps = {
   kind: ProjectFileKind;
+  disabled?: boolean;
   existingNames: readonly string[];
   parentPath: string;
   onCreate: (input: CreateProjectFileSchema) => Promise<void>;

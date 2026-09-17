@@ -1,3 +1,4 @@
+import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
@@ -6,7 +7,8 @@ import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-p
 
 export const ProjectFilesAdd = () => {
   const creation = useProjectWorkspaceFileCreation();
-  const disabled = creation.kind !== null;
+  const { isWorkspaceBusy } = useProjectWorkspaceBranch();
+  const disabled = creation.kind !== null || isWorkspaceBusy;
 
   return (
     <View pointerEvents={disabled ? "none" : "auto"} accessibilityState={{ disabled }} className={disabled ? "opacity-50" : undefined}>

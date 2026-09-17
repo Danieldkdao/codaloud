@@ -9,6 +9,7 @@ import { formatProjectFileKind, formatProjectFileNameAction } from "@/features/p
 
 type ProjectFileNameRowProps = {
   kind: ProjectFileKind;
+  disabled?: boolean;
   mode: "create" | "update";
   initialName?: string;
   existingNames: readonly string[];
@@ -17,7 +18,7 @@ type ProjectFileNameRowProps = {
   onCancel: () => void;
 };
 
-export const ProjectFileNameRow = ({ kind, mode, initialName = "", existingNames, parentPath, onSubmit, onCancel }: ProjectFileNameRowProps) => {
+export const ProjectFileNameRow = ({ kind, disabled = false, mode, initialName = "", existingNames, parentPath, onSubmit, onCancel }: ProjectFileNameRowProps) => {
   const [name, setName] = useState(initialName);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export const ProjectFileNameRow = ({ kind, mode, initialName = "", existingNames
 
   const submit = async (source: "submit" | "blur") => {
     // Native keyboards can emit submit and blur before React renders disabled.
-    if (submitting.current || cancelling.current || (source === "blur" && lastAttempt.current === name)) return;
+    if (disabled || submitting.current || cancelling.current || (source === "blur" && lastAttempt.current === name)) return;
     // Keep typing and cancellation available, but block both keyboard and blur submission.
     if (hasNameConflict) return;
     if (!name.trim()) { onCancel(); return; }
@@ -85,20 +86,20 @@ export const ProjectFileNameRow = ({ kind, mode, initialName = "", existingNames
           selectTextOnFocus
           returnKeyType="done"
           submitBehavior="submit"
-          disabled={pending}
+          disabled={disabled || pending}
           invalid={visibleError !== null}
           onSubmitEditing={() => void submit("submit")}
           onBlur={() => void submit("blur")}
           onKeyPress={({ nativeEvent }) => {
-            if (nativeEvent.key === "Escape" && !submitting.current) { cancelling.current = true; onCancel(); }
+            if (nativeEvent.key === "Escape" && !disabled && !submitting.current) { cancelling.current = true; onCancel(); }
           }}
         />
         {pending && <ActivityIndicator className="text-primary" accessibilityLabel={action.pendingLabel} />}
         <Pressable
-          disabled={pending}
+          disabled={disabled || pending}
           accessibilityRole="button"
           accessibilityLabel={action.cancelLabel}
-          accessibilityState={{ disabled: pending }}
+          accessibilityState={{ disabled: disabled || pending }}
           className="size-12 items-center justify-center rounded-lg active:bg-secondary"
           onPressIn={() => { cancelling.current = true; }}
           onPress={() => { cancelling.current = true; onCancel(); }}

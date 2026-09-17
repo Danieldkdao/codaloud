@@ -35,7 +35,7 @@ const run = (branchName = "feature/remote", failFetch = false) => {
   const sandboxProcess = { env: { ...process.env, ...createSandboxCommand("", input, 50).envs }, stdout: { write: (value: string) => { output += value; } }, exitCode: 0 };
   const sandboxRequire = (name: string) => name === "node:child_process" ? {
     execFileSync: (command: string, args: string[], options: ExecFileSyncOptionsWithStringEncoding & { env: NodeJS.ProcessEnv }) => {
-      if (args.includes(cloneUrl)) {
+      if (args.includes("fetch") && args.includes(cloneUrl)) {
         requests.push({ args, env: options.env });
         if (failFetch) throw Object.assign(new Error("private-test-token"), { stderr: Buffer.from("Authentication failed: private-test-token") });
         // Exercise real Git with a local fixture in place of the authenticated network.
@@ -74,6 +74,31 @@ it("preserves existing local commits and skips fetching that branch", () => {
 
 it("refuses a workspace whose origin points to a different repository", () => {
   git(workspace, "remote", "set-url", "origin", "https://github.com/other/repo.git");
+  const result = run();
+  expect(result.result.code).toBe("WORKSPACE_REMOTE_MISMATCH");
+  expect(result.requests).toHaveLength(0);
+});
+
+it.each(["https://github.com/owner/old-name.git", "https://github.com/old-owner/repo.git"])(
+  "fetches a remote branch after the verified import moves from %s",
+  (origin) => {
+    git(workspace, "remote", "set-url", "origin", origin);
+    writeFileSync(join(workspace, ".git/codaloud-import.json"), JSON.stringify({ repositoryId: "123" }));
+    const head = git(workspace, "rev-parse", "HEAD");
+    const result = run();
+    expect(result.result).toEqual({ branchName: "feature/remote" });
+    expect(git(workspace, "config", "remote.origin.url")).toBe(cloneUrl);
+    expect(git(workspace, "rev-parse", "feature/remote")).toBe(git(remote, "rev-parse", "feature/remote"));
+    expect(git(workspace, "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(workspace, ".git/config"), "utf8")).not.toContain("private-test-token");
+    expect(result.requests).toHaveLength(1);
+    expect(result.requests[0].env.GIT_CONFIG_VALUE_0).toContain("Authorization: Basic ");
+  },
+);
+
+it("does not reconcile a changed origin when the import belongs to another repository", () => {
+  git(workspace, "remote", "set-url", "origin", "https://github.com/other/repo.git");
+  writeFileSync(join(workspace, ".git/codaloud-import.json"), JSON.stringify({ repositoryId: "456" }));
   const result = run();
   expect(result.result.code).toBe("WORKSPACE_REMOTE_MISMATCH");
   expect(result.requests).toHaveLength(0);

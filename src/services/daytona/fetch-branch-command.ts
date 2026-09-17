@@ -1,4 +1,5 @@
 import { sandboxGitLockRuntime } from "./git-lock-command";
+import { sandboxGitOriginRuntime } from "./git-origin-command";
 import { sandboxCommandInput } from "./create-command";
 
 // Runs inside Daytona. Network credentials are confined to an isolated Git
@@ -25,10 +26,10 @@ try {
   const git = (args, cwd = workspace, extraEnv = {}) => execFileSync("git", [...config, ...args], {
     cwd, env: { ...env, ...extraEnv }, encoding: "utf8", timeout: 40000, maxBuffer: 1024 * 1024, stdio: "pipe",
   }).trim();
+` + sandboxGitOriginRuntime + String.raw`
   git(["check-ref-format", "--branch", input.branchName]);
   if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(input.cloneUrl)) fail("WORKSPACE_REMOTE_MISMATCH");
-  const origin = git(["config", "--get", "remote.origin.url"]);
-  if (origin.replace(/\.git$/, "").toLowerCase() !== input.cloneUrl.replace(/\.git$/, "").toLowerCase()) fail("WORKSPACE_REMOTE_MISMATCH");
+  reconcileGitOrigin(input.cloneUrl, input.repositoryId, "WORKSPACE_REMOTE_MISMATCH");
   const localRef = "refs/heads/" + input.branchName;
   const remoteRef = "refs/remotes/origin/" + input.branchName;
   const localExists = () => {

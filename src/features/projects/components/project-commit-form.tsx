@@ -29,7 +29,13 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const { commitSelection } = useProjectWorkspaceChanges();
-  const { projectId, isCheckingOut, isWorkspaceBusy, assertWorkspaceCurrent, runWorkspaceOperation } = useProjectWorkspaceBranch();
+  const {
+    projectId,
+    isCheckingOut,
+    isWorkspaceBusy,
+    assertWorkspaceCurrent,
+    runWorkspaceOperation,
+  } = useProjectWorkspaceBranch();
   const session = useAuthSession();
   const userId =
     !session.isPending && !session.error ? session.data?.user.id : undefined;
@@ -68,52 +74,58 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     setSubmitting(true);
     let requestStarted = false;
     try {
-      await runWorkspaceOperation("Committing changes…", (assertCurrent) => withSavedFiles(async () => {
-        assertCurrent();
-        if (!mounted.current || blocked.current) return;
-        const refreshed = await refetch();
-        assertCurrent();
-        if (!mounted.current || blocked.current) return;
-        const fresh = refreshed.data;
-        if (refreshed.isError || !fresh)
-          throw new Error(
-            "Unable to refresh changes. Try again before committing.",
+      await runWorkspaceOperation("Committing changes…", (assertCurrent) =>
+        withSavedFiles(async () => {
+          assertCurrent();
+          if (!mounted.current || blocked.current) return;
+          const refreshed = await refetch();
+          assertCurrent();
+          if (!mounted.current || blocked.current) return;
+          const fresh = refreshed.data;
+          if (refreshed.isError || !fresh)
+            throw new Error(
+              "Unable to refresh changes. Try again before committing.",
+            );
+          const freshScope = JSON.stringify([
+            userId,
+            projectId,
+            fresh.currentBranch,
+            fresh.headSha,
+          ]);
+          const available = new Set(
+            fresh.changes
+              .filter((change) => change.kind === "file")
+              .map((change) => change.path),
           );
-        const freshScope = JSON.stringify([
-          userId,
-          projectId,
-          fresh.currentBranch,
-          fresh.headSha,
-        ]);
-        const available = new Set(
-          fresh.changes
-            .filter((change) => change.kind === "file")
-            .map((change) => change.path),
-        );
-        if (
-          freshScope !== commitSelection.scope ||
-          fresh.isDetached ||
-          fresh.repositoryState === "not-initialized" ||
-          !fresh.currentBranch ||
-          fresh.changes.some((change) => change.isConflicted) ||
-          input.data.paths.some((path) => !available.has(path))
-        ) {
-          throw new Error(
-            "The checkout or selected changes changed. Review the selection before committing.",
-          );
-        }
-        requestStarted = true;
-        await gitCommit.mutateAsync(input.data);
-        assertCurrent();
-        commitSelection.clear();
-        if (mounted.current) {
-          setMessage("");
-          setOpen(false);
-        }
-        showSuccess("Selected changes committed.");
-      }));
+          if (
+            freshScope !== commitSelection.scope ||
+            fresh.isDetached ||
+            fresh.repositoryState === "not-initialized" ||
+            !fresh.currentBranch ||
+            fresh.changes.some((change) => change.isConflicted) ||
+            input.data.paths.some((path) => !available.has(path))
+          ) {
+            throw new Error(
+              "The checkout or selected changes changed. Review the selection before committing.",
+            );
+          }
+          requestStarted = true;
+          await gitCommit.mutateAsync(input.data);
+          assertCurrent();
+          commitSelection.clear();
+          if (mounted.current) {
+            setMessage("");
+            setOpen(false);
+          }
+          showSuccess("Selected changes committed.");
+        }),
+      );
     } catch (error) {
-      try { assertWorkspaceCurrent(); } catch { return; }
+      try {
+        assertWorkspaceCurrent();
+      } catch {
+        return;
+      }
       // A successful commit can refresh HEAD and unmount this form before its
       // response arrives. Still surface an uncertain result after submission.
       if (mounted.current || requestStarted) {

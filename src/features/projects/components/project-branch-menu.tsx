@@ -7,13 +7,22 @@ import { CodeText } from "@/components/ui/text";
 import { useProjectGitOperation } from "../hooks/use-project-git-operation";
 import { useProjectGit } from "../hooks/use-project-git";
 import { useProject } from "../hooks/use-project";
-import { formatProjectGitCount, formatProjectSyncAction } from "../lib/formatters";
+import {
+  formatProjectGitCount,
+  formatProjectSyncAction,
+} from "../lib/formatters";
 import {
   formatProjectBranchLabel,
   formatProjectBranchSource,
 } from "../lib/formatters";
 
-const syncActions = ["push", "force-push", "pull", "pull-rebase", "fetch"] as const;
+const syncActions = [
+  "push",
+  "force-push",
+  "pull",
+  "pull-rebase",
+  "fetch",
+] as const;
 
 type ProjectBranchMenuProps = {
   maxWidth: number;
@@ -40,32 +49,57 @@ export const ProjectBranchMenu = ({
   const git = useProjectGit(projectId);
   const project = useProject(projectId);
   const connected = Boolean(project.data?.githubRepositoryId);
-  const countsMatchBranch = !git.error && !isCheckingOut && git.data?.currentBranch === branch;
+  const countsMatchBranch =
+    !git.error && !isCheckingOut && git.data?.currentBranch === branch;
   const outgoing = countsMatchBranch ? git.data?.outgoing : null;
   const incoming = countsMatchBranch ? git.data?.incoming : null;
   const sync = (action: (typeof syncActions)[number]) => {
     const presentation = formatProjectSyncAction(action);
-    void run(presentation.pending, async (assertCurrent) => {
-      switch (action) {
-        case "fetch": await git.gitFetch.mutateAsync(); return "Remote branches refreshed.";
-        case "push": {
-          const result = await git.gitPush.mutateAsync({});
-          return result.trackingUpdated ? "Changes pushed to GitHub." : "Changes pushed. Refresh to check branch tracking.";
+    void run(
+      presentation.pending,
+      async (assertCurrent) => {
+        switch (action) {
+          case "fetch":
+            await git.gitFetch.mutateAsync();
+            return "Remote branches refreshed.";
+          case "push": {
+            const result = await git.gitPush.mutateAsync({});
+            return result.trackingUpdated
+              ? "Changes pushed to GitHub."
+              : "Changes pushed. Refresh to check branch tracking.";
+          }
+          case "force-push": {
+            const fresh = await git.gitFetch.mutateAsync();
+            assertCurrent();
+            if (
+              !(await confirm(
+                "Force Push?",
+                `Replace the remote history for ${fresh.currentBranch ?? "this branch"} with your local commits? Other collaborators may need to reconcile their work.`,
+                "Force Push",
+                true,
+              ))
+            )
+              return null;
+            assertCurrent();
+            await git.gitPush.mutateAsync({
+              force: true,
+              expectedRemoteSha: fresh.upstreamSha,
+            });
+            return "Changes force-pushed to GitHub.";
+          }
+          case "pull":
+          case "pull-rebase":
+            await git.gitPull.mutateAsync({ rebase: action === "pull-rebase" });
+            return action === "pull"
+              ? "Remote changes pulled."
+              : "Local commits rebased on remote changes.";
         }
-        case "force-push": {
-          const fresh = await git.gitFetch.mutateAsync();
-          assertCurrent();
-          if (!await confirm("Force Push?", `Replace the remote history for ${fresh.currentBranch ?? "this branch"} with your local commits? Other collaborators may need to reconcile their work.`, "Force Push", true)) return null;
-          assertCurrent();
-          await git.gitPush.mutateAsync({ force: true, expectedRemoteSha: fresh.upstreamSha });
-          return "Changes force-pushed to GitHub.";
-        }
-        case "pull":
-        case "pull-rebase":
-          await git.gitPull.mutateAsync({ rebase: action === "pull-rebase" });
-          return action === "pull" ? "Remote changes pulled." : "Local commits rebased on remote changes.";
-      }
-    }, { success: (message) => message, changesFiles: action === "pull" || action === "pull-rebase" });
+      },
+      {
+        success: (message) => message,
+        changesFiles: action === "pull" || action === "pull-rebase",
+      },
+    );
   };
   const label = formatProjectBranchLabel(branch, isBranchLoading);
   const [open, setOpen] = useState(false);
@@ -107,7 +141,12 @@ export const ProjectBranchMenu = ({
               {label}
             </CodeText>
           </View>
-          {(isWorkspaceBusy || git.isFetching) && <ActivityIndicator className="text-primary" accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"} />}
+          {(isWorkspaceBusy || git.isFetching) && (
+            <ActivityIndicator
+              className="text-primary"
+              accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"}
+            />
+          )}
           <Icon
             family="Entypo"
             name="dot-single"
@@ -153,21 +192,48 @@ export const ProjectBranchMenu = ({
         monospaceTitle
         items={[
           ...syncActions.map((action) => ({
-            id: action, ...formatProjectSyncAction(action),
-            count: action === "push" ? outgoing : action === "pull" ? incoming : null,
-            disabled: isWorkspaceBusy || !connected || !branch || isBranchLoading,
-            busy: workspaceOperation === formatProjectSyncAction(action).pending,
+            id: action,
+            ...formatProjectSyncAction(action),
+            count:
+              action === "push"
+                ? outgoing
+                : action === "pull"
+                  ? incoming
+                  : null,
+            disabled:
+              isWorkspaceBusy || !connected || !branch || isBranchLoading,
+            busy:
+              workspaceOperation === formatProjectSyncAction(action).pending,
             onPress: () => sync(action),
           })),
-          ...(git.error ? [{ id: "retry-counts", label: "Retry Git status", icon: "refresh-cw" as const, disabled: isWorkspaceBusy || git.isFetching, onPress: () => { void git.refetch(); } }] : []),
+          ...(git.error
+            ? [
+                {
+                  id: "retry-counts",
+                  label: "Retry Git status",
+                  icon: "refresh-cw" as const,
+                  disabled: isWorkspaceBusy || git.isFetching,
+                  onPress: () => {
+                    void git.refetch();
+                  },
+                },
+              ]
+            : []),
           {
             id: "branch",
-            label: isCheckoutRecoveryRequired ? "Retry branch recovery" : "Switch Branch",
-            accessibilityLabel: isCheckoutRecoveryRequired ? "Recover branch from actions" : "Switch Branch",
+            label: isCheckoutRecoveryRequired
+              ? "Retry branch recovery"
+              : "Switch Branch",
+            accessibilityLabel: isCheckoutRecoveryRequired
+              ? "Recover branch from actions"
+              : "Switch Branch",
             icon: "git-branch",
             chevron: true,
             disabled: isWorkspaceBusy && !isCheckoutRecoveryRequired,
-            onPress: () => { switchAfterDismiss.current = true; setOpen(false); },
+            onPress: () => {
+              switchAfterDismiss.current = true;
+              setOpen(false);
+            },
           },
         ]}
         onDismiss={() => {

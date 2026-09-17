@@ -26,17 +26,60 @@ export const ProjectOtherOptions = () => {
   const [panel, setPanel] = useState<"stash" | "undo" | "discard" | null>(null);
   const panelAfterDismiss = useRef<typeof panel>(null);
   const { revert } = useProjectHistoryOperations();
-  const openPanel = (value: typeof panel) => { panelAfterDismiss.current = value; setOpen(false); };
+  const openPanel = (value: typeof panel) => {
+    panelAfterDismiss.current = value;
+    setOpen(false);
+  };
   const { stashAll, pop, operation } = useProjectStashOperations();
   const items = otherActions.map((item) => {
     switch (item.id) {
-      case "stash-all": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, busy: operation.workspaceOperation === "Stashing changes…", onPress: () => { void stashAll(); } };
-      case "pop-stash": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, busy: operation.workspaceOperation === "Restoring stash…", onPress: () => { void pop(); } };
-      case "view-stash": return { ...item, disabled: operation.isWorkspaceBusy, onPress: () => openPanel("stash") };
-      case "discard-changes": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, onPress: () => openPanel("discard") };
-      case "undo-last-commit": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, onPress: () => openPanel("undo") };
-      case "revert-last-commit": return { ...item, disabled: operation.isWorkspaceBusy || !operation.branch, busy: operation.workspaceOperation === "Reverting last commit…", onPress: () => { void revert(); } };
-      default: return { ...item, disabled: true };
+      case "stash-all":
+        return {
+          ...item,
+          disabled: operation.isWorkspaceBusy || !operation.branch,
+          busy: operation.workspaceOperation === "Stashing changes…",
+          onPress: () => {
+            void stashAll();
+          },
+        };
+      case "pop-stash":
+        return {
+          ...item,
+          disabled: operation.isWorkspaceBusy || !operation.branch,
+          busy: operation.workspaceOperation === "Restoring stash…",
+          onPress: () => {
+            void pop();
+          },
+        };
+      case "view-stash":
+        return {
+          ...item,
+          disabled: operation.isWorkspaceBusy,
+          onPress: () => openPanel("stash"),
+        };
+      case "discard-changes":
+        return {
+          ...item,
+          disabled: operation.isWorkspaceBusy || !operation.branch,
+          onPress: () => openPanel("discard"),
+        };
+      case "undo-last-commit":
+        return {
+          ...item,
+          disabled: operation.isWorkspaceBusy || !operation.branch,
+          onPress: () => openPanel("undo"),
+        };
+      case "revert-last-commit":
+        return {
+          ...item,
+          disabled: operation.isWorkspaceBusy || !operation.branch,
+          busy: operation.workspaceOperation === "Reverting last commit…",
+          onPress: () => {
+            void revert();
+          },
+        };
+      default:
+        return { ...item, disabled: true };
     }
   });
 
@@ -50,19 +93,38 @@ export const ProjectOtherOptions = () => {
         onPress={() => setOpen(true)}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"
       >
-        {operation.isWorkspaceBusy ? <ActivityIndicator className="text-primary" accessibilityLabel={operation.workspaceOperation ?? "Working…"} /> : <Icon
-          family="MaterialCommunityIcons"
-          name="tune-vertical"
-          size={28}
-          className="text-foreground"
-          accessible={false}
-        />}
+        {operation.isWorkspaceBusy ? (
+          <ActivityIndicator
+            className="text-primary"
+            accessibilityLabel={operation.workspaceOperation ?? "Working…"}
+          />
+        ) : (
+          <Icon
+            family="MaterialCommunityIcons"
+            name="tune-vertical"
+            size={28}
+            className="text-foreground"
+            accessible={false}
+          />
+        )}
       </Pressable>
-      <ActionSheet open={open} onOpenChange={setOpen} items={items} onDismiss={() => {
-        if (panelAfterDismiss.current) { setPanel(panelAfterDismiss.current); panelAfterDismiss.current = null; }
-      }} />
-      {panel === "stash" && <ProjectStashSheet onClose={() => setPanel(null)} />}
-      {(panel === "undo" || panel === "discard") && <ProjectGitResetSheet kind={panel} onClose={() => setPanel(null)} />}
+      <ActionSheet
+        open={open}
+        onOpenChange={setOpen}
+        items={items}
+        onDismiss={() => {
+          if (panelAfterDismiss.current) {
+            setPanel(panelAfterDismiss.current);
+            panelAfterDismiss.current = null;
+          }
+        }}
+      />
+      {panel === "stash" && (
+        <ProjectStashSheet onClose={() => setPanel(null)} />
+      )}
+      {(panel === "undo" || panel === "discard") && (
+        <ProjectGitResetSheet kind={panel} onClose={() => setPanel(null)} />
+      )}
     </>
   );
 };

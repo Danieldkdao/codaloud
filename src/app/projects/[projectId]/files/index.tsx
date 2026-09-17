@@ -70,7 +70,10 @@ const FilesScreen = () => {
 
   if (fileSearch.isSearching) {
     const canFetch =
-      !search.validationError && !isDebouncing && !search.isFetching && search.fetchStatus !== "paused";
+      !search.validationError &&
+      !isDebouncing &&
+      !search.isFetching &&
+      search.fetchStatus !== "paused";
     return (
       <ProjectFileSearchResults
         key={`${projectId}:${fileSearch.query}:${fileSearch.scope}:${searchPath}`}
@@ -80,18 +83,25 @@ const FilesScreen = () => {
         totalCount={search.data?.pages[0]?.totalCount ?? 0}
         // Every page repeats snapshot-wide coverage; use it once, not a sum.
         skippedContentFiles={search.data?.pages[0]?.skippedContentFiles ?? 0}
-        isLoading={!search.validationError && (isDebouncing || search.isPending)}
+        isLoading={
+          !search.validationError && (isDebouncing || search.isPending)
+        }
         isFetching={search.isFetching}
         isFetchingNextPage={search.isFetchingNextPage}
         isPaused={search.fetchStatus === "paused"}
         error={search.validationError ?? search.error?.message}
-        onFilePress={(filePath) => router.push({
-          pathname: "/projects/[projectId]/files/preview",
-          params: {
-            projectId, filePath,
-            ...(fileSearch.scope === "title" ? {} : { search: fileSearch.debouncedQuery }),
-          },
-        })}
+        onFilePress={(filePath) =>
+          router.push({
+            pathname: "/projects/[projectId]/files/preview",
+            params: {
+              projectId,
+              filePath,
+              ...(fileSearch.scope === "title"
+                ? {}
+                : { search: fileSearch.debouncedQuery }),
+            },
+          })
+        }
         onLoadMore={() => {
           if (canFetch && search.hasNextPage && !search.error)
             void search.fetchNextPage({ cancelRefetch: false });
@@ -99,12 +109,16 @@ const FilesScreen = () => {
         onRefresh={() => {
           if (canFetch) void search.refetch();
         }}
-        onRetry={search.validationError ? undefined : () => {
-          if (!canFetch) return;
-          if (search.isFetchNextPageError)
-            void search.fetchNextPage({ cancelRefetch: false });
-          else void search.refetch();
-        }}
+        onRetry={
+          search.validationError
+            ? undefined
+            : () => {
+                if (!canFetch) return;
+                if (search.isFetchNextPageError)
+                  void search.fetchNextPage({ cancelRefetch: false });
+                else void search.refetch();
+              }
+        }
       />
     );
   }
@@ -170,14 +184,17 @@ const FilesScreen = () => {
           parentPath={currentDirectory}
           onCancel={fileCreation.finish}
           onCreate={async (input) => {
-            await workspace.runWorkspaceOperation("Creating file…", async (assertCurrent) => {
-              assertCurrent();
-              const createdFile = await creation.mutateAsync(input);
-              assertCurrent();
-              currentFile.refreshFile(createdFile.path);
-              fileCreation.finish();
-              showSuccess(formatProjectFileKind(input.kind).successMessage);
-            });
+            await workspace.runWorkspaceOperation(
+              "Creating file…",
+              async (assertCurrent) => {
+                assertCurrent();
+                const createdFile = await creation.mutateAsync(input);
+                assertCurrent();
+                currentFile.refreshFile(createdFile.path);
+                fileCreation.finish();
+                showSuccess(formatProjectFileKind(input.kind).successMessage);
+              },
+            );
           }}
         />
       )}
@@ -200,20 +217,28 @@ const FilesScreen = () => {
             .join("/");
           setRenamingPath(previousPath);
           try {
-            await workspace.runWorkspaceOperation("Renaming file…", async (assertCurrent) => {
-              const updatedFile = await saves.renameFiles(
-                previousPath,
-                nextPath,
-                () => { assertCurrent(); return update.mutateAsync(input); },
-              );
-              assertCurrent();
-              currentFile.setFilePath((path) =>
-                path !== null && isProjectFilePathWithin(path, previousPath)
-                  ? updatedFile.path + path.slice(previousPath.length)
-                  : path,
-              );
-              showSuccess(formatProjectFileKind(input.kind).updateSuccessMessage);
-            });
+            await workspace.runWorkspaceOperation(
+              "Renaming file…",
+              async (assertCurrent) => {
+                const updatedFile = await saves.renameFiles(
+                  previousPath,
+                  nextPath,
+                  () => {
+                    assertCurrent();
+                    return update.mutateAsync(input);
+                  },
+                );
+                assertCurrent();
+                currentFile.setFilePath((path) =>
+                  path !== null && isProjectFilePathWithin(path, previousPath)
+                    ? updatedFile.path + path.slice(previousPath.length)
+                    : path,
+                );
+                showSuccess(
+                  formatProjectFileKind(input.kind).updateSuccessMessage,
+                );
+              },
+            );
           } finally {
             renameInFlight.current = false;
             setRenamingPath(null);
@@ -223,17 +248,23 @@ const FilesScreen = () => {
           if (deletionInFlight.current || renameInFlight.current) return;
           deletionInFlight.current = true;
           try {
-            await workspace.runWorkspaceOperation("Deleting file…", async (assertCurrent) => {
-              assertCurrent();
-              const deletedFile = await deletion.mutateAsync(input);
-              assertCurrent();
-              currentFile.setFilePath((path) =>
-                path !== null && isProjectFilePathWithin(path, deletedFile.path)
-                  ? null
-                  : path,
-              );
-              showSuccess(formatProjectFileKind(input.kind).deleteSuccessMessage);
-            });
+            await workspace.runWorkspaceOperation(
+              "Deleting file…",
+              async (assertCurrent) => {
+                assertCurrent();
+                const deletedFile = await deletion.mutateAsync(input);
+                assertCurrent();
+                currentFile.setFilePath((path) =>
+                  path !== null &&
+                  isProjectFilePathWithin(path, deletedFile.path)
+                    ? null
+                    : path,
+                );
+                showSuccess(
+                  formatProjectFileKind(input.kind).deleteSuccessMessage,
+                );
+              },
+            );
           } catch (error) {
             Alert.alert(
               "Couldn't delete this item",
@@ -260,7 +291,11 @@ const FilesScreen = () => {
                 .join("/")
             : undefined
         }
-        navigationDisabled={workspace.isWorkspaceBusy || Boolean(fileCreation.kind) || deletion.isPending}
+        navigationDisabled={
+          workspace.isWorkspaceBusy ||
+          Boolean(fileCreation.kind) ||
+          deletion.isPending
+        }
       />
     </View>
   );

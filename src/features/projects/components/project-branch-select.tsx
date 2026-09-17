@@ -1,6 +1,13 @@
 import { ProjectBranchCreate } from "./project-branch-create";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Keyboard, Pressable, View, useWindowDimensions } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Pressable,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +16,10 @@ import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
 import { useProjectBranches } from "@/features/projects/hooks/use-project-branches";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
-import type { ProjectBranchPageSchema, ProjectBranchSource } from "@/features/projects/actions/branch-schemas";
+import type {
+  ProjectBranchPageSchema,
+  ProjectBranchSource,
+} from "@/features/projects/actions/branch-schemas";
 import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
 import { useThemeColor } from "@/hooks/use-theme";
 
@@ -17,7 +27,10 @@ import { ProjectBranchSection } from "./project-branch-section";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { useProject } from "../hooks/use-project";
 import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
-import type { GitHubRepositoryBranchPage, GitHubRepositoryBranch } from "@/services/github/types";
+import type {
+  GitHubRepositoryBranchPage,
+  GitHubRepositoryBranch,
+} from "@/services/github/types";
 import { formatProjectBranchLabel } from "../lib/formatters";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
@@ -35,9 +48,26 @@ type ProjectBranchSelectProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: ProjectBranchSelectProps = {}) => {
+export const ProjectBranchSelect = ({
+  open: controlledOpen,
+  onOpenChange,
+}: ProjectBranchSelectProps = {}) => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isWorkspaceBusy, workspaceOperation, assertWorkspaceCurrent, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
+  const {
+    projectId,
+    branch,
+    branchSource,
+    setBranch,
+    isBranchLoading,
+    setIsBranchLoading,
+    checkoutBranch,
+    isWorkspaceBusy,
+    workspaceOperation,
+    assertWorkspaceCurrent,
+    checkoutError,
+    isCheckoutRecoveryRequired,
+    retryCheckoutRecovery,
+  } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = session.data?.user.id;
@@ -47,11 +77,23 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
   const query = useProjectBranches(projectId, { search });
-  const remoteQuery = useGitHubRepositoryBranches(repositoryId, { search, enabled: Boolean(repositoryId) });
-  const remoteBranches = useUniquePaginatedItems(remoteQuery.data?.pages, getRemoteBranches, getRemoteBranchKey);
-  const branches = useUniquePaginatedItems(query.data?.pages, getBranches, getBranchKey);
+  const remoteQuery = useGitHubRepositoryBranches(repositoryId, {
+    search,
+    enabled: Boolean(repositoryId),
+  });
+  const remoteBranches = useUniquePaginatedItems(
+    remoteQuery.data?.pages,
+    getRemoteBranches,
+    getRemoteBranchKey,
+  );
+  const branches = useUniquePaginatedItems(
+    query.data?.pages,
+    getBranches,
+    getBranchKey,
+  );
   const currentBranch = query.data?.pages[0]?.currentBranch;
-  const loadingInitialBranches = !query.data && (query.isPending || query.isFetching);
+  const loadingInitialBranches =
+    !query.data && (query.isPending || query.isFetching);
   useEffect(() => {
     setIsBranchLoading(loadingInitialBranches);
   }, [loadingInitialBranches, setIsBranchLoading]);
@@ -74,78 +116,214 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
       // and pagination even when checkout's response was lost.
       await Promise.allSettled([
         queryClient.invalidateQueries(folders),
-        queryClient.resetQueries({ queryKey: ["projects", "file", userId, projectId] }),
-        queryClient.resetQueries({ queryKey: ["projects", "file-search", "infinite", userId, projectId] }),
         queryClient.resetQueries({
-          queryKey: ["projects", "commits", "infinite", "cursor", userId, projectId],
-          predicate: ({ queryKey }) => projectCommitParamsSchema.safeParse(queryKey[6]).data?.source === "local",
+          queryKey: ["projects", "file", userId, projectId],
         }),
-        queryClient.resetQueries({ queryKey: ["projects", "branches", "infinite", "cursor", userId, projectId, "local"] }),
+        queryClient.resetQueries({
+          queryKey: ["projects", "file-search", "infinite", userId, projectId],
+        }),
+        queryClient.resetQueries({
+          queryKey: [
+            "projects",
+            "commits",
+            "infinite",
+            "cursor",
+            userId,
+            projectId,
+          ],
+          predicate: ({ queryKey }) =>
+            projectCommitParamsSchema.safeParse(queryKey[6]).data?.source ===
+            "local",
+        }),
+        queryClient.resetQueries({
+          queryKey: [
+            "projects",
+            "branches",
+            "infinite",
+            "cursor",
+            userId,
+            projectId,
+            "local",
+          ],
+        }),
       ]);
     }
     if (filePath) refreshFile(filePath);
   };
-  const selectBranch = (name: string, source: ProjectBranchSource = "local") => {
+  const selectBranch = (
+    name: string,
+    source: ProjectBranchSource = "local",
+  ) => {
     if (isWorkspaceBusy) return;
     close();
     Keyboard.dismiss();
-    checkoutBranch(name, () => withSavedFiles(async () => {
-      assertWorkspaceCurrent();
-      const result = await query.gitCheckout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
-      assertWorkspaceCurrent();
-      await refreshWorkspace();
-      return result;
-    }), async () => {
-      assertWorkspaceCurrent();
-      await refreshWorkspace();
-      return query.recoverCheckout();
-    });
+    checkoutBranch(
+      name,
+      () =>
+        withSavedFiles(async () => {
+          assertWorkspaceCurrent();
+          const result = await query.gitCheckout.mutateAsync(
+            source === "remote"
+              ? { branchName: name, source }
+              : { branchName: name },
+          );
+          assertWorkspaceCurrent();
+          await refreshWorkspace();
+          return result;
+        }),
+      async () => {
+        assertWorkspaceCurrent();
+        await refreshWorkspace();
+        return query.recoverCheckout();
+      },
+    );
   };
 
   return (
     <>
       <Pressable
-        onPress={() => { if (isCheckoutRecoveryRequired) retryCheckoutRecovery(); else if (!isWorkspaceBusy) setOpen(true); }}
+        onPress={() => {
+          if (isCheckoutRecoveryRequired) retryCheckoutRecovery();
+          else if (!isWorkspaceBusy) setOpen(true);
+        }}
         disabled={isWorkspaceBusy && !isCheckoutRecoveryRequired}
         accessibilityRole="button"
-        accessibilityLabel={isCheckoutRecoveryRequired ? "Retry branch recovery" : `Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`}
-        accessibilityHint={isCheckoutRecoveryRequired ? "Confirms the current branch before editing resumes" : isWorkspaceBusy ? "A workspace operation is running. Please wait." : "Opens available branches"}
-        accessibilityState={{ expanded: open, disabled: isWorkspaceBusy && !isCheckoutRecoveryRequired, busy: isWorkspaceBusy }}
+        accessibilityLabel={
+          isCheckoutRecoveryRequired
+            ? "Retry branch recovery"
+            : `Branch: ${formatProjectBranchLabel(branch, isBranchLoading)}`
+        }
+        accessibilityHint={
+          isCheckoutRecoveryRequired
+            ? "Confirms the current branch before editing resumes"
+            : isWorkspaceBusy
+              ? "A workspace operation is running. Please wait."
+              : "Opens available branches"
+        }
+        accessibilityState={{
+          expanded: open,
+          disabled: isWorkspaceBusy && !isCheckoutRecoveryRequired,
+          busy: isWorkspaceBusy,
+        }}
         className="size-12 items-center justify-center rounded-full active:bg-secondary"
       >
-        {isWorkspaceBusy && !isCheckoutRecoveryRequired ? <ActivityIndicator className="text-foreground" /> : <Icon family="MaterialCommunityIcons" name="source-branch" size={26} className="text-foreground" accessible={false} />}
+        {isWorkspaceBusy && !isCheckoutRecoveryRequired ? (
+          <ActivityIndicator className="text-foreground" />
+        ) : (
+          <Icon
+            family="MaterialCommunityIcons"
+            name="source-branch"
+            size={26}
+            className="text-foreground"
+            accessible={false}
+          />
+        )}
       </Pressable>
-      <ContentSheet open={open && (!isWorkspaceBusy || workspaceOperation === "Creating branch…")} onOpenChange={(value) => { if (!value || !isWorkspaceBusy) setOpen(value); }} backgroundColor={card}>
+      <ContentSheet
+        open={
+          open &&
+          (!isWorkspaceBusy || workspaceOperation === "Creating branch…")
+        }
+        onOpenChange={(value) => {
+          if (!value || !isWorkspaceBusy) setOpen(value);
+        }}
+        backgroundColor={card}
+      >
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
         <View style={{ width }}>
           <View accessibilityViewIsModal onAccessibilityEscape={close}>
             <View className="shrink-0 border-b border-border px-5 pt-2 pb-3">
               <View className="flex-row items-center gap-2">
-                <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
-                <Input type="search" variant="ghost" size="sm" placeholder="Search branches or type to create a new one."
-                  accessibilityLabel="Search branches" autoCapitalize="none" autoCorrect={false}
-                  value={search} onChangeText={setSearch} editable={!isWorkspaceBusy} maxLength={200}
-                  containerClassName="min-w-0 flex-1" className="border-0 px-0 py-1 focus:border-transparent focus:outline-0" />
+                <Icon
+                  family="Feather"
+                  name="search"
+                  size={20}
+                  className="text-muted-foreground"
+                  accessible={false}
+                />
+                <Input
+                  type="search"
+                  variant="ghost"
+                  size="sm"
+                  placeholder="Search branches or type to create a new one."
+                  accessibilityLabel="Search branches"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={search}
+                  onChangeText={setSearch}
+                  editable={!isWorkspaceBusy}
+                  maxLength={200}
+                  containerClassName="min-w-0 flex-1"
+                  className="border-0 px-0 py-1 focus:border-transparent focus:outline-0"
+                />
               </View>
             </View>
             <View>
-              <ProjectBranchCreate name={search} exists={branches.includes(search)} onCreated={() => { close(); setSearch(""); Keyboard.dismiss(); }} />
-              <ProjectBranchSection source="local" branches={branches} selectedBranch={branchSource === "local" ? branch : null}
-                search={search} open={open} query={query} disabled={isWorkspaceBusy} onSelect={selectBranch} />
+              <ProjectBranchCreate
+                name={search}
+                exists={branches.includes(search)}
+                onCreated={() => {
+                  close();
+                  setSearch("");
+                  Keyboard.dismiss();
+                }}
+              />
+              <ProjectBranchSection
+                source="local"
+                branches={branches}
+                selectedBranch={branchSource === "local" ? branch : null}
+                search={search}
+                open={open}
+                query={query}
+                disabled={isWorkspaceBusy}
+                onSelect={selectBranch}
+              />
               <View className="h-px shrink-0 bg-border" />
               {repositoryId ? (
-                <ProjectBranchSection source="remote" branches={remoteBranches.map(({ name }) => name)} selectedBranch={branchSource === "remote" ? branch : null}
-                  search={search} open={open} query={remoteQuery} disabled={isWorkspaceBusy} onSelect={(name) => selectBranch(name, "remote")} />
+                <ProjectBranchSection
+                  source="remote"
+                  branches={remoteBranches.map(({ name }) => name)}
+                  selectedBranch={branchSource === "remote" ? branch : null}
+                  search={search}
+                  open={open}
+                  query={remoteQuery}
+                  disabled={isWorkspaceBusy}
+                  onSelect={(name) => selectBranch(name, "remote")}
+                />
               ) : (
                 <View className="gap-3 px-5 py-4">
                   <View className="flex-row items-center gap-2">
-                    <Icon family="Feather" name="cloud" size={18} className="text-muted-foreground" accessible={false} />
-                    <PText accessibilityRole="header" className="text-base font-medium">Remote branches</PText>
+                    <Icon
+                      family="Feather"
+                      name="cloud"
+                      size={18}
+                      className="text-muted-foreground"
+                      accessible={false}
+                    />
+                    <PText
+                      accessibilityRole="header"
+                      className="text-base font-medium"
+                    >
+                      Remote branches
+                    </PText>
                   </View>
                   <PText className="text-base text-muted-foreground">
-                    {projectQuery.isPending ? "Loading repository…" : projectQuery.error ? "Unable to load the project’s repository." : "No GitHub repository connected."}
+                    {projectQuery.isPending
+                      ? "Loading repository…"
+                      : projectQuery.error
+                        ? "Unable to load the project’s repository."
+                        : "No GitHub repository connected."}
                   </PText>
-                  {projectQuery.error && <Button variant="outline" onPress={() => { void projectQuery.refetch(); }}>Try again</Button>}
+                  {projectQuery.error && (
+                    <Button
+                      variant="outline"
+                      onPress={() => {
+                        void projectQuery.refetch();
+                      }}
+                    >
+                      Try again
+                    </Button>
+                  )}
                 </View>
               )}
             </View>

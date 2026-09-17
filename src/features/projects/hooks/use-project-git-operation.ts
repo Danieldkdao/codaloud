@@ -24,39 +24,74 @@ export const useProjectGitOperation = () => {
     return () => controller.abort();
   }, [userId, workspace.projectId]);
 
-  const confirm = (title: string, message: string, actionText: string, destructive = false) =>
+  const confirm = (
+    title: string,
+    message: string,
+    actionText: string,
+    destructive = false,
+  ) =>
     new Promise<boolean>((resolve) => {
       const signal = lifetime.current?.signal;
-      if (!signal || signal.aborted) { resolve(false); return; }
+      if (!signal || signal.aborted) {
+        resolve(false);
+        return;
+      }
       const finish = (confirmed: boolean) => {
         signal.removeEventListener("abort", cancel);
         resolve(confirmed && !signal.aborted);
       };
       const cancel = () => finish(false);
       signal.addEventListener("abort", cancel, { once: true });
-      Alert.alert(title, message, [
-        { text: "Cancel", style: "cancel", onPress: cancel },
-        { text: actionText, style: destructive ? "destructive" : "default", onPress: () => finish(true) },
-      ], { cancelable: true, onDismiss: cancel });
+      Alert.alert(
+        title,
+        message,
+        [
+          { text: "Cancel", style: "cancel", onPress: cancel },
+          {
+            text: actionText,
+            style: destructive ? "destructive" : "default",
+            onPress: () => finish(true),
+          },
+        ],
+        { cancelable: true, onDismiss: cancel },
+      );
     });
 
-  const run = async <T,>(label: string, action: (assertCurrent: () => void) => Promise<T>, options: {
-    success?: (result: T) => string | null;
-    changesFiles?: boolean;
-  } = {}) => {
+  const run = async <T>(
+    label: string,
+    action: (assertCurrent: () => void) => Promise<T>,
+    options: {
+      success?: (result: T) => string | null;
+      changesFiles?: boolean;
+    } = {},
+  ) => {
     const signal = lifetime.current?.signal;
     const assertCurrent = () => {
       workspace.assertWorkspaceCurrent();
-      if (!signal || signal.aborted) throw new Error("The workspace has changed. Try again.");
+      if (!signal || signal.aborted)
+        throw new Error("The workspace has changed. Try again.");
     };
     try {
       return await workspace.runWorkspaceOperation(label, async () => {
         assertCurrent();
-        if (!onlineManager.isOnline()) throw new Error("Reconnect to the internet to continue.");
-        if (client.isMutating({ predicate: ({ options: mutation }) => {
-          const key = mutation.mutationKey;
-          return key?.[0] === "projects" && key[1] === "files" && key[3] === userId && key[4] === workspace.projectId;
-        } })) throw new Error("Wait for the file operation to finish, then try again.");
+        if (!onlineManager.isOnline())
+          throw new Error("Reconnect to the internet to continue.");
+        if (
+          client.isMutating({
+            predicate: ({ options: mutation }) => {
+              const key = mutation.mutationKey;
+              return (
+                key?.[0] === "projects" &&
+                key[1] === "files" &&
+                key[3] === userId &&
+                key[4] === workspace.projectId
+              );
+            },
+          })
+        )
+          throw new Error(
+            "Wait for the file operation to finish, then try again.",
+          );
         return withSavedFiles(async () => {
           assertCurrent();
           try {
@@ -70,7 +105,9 @@ export const useProjectGitOperation = () => {
             // on conflicts. Remount the editor from confirmed server bytes afterward.
             if (options.changesFiles) {
               workspace.assertWorkspaceCurrent();
-              await client.resetQueries({ queryKey: ["projects", "file", userId, workspace.projectId] });
+              await client.resetQueries({
+                queryKey: ["projects", "file", userId, workspace.projectId],
+              });
               workspace.assertWorkspaceCurrent();
               const file = selectedFile.current;
               if (file.filePath) file.refreshFile(file.filePath);
@@ -79,7 +116,13 @@ export const useProjectGitOperation = () => {
         });
       });
     } catch (error) {
-      if (!signal?.aborted) Alert.alert("Git operation failed", error instanceof Error ? error.message : "Refresh the workspace and try again.");
+      if (!signal?.aborted)
+        Alert.alert(
+          "Git operation failed",
+          error instanceof Error
+            ? error.message
+            : "Refresh the workspace and try again.",
+        );
       return undefined;
     }
   };

@@ -1,4 +1,7 @@
-import type { CreateProjectFileSchema, ProjectFileKind } from "@/features/projects/actions/file-schemas";
+import type {
+  CreateProjectFileSchema,
+  ProjectFileKind,
+} from "@/features/projects/actions/file-schemas";
 import { ProjectFileNameRow } from "@/features/projects/components/project-file-name-row";
 
 type ProjectFileCreateRowProps = {
@@ -10,6 +13,9 @@ type ProjectFileCreateRowProps = {
   onCancel: () => void;
 };
 
-export const ProjectFileCreateRow = ({ onCreate, ...props }: ProjectFileCreateRowProps) => (
+export const ProjectFileCreateRow = ({
+  onCreate,
+  ...props
+}: ProjectFileCreateRowProps) => (
   <ProjectFileNameRow {...props} mode="create" onSubmit={onCreate} />
 );

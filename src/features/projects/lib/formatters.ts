@@ -696,41 +696,88 @@ export const formatProjectFilePreviewMatches = (
   };
 };
 
+export const formatProjectGitCount = (count: number | null | undefined) =>
+  count == null ? "—" : String(count);
 
-export const formatProjectGitCount = (count: number | null | undefined) => count == null ? "—" : String(count);
-
-export const formatProjectSyncAction = (action: "push" | "force-push" | "pull" | "pull-rebase" | "fetch") => {
+export const formatProjectSyncAction = (
+  action: "push" | "force-push" | "pull" | "pull-rebase" | "fetch",
+) => {
   switch (action) {
-    case "push": return { label: "Push", pending: "Pushing…", icon: "upload" as const };
-    case "force-push": return { label: "Force Push", pending: "Force pushing…", icon: "chevrons-up" as const };
-    case "pull": return { label: "Pull", pending: "Pulling…", icon: "download" as const };
-    case "pull-rebase": return { label: "Pull Rebase", pending: "Rebasing…", icon: "git-merge" as const };
-    case "fetch": return { label: "Fetch", pending: "Fetching…", icon: "download-cloud" as const };
+    case "push":
+      return { label: "Push", pending: "Pushing…", icon: "upload" as const };
+    case "force-push":
+      return {
+        label: "Force Push",
+        pending: "Force pushing…",
+        icon: "chevrons-up" as const,
+      };
+    case "pull":
+      return { label: "Pull", pending: "Pulling…", icon: "download" as const };
+    case "pull-rebase":
+      return {
+        label: "Pull Rebase",
+        pending: "Rebasing…",
+        icon: "git-merge" as const,
+      };
+    case "fetch":
+      return {
+        label: "Fetch",
+        pending: "Fetching…",
+        icon: "download-cloud" as const,
+      };
   }
 };
 
-
-export const formatProjectStashResult = (result: { created: boolean; remainingChanges: boolean } | null) => {
+export const formatProjectStashResult = (
+  result: { created: boolean; remainingChanges: boolean } | null,
+) => {
   if (!result) return null;
-  if (result.remainingChanges) return "Stash saved. Some changes remain; review the Changes tab.";
-  return result.created ? "Changes saved in a stash." : "No new changes to stash.";
+  if (result.remainingChanges)
+    return "Stash saved. Some changes remain; review the Changes tab.";
+  return result.created
+    ? "Changes saved in a stash."
+    : "No new changes to stash.";
 };
 export const formatProjectStashLabel = (index: number) => `View stash ${index}`;
 export const formatProjectStashPatchLine = (line: string) => {
   switch (line[0]) {
-    case "+": return "bg-success text-success-foreground";
-    case "-": return "bg-destructive/10 text-destructive";
-    case "@": return "bg-secondary text-secondary-foreground";
-    default: return "text-foreground";
+    case "+":
+      return "bg-success text-success-foreground";
+    case "-":
+      return "bg-destructive/10 text-destructive";
+    case "@":
+      return "bg-secondary text-secondary-foreground";
+    default:
+      return "text-foreground";
   }
 };
-
 
 export const formatProjectUndoMode = (mode: GitUndoMode) => {
   switch (mode) {
-    case "soft": return { label: "Keep changes staged", description: "Remove the last commit and keep its changes staged. Existing working changes are kept.", success: "Last commit undone. Changes remain staged." };
-    case "mixed": return { label: "Keep changes unstaged", description: "Remove the last commit and keep its changes as uncommitted files. All staged changes become unstaged.", success: "Last commit undone. Changes remain in your files." };
-    case "hard": return { label: "Discard commit changes", description: "Remove the last commit AND discard tracked uncommitted changes. Untracked files in the way may also be removed. This cannot be restored from the app.", success: "Last commit and working changes discarded." };
+    case "soft":
+      return {
+        label: "Keep changes staged",
+        description:
+          "Remove the last commit and keep its changes staged. Existing working changes are kept.",
+        success: "Last commit undone. Changes remain staged.",
+      };
+    case "mixed":
+      return {
+        label: "Keep changes unstaged",
+        description:
+          "Remove the last commit and keep its changes as uncommitted files. All staged changes become unstaged.",
+        success: "Last commit undone. Changes remain in your files.",
+      };
+    case "hard":
+      return {
+        label: "Discard commit changes",
+        description:
+          "Remove the last commit AND discard tracked uncommitted changes. Untracked files in the way may also be removed. This cannot be restored from the app.",
+        success: "Last commit and working changes discarded.",
+      };
   }
 };
-export const formatProjectDiscardChoice = (includeUntracked: boolean) => includeUntracked ? "Discard tracked and untracked changes" : "Discard tracked changes";
+export const formatProjectDiscardChoice = (includeUntracked: boolean) =>
+  includeUntracked
+    ? "Discard tracked and untracked changes"
+    : "Discard tracked changes";

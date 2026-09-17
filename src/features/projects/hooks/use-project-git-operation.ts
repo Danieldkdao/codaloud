@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
+import { useTextPrompt } from "@/hooks/use-text-prompt";
 import { useProjectWorkspaceBranch } from "./use-project-workspace-branch";
 import { useProjectFileSaveRegistry } from "./use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "./use-project-workspace-current-file";
@@ -18,6 +19,7 @@ export const useProjectGitOperation = () => {
   const userId = session.data?.user.id;
   const showSuccess = useSuccessFeedback();
   const lifetime = useRef<AbortController | null>(null);
+  const textPrompt = useTextPrompt();
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
@@ -126,5 +128,12 @@ export const useProjectGitOperation = () => {
       return undefined;
     }
   };
-  return { ...workspace, run, confirm };
+  return {
+    ...workspace,
+    run,
+    confirm,
+    textPrompt: textPrompt.props,
+    promptText: (options: Parameters<typeof textPrompt.prompt>[0]) =>
+      textPrompt.prompt(options, lifetime.current?.signal),
+  };
 };

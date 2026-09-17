@@ -163,6 +163,7 @@ vi.mock("@expo/ui/community/bottom-sheet", () => ({
   },
   BottomSheetView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
 }));
+vi.mock("@/components/ui/text-prompt", () => import("@/components/ui/text-prompt.ios"));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ placeholder, accessibilityLabel, value, onChangeText, editable }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void; editable?: boolean }) =>
     createElement("input", { placeholder, "aria-label": accessibilityLabel, value, readOnly: editable === false, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
@@ -180,7 +181,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
-  Alert: { alert: workspaceFiles.alert },
+  Alert: { alert: workspaceFiles.alert, prompt: workspaceFiles.alert },
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   Platform: { OS: "ios" },
   Keyboard: { dismiss: vi.fn() },
@@ -241,7 +242,7 @@ beforeEach(() => {
   history.refetch.mockReset().mockImplementation(async () => ({ data: history.data }));
 
   stashes.gitStash.mutateAsync.mockReset().mockResolvedValue({ created: true, remainingChanges: false });
-  stashes.gitPopStash.mutateAsync.mockReset().mockResolvedValue({ dropped: true });
+  stashes.gitPopStash.mutateAsync.mockReset().mockResolvedValue({ dropped: false });
   stashes.refetch.mockReset().mockImplementation(async () => ({ data: stashes.data }));
 
   git.gitFetch.mutateAsync.mockReset().mockImplementation(async () => git.data);
@@ -1118,15 +1119,15 @@ it("disables invalid branch names and retains the name after server rejection", 
   expect(container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!.value).toBe("already-exists");
 });
 
-const confirmAlert = async (label: string) => {
+const confirmAlert = async (label: string, value?: string) => {
   const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
-  await act(async () => buttons.find((button: { text: string }) => button.text === label).onPress());
+  await act(async () => buttons.find((button: { text: string }) => button.text === label).onPress(value));
 };
-it("stashes saved tracked and untracked changes only after confirmation", async () => {
+it("sends a trimmed stash name only after confirmation", async () => {
   click("Other Options"); click("Stash All"); await act(async () => {});
   expect(stashes.gitStash.mutateAsync).not.toHaveBeenCalled();
-  await confirmAlert("Stash All");
-  expect(stashes.gitStash.mutateAsync).toHaveBeenCalledWith({});
+  await confirmAlert("Stash All", "  Login screen work  ");
+  expect(stashes.gitStash.mutateAsync).toHaveBeenCalledWith({ message: "Login screen work" });
   expect(feedback.success).toHaveBeenCalledWith("Changes saved in a stash.");
 });
 it("refreshes the latest stash and confirms its identity before popping", async () => {
@@ -1221,4 +1222,17 @@ it("refreshes file contents after pull conflicts without success feedback", asyn
   expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
   expect(feedback.success).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Resolve conflicts before continuing.");
+});
+
+it("allows an unnamed stash without sending an invalid blank message", async () => {
+  click("Other Options"); click("Stash All"); await act(async () => {});
+  await confirmAlert("Stash All", "   ");
+  expect(stashes.gitStash.mutateAsync).toHaveBeenCalledWith({ message: undefined });
+});
+it("ignores a stash name submitted after the account changes", async () => {
+  click("Other Options"); click("Stash All"); await act(async () => {});
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  live.userId = "user-two"; act(() => root.render(<Workspace />));
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Stash All").onPress("Old account work"));
+  expect(stashes.gitStash.mutateAsync).not.toHaveBeenCalled();
 });

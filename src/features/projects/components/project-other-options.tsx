@@ -6,6 +6,7 @@ import {
   type ActionSheetItem,
 } from "@/components/ui/action-sheet";
 import { Icon } from "@/components/ui/icon";
+import { TextPrompt } from "@/components/ui/text-prompt";
 
 import { useProjectStashOperations } from "../hooks/use-project-stash-operations";
 import { ProjectStashSheet } from "./project-stash-sheet";
@@ -25,6 +26,7 @@ export const ProjectOtherOptions = () => {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"stash" | "undo" | "discard" | null>(null);
   const panelAfterDismiss = useRef<typeof panel>(null);
+  const stashAfterDismiss = useRef(false);
   const { revert } = useProjectHistoryOperations();
   const openPanel = (value: typeof panel) => {
     panelAfterDismiss.current = value;
@@ -39,7 +41,8 @@ export const ProjectOtherOptions = () => {
           disabled: operation.isWorkspaceBusy || !operation.branch,
           busy: operation.workspaceOperation === "Stashing changes…",
           onPress: () => {
-            void stashAll();
+            stashAfterDismiss.current = true;
+            setOpen(false);
           },
         };
       case "pop-stash":
@@ -113,12 +116,17 @@ export const ProjectOtherOptions = () => {
         onOpenChange={setOpen}
         items={items}
         onDismiss={() => {
+          if (stashAfterDismiss.current) {
+            stashAfterDismiss.current = false;
+            void stashAll();
+          }
           if (panelAfterDismiss.current) {
             setPanel(panelAfterDismiss.current);
             panelAfterDismiss.current = null;
           }
         }}
       />
+      {operation.textPrompt && <TextPrompt {...operation.textPrompt} />}
       {panel === "stash" && (
         <ProjectStashSheet onClose={() => setPanel(null)} />
       )}

@@ -13,16 +13,15 @@ export const useProjectStashOperations = () => {
     operation.run(
       "Stashing changes…",
       async (assertCurrent) => {
-        if (
-          !(await operation.confirm(
-            "Stash all changes?",
-            "Save tracked and untracked changes in a stash and clear them from this workspace. Ignored files are kept.",
-            "Stash All",
-          ))
-        )
-          return null;
+        const name = await operation.promptText({
+          title: "Stash all changes?",
+          message: "Name this stash to find it later, or leave the name blank. Tracked and untracked changes will be saved and cleared from this workspace. Ignored files are kept.",
+          placeholder: "Stash name",
+          actionText: "Stash All",
+        });
+        if (name === null) return null;
         assertCurrent();
-        return stashes.gitStash.mutateAsync({});
+        return stashes.gitStash.mutateAsync({ message: name.trim() || undefined });
       },
       { changesFiles: true, success: formatProjectStashResult },
     );

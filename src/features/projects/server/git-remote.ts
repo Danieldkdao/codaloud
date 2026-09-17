@@ -10,7 +10,7 @@ export const getProjectGitRemote = async (headers: Headers, repositoryId: string
     if (write && (!repository.permissions.push || repository.archived)) {
       throw new SandboxFilesError(403, "GITHUB_PUSH_DENIED", "The repository is archived or your GitHub account cannot push to it.");
     }
-    return { cloneUrl: `https://github.com/${repository.fullName}.git`, accessToken };
+    return { repositoryId, cloneUrl: `https://github.com/${repository.fullName}.git`, accessToken };
   } catch (error) {
     if (error instanceof SandboxFilesError) throw error;
     const { status, body } = getGitHubErrorResponse(error);

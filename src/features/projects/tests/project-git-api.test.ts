@@ -44,6 +44,19 @@ it("authenticates, checks ownership, and executes through requestDaytona", async
   expect(mocks.request).toHaveBeenCalledWith("https://toolbox.test/sandbox/process/execute", expect.objectContaining({ method: "POST" }));
   expect(response.headers.get("Cache-Control")).toBe("private, no-store");
 });
+it("passes the verified repository ID and current name to remote operations after a transfer", async () => {
+  mocks.access.mockResolvedValue({ fullName: "new-owner/renamed-repo", permissions: { push: true, pull: true }, archived: false });
+  const response = await fetchGit(new Request("https://codaloud.test/git/fetch", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+  }), { projectId });
+  expect(response.status).toBe(200);
+  expect(mocks.access).toHaveBeenCalledWith("secret", "123", expect.any(AbortSignal));
+  const { envs } = JSON.parse(mocks.request.mock.calls[0][1].body);
+  const encoded = Array.from({ length: Number(envs.CODALOUD_INPUT_CHUNKS) }, (_, index) => envs[`CODALOUD_INPUT_${index}`]).join("");
+  expect(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8")).remote).toEqual({
+    repositoryId: "123", cloneUrl: "https://github.com/new-owner/renamed-repo.git", accessToken: "secret",
+  });
+});
 it("rejects unauthenticated requests before workspace access", async () => {
   mocks.user.mockResolvedValue({ userId: null });
   expect((await GET(request(), { projectId })).status).toBe(401);

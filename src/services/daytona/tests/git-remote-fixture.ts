@@ -19,7 +19,7 @@ export const createGitRemoteFixture = () => {
 const cp = require("node:child_process");
 const original = cp.execFileSync;
 cp.execFileSync = (file, args, options) => {
-  if (args.includes("https://github.com/example/repo.git")) {
+  if ((args.includes("fetch") || args.includes("push")) && args.includes("https://github.com/example/repo.git")) {
     if (options.cwd === ${JSON.stringify(fixture.repositoryPath)} || !options.env.GIT_CONFIG_VALUE_0?.includes("Authorization: Basic ")) throw new Error("Credential isolation failed");
     if (Object.keys(options.env).some((key) => key.startsWith("CODALOUD_"))) throw new Error("Input credential chunks leaked");
     args = ["-c", "protocol.file.allow=always", ...args.map((arg) => arg === "https://github.com/example/repo.git" ? ${JSON.stringify(remotePath)} : arg)];
@@ -28,7 +28,7 @@ cp.execFileSync = (file, args, options) => {
 };
 `;
   const run = (script: string, input: Record<string, unknown> = {}, hook = "") => fixture.run(script, {
-    remote: { cloneUrl: "https://github.com/example/repo.git", accessToken: "test-secret" }, ...input,
+    remote: { repositoryId: "123", cloneUrl: "https://github.com/example/repo.git", accessToken: "test-secret" }, ...input,
   }, prefix + hook);
   return { ...fixture, remotePath, remoteGit, run, cleanup: () => { fixture.cleanup(); rmSync(remotePath, { recursive: true, force: true }); } };
 };

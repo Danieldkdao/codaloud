@@ -1,10 +1,11 @@
+import { sandboxGitOriginRuntime } from "./git-origin-command";
+
 // Authenticated Git runs only in a newly initialized bare repository. Workspace
 // configuration never receives the credential, even during object transfer.
-export const sandboxGitRemoteRuntime = String.raw`
+export const sandboxGitRemoteRuntime = sandboxGitOriginRuntime + String.raw`
   const prepareRemote = () => {
     if (!input.remote || !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(input.remote.cloneUrl)) fail("GIT_REMOTE_REQUIRED");
-    const origin = optional(["config", "--get", "remote.origin.url"]);
-    if (!origin || origin.replace(/\.git$/, "").toLowerCase() !== input.remote.cloneUrl.replace(/\.git$/, "").toLowerCase()) fail("GIT_REMOTE_MISMATCH");
+    reconcileGitOrigin(input.remote.cloneUrl, input.remote.repositoryId, "GIT_REMOTE_MISMATCH");
     temporary = fs.mkdtempSync(path.join(os.tmpdir(), "codaloud-git-remote-"));
     git(["init", "--bare", "--template=", temporary], temporary);
   };

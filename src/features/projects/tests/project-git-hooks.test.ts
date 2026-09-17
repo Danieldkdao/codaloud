@@ -16,7 +16,7 @@ const { session, actions } = vi.hoisted(() => ({
     createProjectBranchAction: vi.fn(), checkoutProjectBranchAction: vi.fn(), readProjectBranchesAction: vi.fn(),
     readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn(), revertProjectCommitAction: vi.fn(), undoProjectCommitAction: vi.fn(),
     readProjectChangesAction: vi.fn(), readProjectDiscardPreviewAction: vi.fn(), discardProjectChangesAction: vi.fn(),
-    readProjectStashesAction: vi.fn(), stashProjectChangesAction: vi.fn(), popProjectStashAction: vi.fn(),
+    readProjectStashesAction: vi.fn(), stashProjectChangesAction: vi.fn(), popProjectStashAction: vi.fn(), deleteProjectStashAction: vi.fn(),
   },
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
@@ -357,3 +357,22 @@ verifyReadRetries("counts", () => useProjectGit(projectId, { enabled: false }), 
 verifyReadRetries("discard preview", () => useProjectChanges(projectId, { enabled: false }).discardPreview, actions.readProjectDiscardPreviewAction, "discard-preview");
 verifyReadRetries("stash list", () => useProjectStashes(projectId, { enabled: false }), actions.readProjectStashesAction, "stashes");
 verifyReadRetries("stash details", () => useProjectStashes(projectId, { enabled: false, stashIndex: 0, stashSha: "a".repeat(40) }).stashDetails, actions.readProjectStashesAction, "stash-details");
+
+verifyMutation({
+  name: "delete stash",
+  useResult: (id) => useProjectStashes(id, { enabled: false }).gitDeleteStash,
+  action: actions.deleteProjectStashAction,
+  input: { stashIndex: 0, stashSha: "a".repeat(40) },
+});
+
+it("resets stash cursors and details after deletion, including an uncertain response", async () => {
+  const list = ["projects", "stashes", "infinite", "user-one", projectId, {}];
+  const details = ["projects", "stash-details", "user-one", projectId, 1, "a".repeat(40)];
+  client.setQueryData(list, { pages: [{ nextCursor: "stale" }], pageParams: [undefined] });
+  client.setQueryData(details, { patch: "stale" });
+  actions.deleteProjectStashAction.mockResolvedValue({ error: true, code: "GIT_OUTCOME_UNKNOWN", message: "Refresh stashes." });
+  const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false }));
+  await run(async () => { await expect(hook.current.gitDeleteStash.mutateAsync({ stashIndex: 0, stashSha: "a".repeat(40) })).rejects.toThrow(); });
+  expect(client.getQueryData(list)).toBeUndefined();
+  expect(client.getQueryData(details)).toBeUndefined();
+});

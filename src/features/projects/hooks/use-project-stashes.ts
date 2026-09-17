@@ -2,16 +2,19 @@ import { isValidIds } from "@/lib/utils";
 import type {
   GitStashPushedSchema,
   GitStashPoppedSchema,
+  GitStashDroppedSchema,
 } from "../server/git-stash-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import {
   gitStashPopSchema,
+  gitStashDropSchema,
   gitStashPushSchema,
   gitStashQuerySchema,
   type GitStashQuerySchema,
 } from "../server/git-stash-schemas";
 import {
   popProjectStashAction,
+  deleteProjectStashAction,
   stashProjectChangesAction,
   readProjectStashesAction,
 } from "../actions/git-actions";
@@ -239,5 +242,26 @@ export const useProjectStashes = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { ...query, loadMore, retry, stashDetails, gitStash, gitPopStash };
+  const gitDeleteStash = useMutation<
+    GitStashDroppedSchema,
+    ProjectGitError,
+    z.input<typeof gitStashDropSchema>,
+    ProjectGitMutationContext
+  >({
+    mutationKey: ["projects", "git", "deleteStash", userId, projectId],
+    retry: false,
+    networkMode: "always",
+    onMutate: () => ({ userId, projectId }),
+    mutationFn: async (input) => {
+      const id = requireProjectGitSession(userId, projectId);
+      const result = await deleteProjectStashAction(id, input);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Deleting shifts stash indexes and invalidates every saved pagination cursor.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
+  return { ...query, loadMore, retry, stashDetails, gitStash, gitPopStash, gitDeleteStash };
 };

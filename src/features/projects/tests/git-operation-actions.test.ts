@@ -255,3 +255,10 @@ it.each(["mixed", "hard"] as const)("passes the requested %s undo mode", async (
 
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+
+verifyAction({
+  name: "deleteProjectStashAction",
+  call: (id) => actions.deleteProjectStashAction(id, { stashIndex: 1, stashSha: sha }),
+  path: "stash-drop", data: { stashSha: sha, dropped: true }, body: { stashIndex: 1, stashSha: sha },
+  invalid: () => actions.deleteProjectStashAction(projectId, { stashIndex: 0 } as never),
+});

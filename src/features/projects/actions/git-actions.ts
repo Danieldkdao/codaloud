@@ -14,6 +14,8 @@ import {
   gitStashPushedSchema,
   gitStashPopSchema,
   gitStashPoppedSchema,
+  gitStashDropSchema,
+  gitStashDroppedSchema,
 } from "../server/git-stash-schemas";
 import {
   gitCreateBranchSchema,
@@ -340,6 +342,18 @@ export const popProjectStashAction = async (
     path: "git/stash-pop",
     output: gitStashPoppedSchema,
     input: gitStashPopSchema,
+    unsafeInput,
+  });
+
+export const deleteProjectStashAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitStashDropSchema>,
+) =>
+  mutateProjectGitRequest({
+    projectId,
+    path: "git/stash-drop",
+    output: gitStashDroppedSchema,
+    input: gitStashDropSchema,
     unsafeInput,
   });
 

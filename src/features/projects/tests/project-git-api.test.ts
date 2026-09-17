@@ -4,6 +4,7 @@ import { GET } from "@/app/api/projects/[projectId]/git/counts+api";
 import { SandboxFilesError } from "@/services/daytona/api";
 import { POST as createBranch } from "@/app/api/projects/[projectId]/git/branches+api";
 import { POST as stashPush } from "@/app/api/projects/[projectId]/git/stash+api";
+import { POST as stashDrop } from "@/app/api/projects/[projectId]/git/stash-drop+api";
 import { POST as stashPop } from "@/app/api/projects/[projectId]/git/stash-pop+api";
 import { POST as discard, GET as previewDiscard } from "@/app/api/projects/[projectId]/git/discard+api";
 import { POST as revert } from "@/app/api/projects/[projectId]/git/revert+api";
@@ -73,6 +74,7 @@ const mutationRequest = (body: unknown, contentType = "application/json") => new
   method: "POST", headers: { "Content-Type": contentType }, body: JSON.stringify(body),
 });
 const mutationRoutes = [
+  { name: "delete stash", handler: stashDrop, input: { stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
   { name: "undo", handler: undo, input: { mode: "soft" }, output: { previousHeadSha: expected.expectedHeadSha, headSha: "b".repeat(40), currentBranch: "main", mode: "soft" } },
   { name: "pull", handler: pullGit, input: { rebase: false }, output: { previousHeadSha: expected.expectedHeadSha, headSha: expected.expectedHeadSha, currentBranch: "main", rebased: false, counts } },
   { name: "push", handler: pushGit, input: { force: false }, output: { pushed: true, remoteBranch: "main", remoteSha: expected.expectedHeadSha, trackingUpdated: true, counts } },

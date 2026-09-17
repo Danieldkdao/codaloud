@@ -69,3 +69,11 @@ export const gitStashPoppedSchema = z.object({
   dropped: z.literal(false),
 });
 export type GitStashPoppedSchema = z.infer<typeof gitStashPoppedSchema>;
+
+export const gitStashDropSchema = gitStashPopSchema.omit({ restoreIndex: true });
+export type GitStashDropSchema = z.infer<typeof gitStashDropSchema>;
+export const gitStashDroppedSchema = z.object({
+  stashSha: commitHashSchema,
+  dropped: z.literal(true),
+});
+export type GitStashDroppedSchema = z.infer<typeof gitStashDroppedSchema>;

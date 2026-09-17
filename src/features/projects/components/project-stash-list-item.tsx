@@ -22,7 +22,7 @@ type ProjectStashListItemProps = {
   onDelete: () => Promise<unknown>;
 };
 
-const deleteActionWidth = 128;
+const deleteActionWidth = 72;
 const closedOffset = { x: 0, y: 0 };
 const snapOffsets = [0, deleteActionWidth];
 const tapMovementLimit = 8;
@@ -69,6 +69,7 @@ export const ProjectStashListItem = ({
   const renderDelete = () => (
     <View
       style={{ width: deleteActionWidth }}
+      className="items-center justify-center"
       accessibilityElementsHidden={!isActionVisible || isDisabled}
       importantForAccessibility={
         isActionVisible && !isDisabled ? "auto" : "no-hide-descendants"
@@ -76,7 +77,8 @@ export const ProjectStashListItem = ({
     >
       <Button
         variant="destructive"
-        className="flex-1 rounded-none px-3"
+        size="icon-lg"
+        className="rounded-none"
         accessibilityLabel={`Delete stash: ${stash.message}`}
         disabled={isDisabled}
         onPress={() => {
@@ -91,7 +93,6 @@ export const ProjectStashListItem = ({
           className="text-destructive"
           accessible={false}
         />
-        Delete
       </Button>
     </View>
   );
@@ -124,7 +125,8 @@ export const ProjectStashListItem = ({
       }}
       onTouchMove={({ nativeEvent }) => {
         if (
-          Math.abs(nativeEvent.pageX - touchStart.current.x) > tapMovementLimit ||
+          Math.abs(nativeEvent.pageX - touchStart.current.x) >
+            tapMovementLimit ||
           Math.abs(nativeEvent.pageY - touchStart.current.y) > tapMovementLimit
         ) {
           suppressPress.current = true;

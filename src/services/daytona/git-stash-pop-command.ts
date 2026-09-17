@@ -11,9 +11,7 @@ export const sandboxGitStashPopCommand = createGitOperationCommand(String.raw`
   mutationStarted = true;
   try { git(["stash", "apply", ...(input.restoreIndex ? ["--index"] : []), input.stashSha]); }
   catch (error) { if (git(["ls-files", "--unmerged", "-z"])) fail("GIT_CONFLICTS"); throw error; }
-  // Apply by immutable identity, then verify the reflog slot before dropping it.
+  // Restore by immutable identity and retain the saved entry until explicitly deleted.
   checkExpected();
-  if (selection() !== input.stashSha) fail("GIT_STASH_CHANGED");
-  git(["stash", "drop", "stash@{" + input.stashIndex + "}"]);
-  return { stashSha: input.stashSha, dropped: true };
+  return { stashSha: input.stashSha, dropped: false };
 `);

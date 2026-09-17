@@ -10,5 +10,5 @@ export const POST = createGitRoute({
   output: gitStashPoppedSchema,
   script: sandboxGitStashPopCommand,
   mutation: true,
-  message: "Stash applied and removed.",
+  message: "Stash restored; the saved entry was kept.",
 });

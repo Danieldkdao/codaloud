@@ -40,7 +40,7 @@ export const useProjectStashOperations = () => {
         if (
           !(await operation.confirm(
             "Pop stash?",
-            `Restore “${stash.message}” into ${operation.branch ?? "the current branch"}? The stash is removed only after it applies successfully.`,
+            `Restore “${stash.message}” into ${operation.branch ?? "the current branch"}? The saved stash will be kept so you can restore it again.`,
             "Pop Stash",
           ))
         )

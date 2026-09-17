@@ -202,7 +202,7 @@ it("accepts a no-op stash without a message", async () => {
 verifyAction({
   name: "popProjectStashAction",
   call: (id) => actions.popProjectStashAction(id, { stashIndex: 0, stashSha: sha }),
-  path: "stash-pop", data: { stashSha: sha, dropped: true }, body: { stashIndex: 0, stashSha: sha, restoreIndex: false },
+  path: "stash-pop", data: { stashSha: sha, dropped: false }, body: { stashIndex: 0, stashSha: sha, restoreIndex: false },
   invalid: () => actions.popProjectStashAction(projectId, { stashIndex: 0 } as never),
 });
 

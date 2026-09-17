@@ -66,6 +66,6 @@ export const gitStashPopSchema = z.strictObject({
 export type GitStashPopSchema = z.infer<typeof gitStashPopSchema>;
 export const gitStashPoppedSchema = z.object({
   stashSha: commitHashSchema,
-  dropped: z.literal(true),
+  dropped: z.literal(false),
 });
 export type GitStashPoppedSchema = z.infer<typeof gitStashPoppedSchema>;

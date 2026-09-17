@@ -79,7 +79,7 @@ const mutationRoutes = [
   { name: "fetch", handler: fetchGit, input: {}, output: counts },
   { name: "revert", handler: revert, input: {}, output: { hash: "b".repeat(40), parentHash: expected.expectedHeadSha, currentBranch: "main" } },
   { name: "discard", handler: discard, input: { confirm: true, includeUntracked: false, fingerprint: "c".repeat(64) }, output: { headSha: expected.expectedHeadSha, remainingChanges: false } },
-  { name: "pop stash", handler: stashPop, input: { stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: true } },
+  { name: "pop stash", handler: stashPop, input: { stashIndex: 0, stashSha: "b".repeat(40) }, output: { stashSha: "b".repeat(40), dropped: false } },
   { name: "stash all", handler: stashPush, input: { message: "Saved" }, output: { created: true, remainingChanges: false, stashSha: "b".repeat(40) } },
   { name: "create branch", handler: createBranch, input: { branchName: "feature/new" }, output: { previousBranch: "main", currentBranch: "feature/new", headSha: expected.expectedHeadSha } },
 ];

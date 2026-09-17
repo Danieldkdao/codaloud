@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Pressable,
   View,
   useWindowDimensions,
@@ -10,6 +11,7 @@ import { useThemeColor } from "@/hooks/use-theme";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Icon } from "@/components/ui/icon";
 import { CodeText, PText } from "@/components/ui/text";
 import { useProjectStashes } from "../hooks/use-project-stashes";
 import { useProjectStashOperations } from "../hooks/use-project-stash-operations";
@@ -60,23 +62,23 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
       }}
     >
       <View
-        style={{ width, height: height * 0.72 }}
-        className="gap-3 px-5 pb-6 pt-3"
+        style={
+          selected
+            ? { width, height: height * 0.72 }
+            : { width, maxHeight: height * 0.72 }
+        }
+        className={selected ? "gap-3 px-5 pb-6 pt-3" : undefined}
         accessibilityViewIsModal
+        onAccessibilityEscape={selected ? () => setSelected(null) : onClose}
       >
-        <View className="flex-row items-center justify-between gap-3">
-          <PText className="text-xl font-semibold">
-            {selected ? "Stash details" : "Saved stashes"}
-          </PText>
-          <Button
-            variant="ghost"
-            onPress={selected ? () => setSelected(null) : onClose}
-          >
-            {selected ? "Back" : "Done"}
-          </Button>
-        </View>
         {selected ? (
           <>
+            <View className="flex-row items-center justify-between gap-3">
+              <PText className="text-xl font-semibold">Stash details</PText>
+              <Button variant="ghost" onPress={() => setSelected(null)}>
+                Back
+              </Button>
+            </View>
             <PText selectable className="text-base">
               {selected.message}
             </PText>
@@ -96,31 +98,48 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
             </Button>
           </>
         ) : (
-          <Input
-            type="search"
-            accessibilityLabel="Search stashes"
-            placeholder="Search stashes"
-            value={search}
-            onChangeText={setSearch}
-            maxLength={200}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!operation.isWorkspaceBusy}
-          />
+          <View className="shrink-0 border-b border-border px-5 pt-2 pb-3">
+            <View className="flex-row items-center gap-2">
+              <Icon
+                family="Feather"
+                name="search"
+                size={20}
+                className="text-muted-foreground"
+                accessible={false}
+              />
+              <Input
+                type="search"
+                variant="ghost"
+                size="sm"
+                accessibilityLabel="Search stashes"
+                placeholder="Search stashes"
+                value={search}
+                onChangeText={setSearch}
+                maxLength={200}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!operation.isWorkspaceBusy}
+                containerClassName="min-w-0 flex-1"
+                className="border-0 px-0 py-1 focus:border-transparent focus:outline-0"
+              />
+            </View>
+          </View>
         )}
         {active.isFetching && (
           <ActivityIndicator
-            className="text-primary"
+            className={selected ? "text-primary" : "py-3 text-primary"}
             accessibilityLabel="Loading stashes"
           />
         )}
         {active.fetchStatus === "paused" && (
-          <PText className="text-base text-muted-foreground">
+          <PText className={selected
+            ? "text-base text-muted-foreground"
+            : "px-5 py-3 text-center text-base text-muted-foreground"}>
             Reconnect to load stashes.
           </PText>
         )}
         {active.error && (
-          <View className="gap-2">
+          <View className={selected ? "gap-2" : "gap-2 px-5 py-3"}>
             <PText
               selectable
               accessibilityRole="alert"
@@ -165,8 +184,15 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
           />
         ) : (
           <FlatList
+            key={search.trim().toLowerCase()}
+            style={{ flexGrow: 0, flexShrink: 1 }}
+            contentContainerStyle={{ paddingBottom: entries.length ? 24 : 0 }}
+            accessibilityLabel="Saved stashes"
             data={entries}
+            extraData={operation.isWorkspaceBusy}
             keyExtractor={(stash) => `${stash.index}/${stash.sha}`}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentInsetAdjustmentBehavior="automatic"
             onEndReached={() => {
               if (!operation.isWorkspaceBusy) void query.loadMore();
@@ -181,8 +207,11 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
                 disabled={operation.isWorkspaceBusy}
                 accessibilityRole="button"
                 accessibilityLabel={formatProjectStashLabel(item.index)}
-                onPress={() => setSelected(item)}
-                className="gap-1 border-b border-border py-4 disabled:opacity-40"
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setSelected(item);
+                }}
+                className="gap-1 border-b border-border px-5 py-4 active:bg-secondary disabled:opacity-40"
               >
                 <PText className="text-base font-medium">{item.message}</PText>
                 <PText className="text-base text-muted-foreground">
@@ -191,21 +220,30 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
               </Pressable>
             )}
             ListEmptyComponent={
-              !query.isPending && !query.error ? (
-                <PText className="text-base text-muted-foreground">
-                  {search ? "No matching stashes." : "No saved stashes."}
-                </PText>
+              !query.isPending &&
+              !query.error &&
+              query.fetchStatus !== "paused" ? (
+                <View className="items-center justify-center px-5 py-8">
+                  <PText
+                    accessibilityLiveRegion="polite"
+                    className="text-center text-base text-muted-foreground"
+                  >
+                    {search.trim() ? "No matching stashes." : "No saved stashes."}
+                  </PText>
+                </View>
               ) : null
             }
             ListFooterComponent={
               query.hasNextPage ? (
-                <Button
-                  accessibilityLabel="Load more stashes"
-                  disabled={query.isFetching || operation.isWorkspaceBusy}
-                  onPress={() => void query.loadMore()}
-                >
-                  Load more
-                </Button>
+                <View className="px-5 pt-3">
+                  <Button
+                    accessibilityLabel="Load more stashes"
+                    disabled={query.isFetching || operation.isWorkspaceBusy}
+                    onPress={() => void query.loadMore()}
+                  >
+                    Load more
+                  </Button>
+                </View>
               ) : null
             }
           />

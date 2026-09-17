@@ -22,9 +22,7 @@ type ProjectStashListItemProps = {
   onDelete: () => Promise<unknown>;
 };
 
-const deleteActionWidth = 72;
 const closedOffset = { x: 0, y: 0 };
-const snapOffsets = [0, deleteActionWidth];
 const tapMovementLimit = 8;
 
 export const ProjectStashListItem = ({
@@ -40,6 +38,7 @@ export const ProjectStashListItem = ({
   const suppressPress = useRef(false);
   const isSettling = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [rowHeight, setRowHeight] = useState(0);
   const [isActionVisible, setIsActionVisible] = useState(false);
   const isDisabled = disabled || isDeleting;
   const close = () => {
@@ -68,8 +67,7 @@ export const ProjectStashListItem = ({
 
   const renderDelete = () => (
     <View
-      style={{ width: deleteActionWidth }}
-      className="items-center justify-center"
+      style={{ width: rowHeight }}
       accessibilityElementsHidden={!isActionVisible || isDisabled}
       importantForAccessibility={
         isActionVisible && !isDisabled ? "auto" : "no-hide-descendants"
@@ -78,6 +76,7 @@ export const ProjectStashListItem = ({
       <Button
         variant="destructive"
         size="icon-lg"
+        style={{ width: rowHeight, height: rowHeight }}
         className="rounded-none"
         accessibilityLabel={`Delete stash: ${stash.message}`}
         disabled={isDisabled}
@@ -106,7 +105,7 @@ export const ProjectStashListItem = ({
       style={{ width, flexGrow: 0 }}
       contentOffset={closedOffset}
       contentInsetAdjustmentBehavior="never"
-      snapToOffsets={snapOffsets}
+      snapToOffsets={[0, rowHeight]}
       decelerationRate="fast"
       disableIntervalMomentum
       directionalLockEnabled
@@ -147,7 +146,10 @@ export const ProjectStashListItem = ({
       }}
     >
       <Pressable
-        style={{ width }}
+        style={{ width, alignSelf: "flex-start" }}
+        onLayout={({ nativeEvent }) => {
+          setRowHeight(nativeEvent.layout.height);
+        }}
         disabled={isDisabled}
         accessibilityRole="button"
         accessibilityLabel={formatProjectStashLabel(stash.index)}

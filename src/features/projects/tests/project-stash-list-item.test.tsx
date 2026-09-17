@@ -52,9 +52,10 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); vi.unstubAllGlobals(); });
 
 it("reveals one trailing Delete action only when swiping left", () => {
+  act(() => mocks.row!.onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 128 } } } as never));
   expect(mocks.scroll?.horizontal).toBe(true);
   expect(mocks.scroll!.contentOffset!.x).toBe(0);
-  expect(mocks.scroll!.snapToOffsets).toEqual([0, 72]);
+  expect(mocks.scroll!.snapToOffsets).toEqual([0, 128]);
   expect(container.querySelectorAll('[aria-label="Delete stash: Login work"]')).toHaveLength(1);
   expect(visibleDelete()).toHaveLength(0);
   scroll(128);

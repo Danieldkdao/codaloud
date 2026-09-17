@@ -23,8 +23,9 @@ type ProjectStashListItemProps = {
 };
 
 const deleteActionWidth = 128;
-const closedOffset = { x: deleteActionWidth, y: 0 };
-const snapOffsets = [0, deleteActionWidth, deleteActionWidth * 2];
+const closedOffset = { x: 0, y: 0 };
+const snapOffsets = [0, deleteActionWidth];
+const tapMovementLimit = 8;
 
 export const ProjectStashListItem = ({
   stash,
@@ -35,17 +36,20 @@ export const ProjectStashListItem = ({
   const { width } = useWindowDimensions();
   const scrollView = useRef<ScrollView>(null);
   const deleting = useRef(false);
+  const touchStart = useRef({ x: 0, y: 0 });
+  const suppressPress = useRef(false);
+  const isSettling = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [visibleAction, setVisibleAction] = useState<"left" | "right" | null>(null);
+  const [isActionVisible, setIsActionVisible] = useState(false);
   const isDisabled = disabled || isDeleting;
   const close = () => {
     scrollView.current?.scrollTo({ ...closedOffset, animated: true });
-    setVisibleAction(null);
+    setIsActionVisible(false);
   };
   useEffect(() => {
     if (isDisabled) {
       scrollView.current?.scrollTo({ ...closedOffset, animated: false });
-      setVisibleAction(null);
+      setIsActionVisible(false);
     }
   }, [isDisabled]);
 
@@ -62,12 +66,12 @@ export const ProjectStashListItem = ({
     }
   };
 
-  const renderDelete = (side: "left" | "right") => (
+  const renderDelete = () => (
     <View
       style={{ width: deleteActionWidth }}
-      accessibilityElementsHidden={visibleAction !== side || isDisabled}
+      accessibilityElementsHidden={!isActionVisible || isDisabled}
       importantForAccessibility={
-        visibleAction === side && !isDisabled ? "auto" : "no-hide-descendants"
+        isActionVisible && !isDisabled ? "auto" : "no-hide-descendants"
       }
     >
       <Button
@@ -76,6 +80,7 @@ export const ProjectStashListItem = ({
         accessibilityLabel={`Delete stash: ${stash.message}`}
         disabled={isDisabled}
         onPress={() => {
+          if (suppressPress.current) return;
           void remove();
         }}
       >
@@ -111,27 +116,47 @@ export const ProjectStashListItem = ({
       scrollEnabled={!isDisabled}
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={16}
+      onTouchStart={({ nativeEvent }) => {
+        touchStart.current = { x: nativeEvent.pageX, y: nativeEvent.pageY };
+        // Keep a drag's release suppressed through snapping; only a new touch
+        // can become a tap. Touching a moving row merely stops its momentum.
+        suppressPress.current = isSettling.current;
+      }}
+      onTouchMove={({ nativeEvent }) => {
+        if (
+          Math.abs(nativeEvent.pageX - touchStart.current.x) > tapMovementLimit ||
+          Math.abs(nativeEvent.pageY - touchStart.current.y) > tapMovementLimit
+        ) {
+          suppressPress.current = true;
+        }
+      }}
+      onScrollBeginDrag={() => {
+        suppressPress.current = true;
+      }}
+      onMomentumScrollBegin={() => {
+        isSettling.current = true;
+        suppressPress.current = true;
+      }}
+      onMomentumScrollEnd={() => {
+        isSettling.current = false;
+      }}
       onScroll={({ nativeEvent }) => {
-        const offset = nativeEvent.contentOffset.x;
-        if (isDisabled) setVisibleAction(null);
-        else if (offset < deleteActionWidth - 1) setVisibleAction("left");
-        else if (offset > deleteActionWidth + 1) setVisibleAction("right");
-        else setVisibleAction(null);
+        setIsActionVisible(!isDisabled && nativeEvent.contentOffset.x > 1);
       }}
     >
-      {renderDelete("left")}
       <Pressable
         style={{ width }}
         disabled={isDisabled}
         accessibilityRole="button"
         accessibilityLabel={formatProjectStashLabel(stash.index)}
-        accessibilityHint="Asks to restore this stash. Swipe left or right to reveal Delete."
+        accessibilityHint="Asks to restore this stash. Swipe left to reveal Delete."
         accessibilityState={{ disabled: isDisabled, busy: isDeleting }}
         accessibilityActions={[{ name: "delete", label: "Delete stash" }]}
         onAccessibilityAction={({ nativeEvent }) => {
           if (nativeEvent.actionName === "delete") void remove();
         }}
         onPress={() => {
+          if (isDisabled || suppressPress.current) return;
           close();
           onSelect();
         }}
@@ -150,7 +175,7 @@ export const ProjectStashListItem = ({
           />
         )}
       </Pressable>
-      {renderDelete("right")}
+      {renderDelete()}
     </ScrollView>
   );
 };

@@ -78,7 +78,7 @@ const live = vi.hoisted(() => ({
 const workspaceFiles = vi.hoisted(() => ({ flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
-vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
+vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({ ...workspaceFiles, withSavedFiles: async (action: () => Promise<unknown>) => { await workspaceFiles.flushPendingSaves(); return action(); } }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFile: workspaceFiles.refreshFile }) }));
 let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({

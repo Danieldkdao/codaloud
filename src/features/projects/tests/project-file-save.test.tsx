@@ -534,3 +534,41 @@ it("does not invalidate changes for failed saves", async () => {
   expect(current.status).toBe("error");
   expect(client.getQueryState(key)?.isInvalidated).toBe(false);
 });
+
+it("drains saves before Git and preserves late editor drafts across the refreshed document", async () => {
+  await render();
+  await act(async () => current.onChange("before Git"));
+  let finish!: () => void;
+  let pending!: Promise<void>;
+  const action = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+  await act(async () => { pending = registry.withSavedFiles(action); });
+  expect(mocks.save).toHaveBeenCalledOnce();
+  expect(action).toHaveBeenCalledOnce();
+  await act(async () => current.onChange("late editor draft"));
+  await tick();
+  expect(mocks.save).toHaveBeenCalledOnce();
+  await act(async () => { finish(); await pending; });
+  await render("one.ts", "server changed by Git", 1);
+  expect(current.initialValue).toBe("late editor draft");
+  expect(current.status).toBe("pending");
+});
+
+it("does not run Git when a preceding save fails and releases its pause", async () => {
+  await render();
+  await act(async () => current.onChange("draft"));
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Save failed" });
+  const action = vi.fn();
+  await act(async () => { await expect(registry.withSavedFiles(action)).rejects.toThrow("Save failed"); });
+  expect(action).not.toHaveBeenCalled();
+  expect(registry.getDocument("one.ts", 0, "original").isPaused()).toBe(false);
+});
+
+it("blocks renames and dependent flushes while Git holds the documents", async () => {
+  await render();
+  let finish!: () => void;
+  let pending!: Promise<void>;
+  await act(async () => { pending = registry.withSavedFiles(() => new Promise<void>((resolve) => { finish = resolve; })); });
+  await expect(registry.renameFiles("one.ts", "other.ts", vi.fn())).rejects.toThrow("Git");
+  await expect(registry.flushPendingSaves()).rejects.toThrow("Git");
+  await act(async () => { finish(); await pending; });
+});

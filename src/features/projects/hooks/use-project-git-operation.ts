@@ -9,7 +9,7 @@ import { useProjectWorkspaceCurrentFile } from "./use-project-workspace-current-
 
 export const useProjectGitOperation = () => {
   const workspace = useProjectWorkspaceBranch();
-  const { flushPendingSaves } = useProjectFileSaveRegistry();
+  const { withSavedFiles } = useProjectFileSaveRegistry();
   const currentFile = useProjectWorkspaceCurrentFile();
   const selectedFile = useRef(currentFile);
   selectedFile.current = currentFile;
@@ -57,24 +57,26 @@ export const useProjectGitOperation = () => {
           const key = mutation.mutationKey;
           return key?.[0] === "projects" && key[1] === "files" && key[3] === userId && key[4] === workspace.projectId;
         } })) throw new Error("Wait for the file operation to finish, then try again.");
-        await flushPendingSaves();
-        assertCurrent();
-        try {
-          const result = await action(assertCurrent);
+        return withSavedFiles(async () => {
           assertCurrent();
-          const message = options.success?.(result);
-          if (message) showSuccess(message);
-          return result;
-        } finally {
-          // Pull, discard, stash and history changes can replace file contents even
-          // on conflicts. Remount the editor from confirmed server bytes afterward.
-          if (options.changesFiles && !signal?.aborted) {
-            await client.resetQueries({ queryKey: ["projects", "file", userId, workspace.projectId] });
+          try {
+            const result = await action(assertCurrent);
             assertCurrent();
-            const file = selectedFile.current;
-            if (file.filePath) file.refreshFile(file.filePath);
+            const message = options.success?.(result);
+            if (message) showSuccess(message);
+            return result;
+          } finally {
+            // Pull, discard, stash and history changes can replace file contents even
+            // on conflicts. Remount the editor from confirmed server bytes afterward.
+            if (options.changesFiles) {
+              workspace.assertWorkspaceCurrent();
+              await client.resetQueries({ queryKey: ["projects", "file", userId, workspace.projectId] });
+              workspace.assertWorkspaceCurrent();
+              const file = selectedFile.current;
+              if (file.filePath) file.refreshFile(file.filePath);
+            }
           }
-        }
+        });
       });
     } catch (error) {
       if (!signal?.aborted) Alert.alert("Git operation failed", error instanceof Error ? error.message : "Refresh the workspace and try again.");

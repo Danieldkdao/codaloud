@@ -37,11 +37,11 @@ type ProjectBranchSelectProps = {
 
 export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: ProjectBranchSelectProps = {}) => {
   const { width } = useWindowDimensions();
-  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isWorkspaceBusy, workspaceOperation, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
+  const { projectId, branch, branchSource, setBranch, isBranchLoading, setIsBranchLoading, checkoutBranch, isWorkspaceBusy, workspaceOperation, assertWorkspaceCurrent, checkoutError, isCheckoutRecoveryRequired, retryCheckoutRecovery } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
   const session = useAuthSession();
   const userId = session.data?.user.id;
-  const { flushPendingSaves } = useProjectFileSaveRegistry();
+  const { withSavedFiles } = useProjectFileSaveRegistry();
   const { filePath, refreshFile } = useProjectWorkspaceCurrentFile();
   const [search, setSearch] = useState("");
   const projectQuery = useProject(projectId);
@@ -89,12 +89,14 @@ export const ProjectBranchSelect = ({ open: controlledOpen, onOpenChange }: Proj
     if (isWorkspaceBusy) return;
     close();
     Keyboard.dismiss();
-    checkoutBranch(name, async () => {
-      await flushPendingSaves();
+    checkoutBranch(name, () => withSavedFiles(async () => {
+      assertWorkspaceCurrent();
       const result = await query.gitCheckout.mutateAsync(source === "remote" ? { branchName: name, source } : { branchName: name });
+      assertWorkspaceCurrent();
       await refreshWorkspace();
       return result;
-    }, async () => {
+    }), async () => {
+      assertWorkspaceCurrent();
       await refreshWorkspace();
       return query.recoverCheckout();
     });

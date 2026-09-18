@@ -61,7 +61,7 @@ const CodeScreen = () => {
       await documents.flushFile(path);
       if (alive.current && current.current.files.getFileVersion(path) === version) current.current.files.closeFile(path);
     } catch (error) {
-      if (alive.current) {
+      if (alive.current && current.current.files.getFileVersion(path) === version && current.current.files.openFilePaths.includes(path)) {
         current.current.files.openFile(path);
         Alert.alert("Couldn't close this file", error instanceof Error ? error.message : "Save your changes and try again.");
       }
@@ -106,8 +106,10 @@ const CodeScreen = () => {
       {files.activeFilePath ? (
         <View className="absolute left-4 right-4 items-center" style={{ bottom: dockHeight + 8 }} pointerEvents="box-none">
           <View onLayout={({ nativeEvent }) => setBadgeHeight(nativeEvent.layout.height)}>
-            <ProjectCodeStatus status={isReady ? documents.status : { status: "loading" }} analysis={activeAnalysis}
-              onRetry={documents.retry} onShowProblems={() => setAnalysisPanelRequest((value) => value + 1)} />
+            <ProjectCodeStatus readError={!documents.activeKey && query.isError}
+              status={!documents.activeKey && query.isError && !query.isFetching ? { status: "error", message: query.error.message } : isReady ? documents.status : { status: "loading" }}
+              analysis={documents.activeKey ? activeAnalysis : undefined}
+              onRetry={documents.activeKey ? documents.retry : () => { void query.refetch(); }} onShowProblems={() => setAnalysisPanelRequest((value) => value + 1)} />
           </View>
         </View>
       ) : null}

@@ -236,3 +236,13 @@ it("shows loading, debounced saving, success, and failure icons after the lint c
   expect(saveFile).toHaveBeenCalledTimes(2);
   expect(container.querySelector('[data-icon="cloud-check-outline"]')).not.toBeNull();
 });
+
+
+it("shows file read failures in the badge and retries the read", () => {
+  Object.assign(fileQuery, { data: undefined, isError: true, isFetching: false, error: new Error("File unavailable") });
+  renderCode();
+  const retry = container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t load file. Tap to retry."]');
+  expect(retry).not.toBeNull();
+  act(() => retry!.click());
+  expect(fileQuery.refetch).toHaveBeenCalledOnce();
+});

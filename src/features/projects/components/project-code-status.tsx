@@ -6,7 +6,8 @@ import { diagnosticSeverities } from "@/features/projects/actions/code-intellige
 import { formatCodeAnalysisLabel, formatCodeDiagnostic, formatCodeDiagnosticCount, formatProjectFileSaveStatus } from "@/features/projects/lib/formatters";
 import type { SaveSnapshot } from "../lib/project-file-save-document";
 
-export const ProjectCodeStatus = ({ status: save, analysis, onShowProblems, onRetry }: {
+export const ProjectCodeStatus = ({ status: save, analysis, onShowProblems, onRetry, readError = false }: {
+  readError?: boolean;
   status: SaveSnapshot;
   analysis?: CodeEditorAnalysis;
   onShowProblems: () => void;
@@ -47,7 +48,7 @@ export const ProjectCodeStatus = ({ status: save, analysis, onShowProblems, onRe
       <IndicatorContainer
         accessible
         accessibilityRole={canRetry ? "button" : "image"}
-        accessibilityLabel={presentation.label}
+        accessibilityLabel={readError ? "Couldn't load file. Tap to retry." : presentation.label}
         accessibilityHint={canRetry ? save.message : undefined}
         accessibilityState={{ busy: presentation.busy }}
         accessibilityLiveRegion="polite"

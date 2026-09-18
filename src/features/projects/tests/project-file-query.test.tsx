@@ -175,3 +175,15 @@ it("cancels the previous file's restoration retries when the path changes", asyn
   expect(read.mock.calls.filter((call) => call[1] === file.path)).toHaveLength(1);
   expect(current.data?.path).toBe("new.ts");
 });
+
+
+it("ignores a delayed response from a file that is no longer active", async () => {
+  let finish!: (value: typeof file) => void;
+  read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await render();
+  read.mockResolvedValue({ path: "second.ts", content: "second", size: 6 });
+  await render("project-one", "second.ts");
+  await act(async () => finish({ path: file.path, content: "late first", size: 10 }));
+  await advance(1);
+  expect(current.data).toMatchObject({ path: "second.ts", content: "second" });
+});

@@ -108,9 +108,9 @@ export const MainTabBar = () => {
       </TabTrigger>
       <TabTrigger name="account" asChild>
         <TabButton
-          label="Account"
-          icon={{ family: "Ionicons", name: "person-circle-outline" }}
-          selectedIcon={{ family: "Ionicons", name: "person-circle" }}
+          label="Settings"
+          icon={{ family: "Ionicons", name: "settings-outline" }}
+          selectedIcon={{ family: "Ionicons", name: "settings" }}
         />
       </TabTrigger>
     </View>

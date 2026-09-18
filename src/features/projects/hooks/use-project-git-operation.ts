@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Alert } from "react-native";
-import { onlineManager, useQueryClient } from "@tanstack/react-query";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useQueryClient } from "@tanstack/react-query";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { useTextPrompt } from "@/hooks/use-text-prompt";
 import { useProjectWorkspaceBranch } from "./use-project-workspace-branch";
@@ -15,8 +15,8 @@ export const useProjectGitOperation = () => {
   const selectedFile = useRef(currentFile);
   selectedFile.current = currentFile;
   const client = useQueryClient();
-  const session = useAuthSession();
-  const userId = session.data?.user.id;
+  const device = useDeviceWorkspace();
+  const userId = device.workspace?.ownerId;
   const showSuccess = useSuccessFeedback();
   const lifetime = useRef<AbortController | null>(null);
   const textPrompt = useTextPrompt();
@@ -77,8 +77,6 @@ export const useProjectGitOperation = () => {
     try {
       return await workspace.runWorkspaceOperation(label, async () => {
         assertCurrent();
-        if (!onlineManager.isOnline())
-          throw new Error("Reconnect to the internet to continue.");
         if (
           client.isMutating({
             predicate: ({ options: mutation }) => {
@@ -105,7 +103,7 @@ export const useProjectGitOperation = () => {
             return result;
           } finally {
             // Pull, discard, stash and history changes can replace file contents even
-            // on conflicts. Remount the editor from confirmed server bytes afterward.
+            // on conflicts. Remount the editor from confirmed local file contents afterward.
             if (options.changesFiles) {
               workspace.assertWorkspaceCurrent();
               await client.resetQueries({

@@ -26,19 +26,12 @@ import { useThemeColor } from "@/hooks/use-theme";
 import { ProjectBranchSection } from "./project-branch-section";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { useProject } from "../hooks/use-project";
-import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
-import type {
-  GitHubRepositoryBranchPage,
-  GitHubRepositoryBranch,
-} from "@/services/github/types";
+import { useProjectRemoteBranches } from "../hooks/use-project-remote-branches";
 import { formatProjectBranchLabel } from "../lib/formatters";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
 import { projectCommitParamsSchema } from "../lib/commit-params";
-
-const getRemoteBranches = (page: GitHubRepositoryBranchPage) => page.branches;
-const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
 
 const getBranches = (page: ProjectBranchPageSchema) => page.branches;
 const getBranchKey = (branch: string) => branch;
@@ -69,22 +62,22 @@ export const ProjectBranchSelect = ({
     retryCheckoutRecovery,
   } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId = session.data?.user.id;
+  const device = useDeviceWorkspace();
+  const userId = device.workspace?.ownerId;
   const { withSavedFiles } = useProjectFileSaveRegistry();
   const { refreshFiles } = useProjectWorkspaceCurrentFile();
   const [search, setSearch] = useState("");
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
   const query = useProjectBranches(projectId, { search });
-  const remoteQuery = useGitHubRepositoryBranches(repositoryId, {
+  const remoteQuery = useProjectRemoteBranches(projectId, {
     search,
     enabled: Boolean(repositoryId),
   });
   const remoteBranches = useUniquePaginatedItems(
     remoteQuery.data?.pages,
-    getRemoteBranches,
-    getRemoteBranchKey,
+    getBranches,
+    getBranchKey,
   );
   const branches = useUniquePaginatedItems(
     query.data?.pages,
@@ -282,7 +275,7 @@ export const ProjectBranchSelect = ({
               {repositoryId ? (
                 <ProjectBranchSection
                   source="remote"
-                  branches={remoteBranches.map(({ name }) => name)}
+                  branches={remoteBranches}
                   selectedBranch={branchSource === "remote" ? branch : null}
                   search={search}
                   open={open}

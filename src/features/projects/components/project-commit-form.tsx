@@ -19,7 +19,7 @@ import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectWorkspaceBranch } from "../hooks/use-project-workspace-branch";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectChanges } from "../hooks/use-project-changes";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 
 export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
@@ -36,9 +36,8 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     assertWorkspaceCurrent,
     runWorkspaceOperation,
   } = useProjectWorkspaceBranch();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error ? session.data?.user.id : undefined;
+  const device = useDeviceWorkspace();
+  const userId = device.workspace?.ownerId ?? null;
   const { gitCommit } = useProjectCommitHistory(projectId, { enabled: false });
   const { refetch } = useProjectChanges(projectId, { enabled: false });
   const { withSavedFiles } = useProjectFileSaveRegistry();

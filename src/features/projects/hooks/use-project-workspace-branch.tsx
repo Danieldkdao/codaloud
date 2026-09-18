@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocalSearchParams } from "expo-router";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import type { ProjectGitTab } from "../types";
 import type { ProjectBranchCheckoutSchema } from "../actions/branch-schemas";
 
@@ -55,17 +55,14 @@ export const ProjectWorkspaceBranchProvider = ({
   children: ReactNode;
 }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const device = useDeviceWorkspace();
+  const userId = device.workspace?.ownerId ?? null;
   return (
     <ProjectWorkspaceBranchStateProvider
       key={`${projectId}/${userId}`}
       projectId={projectId}
       userId={userId}
-      sessionPending={session.isPending}
+      sessionPending={!device.ready}
     >
       {children}
     </ProjectWorkspaceBranchStateProvider>

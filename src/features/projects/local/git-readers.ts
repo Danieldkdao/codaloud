@@ -16,9 +16,9 @@ const nativeHistorySchema = z.object({
 });
 export type NativeHistorySchema = z.infer<typeof nativeHistorySchema>;
 
-export const readLocalBranches = async (projectId: string, input: unknown) => {
+export const readLocalBranches = async (projectId: string, input: unknown, source: "local" | "remote" = "local") => {
   const params = projectBranchParamsSchema.parse(input);
-  const data = projectBranchesSchema.parse(await executeWorkspace(projectId, "git/branches"));
+  const data = projectBranchesSchema.parse(await executeWorkspace(projectId, "git/branches", { source }));
   const position = params.cursor ? readProjectBranchCursor(params.cursor) : null;
   const matches = data.branches.filter((branch) => branch.toLowerCase().includes(params.search) && (!position || branch > position.after)).sort();
   const branches = matches.slice(0, params.pageSize);

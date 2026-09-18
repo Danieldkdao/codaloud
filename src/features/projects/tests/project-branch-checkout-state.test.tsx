@@ -7,7 +7,7 @@ import type { ProjectBranchCheckoutSchema } from "../actions/branch-schemas";
 
 const scope = vi.hoisted(() => ({ projectId: "project-one", userId: "user-one" }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: scope.projectId }) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, data: { user: { id: scope.userId } } }) }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({ useDeviceWorkspace: () => ({ ready: true, workspace: { ownerId: scope.userId } }) }));
 let current: ReturnType<typeof useProjectWorkspaceBranch>;
 let root: Root;
 let frames: (string | null)[];

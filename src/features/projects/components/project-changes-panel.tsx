@@ -3,7 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, ScrollView, View } from "react
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import type { ProjectRepositoryChangeSchema } from "../actions/change-schemas";
 import { useProjectChanges } from "../hooks/use-project-changes";
 import { useProjectWorkspaceDockHeight } from "../hooks/use-project-workspace-dock-height";
@@ -21,7 +21,7 @@ type ProjectChangesPanelProps = {
 
 export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }: ProjectChangesPanelProps) => {
   const query = useProjectChanges(projectId, { enabled: active });
-  const session = useAuthSession();
+  const device = useDeviceWorkspace();
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const { setCommitSelection } = useProjectWorkspaceChanges();
   const insets = useSafeAreaInsets();
@@ -30,7 +30,7 @@ export const ProjectChangesPanel = ({ projectId, active = true, onViewFullDiff }
   const changes = data?.changes ?? [];
   // The history branch picker does not switch the checkout. Scope drafts and
   // selection to the actual snapshot and account instead of that picker.
-  const scope = JSON.stringify([session.data?.user.id, projectId, data?.currentBranch, data?.headSha]);
+  const scope = JSON.stringify([device.workspace?.ownerId, projectId, data?.currentBranch, data?.headSha]);
   const [selection, setSelection] = useState<{ scope: string; paths: string[] }>({ scope, paths: [] });
   const availablePaths = useMemo(() => new Set(changes.map((change) => change.path)), [changes]);
   const paths = useMemo(() => selection.scope === scope ? selection.paths.filter((path) => availablePaths.has(path)) : [], [selection, scope, availablePaths]);

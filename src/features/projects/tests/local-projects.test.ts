@@ -1,12 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { localWorkspaceMigration } from "@/db/local/migrations";
 import * as schema from "@/db/local/project";
 import { createLocalProjectStore } from "../local/projects";
-
-vi.mock("expo-sqlite", () => ({}));
 
 const owner = "00000000-0000-4000-8000-000000000001";
 const otherOwner = "00000000-0000-4000-8000-000000000002";
@@ -72,6 +70,15 @@ describe("local project storage", () => {
     store.insert(project(11, "Another project"));
     expect(store.list(owner, { search: "%_rEaDy" }).projects.map((item) => item.name))
       .toEqual(["100%_Ready"]);
+  });
+
+  it("searches Unicode names after creation and renaming", () => {
+    const original = project(10, "ÉCOLE");
+    store.insert(original);
+    expect(store.list(owner, { search: "école" }).projects).toHaveLength(1);
+    store.rename(owner, original.id, "ÜBER");
+    expect(store.list(owner, { search: "über" }).projects).toHaveLength(1);
+    expect(store.list(owner, { search: "école" }).projects).toHaveLength(0);
   });
 
   it("keeps imported IDs and timestamps and refuses duplicate inserts", () => {

@@ -5,6 +5,7 @@ CREATE TABLE projects (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL,
   name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  search_name TEXT NOT NULL,
   sandbox_id TEXT,
   setup_status TEXT NOT NULL CHECK (setup_status IN ('pending', 'running', 'ready', 'failed')),
   setup_error TEXT,

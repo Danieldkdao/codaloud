@@ -8,6 +8,7 @@ export const ProjectTable = sqliteTable("projects", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
+  searchName: text("search_name").notNull(),
   sandboxId: text("sandbox_id"),
   setupStatus: text("setup_status", { enum: projectSetupStatuses }).notNull(),
   setupError: text("setup_error"),

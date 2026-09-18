@@ -12,6 +12,14 @@ import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-pr
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 
+vi.mock("react-native-reanimated", () => {
+  const transition = { duration: () => transition, reduceMotion: () => transition };
+  return {
+    default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+    LinearTransition: transition,
+    ReduceMotion: { System: "system" },
+  };
+});
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 
 const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));

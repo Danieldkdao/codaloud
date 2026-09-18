@@ -1,4 +1,13 @@
-import { ActivityIndicator, Pressable, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  View,
+  type ViewProps,
+} from "react-native";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
@@ -11,13 +20,19 @@ import {
 } from "@/features/projects/lib/formatters";
 import type { SaveSnapshot } from "../lib/project-file-save-document";
 
+const badgeTransition = LinearTransition.duration(240).reduceMotion(
+  ReduceMotion.System,
+);
+
 export const ProjectCodeStatus = ({
   status: save,
   analysis,
   onShowProblems,
   onRetry,
   readError = false,
+  onLayout,
 }: {
+  onLayout?: ViewProps["onLayout"];
   readError?: boolean;
   status: SaveSnapshot;
   analysis?: CodeEditorAnalysis;
@@ -29,7 +44,11 @@ export const ProjectCodeStatus = ({
   const canRetry = status === "error";
   const IndicatorContainer = canRetry ? Pressable : View;
   return (
-    <View className="min-h-12 flex-row items-center gap-2 rounded-full border border-border bg-secondary px-3">
+    <Animated.View
+      layout={badgeTransition}
+      onLayout={onLayout}
+      className="min-h-12 flex-row items-center gap-2 overflow-hidden rounded-full border border-border bg-secondary px-3"
+    >
       {analysis && analysis.status !== "unsupported" ? (
         <Pressable
           accessibilityRole="button"
@@ -60,7 +79,8 @@ export const ProjectCodeStatus = ({
                 ? presentation.className
                 : "text-muted-foreground";
               return (
-                <View
+                <Animated.View
+                  layout={badgeTransition}
                   key={severity}
                   className="flex-row items-center gap-1"
                   accessible={false}
@@ -76,35 +96,37 @@ export const ProjectCodeStatus = ({
                       ? "·"
                       : formatCodeDiagnosticCount(count)}
                   </PText>
-                </View>
+                </Animated.View>
               );
             })
           )}
         </Pressable>
       ) : null}
-      <IndicatorContainer
-        accessible
-        accessibilityRole={canRetry ? "button" : "image"}
-        accessibilityLabel={
-          readError ? "Couldn't load file. Tap to retry." : presentation.label
-        }
-        accessibilityHint={canRetry ? save.message : undefined}
-        accessibilityState={{ busy: presentation.busy }}
-        accessibilityLiveRegion="polite"
-        onPress={canRetry ? onRetry : undefined}
-        className="min-h-11 min-w-11 items-center justify-center"
-      >
-        {presentation.busy ? (
-          <ActivityIndicator size="small" className="text-muted-foreground" />
-        ) : (
-          <Icon
-            family="MaterialCommunityIcons"
-            name={presentation.icon}
-            size={22}
-            className={presentation.className}
-          />
-        )}
-      </IndicatorContainer>
-    </View>
+      <Animated.View layout={badgeTransition}>
+        <IndicatorContainer
+          accessible
+          accessibilityRole={canRetry ? "button" : "image"}
+          accessibilityLabel={
+            readError ? "Couldn't load file. Tap to retry." : presentation.label
+          }
+          accessibilityHint={canRetry ? save.message : undefined}
+          accessibilityState={{ busy: presentation.busy }}
+          accessibilityLiveRegion="polite"
+          onPress={canRetry ? onRetry : undefined}
+          className="min-h-11 min-w-11 items-center justify-center"
+        >
+          {presentation.busy ? (
+            <ActivityIndicator size="small" className="text-muted-foreground" />
+          ) : (
+            <Icon
+              family="MaterialCommunityIcons"
+              name={presentation.icon}
+              size={22}
+              className={presentation.className}
+            />
+          )}
+        </IndicatorContainer>
+      </Animated.View>
+    </Animated.View>
   );
 };

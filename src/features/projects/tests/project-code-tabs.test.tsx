@@ -6,6 +6,14 @@ import { ProjectCodeTabs } from "../components/project-code-tabs";
 import { ProjectCodeStatus } from "../components/project-code-status";
 import { formatProjectEditorTab } from "../lib/formatters";
 
+vi.mock("react-native-reanimated", () => {
+  const transition = { duration: () => transition, reduceMotion: () => transition };
+  return {
+    default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+    LinearTransition: transition,
+    ReduceMotion: { System: "system" },
+  };
+});
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),

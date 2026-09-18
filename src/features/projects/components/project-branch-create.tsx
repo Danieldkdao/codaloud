@@ -38,13 +38,6 @@ export const ProjectBranchCreate = ({
   };
   return (
     <View className="gap-2 border-b border-border px-5 py-3">
-      <PText className="text-base text-muted-foreground">
-        {exists
-          ? "This local branch already exists."
-          : !input.success
-            ? input.error.issues[0]?.message
-            : "Create and switch to a new branch from the current branch."}
-      </PText>
       <Button
         accessibilityLabel="Create branch"
         disabled={disabled}

@@ -203,33 +203,28 @@ const CodeScreen = () => {
           style={{ bottom: dockHeight + 8 }}
           pointerEvents="box-none"
         >
-          <View
+          <ProjectCodeStatus
             onLayout={({ nativeEvent }) =>
               setBadgeHeight(nativeEvent.layout.height)
             }
-          >
-            <ProjectCodeStatus
-              readError={!documents.activeKey && query.isError}
-              status={
-                !documents.activeKey && query.isError && !query.isFetching
-                  ? { status: "error", message: query.error.message }
-                  : isReady
-                    ? documents.status
-                    : { status: "loading" }
-              }
-              analysis={documents.activeKey ? activeAnalysis : undefined}
-              onRetry={
-                documents.activeKey
-                  ? documents.retry
-                  : () => {
-                      void query.refetch();
-                    }
-              }
-              onShowProblems={() =>
-                setAnalysisPanelRequest((value) => value + 1)
-              }
-            />
-          </View>
+            readError={!documents.activeKey && query.isError}
+            status={
+              !documents.activeKey && query.isError && !query.isFetching
+                ? { status: "error", message: query.error.message }
+                : isReady
+                  ? documents.status
+                  : { status: "loading" }
+            }
+            analysis={documents.activeKey ? activeAnalysis : undefined}
+            onRetry={
+              documents.activeKey
+                ? documents.retry
+                : () => {
+                    void query.refetch();
+                  }
+            }
+            onShowProblems={() => setAnalysisPanelRequest((value) => value + 1)}
+          />
         </View>
       ) : null}
     </View>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ProjectOpenFilesState } from "../types";
 import { openWorkspaceFile, removeWorkspaceFiles, renameWorkspaceFiles } from "../lib/workspace-files";
 import { isProjectFilePathWithin } from "../lib/files";
@@ -13,10 +13,7 @@ type ProjectWorkspaceCurrentFileState = {
   getFileVersion: (path: string) => number;
   refreshFile: (path: string) => void;
   refreshFiles: () => void;
-  // Existing single-file consumers are migrated in the next integration chunk.
-  filePath: string | null;
-  version: number;
-  setFilePath: Dispatch<SetStateAction<string | null>>;
+
 };
 
 const ProjectWorkspaceCurrentFileContext = createContext<ProjectWorkspaceCurrentFileState | null>(null);
@@ -38,14 +35,6 @@ const WorkspaceFiles = ({ children }: { children: ReactNode }) => {
       getFileVersion: (path) => state.versions[path] ?? 0,
       refreshFile: (path) => refresh([path]),
       refreshFiles: () => setState((current) => ({ ...current, versions: { ...current.versions, ...Object.fromEntries(current.openFilePaths.map((path) => [path, (current.versions[path] ?? 0) + 1])) } })),
-      filePath: state.activeFilePath,
-      version: state.activeFilePath ? state.versions[state.activeFilePath] ?? 0 : 0,
-      setFilePath: (next) => setState((current) => {
-        const path = typeof next === "function" ? next(current.activeFilePath) : next;
-        return path === null
-          ? removeWorkspaceFiles(current, current.activeFilePath ? [current.activeFilePath] : [])
-          : openWorkspaceFile(current, path);
-      }),
     }}>
       {children}
     </ProjectWorkspaceCurrentFileContext>

@@ -22,6 +22,8 @@ vi.mock("@/features/projects/hooks/use-project-file-search", () => ({ useProject
   isPending: false, isFetching: false, isFetchingNextPage: false, fetchStatus: "idle", error: null,
 }) }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({
+  invalidateFiles: vi.fn(),
+  withSavedFiles: async (action: () => Promise<unknown>) => action(),
   renameFiles: async (_previousPath: string, _nextPath: string, rename: () => Promise<unknown>) => rename(),
 }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => fileCreation }));

@@ -247,9 +247,13 @@ const FilesScreen = () => {
               "Deleting file…",
               async (assertCurrent) => {
                 assertCurrent();
-                const deletedFile = await deletion.mutateAsync(input);
-                assertCurrent();
-                currentFile.removeFiles(deletedFile.path);
+                await saves.withSavedFiles(async () => {
+                  assertCurrent();
+                  const deletedFile = await deletion.mutateAsync(input);
+                  assertCurrent();
+                  saves.invalidateFiles(deletedFile.path);
+                  currentFile.removeFiles(deletedFile.path);
+                });
                 showSuccess(
                   formatProjectFileKind(input.kind).deleteSuccessMessage,
                 );

@@ -80,7 +80,7 @@ const render = async () => {
   await flush();
 };
 const select = async (path: string) => {
-  act(() => selection.setFilePath(path));
+  act(() => selection.openFile(path));
   await flush();
 };
 const result = (path: string, isDir = false) => ({ error: false, message: "Done.", data: { name: path.split("/").at(-1)!, path, isDir, size: 0 } });
@@ -117,7 +117,7 @@ it("waits for pending and subsequently queued edits before renaming", async () =
   expect(mocks.update).not.toHaveBeenCalled();
   await act(async () => { finishSecond(); await pending; });
   expect(mocks.update).toHaveBeenCalledOnce();
-  expect(selection.filePath).toBe("new.ts");
+  expect(selection.activeFilePath).toBe("new.ts");
 });
 
 it("keeps the path and draft when a save fails before rename", async () => {
@@ -129,7 +129,7 @@ it("keeps the path and draft when a save fails before rename", async () => {
     await expect(fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" })).rejects.toThrow("Unable to save draft.");
   });
   expect(mocks.update).not.toHaveBeenCalled();
-  expect(selection.filePath).toBe("old.ts");
+  expect(selection.activeFilePath).toBe("old.ts");
   await select("other.ts");
   await select("old.ts");
   expect(container.querySelector("textarea")?.value).toBe("draft");
@@ -151,7 +151,7 @@ it("waits for every dirty descendant before renaming a folder", async () => {
   await act(async () => finishes.get("src/second.ts")!());
   expect(mocks.update).not.toHaveBeenCalled();
   await act(async () => { finishes.get("src/first.ts")!(); await pending; });
-  expect(selection.filePath).toBe("lib/second.ts");
+  expect(selection.activeFilePath).toBe("lib/second.ts");
   expect(mocks.update).toHaveBeenCalledOnce();
 });
 
@@ -182,7 +182,7 @@ it("retargets drafts opened while a folder rename is in progress", async () => {
   expect(mocks.save).not.toHaveBeenCalled();
   await act(async () => { finish(result("lib", true)); await pending; });
   await flush();
-  expect(selection.filePath).toBe("lib/second.ts");
+  expect(selection.activeFilePath).toBe("lib/second.ts");
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "lib/second.ts", content: "new draft", expectedContentHash: createHash("sha256").update("server contents").digest("hex") });
   expect(container.querySelector("textarea")?.value).toBe("new draft");
 });
@@ -234,7 +234,7 @@ it("resumes late edits at the original path after a failed rename", async () => 
     finish({ error: true, message: "Rename failed." });
     await expect(pending).rejects.toThrow("Rename failed.");
   });
-  expect(selection.filePath).toBe("old.ts");
+  expect(selection.activeFilePath).toBe("old.ts");
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "old.ts", content: "late draft", expectedContentHash: createHash("sha256").update("server contents").digest("hex") });
 });
 
@@ -248,7 +248,7 @@ it.each([
   mocks.update.mockResolvedValueOnce(result(destination, kind === "folder"));
   await act(async () => { await fileList.onUpdate({ parentPath: "", previousName: source, name: destination, kind }); });
   await flush();
-  expect(selection.filePath).toBe(expected);
+  expect(selection.activeFilePath).toBe(expected);
   expect(container.querySelector("textarea")?.value).toBe("server contents");
   const segments = expected.split("/");
   expect(container.textContent).toContain(segments.pop());
@@ -264,7 +264,7 @@ it.each([
   mocks.delete.mockResolvedValueOnce(result(deleted, kind === "folder"));
   await act(async () => { await fileList.onDelete({ parentPath: "", name: deleted, kind }); });
   await flush();
-  expect(selection.filePath).toBe(expected);
+  expect(selection.activeFilePath).toBe(expected);
   if (expected === null) {
     // The WebView remains mounted but hidden when the final tab closes.
     expect(container.textContent).toContain("No file selected");
@@ -282,10 +282,10 @@ it.each(["rename", "delete"])("preserves a newer selection while a %s is pending
       ? fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" })
       : fileList.onDelete({ parentPath: "", name: "old.ts", kind: "file" });
   });
-  expect(selection.filePath).toBe("old.ts");
+  expect(selection.activeFilePath).toBe("old.ts");
   await select("other.ts");
   await act(async () => { finish(result(operation === "rename" ? "new.ts" : "old.ts")); await pending; });
-  expect(selection.filePath).toBe("other.ts");
+  expect(selection.activeFilePath).toBe("other.ts");
 });
 
 it.each(["rename", "delete"])("updates the latest affected descendant while a folder %s is pending", async (operation) => {
@@ -301,7 +301,7 @@ it.each(["rename", "delete"])("updates the latest affected descendant while a fo
   await select("src/second.ts");
   await act(async () => { finish(result(operation === "rename" ? "lib" : "src", true)); await pending; });
   await flush();
-  expect(selection.filePath).toBe(operation === "rename" ? "lib/second.ts" : null);
+  expect(selection.activeFilePath).toBe(operation === "rename" ? "lib/second.ts" : null);
 });
 
 it.each(["rename", "delete"])("preserves selection and local edits after a failed %s", async (operation) => {
@@ -312,7 +312,7 @@ it.each(["rename", "delete"])("preserves selection and local edits after a faile
     if (operation === "rename") await expect(fileList.onUpdate({ parentPath: "", previousName: "old.ts", name: "new.ts", kind: "file" })).rejects.toThrow("Failed.");
     else await fileList.onDelete({ parentPath: "", name: "old.ts", kind: "file" });
   });
-  expect(selection.filePath).toBe("old.ts");
+  expect(selection.activeFilePath).toBe("old.ts");
   expect(container.querySelector("textarea")?.value).toBe("unsaved edits");
 });
 
@@ -326,7 +326,7 @@ it("does not let an earlier project's completion change the new project's select
   await render();
   await select("old.ts");
   await act(async () => { finish(result("old.ts")); await pending; });
-  expect(selection.filePath).toBe("old.ts");
+  expect(selection.activeFilePath).toBe("old.ts");
   expect(container.querySelector("textarea")?.value).toBe("server contents");
 });
 
@@ -353,7 +353,7 @@ it("refreshes an actively selected path recreated after an external deletion", a
   mocks.readContent.mockImplementation(async (_project: string, path: string) => ({ path, content: "", size: 0 }));
   await act(async () => { await createRow.onCreate({ parentPath: "", name: "old.ts", kind: "file" }); });
   await flush();
-  expect(selection.filePath).toBe("old.ts");
+  expect(selection.activeFilePath).toBe("old.ts");
   expect(container.querySelector("textarea")?.value).toBe("");
 });
 
@@ -369,4 +369,21 @@ it("keeps all tabs in sync when an inactive folder is renamed then deleted", asy
   mocks.delete.mockResolvedValueOnce(result("lib", true));
   await act(async () => { await fileList.onDelete({ parentPath: "", name: "lib", kind: "folder" }); });
   expect(selection.openFilePaths).toEqual(["other.ts"]);
+});
+
+
+it("drains edits before deletion and ignores late edits after confirmed deletion", async () => {
+  await select("old.ts");
+  const lateChange = mocks.change!;
+  await act(async () => lateChange("draft"));
+  let finish!: () => void;
+  mocks.save.mockImplementationOnce((_project, input) => new Promise((resolve) => { finish = () => resolve({ error: false, message: "Saved", data: { path: input.path, size: 5, contentHash: createHash("sha256").update(input.content).digest("hex") } }); }));
+  mocks.delete.mockResolvedValueOnce(result("old.ts"));
+  let deletion!: Promise<void>;
+  await act(async () => { deletion = fileList.onDelete({ parentPath: "", name: "old.ts", kind: "file" }); });
+  expect(mocks.delete).not.toHaveBeenCalled();
+  await act(async () => { finish(); await deletion; });
+  expect(selection.openFilePaths).toEqual([]);
+  await act(async () => lateChange("late"));
+  expect(mocks.save).toHaveBeenCalledOnce();
 });

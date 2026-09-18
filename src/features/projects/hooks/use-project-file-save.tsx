@@ -22,6 +22,7 @@ type SaveDocument = ReturnType<typeof createFileSaveDocument>;
 type FileSaveRegistryState = {
   getDocument: (path: string, version: number, content: string) => SaveDocument;
   flushPendingSaves: () => Promise<void>;
+  invalidateFiles: (root: string) => void;
   withSavedFiles: <T>(action: () => Promise<T>) => Promise<T>;
   renameFiles: <T>(
     previousPath: string,
@@ -279,7 +280,16 @@ const FileSaveRegistry = ({
   }, [documents]);
   return (
     <RegistryContext
-      value={{ getDocument, flushPendingSaves, withSavedFiles, renameFiles }}
+      value={{ getDocument, flushPendingSaves, withSavedFiles, renameFiles,
+        invalidateFiles: (root) => {
+          for (const [path, entry] of documents) {
+            if (!isProjectFilePathWithin(path, root)) continue;
+            entry.document.invalidate();
+            protectedDrafts.delete(entry.document);
+            documents.delete(path);
+          }
+        },
+      }}
     >
       {children}
     </RegistryContext>

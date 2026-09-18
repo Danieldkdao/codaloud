@@ -622,3 +622,12 @@ it("does not replace a local draft when server content refreshes", async () => {
   expect(editorDocuments.editor!.key).toBe(first);
   expect(registry.getDocument("one.ts", 0, "external change").getContent()).toBe("local draft");
 });
+
+
+it("invalidates deleted documents so delayed edits cannot recreate them", async () => {
+  await renderEditor("one.ts");
+  const key = editorDocuments.editor!.key;
+  await act(async () => { registry.invalidateFiles("one.ts"); await editorDocuments.onChange("late edit", key); });
+  await tick();
+  expect(mocks.save).not.toHaveBeenCalled();
+});

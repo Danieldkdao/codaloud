@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import { z } from "zod";
 
 import { GITHUB_CURSOR_MAX_LENGTH, GITHUB_SEARCH_BATCH_SIZE } from "../constants";
@@ -35,7 +34,9 @@ export const readRepositoryCursor = (
       throw new GitHubRepositoryCursorError();
     }
     const position = repositoryCursorSchema.parse(
-      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(
+        Uint8Array.from(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")), (character) => character.charCodeAt(0)),
+      )),
     );
     if (
       position.search !== search ||
@@ -54,4 +55,5 @@ export const readRepositoryCursor = (
 // This is a validated position, not an authorization token. Every request still
 // resolves current GitHub credentials; no repository data or credentials live here.
 export const writeRepositoryCursor = (position: RepositoryCursorSchema) =>
-  Buffer.from(JSON.stringify(position)).toString("base64url");
+  btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(position))))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

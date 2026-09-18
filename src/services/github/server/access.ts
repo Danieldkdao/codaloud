@@ -5,12 +5,8 @@ import { RequestError } from "octokit";
 import { auth } from "@/lib/auth/auth";
 import type { ApiResponse } from "@/lib/types";
 
-export class GitHubAccessError extends Error {
-  constructor(message: string, readonly code?: "GITHUB_RECONNECT_REQUIRED") {
-    super(message);
-    this.name = "GitHubAccessError";
-  }
-}
+import { GitHubAccessError } from "../access-error";
+export { GitHubAccessError } from "../access-error";
 
 const resolveGitHubCredentials = async (
   body: { accountId: string; userId?: string },

@@ -5,7 +5,7 @@ import type {
 } from "@/services/github/types";
 import { Octokit } from "octokit";
 import { gitHubRepositoryRequestSchema, gitHubRepositorySchema } from "@/services/github/schemas";
-import { GitHubAccessError } from "./access";
+import { GitHubAccessError } from "../access-error";
 import { paginateGitHubRepositories } from "./repository-pagination";
 import { paginateGitHubSearch } from "./search-pagination";
 

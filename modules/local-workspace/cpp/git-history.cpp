@@ -116,6 +116,6 @@ Json gitReadOperation(git_repository *repo, const std::string &operation, const 
   if (operation == "git/changes") return gitChanges(repo);
   if (operation == "git/history") return history(repo, args);
   if (operation == "git/commit-details") return commitDetails(repo, args);
-  throw WorkspaceError("UNKNOWN_OPERATION", "Unknown local Git operation.");
+  return gitMutation(repo, operation, args);
 }
 }

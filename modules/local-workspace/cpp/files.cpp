@@ -27,6 +27,39 @@ std::string sha256(const std::string &value) {
   return result.str();
 }
 
+std::string sha256File(const fs::path &path) {
+  const int descriptor = open(path.c_str(), O_RDONLY | O_NOFOLLOW);
+  if (descriptor < 0) throw WorkspaceError("FILE_UNAVAILABLE", "Unable to verify a changed file.");
+#ifdef __APPLE__
+  CC_SHA256_CTX context;
+  CC_SHA256_Init(&context);
+#else
+  mbedtls_sha256_context context;
+  mbedtls_sha256_init(&context);
+  mbedtls_sha256_starts(&context, 0);
+#endif
+  unsigned char buffer[8192], digest[32];
+  ssize_t count;
+  while ((count = read(descriptor, buffer, sizeof(buffer))) > 0) {
+#ifdef __APPLE__
+    CC_SHA256_Update(&context, buffer, static_cast<CC_LONG>(count));
+#else
+    mbedtls_sha256_update(&context, buffer, count);
+#endif
+  }
+  close(descriptor);
+#ifdef __APPLE__
+  CC_SHA256_Final(digest, &context);
+#else
+  mbedtls_sha256_finish(&context, digest);
+  mbedtls_sha256_free(&context);
+#endif
+  if (count < 0) throw WorkspaceError("FILE_UNAVAILABLE", "Unable to verify a changed file.");
+  std::ostringstream result;
+  for (auto byte : digest) result << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned int>(byte);
+  return result.str();
+}
+
 std::string readText(const fs::path &path) {
   if (!fs::is_regular_file(fs::symlink_status(path))) throw WorkspaceError("UNSUPPORTED_FILE", "Choose a regular text file.");
   if (fs::file_size(path) > editorLimit) throw WorkspaceError("FILE_TOO_LARGE", "This file exceeds the editor size limit.");

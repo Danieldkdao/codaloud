@@ -35,6 +35,8 @@ void requireMutableBranch(git_repository *repo);
 void createSignature(Signature &signature, const Json &args);
 Json gitOperation(const fs::path &root, const std::string &operation, const Json &args);
 Json gitReadOperation(git_repository *repo, const std::string &operation, const Json &args);
+Json gitMutation(git_repository *repo, const std::string &operation, const Json &args);
+bool hasChanges(git_repository *repo);
 Json gitChanges(git_repository *repo);
 Json commitMetadata(git_commit *commit, bool detailed = false);
 Json diffPatch(git_diff *diff, size_t index);

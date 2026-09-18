@@ -8,7 +8,7 @@ vi.mock("@/services/local-workspace/execute", () => ({ executeWorkspace: mocks.e
 vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000001" }));
 vi.mock("@/services/github/credentials", () => ({ getGitHubAccessToken: mocks.token }));
 vi.mock("@/services/github/server/repositories", () => ({ verifyGitHubRepositoryAccess: mocks.repository }));
-import { createProjectAction, deleteProjectAction, readProjectAction, readUserProjectsAction } from "../actions/actions";
+import { createProjectAction, deleteProjectAction, readProjectAction, readUserProjectsAction, updateProjectAction } from "../actions/actions";
 const id = "00000000-0000-4000-8000-000000000001";
 beforeEach(() => { vi.resetAllMocks(); mocks.execute.mockResolvedValue(true); });
 it("creates a ready local project without credentials or network", async () => {
@@ -43,4 +43,22 @@ it("reads empty local collections and returns null on storage errors", async () 
   expect(await readUserProjectsAction()).toEqual({ projects: [], nextCursor: null });
   mocks.read.mockImplementation(() => { throw new Error("unavailable"); });
   expect(await readProjectAction(id)).toBeNull();
+});
+
+it("rejects invalid identifiers before storage access", async () => {
+  expect(await readProjectAction("../project")).toBeNull();
+  expect(await deleteProjectAction("bad")).toMatchObject({ error: true });
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+it("renames only the current device owner's project", async () => {
+  mocks.rename.mockReturnValue({ id });
+  expect(await updateProjectAction(id, { name: "Renamed" })).toMatchObject({ error: false });
+  expect(mocks.rename).toHaveBeenCalledWith("owner", id, "Renamed");
+});
+it("clones the verified repository URL with ephemeral credentials", async () => {
+  mocks.token.mockResolvedValue("ephemeral-token");
+  mocks.repository.mockResolvedValue({ cloneUrl: "https://github.com/example/repo.git" });
+  expect(await createProjectAction({ source: "github", name: "Repo", repositoryId: "42" })).toMatchObject({ error: false });
+  expect(mocks.execute).toHaveBeenCalledWith(id, "clone", { url: "https://github.com/example/repo.git", accessToken: "ephemeral-token" });
+  expect(mocks.insert.mock.calls[0][0]).not.toHaveProperty("accessToken");
 });

@@ -7,6 +7,10 @@ import FilesScreen from "@/app/projects/[projectId]/files";
 import { ProjectWorkspaceFileSearchProvider, useProjectWorkspaceFileSearch } from "../hooks/use-project-workspace-file-search";
 import type { ProjectFileSearchEntrySchema } from "../actions/file-search-schemas";
 
+vi.mock("../hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => ({ isWorkspaceBusy: false }) }));
+
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+
 const mocks = vi.hoisted(() => ({ read: vi.fn(), flushSaves: vi.fn(), browse: vi.fn(), navigate: vi.fn(), push: vi.fn(), select: vi.fn() }));
 vi.mock("../components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => <>{children}</> }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";

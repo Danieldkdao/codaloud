@@ -49,6 +49,35 @@ it("returns the confirmed commit after validation and staging", async () => {
   } });
 });
 
+it("accepts selections larger than the single-command Git body limit", async () => {
+  const paths = Array.from({ length: 2000 }, (_, index) => `src/features/selected-files/changed-file-${index}.ts`);
+  const body = JSON.stringify({ message: "Commit selected files", paths });
+  expect(Buffer.byteLength(body)).toBeGreaterThan(64 * 1024);
+  const input = new Request(commitRequest().url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  expect((await POST(input, { projectId })).status).toBe(200);
+  expect(mocks.commit).toHaveBeenCalledWith(input.headers, projectId, { message: "Commit selected files", paths }, input.signal);
+});
+
+it("rejects mutation query flags and invalid output without repeating a commit", async () => {
+  const input = commitRequest();
+  const ambiguous = new Request(`${input.url}?force=true`, input);
+  expect((await POST(ambiguous, { projectId })).status).toBe(400);
+  expect(mocks.commit).not.toHaveBeenCalled();
+  mocks.commit.mockResolvedValue({ hash: "not-a-commit", secret: "hidden" });
+  const response = await POST(commitRequest(), { projectId });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toMatchObject({ code: "COMMIT_OUTCOME_UNKNOWN" });
+  expect(mocks.commit).toHaveBeenCalledOnce();
+});
+
+it.each(["source=local&source=remote&branch=main", "source=local&branch=main&page=2", "source=local&branch=main&projectId=other"])("rejects ambiguous or unsupported history query: %s", async (query) => {
+  const response = await GET(new Request(`${request().url.split("?")[0]}?${query}`), { projectId });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "INVALID_COMMIT_PARAMS" });
+  expect(mocks.local).not.toHaveBeenCalled();
+  expect(mocks.remote).not.toHaveBeenCalled();
+});
+
 it("does not validate workspace files when the route session is missing", async () => {
   mocks.user.mockResolvedValue({ userId: null });
   expect((await POST(commitRequest(), { projectId })).status).toBe(401);

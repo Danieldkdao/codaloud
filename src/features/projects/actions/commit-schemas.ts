@@ -1,19 +1,34 @@
 import { z } from "zod";
 import { PAGE_SIZE } from "@/lib/constants";
-import { projectBranchNameSchema, projectBranchSources } from "./branch-schemas";
+import {
+  projectBranchNameSchema,
+  projectBranchSources,
+} from "./branch-schemas";
 
 export const commitSources = projectBranchSources;
 export type CommitSource = (typeof commitSources)[number];
 export const commitSourceSchema = z.enum(commitSources);
 export type CommitSourceSchema = z.infer<typeof commitSourceSchema>;
 
-export const commitHashSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+export const commitHashSchema = z
+  .string()
+  .regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export type CommitHashSchema = z.infer<typeof commitHashSchema>;
 
 export const projectCommitQuerySchema = z.strictObject({
   branch: projectBranchNameSchema,
-  search: z.string().trim().max(200).transform((value) => value.toLowerCase()).default(""),
-  author: z.string().trim().max(200).transform((value) => value.toLowerCase()).default(""),
+  search: z
+    .string()
+    .trim()
+    .max(200)
+    .transform((value) => value.toLowerCase())
+    .default(""),
+  author: z
+    .string()
+    .trim()
+    .max(200)
+    .transform((value) => value.toLowerCase())
+    .default(""),
   pageSize: z.number().int().min(1).max(100).default(PAGE_SIZE),
   cursor: z.string().min(1).max(4096).nullish(),
 });
@@ -45,4 +60,6 @@ export const readProjectCommitsResponseSchema = z.object({
   message: z.string(),
   data: projectCommitPageSchema,
 });
-export type ReadProjectCommitsResponseSchema = z.infer<typeof readProjectCommitsResponseSchema>;
+export type ReadProjectCommitsResponseSchema = z.infer<
+  typeof readProjectCommitsResponseSchema
+>;

@@ -42,6 +42,13 @@ it("rejects missing sessions and invalid IDs before reading changes", async () =
   expect(mocks.read).not.toHaveBeenCalled();
 });
 
+it.each(["branch=other", "page=1", "sandboxId=other", "projectId=other"])("rejects unsupported changes query parameters: %s", async (query) => {
+  const response = await GET(new Request(`${request().url}?${query}`), { projectId });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "INVALID_GIT_INPUT" });
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+
 it.each([
   [404, "PROJECT_NOT_FOUND"], [409, "WORKSPACE_NOT_READY"],
   [409, "WORKSPACE_CHANGED"], [413, "CHANGES_TOO_LARGE"], [503, "WORKSPACE_RESTORING"],

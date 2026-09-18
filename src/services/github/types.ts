@@ -19,7 +19,10 @@ export type GitHubSearchPage<T> = {
 };
 
 export type GitHubSearchPaginationOptions<T> = {
-  loadBatch: (page: number, pageSize: number) => Promise<{
+  loadBatch: (
+    page: number,
+    pageSize: number,
+  ) => Promise<{
     items: T[];
     hasNextPage: boolean;
   }>;

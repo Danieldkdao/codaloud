@@ -2,6 +2,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { commitUserProject } from "../server/project-commit";
 import type { ProjectRepositoryChangeSchema, ProjectRepositoryChangesSchema } from "../actions/change-schemas";
 
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+
 const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), stage: vi.fn(), commit: vi.fn() }));
 vi.mock("@/services/daytona/commit-changes", () => ({ commitSandboxChanges: mocks.commit }));
 vi.mock("@/services/daytona/stage-changes", () => ({ stageSandboxChanges: mocks.stage }));

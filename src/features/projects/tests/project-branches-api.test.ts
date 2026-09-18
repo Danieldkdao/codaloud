@@ -212,11 +212,22 @@ it.each([
   expect(await response.json()).toMatchObject({ data: { branches: value.branches, currentBranch: value.current || null } });
 });
 
-it("ignores caller-supplied sandbox IDs and repository paths", async () => {
+it("rejects caller-supplied sandbox IDs and repository paths before access", async () => {
   const input = new Request(`${request().url}?sandboxId=other&path=/etc&repositoryId=other`);
-  await GET(input, { projectId });
-  expect(mocks.getSandbox).toHaveBeenCalledExactlyOnceWith("owned-sandbox");
-  expect(mocks.branches).toHaveBeenCalledExactlyOnceWith("/home/daytona/.codaloud/workspace");
+  const response = await GET(input, { projectId });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "INVALID_BRANCH_PARAMS" });
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.getSandbox).not.toHaveBeenCalled();
+  expect(mocks.branches).not.toHaveBeenCalled();
+});
+
+it.each(["search=main&search=feature", "page=2", "offset=20", "projectId=other"])("rejects ambiguous or unsupported branch queries: %s", async (query) => {
+  const response = await GET(new Request(`${request().url}?${query}`), { projectId });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "INVALID_BRANCH_PARAMS" });
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.fetch).not.toHaveBeenCalled();
 });
 
 it.each([null, {}, { branches: "main" }, { branches: [1] }, { branches: [""] }, { branches: [], current: 42 }])("does not return malformed provider data as success: %j", async (value) => {

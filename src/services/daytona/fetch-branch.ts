@@ -11,6 +11,7 @@ export type RemoteBranchFetchInput = {
 
 const fetchFailure = (code: string): SandboxFilesError => {
   switch (code) {
+    case "GIT_BUSY": return new SandboxFilesError(409, code, "Another Git operation is running. Wait and refresh before retrying.");
     case "REMOTE_BRANCH_NOT_FOUND":
       return new SandboxFilesError(404, code, "The remote branch no longer exists. Refresh the branch list and select another branch.");
     case "REMOTE_FETCH_AUTH_FAILED":

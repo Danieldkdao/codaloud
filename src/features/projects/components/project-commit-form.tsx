@@ -22,25 +22,31 @@ import { useProjectChanges } from "../hooks/use-project-changes";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 
-export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
+export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
   const [message, setMessage] = useState("");
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const { commitSelection } = useProjectWorkspaceChanges();
-  const { projectId, isCheckingOut } = useProjectWorkspaceBranch();
+  const {
+    projectId,
+    isCheckingOut,
+    isWorkspaceBusy,
+    assertWorkspaceCurrent,
+    runWorkspaceOperation,
+  } = useProjectWorkspaceBranch();
   const session = useAuthSession();
   const userId =
     !session.isPending && !session.error ? session.data?.user.id : undefined;
-  const { commit } = useProjectCommitHistory(projectId, { enabled: false });
+  const { gitCommit } = useProjectCommitHistory(projectId, { enabled: false });
   const { refetch } = useProjectChanges(projectId, { enabled: false });
-  const { flushPendingSaves } = useProjectFileSaveRegistry();
+  const { withSavedFiles } = useProjectFileSaveRegistry();
   const showSuccess = useSuccessFeedback();
   const blocked = useRef(false);
   useEffect(() => {
-    blocked.current = !visible || isCheckingOut || !userId;
-  }, [visible, isCheckingOut, userId]);
+    blocked.current = !enabled || isCheckingOut || !userId;
+  }, [enabled, isCheckingOut, userId]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -51,19 +57,16 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
     message,
     paths: commitSelection.paths,
   });
-  const busy = submitting || commit.isPending;
+  const busy = submitting || gitCommit.isPending;
   const canSubmit =
-    visible &&
+    enabled &&
     Boolean(userId) &&
-    !isCheckingOut &&
+    !isWorkspaceBusy &&
     commitSelection.isReady &&
     input.success &&
     !busy;
   const { width } = useWindowDimensions();
   const card = useThemeColor("card");
-  useEffect(() => {
-    if (!visible) setOpen(false);
-  }, [visible]);
   const submit = async () => {
     if (!canSubmit || !input.success || inFlight.current) return;
     // Capture the selection and close the same-tick gap before the button disables.
@@ -71,47 +74,58 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
     setSubmitting(true);
     let requestStarted = false;
     try {
-      await flushPendingSaves();
-      if (!mounted.current || blocked.current) return;
-      const refreshed = await refetch();
-      if (!mounted.current || blocked.current) return;
-      const fresh = refreshed.data;
-      if (refreshed.isError || !fresh)
-        throw new Error(
-          "Unable to refresh changes. Try again before committing.",
-        );
-      const freshScope = JSON.stringify([
-        userId,
-        projectId,
-        fresh.currentBranch,
-        fresh.headSha,
-      ]);
-      const available = new Set(
-        fresh.changes
-          .filter((change) => change.kind === "file")
-          .map((change) => change.path),
+      await runWorkspaceOperation("Committing changes…", (assertCurrent) =>
+        withSavedFiles(async () => {
+          assertCurrent();
+          if (!mounted.current || blocked.current) return;
+          const refreshed = await refetch();
+          assertCurrent();
+          if (!mounted.current || blocked.current) return;
+          const fresh = refreshed.data;
+          if (refreshed.isError || !fresh)
+            throw new Error(
+              "Unable to refresh changes. Try again before committing.",
+            );
+          const freshScope = JSON.stringify([
+            userId,
+            projectId,
+            fresh.currentBranch,
+            fresh.headSha,
+          ]);
+          const available = new Set(
+            fresh.changes
+              .filter((change) => change.kind === "file")
+              .map((change) => change.path),
+          );
+          if (
+            freshScope !== commitSelection.scope ||
+            fresh.isDetached ||
+            fresh.repositoryState === "not-initialized" ||
+            !fresh.currentBranch ||
+            fresh.changes.some((change) => change.isConflicted) ||
+            input.data.paths.some((path) => !available.has(path))
+          ) {
+            throw new Error(
+              "The checkout or selected changes changed. Review the selection before committing.",
+            );
+          }
+          requestStarted = true;
+          await gitCommit.mutateAsync(input.data);
+          assertCurrent();
+          commitSelection.clear();
+          if (mounted.current) {
+            setMessage("");
+            setOpen(false);
+          }
+          showSuccess("Selected changes committed.");
+        }),
       );
-      if (
-        freshScope !== commitSelection.scope ||
-        fresh.isDetached ||
-        fresh.repositoryState === "not-initialized" ||
-        !fresh.currentBranch ||
-        fresh.changes.some((change) => change.isConflicted) ||
-        input.data.paths.some((path) => !available.has(path))
-      ) {
-        throw new Error(
-          "The checkout or selected changes changed. Review the selection before committing.",
-        );
-      }
-      requestStarted = true;
-      await commit.mutateAsync(input.data);
-      commitSelection.clear();
-      if (mounted.current) {
-        setMessage("");
-        setOpen(false);
-      }
-      showSuccess("Selected changes committed.");
     } catch (error) {
+      try {
+        assertWorkspaceCurrent();
+      } catch {
+        return;
+      }
       // A successful commit can refresh HEAD and unmount this form before its
       // response arrives. Still surface an uncertain result after submission.
       if (mounted.current || requestStarted) {
@@ -129,32 +143,31 @@ export const ProjectCommitForm = ({ visible }: { visible: boolean }) => {
   };
   return (
     <>
-      {visible ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open commit form"
-          accessibilityHint="Opens the commit message form"
-          accessibilityState={{ expanded: open }}
-          onPress={() => setOpen(true)}
-          className="items-center justify-center rounded-full active:bg-secondary"
-          style={{ width: 48, height: 48 }}
-        >
-          <Icon
-            family="Feather"
-            name="git-commit"
-            size={22}
-            accessible={false}
-            className="text-foreground"
-          />
-        </Pressable>
-      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        disabled={isWorkspaceBusy}
+        accessibilityLabel="Open commit form"
+        accessibilityHint="Opens the commit message form"
+        accessibilityState={{ expanded: open, disabled: isWorkspaceBusy }}
+        onPress={() => setOpen(true)}
+        className="items-center justify-center rounded-full active:bg-secondary"
+        style={{ width: 48, height: 48 }}
+      >
+        <Icon
+          family="MaterialCommunityIcons"
+          name="source-commit"
+          size={28}
+          accessible={false}
+          className="text-foreground"
+        />
+      </Pressable>
       <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
         <KeyboardAvoidingView
           behavior={process.env.EXPO_OS === "android" ? "height" : undefined}
           style={{ width }}
         >
           <View
-            className="gap-3 bg-card px-5 pb-6 pt-4"
+            className="gap-3 px-5 pb-6 pt-4"
             accessibilityViewIsModal
             onAccessibilityEscape={() => setOpen(false)}
           >

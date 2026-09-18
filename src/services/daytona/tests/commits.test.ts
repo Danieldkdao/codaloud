@@ -8,6 +8,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readSandboxCommits } from "@/services/daytona/commits";
 
 const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn() }));
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/features/projects/server/projects", () => ({ confirmUserProjectOwnership: mocks.project }));
 vi.mock("@/data/env/server", () => ({ serverEnv: { DAYTONA_API_KEY: "test-key", COMMIT_CURSOR_SIGNING_SECRET: "test-secret-for-commit-cursors-123456" } }));

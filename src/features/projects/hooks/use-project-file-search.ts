@@ -1,6 +1,6 @@
+import { isValidIds } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { z } from "zod";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { readProjectFilesAction } from "../actions/file-actions";
 import {
@@ -49,12 +49,12 @@ export const useProjectFileSearch = (
     path,
     pageSize,
   });
-  const validProject = z.uuid().safeParse(projectId);
+  const validProject = !!projectId && isValidIds(projectId);
   const validationError = params.success
     ? null
     : (params.error.issues[0]?.message ?? "Invalid project file search or pagination.");
   const canSearch =
-    enabled && Boolean(userId) && validProject.success && params.success;
+    enabled && Boolean(userId) && validProject && params.success;
   const queryKey = useMemo(
     () => [
       "projects",
@@ -89,7 +89,7 @@ export const useProjectFileSearch = (
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch bypasses enabled, so validate again before sending a request.
       if (!userId) throw new Error("Sign in to search project files.");
-      if (!validProject.success) {
+      if (!projectId || !validProject) {
         throw new Error("Invalid project file search or pagination.");
       }
       if (!params.success) throw new Error(validationError!);
@@ -101,7 +101,7 @@ export const useProjectFileSearch = (
       if (signal.aborted) throw new Error("Search canceled.");
       let requestError: ProjectFileSearchRequestError | undefined;
       const result = await readProjectFilesAction(
-        validProject.data,
+        projectId,
         { ...params.data, cursor: pageParam ?? undefined },
         signal,
         undefined,

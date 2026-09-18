@@ -1,7 +1,8 @@
+import { sandboxGitLockRuntime } from "./git-lock-command";
 import { sandboxCommandInput } from "./create-command";
 
 // Commit the staged snapshot without rereading files that the editor may change.
-export const sandboxCommitChangesCommand = sandboxCommandInput + String.raw`
+export const sandboxCommitChangesCommand = sandboxCommandInput + sandboxGitLockRuntime + String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
@@ -112,7 +113,7 @@ const run = () => {
     if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
   }
 };
-try { process.stdout.write(JSON.stringify(run())); }
+try { process.stdout.write(JSON.stringify(withGitOperationLock(input.repositoryPath, run, "COMMIT_BUSY"))); }
 catch (error) {
   const known = ["WORKSPACE_CHANGED", "COMMIT_UNRESOLVED_CONFLICTS", "COMMIT_INDEX_CHANGED", "COMMIT_BUSY"];
   process.stdout.write(JSON.stringify({ code: publicationAttempted ? "COMMIT_OUTCOME_UNKNOWN" : known.includes(error.code) ? error.code : "COMMIT_FAILED" }));

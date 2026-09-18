@@ -22,7 +22,12 @@ type SaveDocument = ReturnType<typeof createFileSaveDocument>;
 type FileSaveRegistryState = {
   getDocument: (path: string, version: number, content: string) => SaveDocument;
   flushPendingSaves: () => Promise<void>;
-  renameFiles: <T>(previousPath: string, nextPath: string, rename: () => Promise<T>) => Promise<T>;
+  withSavedFiles: <T>(action: () => Promise<T>) => Promise<T>;
+  renameFiles: <T>(
+    previousPath: string,
+    nextPath: string,
+    rename: () => Promise<T>,
+  ) => Promise<T>;
 };
 const RegistryContext = createContext<FileSaveRegistryState | null>(null);
 type ProjectFileSaveState = SaveSnapshot & {
@@ -45,28 +50,49 @@ const FileSaveRegistry = ({
   const [documents] = useState(
     () => new Map<string, { version: number; document: SaveDocument }>(),
   );
+  const [gitOperation] = useState(() => ({
+    current: null as Set<SaveDocument> | null,
+  }));
+  const [protectedDrafts] = useState(() => new Set<SaveDocument>());
   const [renameOperation] = useState(() => ({
     current: null as { previousPath: string; paused: Set<SaveDocument> } | null,
   }));
   const registerDocument = useCallback(
     (path: string, version: number, document: SaveDocument) => {
-      if (renameOperation.current && isProjectFilePathWithin(path, renameOperation.current.previousPath)) {
+      if (
+        renameOperation.current &&
+        isProjectFilePathWithin(path, renameOperation.current.previousPath)
+      ) {
         document.pause();
         renameOperation.current.paused.add(document);
       }
+      if (gitOperation.current) {
+        document.pause();
+        gitOperation.current.add(document);
+      }
       documents.set(path, { version, document });
     },
-    [documents, renameOperation],
+    [documents, renameOperation, gitOperation],
   );
   const getDocument = useCallback(
     (path: string, version: number, content: string) => {
       const existing = documents.get(path);
+      // A bridge event can arrive after the editor becomes read-only. Retain
+      // that draft across Git's document refresh; expected hashes protect retry.
+      if (
+        existing &&
+        (gitOperation.current || protectedDrafts.has(existing.document)) &&
+        existing.document.shouldRetain()
+      )
+        return existing.document;
       if (
         existing?.version === version &&
-        (existing.document.isPaused() || existing.document.shouldRetain() ||
+        (existing.document.isPaused() ||
+          existing.document.shouldRetain() ||
           existing.document.getContent() === content)
       )
         return existing.document;
+      if (existing) protectedDrafts.delete(existing.document);
       existing?.document.invalidate();
       const document = createFileSaveDocument(
         projectId,
@@ -91,47 +117,114 @@ const FileSaveRegistry = ({
         (documentPath, inUse) => {
           // A retained React tree can reconnect after its clean entry was released.
           if (inUse) {
-            if (!documents.has(documentPath)) registerDocument(documentPath, version, document);
+            if (!documents.has(documentPath))
+              registerDocument(documentPath, version, document);
             return;
           }
           // Renames move the key; a recreated path may already own a replacement.
           if (documents.get(documentPath)?.document !== document) return;
           documents.delete(documentPath);
+          protectedDrafts.delete(document);
         },
       );
       registerDocument(path, version, document);
       return document;
     },
-    [documents, projectId, queryClient, registerDocument, userId],
+    [
+      documents,
+      projectId,
+      queryClient,
+      registerDocument,
+      userId,
+      gitOperation,
+      protectedDrafts,
+    ],
   );
   const flushPendingSaves = useCallback(async () => {
     while (true) {
+      if (gitOperation.current)
+        throw new Error("A Git operation is in progress. Please wait.");
       // A paused document's normal flush returns without saving. Never treat
       // that as confirmation or write through a rename's pause.
       if (renameOperation.current)
-        throw new Error("A file rename is in progress. Wait for it to finish, then try again.");
-      const pending = [...documents.values()].filter(({ document }) => document.shouldRetain());
+        throw new Error(
+          "A file rename is in progress. Wait for it to finish, then try again.",
+        );
+      const pending = [...documents.values()].filter(({ document }) =>
+        document.shouldRetain(),
+      );
       if (pending.length === 0) return;
-      const results = await Promise.allSettled(pending.map(({ document }) => document.flush()));
+      const results = await Promise.allSettled(
+        pending.map(({ document }) => document.flush()),
+      );
       const failure = results.find((result) => result.status === "rejected");
       if (failure) {
-        const message = failure.reason instanceof Error ? failure.reason.message : "Unable to save your changes.";
+        const message =
+          failure.reason instanceof Error
+            ? failure.reason.message
+            : "Unable to save your changes.";
         throw new Error(`${message} Open Code to retry saving your changes.`);
       }
       // Navigation and late editor events can add drafts while earlier saves
       // drain. Recheck the registry before allowing a dependent read to start.
     }
-  }, [documents, renameOperation]);
+  }, [documents, renameOperation, gitOperation]);
+  const withSavedFiles = useCallback<FileSaveRegistryState["withSavedFiles"]>(
+    async (action) => {
+      if (gitOperation.current || renameOperation.current)
+        throw new Error("A file or Git operation is already in progress.");
+      const paused = new Set<SaveDocument>();
+      gitOperation.current = paused;
+      try {
+        do {
+          const entries = [...documents.values()];
+          for (const { document } of entries) {
+            document.pause();
+            paused.add(document);
+          }
+          const results = await Promise.allSettled(
+            entries.map(({ document }) => document.flush(true)),
+          );
+          const failed = results.find((result) => result.status === "rejected");
+          if (failed) throw failed.reason;
+        } while (
+          [...documents.values()].some(({ document }) =>
+            document.shouldRetain(),
+          )
+        );
+        return await action();
+      } finally {
+        gitOperation.current = null;
+        for (const document of paused) {
+          if (document.shouldRetain()) protectedDrafts.add(document);
+          document.resume();
+        }
+      }
+    },
+    [documents, gitOperation, protectedDrafts, renameOperation],
+  );
   const renameFiles = useCallback<FileSaveRegistryState["renameFiles"]>(
     async (previousPath, nextPath, rename) => {
-      if (renameOperation.current) throw new Error("Another rename is in progress. Please try again.");
+      if (gitOperation.current)
+        throw new Error("A Git operation is in progress. Please wait.");
+      if (renameOperation.current)
+        throw new Error("Another rename is in progress. Please try again.");
       const operation = { previousPath, paused: new Set<SaveDocument>() };
       renameOperation.current = operation;
-      const affected = () => [...documents].filter(([path]) => isProjectFilePathWithin(path, previousPath));
+      const affected = () =>
+        [...documents].filter(([path]) =>
+          isProjectFilePathWithin(path, previousPath),
+        );
       try {
         for (const [path, entry] of documents) {
-          if (!isProjectFilePathWithin(path, previousPath) && isProjectFilePathWithin(path, nextPath) && entry.document.shouldRetain())
-            throw new Error("The destination has unsaved edits. Save them before renaming.");
+          if (
+            !isProjectFilePathWithin(path, previousPath) &&
+            isProjectFilePathWithin(path, nextPath) &&
+            entry.document.shouldRetain()
+          )
+            throw new Error(
+              "The destination has unsaved edits. Save them before renaming.",
+            );
         }
         // Recheck after each await: navigation can open another descendant while
         // saves drain. New documents join the pause in getDocument above.
@@ -141,10 +234,16 @@ const FileSaveRegistry = ({
             document.pause();
             operation.paused.add(document);
           }
-          const results = await Promise.allSettled(entries.map(([, { document }]) => document.flush(true)));
-          const failure = results.find((result) => result.status === "rejected");
+          const results = await Promise.allSettled(
+            entries.map(([, { document }]) => document.flush(true)),
+          );
+          const failure = results.find(
+            (result) => result.status === "rejected",
+          );
           if (failure) throw failure.reason;
-        } while (affected().some(([, { document }]) => document.shouldRetain()));
+        } while (
+          affected().some(([, { document }]) => document.shouldRetain())
+        );
 
         const result = await rename();
         for (const [path, entry] of affected()) {
@@ -166,7 +265,7 @@ const FileSaveRegistry = ({
         }
       }
     },
-    [documents, renameOperation],
+    [documents, renameOperation, gitOperation],
   );
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -178,7 +277,13 @@ const FileSaveRegistry = ({
     });
     return () => subscription.remove();
   }, [documents]);
-  return <RegistryContext value={{ getDocument, flushPendingSaves, renameFiles }}>{children}</RegistryContext>;
+  return (
+    <RegistryContext
+      value={{ getDocument, flushPendingSaves, withSavedFiles, renameFiles }}
+    >
+      {children}
+    </RegistryContext>
+  );
 };
 
 export const ProjectFileSaveRegistryProvider = ({
@@ -264,6 +369,7 @@ export const useProjectFileSave = () => useContext(FileSaveContext);
 
 export const useProjectFileSaveRegistry = () => {
   const registry = useContext(RegistryContext);
-  if (!registry) throw new Error("File operations require ProjectFileSaveRegistryProvider");
+  if (!registry)
+    throw new Error("File operations require ProjectFileSaveRegistryProvider");
   return registry;
 };

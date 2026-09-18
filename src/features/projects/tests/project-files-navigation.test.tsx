@@ -8,6 +8,12 @@ import { getDirectoryFiles } from "@/features/projects/lib/files";
 import type { SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 
+const workspace = vi.hoisted(() => ({ isWorkspaceBusy: false, assertWorkspaceCurrent: vi.fn(), runWorkspaceOperation: async (_label: string, action: (assertCurrent: () => void) => Promise<unknown>) => {
+  if (workspace.isWorkspaceBusy) throw new Error("Wait for the Git operation to finish.");
+  return action(workspace.assertWorkspaceCurrent);
+} }));
+vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ useProjectWorkspaceBranch: () => workspace }));
+
 const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
 const fileSearch = vi.hoisted(() => ({ query: "", debouncedQuery: "", scope: "all", isSearching: false }));
 vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => fileSearch }));
@@ -112,6 +118,7 @@ const click = (label: string) => {
 };
 
 beforeEach(() => {
+  workspace.isWorkspaceBusy = false;
   fileSearch.query = "";
   fileSearch.isSearching = false;
   fileCreation.kind = null;
@@ -351,4 +358,29 @@ it.each([
   expect(container.querySelector('[role="progressbar"]')).toBeNull();
   expect(container.querySelector<HTMLButtonElement>(`[aria-label="Delete ${input.name}"]`)?.disabled).toBe(false);
   expect(mocks.alert).toHaveBeenCalledWith("Couldn't delete this item", "Please try again.");
+});
+
+it("disables file navigation and editing controls during Git operations", () => {
+  workspace.isWorkspaceBusy = true;
+  act(() => root.render(createElement(FilesScreen)));
+  for (const label of ["app, folder", "package.json, file", "Delete package.json", "Update package.json"]) {
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.disabled).toBe(true);
+  }
+});
+
+it("blocks a deletion confirmed after a Git operation has started", async () => {
+  click("Delete package.json");
+  workspace.isWorkspaceBusy = true;
+  await act(async () => mocks.confirm.mock.calls.at(-1)![2].onConfirmPress());
+  expect(mocks.delete).not.toHaveBeenCalled();
+  expect(mocks.alert).toHaveBeenCalledWith("Couldn't delete this item", expect.stringContaining("Git operation"));
+});
+
+it("disables an open file creation draft without submitting it during Git operations", () => {
+  fileCreation.kind = "file";
+  workspace.isWorkspaceBusy = true;
+  act(() => root.render(createElement(FilesScreen)));
+  expect(container.querySelector<HTMLInputElement>("input")?.disabled).toBe(true);
+  act(() => inputEvents.onSubmitEditing());
+  expect(mocks.create).not.toHaveBeenCalled();
 });

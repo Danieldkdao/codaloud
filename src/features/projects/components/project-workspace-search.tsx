@@ -217,9 +217,9 @@ export const ProjectWorkspaceSearch = ({
           style={{ width: 48, height: 48 }}
         >
           <Icon
-            family="Feather"
-            name="search"
-            size={22}
+            family="MaterialCommunityIcons"
+            name="magnify"
+            size={28}
             accessible={false}
             className="text-foreground"
           />

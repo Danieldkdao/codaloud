@@ -12,6 +12,8 @@ const session = vi.hoisted(() => ({
   isPending: false,
   error: null as Error | null,
 }));
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
 vi.mock("../actions/git-actions", () => ({ readProjectChangesAction: vi.fn() }));
 
@@ -223,7 +225,7 @@ it("isolates project and account caches without showing a previous project's dat
   await render();
   expect(current.data?.currentBranch).toBe("other-account");
   expect(client.getQueryData(["projects", "changes", "user-one", projectId])).toEqual(snapshot);
-  expect(client.getQueryCache().getAll()).toHaveLength(3);
+  expect(client.getQueryCache().getAll().filter((query) => query.queryKey[1] === "changes")).toHaveLength(3);
 });
 
 it("reuses cached data when remounted", async () => {

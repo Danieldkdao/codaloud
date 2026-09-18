@@ -124,3 +124,57 @@ it.each(["projectId", "userId"] as const)("ignores completion from an earlier %s
   expect(current.branch).toBe("release");
   expect(current.isCheckingOut).toBe(false);
 });
+
+it("serializes workspace operations and blocks checkout before React rerenders", async () => {
+  const request = deferred();
+  const checkout = vi.fn();
+  let pending!: Promise<unknown>;
+  await act(async () => {
+    pending = current.runWorkspaceOperation("Pulling…", () => request.promise);
+    await expect(current.runWorkspaceOperation("Stashing…", checkout)).rejects.toThrow("already");
+    current.checkoutBranch("other", checkout);
+  });
+  expect(checkout).not.toHaveBeenCalled();
+  expect(current.isWorkspaceBusy).toBe(true);
+  expect(current.workspaceOperation).toBe("Pulling…");
+  await act(async () => { request.resolve({ previousBranch: "main", currentBranch: "main" }); await pending; });
+  expect(current.isWorkspaceBusy).toBe(false);
+});
+
+it("releases the workspace after an operation fails", async () => {
+  await act(async () => {
+    await expect(current.runWorkspaceOperation("Stashing…", async () => { throw new Error("Offline"); })).rejects.toThrow("Offline");
+  });
+  expect(current.isWorkspaceBusy).toBe(false);
+  expect(current.workspaceOperation).toBeNull();
+});
+
+it.each(["user", "project"])("invalidates delayed operation callbacks after changing %s", async (kind) => {
+  const previous = current;
+  const request = deferred();
+  const action = vi.fn();
+  let pending!: Promise<unknown>;
+  await act(async () => {
+    pending = previous.runWorkspaceOperation("Saving…", async (assertCurrent) => {
+      await request.promise;
+      assertCurrent();
+      action();
+    });
+  });
+  if (kind === "user") scope.userId = "user-two"; else scope.projectId = "project-two";
+  await render();
+  await act(async () => {
+    request.resolve({ previousBranch: "main", currentBranch: "main" });
+    await expect(pending).rejects.toThrow("workspace");
+    await expect(previous.runWorkspaceOperation("Old confirmation", action)).rejects.toThrow("workspace");
+  });
+  expect(action).not.toHaveBeenCalled();
+  expect(current.isWorkspaceBusy).toBe(false);
+});
+
+it("blocks workspace mutations while a checkout is in progress", async () => {
+  const request = deferred();
+  await act(async () => current.checkoutBranch("other", () => request.promise));
+  await expect(current.runWorkspaceOperation("Discarding…", vi.fn())).rejects.toThrow("already");
+  await act(async () => request.resolve({ previousBranch: "main", currentBranch: "other" }));
+});

@@ -3,6 +3,7 @@ import { Pressable, type View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { ProjectBranchSelect } from "@/features/projects/components/project-branch-select";
+import { ProjectOtherOptions } from "@/features/projects/components/project-other-options";
 import { ProjectFilesAdd } from "@/features/projects/components/project-files-add";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
@@ -15,9 +16,11 @@ import type { ProjectWorkspaceTab } from "@/features/projects/types";
 
 type ProjectActionButtonsProps = {
   tab: ProjectWorkspaceTab;
+  branchPickerOpen?: boolean;
+  onBranchPickerOpenChange?: (open: boolean) => void;
 };
 
-export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => {
+export const ProjectActionButtonsLeft = ({ tab, branchPickerOpen, onBranchPickerOpenChange }: ProjectActionButtonsProps) => {
   const { projectId } = useProjectWorkspaceBranch();
 
   switch (tab) {
@@ -37,7 +40,12 @@ export const ProjectActionButtonsLeft = ({ tab }: ProjectActionButtonsProps) => 
         </>
       );
     case "git":
-      return <ProjectBranchSelect key={projectId} />;
+      return (
+        <>
+          <ProjectBranchSelect key={projectId} open={branchPickerOpen} onOpenChange={onBranchPickerOpenChange} />
+          <ProjectOtherOptions key={`other-${projectId}`} />
+        </>
+      );
     case "agent":
       return null;
     default:
@@ -82,7 +90,7 @@ export const ProjectActionButtonsRight = ({
           />
           <ProjectCommitForm
             key={commitSelection.scope}
-            visible={gitTab === "changes" && commitSelection.totalCount > 0}
+            enabled={gitTab === "changes" && commitSelection.totalCount > 0}
           />
         </>
       );

@@ -1,0 +1,260 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as actions from "../actions/git-actions";
+
+const { network, session, requestHeaders } = vi.hoisted(() => ({
+  network: vi.fn<typeof fetch>(),
+  session: vi.fn(),
+  requestHeaders: vi.fn<() => Promise<Headers>>(),
+}));
+vi.mock("@/lib/auth/client-helpers", () => ({ getCurrentUserClient: session }));
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const { isValidIds } = await importOriginal<typeof import("@/lib/utils")>();
+  return {
+    fetchBase: network,
+    createRequestHeaders: requestHeaders,
+    isValidIds,
+    createSearchParams: (params: Record<string, unknown>) => new URLSearchParams(
+      Object.entries(params).filter(([, value]) => value != null).map(([key, value]) => [key, String(value)]),
+    ),
+  };
+});
+
+const projectId = "123e4567-e89b-42d3-a456-426614174000";
+const sha = "a".repeat(40);
+const counts = {
+  currentBranch: "main", headSha: sha, upstream: null, upstreamSha: null,
+  outgoing: null, incoming: null, isShallow: false, observedAt: "2026-09-15T12:00:00Z",
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  session.mockResolvedValue({ userId: "owner", error: null });
+  requestHeaders.mockResolvedValue(new Headers({ Cookie: "session=test" }));
+});
+
+type ActionCase = {
+  name: string;
+  call: (id: string, signal?: AbortSignal) => Promise<unknown>;
+  path: string;
+  data: unknown;
+  body?: unknown;
+  invalid?: () => Promise<unknown>;
+};
+
+const verifyAction = ({ name, call, path, data, body, invalid }: ActionCase) => {
+  const mutation = body !== undefined;
+  const success = { error: false, message: "Git request completed.", data };
+  const failure = mutation ? expect.objectContaining({ error: true }) : null;
+  describe(name, () => {
+    it("sends an authenticated request and validates the response", async () => {
+      network.mockResolvedValue(Response.json(success));
+      expect(await call(projectId)).toEqual(mutation ? success : data);
+      expect(session).toHaveBeenCalledOnce();
+      expect(requestHeaders).toHaveBeenCalledExactlyOnceWith(...(mutation ? [{ "Content-Type": "application/json" }] : []));
+      expect(network).toHaveBeenCalledExactlyOnceWith(`/api/projects/${projectId}/git/${path}`, {
+        method: mutation ? "POST" : "GET",
+        headers: await requestHeaders.mock.results[0].value,
+        credentials: "omit",
+        ...(mutation ? { body: JSON.stringify(body) } : { signal: undefined }),
+      });
+    });
+    it.each([
+      { userId: null, error: null },
+      { userId: "owner", error: new Error("session unavailable") },
+    ])("does not request without a verified user", async (value) => {
+      session.mockResolvedValue(value);
+      expect(await call(projectId)).toEqual(failure);
+      expect(network).not.toHaveBeenCalled();
+    });
+    it("rejects invalid project IDs", async () => {
+      expect(await call("../other")).toEqual(failure);
+      expect(network).not.toHaveBeenCalled();
+    });
+    it.each([new Headers(), new Headers({ Cookie: " " })])("requires a usable cookie", async (headers) => {
+      requestHeaders.mockResolvedValue(headers);
+      expect(await call(projectId)).toEqual(failure);
+      expect(network).not.toHaveBeenCalled();
+    });
+    it.each(["session", "headers"])("catches %s preparation failures", async (step) => {
+      (step === "session" ? session : requestHeaders).mockRejectedValue(new Error("private details"));
+      expect(await call(projectId)).toEqual(mutation ? expect.objectContaining({ error: true, code: "GIT_REQUEST_FAILED" }) : null);
+      expect(network).not.toHaveBeenCalled();
+    });
+    it.each([200, 409, 503])("handles API errors at HTTP %s", async (status) => {
+      const error = { error: true, code: "WORKSPACE_RESTORING", message: "Workspace restoring." };
+      network.mockResolvedValue(Response.json(error, { status }));
+      expect(await call(projectId)).toEqual(mutation ? error : null);
+    });
+    it.each(["http", "json", "network", "shape", "envelope"])("handles %s failure without retrying", async (kind) => {
+      if (kind === "http") network.mockResolvedValue(Response.json(success, { status: 500 }));
+      if (kind === "json") network.mockResolvedValue(new Response("invalid JSON"));
+      if (kind === "network") network.mockRejectedValue(new Error("private detail"));
+      if (kind === "shape") network.mockResolvedValue(Response.json({ ...success, data: {} }));
+      if (kind === "envelope") network.mockResolvedValue(Response.json({ data }));
+      expect(await call(projectId)).toEqual(mutation ? expect.objectContaining({ error: true, code: "GIT_OUTCOME_UNKNOWN" }) : null);
+      expect(network).toHaveBeenCalledOnce();
+    });
+    if (invalid) it("rejects invalid input before sending", async () => {
+      expect(await invalid()).toEqual(failure);
+      expect(network).not.toHaveBeenCalled();
+    });
+    if (!mutation) {
+      it("does not send already canceled reads", async () => {
+        expect(await call(projectId, AbortSignal.abort())).toBeNull();
+        expect(network).not.toHaveBeenCalled();
+      });
+      it("forwards cancellation and ignores a response canceled during parsing", async () => {
+        const controller = new AbortController();
+        const response = Response.json(success);
+        vi.spyOn(response, "json").mockImplementation(async () => {
+          controller.abort();
+          return success;
+        });
+        network.mockResolvedValue(response);
+        expect(await call(projectId, controller.signal)).toBeNull();
+        expect(network.mock.calls[0][1]?.signal).toBe(controller.signal);
+      });
+    }
+  });
+};
+
+verifyAction({
+  name: "readProjectGitCountsAction",
+  call: (id, signal) => actions.readProjectGitCountsAction(id, signal),
+  path: "counts", data: counts,
+});
+
+verifyAction({
+  name: "fetchProjectGitAction",
+  call: (id) => actions.fetchProjectGitAction(id),
+  path: "fetch", data: counts, body: {},
+});
+
+verifyAction({
+  name: "pushProjectGitAction",
+  call: (id) => actions.pushProjectGitAction(id, {}),
+  path: "push", data: { pushed: true, remoteBranch: "main", remoteSha: sha, trackingUpdated: true, counts }, body: { force: false },
+  invalid: () => actions.pushProjectGitAction(projectId, { force: true } as never),
+});
+
+it.each([null, sha])("preserves the explicit force-push lease %s", async (expectedRemoteSha) => {
+  network.mockResolvedValue(Response.json({ error: true, code: "PUSH_REJECTED", message: "Remote changed." }));
+  await actions.pushProjectGitAction(projectId, { force: true, expectedRemoteSha });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ force: true, expectedRemoteSha });
+});
+
+verifyAction({
+  name: "pullProjectGitAction",
+  call: (id) => actions.pullProjectGitAction(id, {}),
+  path: "pull", data: { previousHeadSha: sha, headSha: sha, currentBranch: "main", rebased: false, counts: null }, body: { rebase: false },
+  invalid: () => actions.pullProjectGitAction(projectId, { rebase: "yes" } as never),
+});
+
+it("requests pull with rebase", async () => {
+  await actions.pullProjectGitAction(projectId, { rebase: true });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ rebase: true });
+});
+
+verifyAction({
+  name: "createProjectBranchAction",
+  call: (id) => actions.createProjectBranchAction(id, { branchName: "feature/mobile" }),
+  path: "branches", data: { previousBranch: "main", currentBranch: "feature/mobile", headSha: sha }, body: { branchName: "feature/mobile" },
+  invalid: () => actions.createProjectBranchAction(projectId, { branchName: "../invalid" } as never),
+});
+
+verifyAction({
+  name: "readProjectStashesAction",
+  call: (id, signal) => actions.readProjectStashesAction(id, {}, signal),
+  path: "stash?pageSize=20&search=", data: { stashes: [], nextCursor: null },
+  invalid: () => actions.readProjectStashesAction(projectId, { index: 0 } as never),
+});
+
+it("serializes stash search and pagination", async () => {
+  const data = { stashes: [{ index: 0, sha, message: "work", createdAt: "2026-09-15T12:00:00Z" }], nextCursor: "next" };
+  network.mockResolvedValue(Response.json({ error: false, message: "Stashes loaded.", data }));
+  expect(await actions.readProjectStashesAction(projectId, { search: "  a & b  ", pageSize: 5, cursor: "previous" })).toEqual(data);
+  const url = new URL(network.mock.calls[0][0] as string, "https://example.test");
+  expect(Object.fromEntries(url.searchParams)).toEqual({ search: "a & b", pageSize: "5", cursor: "previous" });
+});
+it("rejects obsolete stash detail requests before fetching", async () => {
+  expect(await actions.readProjectStashesAction(projectId, { index: 0, stashSha: sha } as never)).toBeNull();
+  expect(network).not.toHaveBeenCalled();
+});
+
+verifyAction({
+  name: "stashProjectChangesAction",
+  call: (id) => actions.stashProjectChangesAction(id, { message: "  Save work  " }),
+  path: "stash", data: { created: true, remainingChanges: false, stashSha: sha }, body: { message: "Save work" },
+  invalid: () => actions.stashProjectChangesAction(projectId, { message: " " } as never),
+});
+
+it("accepts a no-op stash without a message", async () => {
+  const success = { error: false, message: "Nothing to stash.", data: { created: false, remainingChanges: false, stashSha: null } };
+  network.mockResolvedValue(Response.json(success));
+  expect(await actions.stashProjectChangesAction(projectId)).toEqual(success);
+  expect(network.mock.calls[0][1]?.body).toBe("{}");
+});
+
+verifyAction({
+  name: "popProjectStashAction",
+  call: (id) => actions.popProjectStashAction(id, { stashIndex: 0, stashSha: sha }),
+  path: "stash-pop", data: { stashSha: sha, dropped: false }, body: { stashIndex: 0, stashSha: sha, restoreIndex: false },
+  invalid: () => actions.popProjectStashAction(projectId, { stashIndex: 0 } as never),
+});
+
+it("preserves restoreIndex for stash pop", async () => {
+  await actions.popProjectStashAction(projectId, { stashIndex: 1, stashSha: sha, restoreIndex: true });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ stashIndex: 1, stashSha: sha, restoreIndex: true });
+});
+
+verifyAction({
+  name: "readProjectDiscardPreviewAction",
+  call: (id, signal) => actions.readProjectDiscardPreviewAction(id, signal),
+  path: "discard", data: { currentBranch: "main", headSha: sha, fingerprint: "b".repeat(64), changedPaths: [] },
+});
+
+verifyAction({
+  name: "discardProjectChangesAction",
+  call: (id) => actions.discardProjectChangesAction(id, { fingerprint: "b".repeat(64), confirm: true, includeUntracked: false }),
+  path: "discard", data: { headSha: sha, remainingChanges: false }, body: { fingerprint: "b".repeat(64), confirm: true, includeUntracked: false },
+  invalid: () => actions.discardProjectChangesAction(projectId, { fingerprint: "b".repeat(64), confirm: false, includeUntracked: true } as never),
+});
+
+it("requires the preview fingerprint and preserves the untracked-file choice", async () => {
+  await actions.discardProjectChangesAction(projectId, { fingerprint: "b".repeat(64), confirm: true, includeUntracked: true });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ fingerprint: "b".repeat(64), confirm: true, includeUntracked: true });
+});
+
+verifyAction({
+  name: "revertProjectCommitAction",
+  call: (id) => actions.revertProjectCommitAction(id, {}),
+  path: "revert", data: { hash: sha, currentBranch: "main", parentHash: sha }, body: {},
+  invalid: () => actions.revertProjectCommitAction(projectId, { mainline: 0 } as never),
+});
+
+it("passes the merge mainline to revert", async () => {
+  await actions.revertProjectCommitAction(projectId, { mainline: 2 });
+  expect(network.mock.calls[0][1]?.body).toBe('{"mainline":2}');
+});
+
+verifyAction({
+  name: "undoProjectCommitAction",
+  call: (id) => actions.undoProjectCommitAction(id, { mode: "soft" }),
+  path: "undo", data: { previousHeadSha: sha, headSha: sha, currentBranch: "main", mode: "soft" }, body: { mode: "soft" },
+  invalid: () => actions.undoProjectCommitAction(projectId, { mode: "invalid" } as never),
+});
+
+it.each(["mixed", "hard"] as const)("passes the requested %s undo mode", async (mode) => {
+  await actions.undoProjectCommitAction(projectId, { mode });
+  expect(JSON.parse(network.mock.calls[0][1]?.body as string)).toEqual({ mode });
+});
+
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+
+verifyAction({
+  name: "deleteProjectStashAction",
+  call: (id) => actions.deleteProjectStashAction(id, { stashIndex: 1, stashSha: sha }),
+  path: "stash-drop", data: { stashSha: sha, dropped: true }, body: { stashIndex: 1, stashSha: sha },
+  invalid: () => actions.deleteProjectStashAction(projectId, { stashIndex: 0 } as never),
+});

@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTabTrigger } from "expo-router/ui";
 import { useEffect, useState } from "react";
 import { PixelRatio, Platform, View, type ImageSourcePropType } from "react-native";
@@ -27,7 +27,9 @@ export const ProjectWorkspaceTabSelect = ({ tab }: { tab: ProjectWorkspaceTab })
       const { icon } = formatWorkspaceTab(name);
       const image = icon.family === "Feather"
         ? await Feather.getImageSource(icon.name, imageSize, foreground)
-        : await Ionicons.getImageSource(icon.name, imageSize, foreground);
+        : icon.family === "MaterialCommunityIcons"
+          ? await MaterialCommunityIcons.getImageSource(icon.name, imageSize, foreground)
+          : await Ionicons.getImageSource(icon.name, imageSize, foreground);
       return [name, image ?? undefined] as const;
     })).then((images) => {
       if (active) setMenuImages(Object.fromEntries(images));

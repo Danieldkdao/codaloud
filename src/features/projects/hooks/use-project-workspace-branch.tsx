@@ -1,6 +1,7 @@
 import {
   createContext,
   useCallback,
+  useEffect,
   useContext,
   useOptimistic,
   useRef,
@@ -27,6 +28,13 @@ type ProjectWorkspaceBranchState = {
     recover?: () => Promise<ProjectBranchCheckoutSchema>,
   ) => void;
   isCheckingOut: boolean;
+  isWorkspaceBusy: boolean;
+  workspaceOperation: string | null;
+  assertWorkspaceCurrent: () => void;
+  runWorkspaceOperation: <T>(
+    label: string,
+    action: (assertCurrent: () => void) => Promise<T>,
+  ) => Promise<T>;
   isCheckoutRecoveryRequired: boolean;
   retryCheckoutRecovery: () => void;
   checkoutError: string | null;
@@ -91,6 +99,44 @@ const ProjectWorkspaceBranchStateProvider = ({
   >(undefined);
   const isCheckingOut = isPending || isCheckoutRecoveryRequired;
   const checkoutInFlight = useRef(false);
+  const workspaceInFlight = useRef(false);
+  const mounted = useRef(true);
+  const [workspaceOperation, setWorkspaceOperation] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const assertWorkspaceCurrent = () => {
+    if (!mounted.current || !userId)
+      throw new Error(
+        "This workspace session has changed. Reopen the project and try again.",
+      );
+  };
+  const runWorkspaceOperation: ProjectWorkspaceBranchState["runWorkspaceOperation"] =
+    async (label, action) => {
+      assertWorkspaceCurrent();
+      if (
+        workspaceInFlight.current ||
+        checkoutInFlight.current ||
+        isCheckingOut
+      )
+        throw new Error(
+          "A workspace operation is already in progress. Please wait.",
+        );
+      // Acquire synchronously: two taps can arrive before disabled controls render.
+      workspaceInFlight.current = true;
+      setWorkspaceOperation(label);
+      try {
+        return await action(assertWorkspaceCurrent);
+      } finally {
+        workspaceInFlight.current = false;
+        if (mounted.current) setWorkspaceOperation(null);
+      }
+    };
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const branch = isCheckoutRecoveryRequired
     ? null
@@ -141,6 +187,8 @@ const ProjectWorkspaceBranchStateProvider = ({
   ) => {
     if (
       !userId ||
+      !mounted.current ||
+      workspaceInFlight.current ||
       checkoutInFlight.current ||
       isCheckingOut ||
       (selection?.branch === name && selection.source === "local")
@@ -264,6 +312,10 @@ const ProjectWorkspaceBranchStateProvider = ({
         },
         checkoutBranch,
         isCheckingOut,
+        isWorkspaceBusy: isCheckingOut || workspaceOperation !== null,
+        workspaceOperation,
+        assertWorkspaceCurrent,
+        runWorkspaceOperation,
         isCheckoutRecoveryRequired,
         retryCheckoutRecovery,
         checkoutError,

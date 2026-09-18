@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   flushSaves: vi.fn(),
   session: { isPending: false, error: null as Error | null, data: { user: { id: "user-one" } } as { user: { id: string } } | null },
 }));
+vi.mock("react-native", () => ({ Alert: {} }));
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => mocks.session }));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
 vi.mock("../hooks/use-project-file-save", () => ({

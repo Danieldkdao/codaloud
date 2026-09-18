@@ -174,7 +174,7 @@ export const useProjectChanges = (projectId: string, enabled: boolean) => {
   const userId = !session.isPending && !session.error
     ? session.data?.user.id ?? null
     : null;
-  const validProject = z.uuid().safeParse(projectId).success;
+  const validProject = isValidIds(projectId);
   const { flushPendingSaves } = useProjectFileSaveRegistry();
 
   return useQuery({

@@ -57,8 +57,15 @@ beforeEach(() => {
     else if (url.pathname === "/api/sandbox/owned-sandbox/start") result = {};
     else if (url.pathname === "/owned-sandbox/user-home-dir") result = await mocks.home();
     else if (url.pathname === "/owned-sandbox/git/branches") result = await mocks.branches(url.searchParams.get("path"));
-    else if (url.pathname === "/owned-sandbox/git/checkout") result = await mocks.checkout(JSON.parse(String(init.body)));
-    else if (url.pathname === "/owned-sandbox/process/execute") result = await mocks.sync(JSON.parse(String(init.body)));
+    else if (url.pathname === "/owned-sandbox/process/execute") {
+      const command = JSON.parse(String(init.body));
+      const encoded = Array.from({ length: Number(command.envs.CODALOUD_INPUT_CHUNKS) }, (_, i) => command.envs[`CODALOUD_INPUT_${i}`]).join("");
+      const params = JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString());
+      if ("previousBranch" in params) {
+        const response = await mocks.checkout({ path: params.repositoryPath, branch: params.branch });
+        result = { exitCode: 0, result: JSON.stringify(response.ok ? { checkedOut: true } : { error: await response.text() }) };
+      } else result = await mocks.sync(command);
+    }
     else throw new Error("Unexpected Daytona request");
     return result instanceof Response ? result : Response.json(result);
   });
@@ -124,7 +131,7 @@ it("authorizes the stored project/repository and checks out through HTTP, then v
   expect(mocks.repository.mock.invocationCallOrder[0]).toBeLessThan(mocks.sandbox.mock.invocationCallOrder[0]);
   expect(mocks.checkout).toHaveBeenCalledExactlyOnceWith({ path: "/home/daytona/.codaloud/workspace", branch: "feature/voice" });
   expect(mocks.branches).toHaveBeenCalledTimes(2);
-  expect(mocks.fetch).toHaveBeenCalledWith("https://toolbox.daytona.test/owned-sandbox/git/checkout", expect.objectContaining({ method: "POST" }));
+  expect(mocks.fetch).toHaveBeenCalledWith("https://toolbox.daytona.test/owned-sandbox/process/execute", expect.objectContaining({ method: "POST" }));
   for (const [, options] of mocks.fetch.mock.calls) {
     expect(new Headers(options.headers).get("Authorization")).toBe("Bearer test-server-key");
     expect(JSON.stringify(options)).not.toContain("test-github-token");
@@ -309,4 +316,20 @@ it("rejects malformed branch data before mutation", async () => {
   mocks.branches.mockResolvedValue({ branches: "main", current: "main" });
   expect((await checkout()).response.status).toBe(502);
   expect(mocks.checkout).not.toHaveBeenCalled();
+});
+it("rejects checkout query options before accessing the project", async () => {
+  const input = request();
+  const response = await POST(new Request(`${input.url}?force=true`, input), { projectId });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "INVALID_BRANCH" });
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.fetch).not.toHaveBeenCalled();
+});
+
+it("bounds checkout JSON before accessing the project", async () => {
+  const input = new Request(request().url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchName: "a".repeat(65536) }) });
+  const response = await POST(input, { projectId });
+  expect(response.status).toBe(413);
+  expect(mocks.project).not.toHaveBeenCalled();
+  expect(mocks.fetch).not.toHaveBeenCalled();
 });

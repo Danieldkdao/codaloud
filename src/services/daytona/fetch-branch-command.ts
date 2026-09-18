@@ -1,8 +1,10 @@
+import { sandboxGitLockRuntime } from "./git-lock-command";
+import { sandboxGitOriginRuntime } from "./git-origin-command";
 import { sandboxCommandInput } from "./create-command";
 
 // Runs inside Daytona. Network credentials are confined to an isolated Git
 // repository so workspace Git configuration cannot redirect or intercept them.
-export const sandboxFetchBranchCommand = sandboxCommandInput + String.raw`
+export const sandboxFetchBranchCommand = sandboxCommandInput + sandboxGitLockRuntime + String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -10,6 +12,7 @@ const { execFileSync } = require("node:child_process");
 const fail = (code) => { const error = new Error(code); error.code = code; throw error; };
 let temporary;
 try {
+  withGitOperationLock(input.repositoryPath, () => {
   const workspace = input.repositoryPath;
   for (const directory of [workspace, path.join(workspace, ".git")]) {
     const info = fs.lstatSync(directory);
@@ -23,10 +26,10 @@ try {
   const git = (args, cwd = workspace, extraEnv = {}) => execFileSync("git", [...config, ...args], {
     cwd, env: { ...env, ...extraEnv }, encoding: "utf8", timeout: 40000, maxBuffer: 1024 * 1024, stdio: "pipe",
   }).trim();
+` + sandboxGitOriginRuntime + String.raw`
   git(["check-ref-format", "--branch", input.branchName]);
   if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(input.cloneUrl)) fail("WORKSPACE_REMOTE_MISMATCH");
-  const origin = git(["config", "--get", "remote.origin.url"]);
-  if (origin.replace(/\.git$/, "").toLowerCase() !== input.cloneUrl.replace(/\.git$/, "").toLowerCase()) fail("WORKSPACE_REMOTE_MISMATCH");
+  reconcileGitOrigin(input.cloneUrl, input.repositoryId, "WORKSPACE_REMOTE_MISMATCH");
   const localRef = "refs/heads/" + input.branchName;
   const remoteRef = "refs/remotes/origin/" + input.branchName;
   const localExists = () => {
@@ -63,8 +66,9 @@ try {
     git(["config", "branch." + input.branchName + ".merge", "refs/heads/" + input.branchName]);
   }
   process.stdout.write(JSON.stringify({ branchName: input.branchName }));
+  });
 } catch (error) {
-  const known = ["REMOTE_BRANCH_NOT_FOUND", "REMOTE_FETCH_AUTH_FAILED", "REMOTE_FETCH_FAILED", "WORKSPACE_REMOTE_MISMATCH"];
+  const known = ["GIT_BUSY", "REMOTE_BRANCH_NOT_FOUND", "REMOTE_FETCH_AUTH_FAILED", "REMOTE_FETCH_FAILED", "WORKSPACE_REMOTE_MISMATCH"];
   process.stdout.write(JSON.stringify({ code: known.includes(error.code) ? error.code : "REMOTE_FETCH_FAILED" }));
   process.exitCode = 1;
 } finally {

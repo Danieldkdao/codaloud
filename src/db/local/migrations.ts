@@ -30,3 +30,12 @@ export const localGitIdentityMigration = `
 ALTER TABLE workspace ADD COLUMN git_author_name TEXT;
 ALTER TABLE workspace ADD COLUMN git_author_email TEXT;
 `;
+
+export const localImportHistoryMigration = `
+CREATE TABLE migration_imports (
+  id TEXT PRIMARY KEY NOT NULL,
+  source_branch_id TEXT NOT NULL,
+  imported_at TEXT NOT NULL,
+  metadata TEXT NOT NULL
+);
+`;

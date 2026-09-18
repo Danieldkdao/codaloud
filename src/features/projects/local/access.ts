@@ -1,5 +1,5 @@
 import { getLocalDatabase } from "@/db/local/database";
-import { ProjectTable } from "@/db/local/project";
+import { ProjectTable } from "@/db/schemas/project";
 import { getDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { executeWorkspace, LocalWorkspaceError } from "@/services/local-workspace/execute";
 import { createLocalProjectStore } from "./projects";

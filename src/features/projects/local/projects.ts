@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, getTableColumns, gt, lt, or, sql } from "drizzle-orm";
 import type { LocalDatabase } from "@/db/local/database";
-import { ProjectTable, type ProjectInsertData } from "@/db/local/project";
+import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
 import { projectResponseSchema, updateProjectSchema } from "../actions/schemas";
 import { projectParamsSchema, readProjectCursor, type ProjectCursorSchema, type ProjectParamsSchema } from "../lib/project-params";
 import type { ProjectPageData } from "../types";

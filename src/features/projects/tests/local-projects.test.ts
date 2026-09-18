@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { localWorkspaceMigration } from "@/db/local/migrations";
-import * as schema from "@/db/local/project";
+import * as schema from "@/db/schema";
 import { createLocalProjectStore } from "../local/projects";
 
 const owner = "00000000-0000-4000-8000-000000000001";

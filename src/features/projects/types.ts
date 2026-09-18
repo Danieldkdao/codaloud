@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@/lib/types";
-import type { ProjectSelectData } from "@/db/local/project";
+import type { ProjectSelectData } from "@/db/schemas/project";
 import type { ProjectFileEntrySchema } from "./actions/file-schemas";
 import type { ProjectFileSearchPageSchema } from "./actions/file-search-schemas";
 import type {

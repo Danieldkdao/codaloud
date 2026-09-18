@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getLocalDatabase } from "@/db/local/database";
-import { WorkspaceTable } from "@/db/local/workspace";
+import { WorkspaceTable } from "@/db/schemas/workspace";
 
 export const gitIdentitySchema = z.strictObject({
   name: z.string().trim().min(1, "Enter your Git author name.").max(200).regex(/^[^<>\r\n\0]+$/),

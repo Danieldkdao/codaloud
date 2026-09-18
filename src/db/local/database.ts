@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import { openDatabaseAsync } from "expo-sqlite";
 import { localWorkspaceMigration, localWorkspacePreferencesMigration, localGitIdentityMigration, localImportHistoryMigration } from "./migrations";
-import * as schema from "./project";
+import * as schema from "../schema";
 
 const openLocalDatabase = async () => {
   const sqlite = await openDatabaseAsync("codaloud-workspace.db");

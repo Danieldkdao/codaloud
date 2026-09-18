@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { randomUUID } from "expo-crypto";
 import { getLocalDatabase } from "@/db/local/database";
-import { WorkspaceTable } from "@/db/local/workspace";
+import { WorkspaceTable } from "@/db/schemas/workspace";
 import type { WorkspaceStorage } from "./types";
 
 export const workspaceStorage: WorkspaceStorage = {

@@ -54,11 +54,6 @@ export const createRequestHeaders = async (
   const headers = new Headers(init);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
-  // This module also serves API routes; load native auth only when needed.
-  const { authClient } = await import("./auth/auth-client");
-  const cookie = await authClient.getCookie();
-  if (cookie) headers.set("Cookie", cookie);
-
   return headers;
 };
 

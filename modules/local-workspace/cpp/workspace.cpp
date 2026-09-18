@@ -72,7 +72,19 @@ std::string execute(const std::string &base, const std::string &request) {
     fs::create_directories(base);
     if (fs::is_symlink(fs::symlink_status(root))) throw WorkspaceError("INVALID_PROJECT", "Invalid local project folder.");
     Json data;
-    if (operation == "clone") {
+    const auto archive = fs::path(base) / (id + ".deleted");
+    if (fs::is_symlink(fs::symlink_status(archive))) throw WorkspaceError("INVALID_PROJECT", "Invalid archived project folder.");
+    if (operation == "archive-project") {
+      if (!fs::is_directory(root) || fs::exists(archive)) throw WorkspaceError("PROJECT_UNAVAILABLE", "Unable to prepare project deletion.");
+      fs::rename(root, archive);
+      data = true;
+    } else if (operation == "restore-project") {
+      if (!fs::exists(root) && fs::is_directory(archive)) fs::rename(archive, root);
+      data = true;
+    } else if (operation == "purge-project") {
+      fs::remove_all(archive);
+      data = true;
+    } else if (operation == "clone") {
       if (fs::exists(root)) throw WorkspaceError("PROJECT_EXISTS", "This project already exists on the device.");
       try { cloneRepository(root, args); } catch (...) { fs::remove_all(root); throw; }
       data = true;

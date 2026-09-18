@@ -5,22 +5,21 @@ import {
   projectParamsSchema,
   type ProjectParamsSchema,
 } from "@/features/projects/lib/project-params";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 
 export const useProjects = (filters: Partial<ProjectParamsSchema> = {}) => {
-  const session = useAuthSession();
-  const userId = !session.isPending && !session.error
-    ? session.data?.user.id ?? null
-    : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
 
   const params = projectParamsSchema.parse(filters);
 
   return useInfiniteQuery({
     queryKey: ["projects", "infinite", "cursor", userId, params],
     enabled: Boolean(userId),
+    networkMode: "always",
     initialPageParam: (params.cursor ?? null) as string | null,
     queryFn: async ({ pageParam, signal }) => {
-      if (!userId) throw new Error("You must be signed in to view your projects.");
+      if (!userId) throw new Error("The local workspace is not ready.");
 
       const userProjects = await readUserProjectsAction({ ...params, cursor: pageParam }, signal);
 

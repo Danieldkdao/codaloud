@@ -1,324 +1,87 @@
-import {
-  createProjectFormSchema,
-  createProjectResponseSchema,
-  deleteProjectResponseSchema,
-  readProjectResponseSchema,
-  readProjectsResponseSchema,
-  updateProjectResponseSchema,
-  updateProjectSchema,
-  type CreateProjectFormSchema,
-  type UpdateProjectSchema,
-} from "@/features/projects/actions/schemas";
-import {
-  projectParamsSchema,
-  type ProjectParamsSchema,
-} from "@/features/projects/lib/project-params";
-import type { ProjectPageData, ProjectResponseData } from "@/features/projects/types";
-import { getCurrentUserClient } from "@/lib/auth/client-helpers";
-import { createRequestHeaders, createSearchParams, fetchBase, isValidIds } from "@/lib/utils";
+import { randomUUID } from "expo-crypto";
+import { createProjectFormSchema, updateProjectSchema, type CreateProjectFormSchema, type UpdateProjectSchema } from "./schemas";
+import { projectParamsSchema, type ProjectParamsSchema } from "../lib/project-params";
+import type { ProjectPageData, ProjectResponseData } from "../types";
+import { getLocalProjects } from "../local/access";
+import { executeWorkspace, LocalWorkspaceError } from "@/services/local-workspace/execute";
+import { getGitHubAccessToken } from "@/services/github/credentials";
+import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
+import { z } from "zod";
 
-export const readProjectAction = async (
-  projectId: string,
-  signal?: AbortSignal,
-): Promise<ProjectResponseData | null> => {
+const failure = (error: unknown) => ({
+  error: true as const,
+  message: error instanceof Error ? error.message : "Unable to update this local project.",
+  code: error instanceof LocalWorkspaceError ? error.code : undefined,
+});
+
+export const readProjectAction = async (projectId: string, signal?: AbortSignal): Promise<ProjectResponseData | null> => {
   try {
-    if (!isValidIds(projectId)) return null;
-
-    const headers = await createRequestHeaders();
-    const response = await fetchBase(`/api/projects/${projectId}`, {
-      method: "GET",
-      headers,
-      credentials: "omit",
-      signal,
-    });
-    if (!response.ok) return null;
-
-    const payload: unknown = await response.json();
-    const result = readProjectResponseSchema.safeParse(payload);
-    if (!result.success) return null;
-    if (result.data.data.id.toLowerCase() !== projectId.toLowerCase()) return null;
-
-    return result.data.data;
-  } catch {
-    return null;
-  }
+    const id = z.uuid().parse(projectId).toLowerCase();
+    const { store, ownerId } = await getLocalProjects();
+    return signal?.aborted ? null : store.read(ownerId, id);
+  } catch { return null; }
 };
 
-export const readUserProjectsAction = async (
-  params: Partial<ProjectParamsSchema> = {},
-  signal?: AbortSignal,
-): Promise<ProjectPageData | null> => {
+export const readUserProjectsAction = async (params: Partial<ProjectParamsSchema> = {}, signal?: AbortSignal): Promise<ProjectPageData | null> => {
   try {
-    const validatedParams = projectParamsSchema.safeParse(params);
-    if (!validatedParams.success) return null;
-
-    const query = createSearchParams(validatedParams.data);
-    const headers = await createRequestHeaders();
-
-    const response = await fetchBase(`/api/projects?${query}`, {
-      method: "GET",
-      headers,
-      credentials: "omit",
-      signal,
-    });
-    if (!response.ok) return null;
-
-    const payload: unknown = await response.json();
-    const result = readProjectsResponseSchema.safeParse(payload);
-    if (!result.success) return null;
-
-    const { nextCursor } = result.data.data;
-    if (nextCursor !== null && (
-      nextCursor === validatedParams.data.cursor ||
-      !projectParamsSchema.safeParse({ ...validatedParams.data, cursor: nextCursor }).success
-    )) return null;
-
-    return result.data.data;
-  } catch {
-    return null;
-  }
+    const input = projectParamsSchema.parse(params);
+    const { store, ownerId } = await getLocalProjects();
+    return signal?.aborted ? null : store.list(ownerId, input);
+  } catch { return null; }
 };
 
 export const createProjectAction = async (unsafeData: CreateProjectFormSchema) => {
   try {
-    const { userId, error: sessionError } = await getCurrentUserClient();
-
-    if (sessionError) {
-      return {
-        error: true as const,
-        message: "Unable to verify your session. Please try again.",
-      };
+    const input = createProjectFormSchema.parse(unsafeData);
+    const { store, ownerId } = await getLocalProjects();
+    const id = randomUUID();
+    if (input.source === "github") {
+      const accessToken = await getGitHubAccessToken();
+      const repository = await verifyGitHubRepositoryAccess(accessToken, input.repositoryId);
+      await executeWorkspace(id, "clone", { url: repository.cloneUrl, accessToken });
+    } else await executeWorkspace(id, "initialize");
+    const now = new Date().toISOString();
+    try {
+      store.insert({ id, userId: ownerId, name: input.name, sandboxId: null,
+        setupStatus: "ready", setupError: null,
+        githubRepositoryId: input.source === "github" ? input.repositoryId : null,
+        lastOpenedFilePath: null, lastOpenedAt: null, createdAt: now, updatedAt: now });
+    } catch (error) {
+      // Only this newly created workspace is eligible for rollback.
+      await executeWorkspace(id, "archive-project");
+      await executeWorkspace(id, "purge-project");
+      throw error;
     }
-
-    if (!userId) {
-      return {
-        error: true as const,
-        message: "You must be signed in to create a project.",
-      };
-    }
-
-    const validatedData = createProjectFormSchema.safeParse(unsafeData);
-    if (!validatedData.success) {
-      return {
-        error: true as const,
-        message: validatedData.error.issues[0]?.message ?? "Invalid project data.",
-      };
-    }
-
-    const headers = await createRequestHeaders({
-      "Content-Type": "application/json",
-    });
-
-    const response = await fetchBase("/api/projects", {
-      method: "POST",
-      headers,
-      credentials: "omit",
-      body: JSON.stringify(validatedData.data),
-    });
-
-    const payload: unknown = await response.json();
-    const result = createProjectResponseSchema.safeParse(payload);
-    if (!result.success) {
-      return {
-        error: true as const,
-        message: "The server returned an invalid project response.",
-      };
-    }
-
-    if (result.data.error) {
-      return result.data;
-    }
-
-    if (!response.ok) {
-      return {
-        error: true as const,
-        message: "Unable to create project. Please try again.",
-      };
-    }
-
-    return {
-      error: false as const,
-      message: result.data.message,
-      projectId: result.data.data.id,
-    };
-  } catch {
-    return {
-      error: true as const,
-      message: "Unable to create project. Please try again.",
-    };
-  }
+    return { error: false as const, message: "Project created on this device.", projectId: id };
+  } catch (error) { return failure(error); }
 };
 
-export const updateProjectAction = async (
-  projectId: string,
-  unsafeData: UpdateProjectSchema,
-) => {
+export const updateProjectAction = async (projectId: string, unsafeData: UpdateProjectSchema) => {
   try {
-    const { userId, error: sessionError } = await getCurrentUserClient();
-
-    if (sessionError) {
-      return {
-        error: true as const,
-        message: "Unable to verify your session. Please try again.",
-      };
-    }
-
-    if (!userId) {
-      return {
-        error: true as const,
-        message: "You must be signed in to update a project.",
-      };
-    }
-
-    if (!isValidIds(userId)) {
-      return {
-        error: true as const,
-        message: "Unable to verify your session. Please try again.",
-      };
-    }
-
-    if (!isValidIds(projectId)) {
-      return { error: true as const, message: "Invalid project ID." };
-    }
-
-    const validatedData = updateProjectSchema.safeParse(unsafeData);
-    if (!validatedData.success) {
-      return {
-        error: true as const,
-        message: validatedData.error.issues[0]?.message ?? "Invalid project data.",
-      };
-    }
-
-    const headers = await createRequestHeaders({
-      "Content-Type": "application/json",
-    });
-    const response = await fetchBase(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers,
-      credentials: "omit",
-      body: JSON.stringify(validatedData.data),
-    });
-
-    const payload: unknown = await response.json();
-    const result = updateProjectResponseSchema.safeParse(payload);
-    if (!result.success) {
-      return {
-        error: true as const,
-        message: "The server returned an invalid project response.",
-      };
-    }
-
-    if (result.data.error) {
-      return result.data;
-    }
-
-    if (!response.ok) {
-      return {
-        error: true as const,
-        message: "Unable to update project. Please try again.",
-      };
-    }
-
-    const updatedProject = result.data.data;
-    if (
-      updatedProject.id.toLowerCase() !== projectId.toLowerCase() ||
-      updatedProject.userId.toLowerCase() !== userId.toLowerCase()
-    ) {
-      return {
-        error: true as const,
-        message: "The server returned an invalid project response.",
-      };
-    }
-
-    return {
-      error: false as const,
-      message: result.data.message,
-      projectId: updatedProject.id,
-    };
-  } catch {
-    return {
-      error: true as const,
-      message: "Unable to update project. Please try again.",
-    };
-  }
+    const id = z.uuid().parse(projectId).toLowerCase();
+    const input = updateProjectSchema.parse(unsafeData);
+    const { store, ownerId } = await getLocalProjects();
+    const updatedProject = store.rename(ownerId, id, input.name!);
+    if (!updatedProject) throw new Error("This project is not on this device.");
+    return { error: false as const, message: "Project updated.", projectId: id };
+  } catch (error) { return failure(error); }
 };
 
 export const deleteProjectAction = async (projectId: string) => {
   try {
-    const { userId, error: sessionError } = await getCurrentUserClient();
-
-    if (sessionError) {
-      return {
-        error: true as const,
-        message: "Unable to verify your session. Please try again.",
-      };
+    const id = z.uuid().parse(projectId).toLowerCase();
+    const { store, ownerId } = await getLocalProjects();
+    if (!store.read(ownerId, id)) throw new Error("This project is not on this device.");
+    await executeWorkspace(id, "archive-project");
+    try {
+      if (!store.remove(ownerId, id)) throw new Error("Unable to remove this project.");
+    } catch (error) {
+      await executeWorkspace(id, "restore-project");
+      throw error;
     }
-
-    if (!userId) {
-      return {
-        error: true as const,
-        message: "You must be signed in to delete a project.",
-      };
-    }
-
-    if (!isValidIds(userId)) {
-      return {
-        error: true as const,
-        message: "Unable to verify your session. Please try again.",
-      };
-    }
-
-    if (!isValidIds(projectId)) {
-      return { error: true as const, message: "Invalid project ID." };
-    }
-
-    const headers = await createRequestHeaders();
-    const response = await fetchBase(`/api/projects/${projectId}`, {
-      method: "DELETE",
-      headers,
-      credentials: "omit",
-    });
-
-    const payload: unknown = await response.json();
-    const result = deleteProjectResponseSchema.safeParse(payload);
-    if (!result.success) {
-      return {
-        error: true as const,
-        message: "The server returned an invalid project response.",
-      };
-    }
-
-    if (result.data.error) {
-      return result.data;
-    }
-
-    if (!response.ok) {
-      return {
-        error: true as const,
-        message: "Unable to delete project. Please try again.",
-      };
-    }
-
-    const deletedProject = result.data.data;
-    if (
-      deletedProject.id.toLowerCase() !== projectId.toLowerCase() ||
-      deletedProject.userId.toLowerCase() !== userId.toLowerCase()
-    ) {
-      return {
-        error: true as const,
-        message: "The server returned an invalid project response.",
-      };
-    }
-
-    return {
-      error: false as const,
-      message: result.data.message,
-      projectId: deletedProject.id,
-    };
-  } catch {
-    return {
-      error: true as const,
-      message: "Unable to delete project. Please try again.",
-    };
-  }
+    // The rename and metadata removal are complete. Cleanup failure must not
+    // invite a second deletion of a project that has already been removed.
+    await executeWorkspace(id, "purge-project").catch(() => undefined);
+    return { error: false as const, message: "Project deleted from this device.", projectId: id };
+  } catch (error) { return failure(error); }
 };

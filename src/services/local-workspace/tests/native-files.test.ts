@@ -68,3 +68,15 @@ it("rejects binary data and files above the editor limit", () => {
   expect(call("read-file", { path: "binary.txt" }).ok).toBe(false);
   expect(call("read-file", { path: "large.txt" }).ok).toBe(false);
 });
+
+it("archives a project reversibly before metadata deletion and purges only the archive", () => {
+  writeFileSync(join(root, projectId, "unsaved.txt"), "keep");
+  expect(call("archive-project").ok).toBe(true);
+  expect(call("read-file", { path: "unsaved.txt" }).ok).toBe(false);
+  expect(call("restore-project").ok).toBe(true);
+  expect(call("read-file", { path: "unsaved.txt" }).data.content).toBe("keep");
+  expect(call("archive-project").ok).toBe(true);
+  expect(call("purge-project").ok).toBe(true);
+  expect(call("restore-project").ok).toBe(true);
+  expect(call("read-file", { path: "unsaved.txt" }).ok).toBe(false);
+});

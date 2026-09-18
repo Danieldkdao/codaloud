@@ -1,22 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { readProjectAction } from "@/features/projects/actions/actions";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 
 export const useProject = (projectId: string) => {
-  const session = useAuthSession();
-  const userId = !session.isPending && !session.error
-    ? session.data?.user.id ?? null
-    : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
 
   return useQuery({
     queryKey: ["projects", "detail", userId, projectId],
     enabled: Boolean(userId),
+    networkMode: "always",
     staleTime: 0,
     // Read failures lose their HTTP status; let the user retry instead of retrying 4xx responses.
     retry: false,
     queryFn: async ({ signal }) => {
-      if (!userId) throw new Error("You must be signed in to view a project.");
+      if (!userId) throw new Error("The local workspace is not ready.");
 
       const existingProject = await readProjectAction(projectId, signal);
 

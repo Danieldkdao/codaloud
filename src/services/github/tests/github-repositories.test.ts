@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listUserAccounts: vi.fn(),
   getAccessToken: vi.fn(),
   getCookie: vi.fn(),
+  getDeviceToken: vi.fn(),
   platform: { OS: "ios" },
 }));
 
@@ -32,6 +33,8 @@ vi.mock("react-native", () => ({
   Platform: mocks.platform,
   Alert: { alert: vi.fn() },
 }));
+
+vi.mock("../credentials", () => ({ getGitHubAccessToken: mocks.getDeviceToken }));
 
 const network = vi.fn<typeof fetch>();
 const githubRepository = (id: number) => ({
@@ -62,6 +65,7 @@ beforeEach(() => {
   ]);
   mocks.getAccessToken.mockResolvedValue({ accessToken: "private-token" });
   mocks.getCookie.mockResolvedValue("session=mobile");
+  mocks.getDeviceToken.mockResolvedValue("device-token");
   network.mockReset();
   network.mockImplementation(async () => Response.json([githubRepository(1)]));
   vi.stubGlobal("fetch", network);
@@ -257,100 +261,29 @@ describe("single-page GitHub service", () => {
   });
 });
 
-describe("readGitHubRepositories", () => {
-  it("passes continuation through the real action, route, and Octokit service", async () => {
-    const upstreamPages: string[] = [];
-    network.mockImplementation(async (url, options) => {
-      if (String(url).startsWith("https://api.codaloud.test/api/github/repositories")) {
-        expect(new URL(String(url), "https://codaloud.test").searchParams.has("page")).toBe(false);
-        return GET(new Request(url, options));
-      }
-      const query = new URL(String(url)).searchParams;
-      upstreamPages.push(query.get("page")!);
-      expect(query.get("per_page")).toBe("2");
-      const page = Number(query.get("page"));
-      return Response.json([githubRepository(page * 2 - 1), githubRepository(page * 2)], {
-        headers: page === 1 ? { link: '<https://api.github.com/user/repos?page=2>; rel="next"' } : {},
-      });
-    });
-    const first = await readGitHubRepositories({ pageSize: 2 });
-    expect(first.repositories.map((repository) => repository.id)).toEqual([1, 2]);
-    expect(first.nextCursor).toEqual(expect.any(String));
-    const second = await readGitHubRepositories({ pageSize: 2, cursor: first.nextCursor });
-    expect(second.repositories.map((repository) => repository.id)).toEqual([3, 4]);
-    expect(second.nextCursor).toBeNull();
-    expect(upstreamPages).toEqual(["1", "2"]);
-    expect(mocks.getAccessToken).toHaveBeenCalledTimes(2);
+describe("device repository reads", () => {
+  it("calls GitHub directly with the device token and no Codaloud cookie", async () => {
+    const controller = new AbortController();
+    expect(await readGitHubRepositories({ signal: controller.signal })).toMatchObject({ repositories: [{ id: 1 }], nextCursor: null });
+    const [url, options] = network.mock.calls[0];
+    expect(new URL(String(url)).origin).toBe("https://api.github.com");
+    expect(new Headers(options?.headers).get("authorization")).toBe("token device-token");
+    expect(new Headers(options?.headers).has("cookie")).toBe(false);
+    expect(options?.signal).toBe(controller.signal);
+    expect(mocks.getCookie).not.toHaveBeenCalled();
   });
 
-  it.each(["ios", "android"])(
-    "uses the correct session transport on %s",
-    async (os) => {
-      mocks.platform.OS = os;
-      const controller = new AbortController();
-      network.mockResolvedValue(Response.json({ error: false, data: { repositories: [], nextCursor: null } }));
-      expect(
-        await readGitHubRepositories({ signal: controller.signal }),
-      ).toEqual({ repositories: [], nextCursor: null });
-      const [url, options] = network.mock.calls[0];
-      const expectedPath = `/api/github/repositories?pageSize=${PAGE_SIZE}`;
-      expect(url).toBe(`https://api.codaloud.test${expectedPath}`);
-      expect(new Headers(options?.headers).get("Cookie")).toBe("session=mobile");
-      expect(options?.credentials).toBe("omit");
-      expect(options?.signal).toBe(controller.signal);
-    },
-  );
-
-  it("omits the first cursor and forwards an opaque continuation unchanged", async () => {
-    network.mockImplementation(async () => Response.json({ error: false, data: { repositories: [], nextCursor: null } }));
-    await readGitHubRepositories({ pageSize: 8 });
-    await readGitHubRepositories({ cursor: "opaque-cursor", pageSize: 8 });
-    const queries = network.mock.calls.map(([url]) => new URL(String(url), "https://codaloud.test").searchParams);
-    expect(queries[0].has("cursor")).toBe(false);
-    expect(queries[1].get("cursor")).toBe("opaque-cursor");
-    expect(queries[1].get("pageSize")).toBe("8");
-  });
-
-  it("throws API errors with their HTTP status", async () => {
-    network.mockResolvedValue(
-      Response.json(
-        { error: true, message: "Connect GitHub first." },
-        { status: 403 },
-      ),
-    );
-    await expect(readGitHubRepositories()).rejects.toMatchObject({
-      message: "Connect GitHub first.",
-      status: 403,
-    });
-  });
-
-  it("rejects malformed responses", async () => {
-    network.mockResolvedValueOnce(new Response("Unavailable", { status: 502 }));
-    await expect(readGitHubRepositories()).rejects.toMatchObject({
-      message: "Unable to read the repository response.",
-      status: 502,
-    });
-    network.mockResolvedValueOnce(Response.json({ error: false }));
-    await expect(readGitHubRepositories()).rejects.toThrow(
-      /invalid repository response/,
-    );
-  });
-
-  it("preserves abort errors", async () => {
-    const abort = new DOMException("Cancelled", "AbortError");
-    network.mockRejectedValue(abort);
-    await expect(readGitHubRepositories()).rejects.toBe(abort);
+  it.each([401, 403, 429, 502])("returns null for failed GitHub requests: %s", async (status) => {
+    network.mockResolvedValue(Response.json({ message: "upstream error" }, { status }));
+    expect(await readGitHubRepositories()).toBeNull();
   });
 });
 
 describe("repository search", () => {
-  it("matches full names through the action and API while continuing across GitHub pages", async () => {
+  it("matches full names through the device action while continuing across GitHub pages", async () => {
     const scannedPages: number[] = [];
     const search = "  ACME/REPO-  ";
     network.mockImplementation(async (url, options) => {
-      if (String(url).startsWith("https://api.codaloud.test/api/github/repositories")) {
-        return GET(new Request(url, options));
-      }
       const page = Number(new URL(String(url)).searchParams.get("page"));
       scannedPages.push(page);
       return Response.json([
@@ -363,24 +296,18 @@ describe("repository search", () => {
       });
     });
     const first = await readGitHubRepositories({ search, pageSize: 1 });
+  if (!first) throw new Error("Expected a repository page");
     expect(first.repositories.map(({ fullName }) => fullName)).toEqual(["Acme/repo-2"]);
     expect(first.nextCursor).toEqual(expect.any(String));
     const second = await readGitHubRepositories({ search, pageSize: 1, cursor: first.nextCursor });
+  if (!second) throw new Error("Expected a repository page");
     expect(second.repositories.map(({ fullName }) => fullName)).toEqual(["Acme/repo-4"]);
     expect(second.nextCursor).toBeNull();
     expect(scannedPages).toEqual([1, 2]);
   });
 
-  it("passes encoded search through the action and route, matching names and descriptions before pagination", async () => {
+  it("passes encoded search through the device action, matching names and descriptions before pagination", async () => {
     network.mockImplementation(async (url, options) => {
-      if (String(url).startsWith("https://api.codaloud.test/api/github/repositories")) {
-        expect(
-          new URL(String(url), "https://codaloud.test").searchParams.get(
-            "search",
-          ),
-        ).toBe("  CLOUD & code  ");
-        return GET(new Request(url, options));
-      }
       const query = new URL(String(url)).searchParams;
       expect(new URL(String(url)).pathname).toBe("/user/repos");
       if (query.get("page") === "1") {
@@ -402,10 +329,12 @@ describe("repository search", () => {
       ]);
     });
     const first = await readGitHubRepositories({ search: "  CLOUD & code  ", pageSize: 1 });
+  if (!first) throw new Error("Expected a repository page");
     const result = await readGitHubRepositories({ search: "  CLOUD & code  ", pageSize: 1, cursor: first.nextCursor });
+  if (!result) throw new Error("Expected a repository page");
     expect(first.repositories.map((repository) => repository.id)).toEqual([1]);
     expect(result.repositories.map((repository) => repository.id)).toEqual([3]);
-    expect(network).toHaveBeenCalledTimes(5);
+    expect(network).toHaveBeenCalledTimes(3);
   });
 
   it("continues through pages with no matches and returns an empty result when exhausted", async () => {
@@ -470,16 +399,6 @@ describe("repository authentication error contract", () => {
 });
 
 
-it("preserves the reconnect code through the real repository action and route", async () => {
-  network.mockImplementation(async (url, options) => {
-    if (String(url).startsWith("https://api.codaloud.test/api/github/repositories")) {
-      return GET(new Request(url, options));
-    }
-    return Response.json({ message: "Bad credentials" }, { status: 401 });
-  });
-  await expect(readGitHubRepositories()).rejects.toMatchObject({ status: 403, code: "GITHUB_RECONNECT_REQUIRED" });
-});
-
 it("does not restart completed GitHub pages when loading the next search page", async () => {
   network.mockImplementation(async (url) => {
     const page = Number(new URL(String(url)).searchParams.get("page"));
@@ -534,17 +453,14 @@ describe("cursor API contract", () => {
     { repositories: [{ id: 1 }], nextCursor: null },
   ])("rejects incompatible successful responses: %j", async (data) => {
     network.mockResolvedValue(Response.json({ error: false, data }));
-    await expect(readGitHubRepositories()).rejects.toThrow(/invalid repository response/);
+    expect(await readGitHubRepositories()).toBeNull();
   });
 });
 
 
-it("continues an empty bounded search through the real action and API", async () => {
+it("continues an empty bounded search through the device action", async () => {
   const scannedPages: number[] = [];
   network.mockImplementation(async (url, options) => {
-    if (String(url).startsWith("https://api.codaloud.test/api/github/repositories")) {
-      return GET(new Request(url, options));
-    }
     const page = Number(new URL(String(url)).searchParams.get("page"));
     scannedPages.push(page);
     return Response.json([{ ...githubRepository(page), name: page === 6 ? "match" : "other" }], {
@@ -552,10 +468,12 @@ it("continues an empty bounded search through the real action and API", async ()
     });
   });
   const first = await readGitHubRepositories({ search: "match" });
+  if (!first) throw new Error("Expected a repository page");
   expect(first.repositories).toEqual([]);
   expect(first.nextCursor).toEqual(expect.any(String));
   expect(scannedPages).toEqual([1, 2, 3, 4, 5]);
   const next = await readGitHubRepositories({ search: "match", cursor: first.nextCursor });
+  if (!next) throw new Error("Expected a repository page");
   expect(next.repositories.map(({ id }) => id)).toEqual([6]);
   expect(next.nextCursor).toBeNull();
   expect(scannedPages).toEqual([1, 2, 3, 4, 5, 6]);
@@ -563,6 +481,6 @@ it("continues an empty bounded search through the real action and API", async ()
 
 it("rejects a non-advancing continuation instead of requesting it forever", async () => {
   network.mockResolvedValue(Response.json({ error: false, data: { repositories: [], nextCursor: "same-cursor" } }));
-  await expect(readGitHubRepositories({ cursor: "same-cursor" })).rejects.toThrow(/invalid repository response/);
-  expect(network).toHaveBeenCalledOnce();
+  expect(await readGitHubRepositories({ cursor: "same-cursor" })).toBeNull();
+  expect(network).not.toHaveBeenCalled();
 });

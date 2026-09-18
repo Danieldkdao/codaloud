@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useGitHubProfile } from "./use-github-profile";
 import { PAGE_SIZE } from "@/lib/constants";
 import { readGitHubRepositoryBranches } from "../actions/actions";
 import { gitHubRepositoryBranchesRequestSchema } from "../schemas";
@@ -16,8 +16,8 @@ export const useGitHubRepositoryBranches = (
     enabled?: boolean;
   } = {},
 ) => {
-  const session = useAuthSession();
-  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
+  const connection = useGitHubProfile();
+  const userId = connection.ready && connection.scopes.includes("repo") ? connection.profile?.id ?? null : null;
   const normalizedSearch = search.trim().toLowerCase();
   const validatedId = gitHubRepositoryBranchesRequestSchema.shape.repositoryId.safeParse(repositoryId);
 
@@ -28,7 +28,7 @@ export const useGitHubRepositoryBranches = (
     ],
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch can run even when the query is disabled.
-      if (!userId) throw new Error("Sign in to view GitHub branches.");
+      if (!userId) throw new Error("Connect GitHub to view branches.");
       if (!validatedId.success) throw new Error("Select a valid GitHub repository.");
 
       const branches = await readGitHubRepositoryBranches(validatedId.data, {
@@ -45,6 +45,7 @@ export const useGitHubRepositoryBranches = (
     initialPageParam: null as string | null,
     // Sparse searches can return an empty page with more branches to scan.
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    networkMode: "online",
     enabled: enabled && Boolean(userId) && validatedId.success,
   });
 

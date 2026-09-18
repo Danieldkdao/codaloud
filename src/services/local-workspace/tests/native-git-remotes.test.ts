@@ -80,3 +80,14 @@ it.each([false, true])("keeps local work intact when an incoming pull conflicts,
   expect(git(join(root, firstId), "show", "HEAD:base.txt")).toBe("local change");
   expect(git(join(root, firstId), "status", "--porcelain")).toBe("");
 });
+
+it("reads fetched remote history and branches without contacting the remote", () => {
+  expect(call(firstId, "git/push").ok).toBe(true);
+  const remoteHead = git(remote, "rev-parse", "HEAD");
+  commit(firstId, "local-only.txt", "offline\n");
+  rmSync(remote, { recursive: true });
+  const history = call(firstId, "git/history", { branch: "main", source: "remote" });
+  expect(history).toMatchObject({ ok: true, data: { snapshotSha: remoteHead } });
+  expect(call(firstId, "git/branches", { source: "remote" }).data.branches).toEqual(["main"]);
+  expect(call(firstId, "git/commit-details", { commitSha: remoteHead, source: "remote" }).data.source).toBe("remote");
+});

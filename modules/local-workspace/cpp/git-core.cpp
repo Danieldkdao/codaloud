@@ -239,7 +239,8 @@ Json gitOperation(const fs::path &root, const std::string &operation, const Json
   if (operation == "git/checkout" || operation == "git/create-branch") return checkoutBranch(repo.get(), args, operation == "git/create-branch");
   if (operation == "git/branches") {
     BranchIterator iterator;
-    checkGit(git_branch_iterator_new(iterator.out(), repo.get(), GIT_BRANCH_LOCAL));
+    const bool remote = args.value("source", "local") == "remote";
+    checkGit(git_branch_iterator_new(iterator.out(), repo.get(), remote ? GIT_BRANCH_REMOTE : GIT_BRANCH_LOCAL));
     std::set<std::string> names;
     int status;
     while (true) {
@@ -250,11 +251,16 @@ Json gitOperation(const fs::path &root, const std::string &operation, const Json
       checkGit(status);
       const char *name;
       checkGit(git_branch_name(&name, branch.get()));
-      names.insert(name);
+      std::string label = name;
+      if (remote) {
+        if (label.rfind("origin/", 0) != 0 || label == "origin/HEAD") continue;
+        label = label.substr(7);
+      }
+      names.insert(label);
       if (names.size() > 50000) throw WorkspaceError("TOO_MANY_BRANCHES", "This repository contains too many branches.");
     }
     const auto active = currentBranch(repo.get());
-    if (!active.is_null()) names.insert(active.get<std::string>());
+    if (!remote && !active.is_null()) names.insert(active.get<std::string>());
     return {{"branches", names}, {"currentBranch", active}};
   }
   return gitReadOperation(repo.get(), operation, args);

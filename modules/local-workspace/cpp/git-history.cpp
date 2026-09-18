@@ -33,8 +33,8 @@ static Json history(git_repository *repo, const Json &args) {
     int valid = 0;
     checkGit(git_branch_name_is_valid(&valid, branch.c_str()));
     if (!valid) throw WorkspaceError("INVALID_BRANCH", "Select a valid branch.");
-    status = git_reference_name_to_id(&snapshot, repo, ("refs/heads/" + branch).c_str());
-    if ((status == GIT_ENOTFOUND || status == GIT_EUNBORNBRANCH) && currentBranch(repo) == branch && git_repository_head_unborn(repo) == 1)
+    status = git_reference_name_to_id(&snapshot, repo, (std::string(args.value("source", "local") == "remote" ? "refs/remotes/origin/" : "refs/heads/") + branch).c_str());
+    if (args.value("source", "local") != "remote" && (status == GIT_ENOTFOUND || status == GIT_EUNBORNBRANCH) && currentBranch(repo) == branch && git_repository_head_unborn(repo) == 1)
       return {{"commits", Json::array()}, {"snapshotSha", nullptr}, {"nextOffset", nullptr}, {"isShallow", false}};
   }
   checkGit(status);
@@ -108,7 +108,7 @@ static Json commitDetails(git_repository *repo, const Json &args) {
     responseBytes += files.back().dump().size();
     if (responseBytes > 8 * 1024 * 1024) throw WorkspaceError("DIFF_TOO_LARGE", "This commit exceeds the diff preview limit.");
   }
-  return {{"source", "local"}, {"commit", commitMetadata(commit.get(), true)}, {"baseSha", baseSha},
+  return {{"source", args.value("source", "local")}, {"commit", commitMetadata(commit.get(), true)}, {"baseSha", baseSha},
     {"files", files}, {"githubUrl", nullptr}, {"summary", {{"fileCount", count}, {"additions", additions}, {"deletions", deletions}, {"unavailableCount", unavailable}}}};
 }
 

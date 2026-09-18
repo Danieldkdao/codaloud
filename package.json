@@ -103,7 +103,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:auth": "pnpm dlx auth@1.7.3 generate --config ./src/lib/auth/auth.ts --output ./src/db/schemas/new-user.ts --yes",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
+    "android": "expo run:android",
     "ios": "exec expo run:ios --device",
     "export:api": "EXPO_NO_WEB_SETUP=1 expo export --platform web --api-only",
     "lint": "expo lint",
@@ -118,7 +118,8 @@
     "build:native:ios": "node scripts/build-local-workspace-ios.mjs",
     "build:native:host": "node scripts/build-local-workspace-host.mjs",
     "postinstall": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs",
-    "preios": "node scripts/build-local-typescript.mjs && node scripts/build-local-workspace-ios.mjs"
+    "preios": "node scripts/build-local-typescript.mjs && node scripts/build-local-workspace-ios.mjs",
+    "preandroid": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs"
   },
   "private": true,
   "packageManager": "pnpm@12.4.1"

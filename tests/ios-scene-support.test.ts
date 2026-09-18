@@ -10,7 +10,7 @@ it("generates a resolvable scene configuration for iOS 27 launch", () => {
     // A clean project prevents an old generated Info.plist from hiding a regression.
     for (const file of ["app.json", "package.json"])
       copyFileSync(resolve(file), join(project, file));
-    for (const directory of ["node_modules", "assets", "src"])
+    for (const directory of ["node_modules", "assets", "src", "scripts"])
       symlinkSync(resolve(directory), join(project, directory), "dir");
     const output = execFileSync(process.execPath, [
       resolve("node_modules/expo/bin/cli"), "config", project, "--type", "introspect", "--json",

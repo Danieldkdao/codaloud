@@ -17,3 +17,11 @@ CREATE TABLE projects (
 );
 CREATE INDEX projects_user_id_updated_at_idx ON projects (user_id, updated_at DESC);
 `;
+
+export const localWorkspacePreferencesMigration = `
+CREATE TABLE workspace (
+  id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+  owner_id TEXT NOT NULL,
+  has_entered INTEGER NOT NULL DEFAULT 0 CHECK (has_entered IN (0, 1))
+);
+`;

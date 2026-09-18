@@ -190,3 +190,9 @@ export type ProjectGitMutationContext = {
   userId: string | null;
   projectId: string | null | undefined;
 };
+
+export type ProjectOpenFilesState = {
+  openFilePaths: string[];
+  activeFilePath: string | null;
+  versions: Record<string, number>;
+};

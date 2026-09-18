@@ -16,7 +16,7 @@ vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending:
 vi.mock("../actions/file-actions", () => ({ readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: mocks.isDarkMode }), useThemeColor: () => "transparent" }));
 vi.mock("@/components/code-editor", () => ({ default: (props: ComponentProps<typeof CodeEditor>) => {
-  useImperativeHandle(props.ref, () => ({ nextMatch: mocks.nextMatch, previousMatch: mocks.previousMatch }));
+  useImperativeHandle(props.ref, () => ({ flushChanges: async () => {}, nextMatch: mocks.nextMatch, previousMatch: mocks.previousMatch }));
   mocks.editor(props);
   return <div data-testid="editor">{props.initialValue}</div>;
 } }));

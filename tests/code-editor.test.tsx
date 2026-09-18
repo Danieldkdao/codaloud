@@ -429,3 +429,40 @@ it("reveals a match hidden inside a folded section", async () => {
   expect(foldedRanges(editor().state).size).toBe(0);
   expect(container.querySelector(".cm-fileMatch-active")?.textContent).toBe("target");
 });
+
+
+it("preserves per-document text, selection, scroll and undo when switching tabs", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  const show = (key: string, initialValue: string) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.txt`, initialValue, documentKey: key, openDocumentKeys: ["a", "b"], onChange,
+  })));
+  await show("a", "first");
+  act(() => editor().dispatch({ changes: { from: 0, insert: "edited " }, selection: { anchor: 3 } }));
+  editor().scrollDOM.scrollTop = 84;
+  await show("b", "second");
+  expect(editor().state.sliceDoc()).toBe("second");
+  act(() => editor().dispatch({ changes: { from: 0, insert: "other " } }));
+  await show("a", "first");
+  expect(editor().state.sliceDoc()).toBe("edited first");
+  expect(editor().state.selection.main.anchor).toBe(3);
+  expect(editor().scrollDOM.scrollTop).toBe(84);
+  act(() => undo(editor()));
+  expect(editor().state.sliceDoc()).toBe("first");
+  expect(onChange).toHaveBeenLastCalledWith("first", "a");
+  await show("b", "second");
+  expect(editor().state.sliceDoc()).toBe("other second");
+});
+
+it("drops closed buffers and binds queued bridge events to their originating document", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  const show = (key: string, keys: string[]) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.txt`, initialValue: "original", documentKey: key, openDocumentKeys: keys, onChange,
+  })));
+  await show("a", ["a", "b"]);
+  act(() => editor().dispatch({ changes: { from: 0, insert: "old " } }));
+  expect(onChange).toHaveBeenLastCalledWith("old original", "a");
+  await show("b", ["b"]);
+  await show("a", ["a", "b"]);
+  expect(editor().state.sliceDoc()).toBe("original");
+  expect(undo(editor())).toBe(false);
+});

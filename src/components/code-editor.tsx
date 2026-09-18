@@ -1,7 +1,7 @@
 "use dom";
 
 import { basicSetup, EditorView } from "codemirror";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import {
   HighlightStyle,
   LanguageDescription,
@@ -25,6 +25,7 @@ import "@/global.css";
 import "@/styles/code-editor.css";
 
 export interface CodeEditorRef extends DOMImperativeFactory {
+  flushChanges: () => Promise<void>;
   nextMatch: () => void;
   previousMatch: () => void;
 }
@@ -34,6 +35,8 @@ type CodeEditorProps = {
   /** Literal, case-insensitive search terms. Matching runs against the live document. */
   matches?: string[];
   onMatchesChange?: (state: CodeEditorMatchState) => Promise<void>;
+  documentKey?: string;
+  openDocumentKeys?: string[];
   filename: string;
   /** Initial text for this document. Live edits stay inside CodeMirror. */
   initialValue: string;
@@ -43,10 +46,10 @@ type CodeEditorProps = {
   /** DOM components have a separate React tree, so appearance crosses as a prop. */
   colorScheme?: "light" | "dark";
   /** Signals that CodeMirror has finished its initial layout. */
-  onReady?: () => Promise<void>;
-  onChange?: (content: string) => Promise<void>;
-  onRequestAnalysis?: CodeEditorAnalysisRequest;
-  onAnalysis?: (analysis: CodeEditorAnalysis) => Promise<void>;
+  onReady?: (documentKey?: string) => Promise<void>;
+  onChange?: (content: string, documentKey?: string) => Promise<void>;
+  onRequestAnalysis?: (input: Parameters<CodeEditorAnalysisRequest>[0], documentKey?: string) => ReturnType<CodeEditorAnalysisRequest>;
+  onAnalysis?: (analysis: CodeEditorAnalysis, documentKey?: string) => Promise<void>;
   analysisPanelRequest?: number;
   dom?: import("expo/dom").DOMProps;
 };
@@ -92,6 +95,8 @@ const CodeEditor = ({
   matches,
   onMatchesChange,
   filename,
+  documentKey,
+  openDocumentKeys,
   initialValue,
   readOnly = false,
   bottomInset = 0,
@@ -103,6 +108,15 @@ const CodeEditor = ({
   analysisPanelRequest = 0,
 }: CodeEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
+  const buffers = useRef(new Map<string, { state: EditorState; top: number; left: number }>());
+  const openKeys = useRef(openDocumentKeys);
+  openKeys.current = openDocumentKeys;
+  const pendingChanges = useRef(new Set<Promise<void>>());
+  useEffect(() => {
+    if (openDocumentKeys) for (const key of buffers.current.keys()) {
+      if (!openDocumentKeys.includes(key)) buffers.current.delete(key);
+    }
+  }, [openDocumentKeys]);
   const matchesKey = JSON.stringify(matches ?? []);
   const matchesCallback = useRef(onMatchesChange);
   matchesCallback.current = onMatchesChange;
@@ -134,6 +148,9 @@ const CodeEditor = ({
   inset.current = effectiveInset;
 
   useDOMImperativeHandle(ref ?? null, () => ({
+    flushChanges: async () => {
+      while (pendingChanges.current.size) await Promise.all([...pendingChanges.current]);
+    },
     nextMatch: () => { if (view.current) moveCodeEditorMatch(view.current, 1); },
     previousMatch: () => { if (view.current) moveCodeEditorMatch(view.current, -1); },
   }), []);
@@ -155,20 +172,17 @@ const CodeEditor = ({
     pendingProblemsPanel.current = false;
     const intelligence = hasAnalysis ? createCodeEditorIntelligence(
       filename,
-      async (input) => analysisCallbacks.current.onRequestAnalysis?.(input) ?? null,
+      async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, documentKey) ?? null,
       (analysis) => {
         analysisStatus.current = analysis.status;
-        void analysisCallbacks.current.onAnalysis?.(analysis).catch(() => {});
+        void (documentKey ? analysisCallbacks.current.onAnalysis?.(analysis, documentKey) : analysisCallbacks.current.onAnalysis?.(analysis))?.catch(() => {});
         if (analysis.status === "ready" && pendingProblemsPanel.current) {
           pendingProblemsPanel.current = false;
           requestAnimationFrame(() => { if (!disposed && view.current === editor) openLintPanel(editor); });
         }
       },
     ) : null;
-    const editor = new EditorView({
-      parent: host.current,
-      doc: initialValue,
-      extensions: [
+    const extensions = [
         basicSetup,
         codeEditorMatches,
         editability.of([
@@ -183,9 +197,15 @@ const CodeEditor = ({
         EditorView.updateListener.of((update) => {
           if (update.startState.field(codeEditorMatches) !== update.state.field(codeEditorMatches)) reportMatches(update.view);
           if (update.docChanged) {
-            void changeCallback.current?.(update.state.sliceDoc()).catch((error: unknown) => {
-              console.warn("Unable to report editor changes", error);
-            });
+            const pending = documentKey
+              ? changeCallback.current?.(update.state.sliceDoc(), documentKey)
+              : changeCallback.current?.(update.state.sliceDoc());
+            if (pending) {
+              pendingChanges.current.add(pending);
+              void pending.catch((error: unknown) => {
+                console.warn("Unable to report editor changes", error);
+              }).finally(() => pendingChanges.current.delete(pending));
+            }
           }
         }),
         syntaxHighlighting(highlightStyle),
@@ -200,11 +220,21 @@ const CodeEditor = ({
           spellcheck: "false",
         })),
         EditorView.scrollMargins.of(() => ({ bottom: inset.current })),
-      ],
+      ];
+    const buffer = documentKey ? buffers.current.get(documentKey) : undefined;
+    const editor = new EditorView({
+      parent: host.current,
+      state: buffer
+        ? buffer.state.update({ effects: [StateEffect.reconfigure.of(extensions), editability.reconfigure([EditorState.readOnly.of(readOnlyRef.current), EditorView.editable.of(!readOnlyRef.current)])] }).state
+        : EditorState.create({ doc: initialValue, extensions }),
     });
+    if (buffer) {
+      editor.scrollDOM.scrollTop = buffer.top;
+      editor.scrollDOM.scrollLeft = buffer.left;
+    }
     view.current = editor;
     reportedMatches.current = null;
-    if (!hasAnalysis) void analysisCallbacks.current.onAnalysis?.({ status: "unsupported", diagnostics: [] }).catch(() => {});
+    if (!hasAnalysis) void analysisCallbacks.current.onAnalysis?.({ status: "unsupported", diagnostics: [] }, documentKey).catch(() => {});
     const description = LanguageDescription.matchFilename(languages, filename);
     setLanguageError(false);
     const languageSetup = description
@@ -223,11 +253,14 @@ const CodeEditor = ({
     });
     return () => {
       disposed = true;
+      if (documentKey && (!openKeys.current || openKeys.current.includes(documentKey))) {
+        buffers.current.set(documentKey, { state: editor.state, top: editor.scrollDOM.scrollTop, left: editor.scrollDOM.scrollLeft });
+      }
       intelligence?.destroy();
       editor.destroy();
       view.current = null;
     };
-  }, [filename, initialValue, hasAnalysis, editability]);
+  }, [filename, initialValue, hasAnalysis, editability, documentKey]);
 
   useEffect(() => {
     const editor = view.current;
@@ -235,7 +268,7 @@ const CodeEditor = ({
     editor.dispatch({ effects: setCodeEditorMatches.of(JSON.parse(matchesKey) as string[]) });
     reportMatches(editor);
     scrollToActiveCodeEditorMatch(editor);
-  }, [matchesKey, filename, initialValue, hasAnalysis]);
+  }, [matchesKey, filename, initialValue, hasAnalysis, documentKey]);
 
   useEffect(() => {
     // Reconfigure in place so switching modes preserves document and undo state.
@@ -274,7 +307,7 @@ const CodeEditor = ({
         requestAnimationFrame(() => {
           if (!disposed && view.current === preparedEditor) scrollToActiveCodeEditorMatch(preparedEditor);
         });
-        void readyCallback.current?.().catch((error: unknown) => {
+        void readyCallback.current?.(documentKey).catch((error: unknown) => {
           console.warn("Unable to report editor readiness", error);
         });
       },

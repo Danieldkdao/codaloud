@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppStateStatus } from "react-native";
 import { ProjectFileSaveRegistryProvider, ProjectFileSaveProvider, useProjectFileSave, useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 
+import { useProjectEditorDocuments } from "../hooks/use-project-editor-documents";
+
 const mocks = vi.hoisted(() => ({ save: vi.fn(), read: vi.fn() }));
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: AppStateStatus) => void>() }));
 vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, listener: (state: AppStateStatus) => void) => {
@@ -571,4 +573,52 @@ it("blocks renames and dependent flushes while Git holds the documents", async (
   await expect(registry.renameFiles("one.ts", "other.ts", vi.fn())).rejects.toThrow("Git");
   await expect(registry.flushPendingSaves()).rejects.toThrow("Git");
   await act(async () => { finish(); await pending; });
+});
+
+
+let editorDocuments: ReturnType<typeof useProjectEditorDocuments>;
+const EditorProbe = ({ path, content, paths }: { path: string; content: string; paths: string[] }) => {
+  editorDocuments = useProjectEditorDocuments({ activeFilePath: path, openFilePaths: paths, getFileVersion: () => 0 }, content);
+  registry = useProjectFileSaveRegistry();
+  return null;
+};
+const renderEditor = (path: string, content = "original", paths = ["one.ts", "two.ts"]) => act(async () => root.render(
+  createElement(QueryClientProvider, { client }, createElement(ProjectFileSaveRegistryProvider, { projectId: "project-one", children:
+    createElement(EditorProbe, { path, content, paths }),
+  })),
+));
+
+it("retains each open document and routes late bridge edits to their source", async () => {
+  await renderEditor("one.ts");
+  const first = editorDocuments.editor!.key;
+  await act(async () => editorDocuments.onChange("first draft", first));
+  await renderEditor("two.ts", "second file");
+  const second = editorDocuments.editor!.key;
+  await act(async () => editorDocuments.onChange("late first draft", first));
+  expect(editorDocuments.status.status).toBe("saved");
+  await tick();
+  expect(mocks.save.mock.calls.every((call) => call[1].path === "one.ts")).toBe(true);
+  await renderEditor("one.ts", "late first draft");
+  expect(editorDocuments.editor!.key).toBe(first);
+  await renderEditor("two.ts", "second file");
+  expect(editorDocuments.editor!.key).toBe(second);
+});
+
+it("flushes a closing file and refuses to hide a failed save", async () => {
+  await renderEditor("one.ts");
+  await act(async () => editorDocuments.onChange("draft", editorDocuments.editor!.key));
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Cannot save" });
+  await act(async () => { await expect(editorDocuments.flushFile("one.ts")).rejects.toThrow("Cannot save"); });
+  expect(editorDocuments.status.status).toBe("error");
+  await act(async () => editorDocuments.retry());
+  await act(async () => { await expect(editorDocuments.flushFile("one.ts")).resolves.toBeUndefined(); });
+});
+
+it("does not replace a local draft when server content refreshes", async () => {
+  await renderEditor("one.ts");
+  const first = editorDocuments.editor!.key;
+  await act(async () => editorDocuments.onChange("local draft", first));
+  await renderEditor("one.ts", "external change");
+  expect(editorDocuments.editor!.key).toBe(first);
+  expect(registry.getDocument("one.ts", 0, "external change").getContent()).toBe("local draft");
 });

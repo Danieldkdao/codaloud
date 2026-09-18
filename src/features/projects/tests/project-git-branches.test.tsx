@@ -369,7 +369,8 @@ it.each(["18: video call stream\n", "18: video call stream\n\nLong commit body",
 it("shows branch loading until the current branch resolves, then preserves selection while refreshing", () => {
   live.data = undefined; live.isPending = true; live.isFetching = true;
   act(() => root.render(createElement(Workspace, { key: "loading-branch" })));
-  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("Loading branches…");
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("");
+  expect(container.querySelector('[data-testid="branch-indicator"] [role="progressbar"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Branch: Loading branches…"]')).not.toBeNull();
   click("Commit History");
   expect(container.textContent).not.toContain("Select a branch");

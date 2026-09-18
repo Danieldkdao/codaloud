@@ -102,6 +102,7 @@ export const ProjectBranchMenu = ({
     );
   };
   const label = formatProjectBranchLabel(branch, isBranchLoading);
+  const loadingBranch = !branch && isBranchLoading;
   const [open, setOpen] = useState(false);
   const switchAfterDismiss = useRef(false);
 
@@ -133,15 +134,19 @@ export const ProjectBranchMenu = ({
             style={{ maxWidth: Math.max(40, maxWidth - 190) }}
             className="min-w-0 shrink"
           >
-            <CodeText
-              className="text-lg font-medium text-secondary-foreground"
-              numberOfLines={1}
-              ellipsizeMode="middle"
-            >
-              {label}
-            </CodeText>
+            {loadingBranch ? (
+              <ActivityIndicator className="text-primary" accessibilityLabel={label} />
+            ) : (
+              <CodeText
+                className="text-lg font-medium text-secondary-foreground"
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                {label}
+              </CodeText>
+            )}
           </View>
-          {(isWorkspaceBusy || git.isFetching) && (
+          {!loadingBranch && (isWorkspaceBusy || git.isFetching) && (
             <ActivityIndicator
               className="text-primary"
               accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"}

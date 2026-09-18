@@ -12,7 +12,6 @@ export const refreshProjectGitQueries = async (
     ["projects", "branches", "infinite", "cursor", userId, projectId],
     ["projects", "file-search", "infinite", userId, projectId],
     ["projects", "stashes", "infinite", userId, projectId],
-    ["projects", "stash-details", userId, projectId],
     ["projects", "discard-preview", userId, projectId],
   ];
   const documents = ["file", "files", "changes", "git-counts", "commit-details", "detail"]

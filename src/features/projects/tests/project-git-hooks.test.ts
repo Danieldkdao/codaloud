@@ -59,7 +59,7 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   root = createRoot(document.createElement("div"));
   actions.readProjectGitCountsAction.mockResolvedValue(counts);
-  actions.readProjectStashesAction.mockResolvedValue({ stashes: [], nextCursor: null, patch: null });
+  actions.readProjectStashesAction.mockResolvedValue({ stashes: [], nextCursor: null });
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -239,8 +239,8 @@ verifyMutation({
 
 describe("stash list", () => {
   it("normalizes search, paginates, and keeps successful empty pages", async () => {
-    actions.readProjectStashesAction.mockResolvedValueOnce({ stashes: [], patch: null, nextCursor: "next" })
-      .mockResolvedValue({ stashes: [], patch: null, nextCursor: null });
+    actions.readProjectStashesAction.mockResolvedValueOnce({ stashes: [], nextCursor: "next" })
+      .mockResolvedValue({ stashes: [], nextCursor: null });
     const hook = await renderHook(() => useProjectStashes(projectId, { search: " WORK ", pageSize: 5 }));
     expect(hook.current.data?.pages).toHaveLength(1);
     expect(hook.current.hasNextPage).toBe(true);
@@ -263,10 +263,10 @@ describe("stash list", () => {
     expect(actions.readProjectStashesAction).not.toHaveBeenCalled();
   });
   it.each(["INVALID_STASH_CURSOR", "GIT_STASH_CHANGED"])("restarts expired %s pagination after first-page eviction", async (code) => {
-    actions.readProjectStashesAction.mockResolvedValueOnce({ stashes: [], patch: null, nextCursor: "next" })
-      .mockResolvedValueOnce({ stashes: [], patch: null, nextCursor: "last" })
+    actions.readProjectStashesAction.mockResolvedValueOnce({ stashes: [], nextCursor: "next" })
+      .mockResolvedValueOnce({ stashes: [], nextCursor: "last" })
       .mockImplementationOnce(async (_id, _input, _signal, onFailure) => { onFailure(409, null, code); return null; })
-      .mockResolvedValue({ stashes: [], patch: null, nextCursor: null });
+      .mockResolvedValue({ stashes: [], nextCursor: null });
     const hook = await renderHook(() => useProjectStashes(projectId, { maxPages: 1 }));
     await run(async () => { await hook.current.loadMore(); });
     await run(async () => { await hook.current.loadMore(); });
@@ -274,26 +274,6 @@ describe("stash list", () => {
     await run(async () => { await hook.current.retry(); });
     expect(actions.readProjectStashesAction.mock.calls.map(([, input]) => input.cursor)).toEqual([undefined, "next", "last", undefined]);
     expect(hook.current.data?.pageParams).toEqual([undefined]);
-  });
-});
-
-describe("stash details", () => {
-  it("loads the selected stash by index and SHA with a separate cache key", async () => {
-    const stashSha = "a".repeat(40);
-    const details = { stashes: [{ index: 0, sha: stashSha, message: "work", createdAt: "2026-09-15T12:00:00Z" }], nextCursor: null, patch: "diff --git" };
-    actions.readProjectStashesAction.mockResolvedValue(details);
-    const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false, stashIndex: 0, stashSha }));
-    expect(hook.current.stashDetails.data).toBeUndefined();
-    await run(() => hook.current.stashDetails.refetch({ throwOnError: true }));
-    expect(hook.current.stashDetails.data).toEqual(details);
-    expect(actions.readProjectStashesAction).toHaveBeenCalledExactlyOnceWith(projectId,
-      { index: 0, stashSha, search: "", pageSize: 20 }, expect.any(AbortSignal), expect.any(Function));
-    expect(client.getQueryData(["projects", "stash-details", "user-one", projectId, 0, stashSha])).toEqual(details);
-  });
-  it("never requests an unidentified stash, even through manual refetch", async () => {
-    const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false }));
-    await run(async () => { await expect(hook.current.stashDetails.refetch({ throwOnError: true })).rejects.toThrow(); });
-    expect(actions.readProjectStashesAction).not.toHaveBeenCalled();
   });
 });
 
@@ -356,7 +336,6 @@ const verifyReadRetries = (name: string, useRead: () => { refetch: (options: { t
 verifyReadRetries("counts", () => useProjectGit(projectId, { enabled: false }), actions.readProjectGitCountsAction, "git-counts");
 verifyReadRetries("discard preview", () => useProjectChanges(projectId, { enabled: false }).discardPreview, actions.readProjectDiscardPreviewAction, "discard-preview");
 verifyReadRetries("stash list", () => useProjectStashes(projectId, { enabled: false }), actions.readProjectStashesAction, "stashes");
-verifyReadRetries("stash details", () => useProjectStashes(projectId, { enabled: false, stashIndex: 0, stashSha: "a".repeat(40) }).stashDetails, actions.readProjectStashesAction, "stash-details");
 
 verifyMutation({
   name: "delete stash",
@@ -365,14 +344,11 @@ verifyMutation({
   input: { stashIndex: 0, stashSha: "a".repeat(40) },
 });
 
-it("resets stash cursors and details after deletion, including an uncertain response", async () => {
+it("resets stash cursors after deletion, including an uncertain response", async () => {
   const list = ["projects", "stashes", "infinite", "user-one", projectId, {}];
-  const details = ["projects", "stash-details", "user-one", projectId, 1, "a".repeat(40)];
   client.setQueryData(list, { pages: [{ nextCursor: "stale" }], pageParams: [undefined] });
-  client.setQueryData(details, { patch: "stale" });
   actions.deleteProjectStashAction.mockResolvedValue({ error: true, code: "GIT_OUTCOME_UNKNOWN", message: "Refresh stashes." });
   const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false }));
   await run(async () => { await expect(hook.current.gitDeleteStash.mutateAsync({ stashIndex: 0, stashSha: "a".repeat(40) })).rejects.toThrow(); });
   expect(client.getQueryData(list)).toBeUndefined();
-  expect(client.getQueryData(details)).toBeUndefined();
 });

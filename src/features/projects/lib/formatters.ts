@@ -739,19 +739,6 @@ export const formatProjectStashResult = (
     : "No new changes to stash.";
 };
 export const formatProjectStashLabel = (index: number) => `View stash ${index}`;
-export const formatProjectStashPatchLine = (line: string) => {
-  switch (line[0]) {
-    case "+":
-      return "bg-success text-success-foreground";
-    case "-":
-      return "bg-destructive/10 text-destructive";
-    case "@":
-      return "bg-secondary text-secondary-foreground";
-    default:
-      return "text-foreground";
-  }
-};
-
 export const formatProjectUndoMode = (mode: GitUndoMode) => {
   switch (mode) {
     case "soft":

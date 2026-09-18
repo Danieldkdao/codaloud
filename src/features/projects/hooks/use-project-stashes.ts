@@ -21,7 +21,6 @@ import {
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   useInfiniteQuery,
-  useQuery,
   useQueryClient,
   useMutation,
 } from "@tanstack/react-query";
@@ -38,14 +37,10 @@ export const useProjectStashes = (
   {
     enabled = true,
     maxPages = 0,
-    stashIndex,
-    stashSha,
     ...filters
   }: Partial<Pick<GitStashQuerySchema, "search" | "pageSize">> & {
     enabled?: boolean;
     maxPages?: number;
-    stashIndex?: number;
-    stashSha?: string;
   } = {},
 ) => {
   const queryClient = useQueryClient();
@@ -113,55 +108,6 @@ export const useProjectStashes = (
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
-  const selection = gitStashQuerySchema.safeParse({
-    index: stashIndex,
-    stashSha,
-  });
-  const stashDetails = useQuery({
-    queryKey: [
-      "projects",
-      "stash-details",
-      userId,
-      projectId,
-      stashIndex,
-      stashSha,
-    ],
-    enabled:
-      enabled &&
-      Boolean(userId) &&
-      validProject &&
-      selection.success &&
-      selection.data.index !== undefined,
-    retry: (failureCount, error) =>
-      error instanceof ProjectGitRequestError &&
-      ((error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
-        (failureCount < 2 && (error.status === 0 || error.status >= 500))),
-    retryDelay: (attempt, error) =>
-      error instanceof ProjectGitRequestError
-        ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
-        : 0,
-    queryFn: async ({ signal }) => {
-      const id = requireProjectGitSession(userId, projectId);
-      if (!selection.success || selection.data.index === undefined)
-        throw new Error("Select a valid stash index and SHA.");
-      let failure: ProjectGitRequestError | undefined;
-      const details = await readProjectStashesAction(
-        id,
-        selection.data,
-        signal,
-        (status, retryAfter, code) => {
-          failure = new ProjectGitRequestError(status, retryAfter, code);
-        },
-      );
-      if (details === null)
-        throw (
-          failure ??
-          new Error("Unable to load stash details. Please try again.")
-        );
-      return details;
-    },
-  });
-
   const loadMore = () => {
     if (
       enabled &&
@@ -267,7 +213,6 @@ export const useProjectStashes = (
     ...query,
     loadMore,
     retry,
-    stashDetails,
     gitStash,
     gitPopStash,
     gitDeleteStash,

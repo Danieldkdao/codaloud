@@ -15,9 +15,8 @@ import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit
 import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
 
 const stashes = vi.hoisted(() => ({
-  data: { pages: [{ stashes: [{ index: 0, sha: "c".repeat(40), message: "Saved mobile work", createdAt: "2026-09-16T12:00:00Z" }], patch: null, nextCursor: null }] },
+  data: { pages: [{ stashes: [{ index: 0, sha: "c".repeat(40), message: "Saved mobile work", createdAt: "2026-09-16T12:00:00Z" }], nextCursor: null }] },
   refetch: vi.fn(), retry: vi.fn(), loadMore: vi.fn(), isFetching: false, isPending: false, hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
-  stashDetails: { data: { patch: "diff --git a/test.txt b/test.txt\n+saved change\n", stashes: [], nextCursor: null }, refetch: vi.fn(), isFetching: false, isPending: false, error: null as Error | null, fetchStatus: "idle" },
   gitStash: { mutateAsync: vi.fn() }, gitPopStash: { mutateAsync: vi.fn() }, gitDeleteStash: { mutateAsync: vi.fn() },
 }));
 vi.mock("@/features/projects/hooks/use-project-stashes", () => ({ useProjectStashes: () => stashes }));

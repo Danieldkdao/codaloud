@@ -10,7 +10,6 @@ const snapshots = (user: string, project: string) => [
   ["projects", "branches", "infinite", "cursor", user, project, "local"],
   ["projects", "file-search", "infinite", user, project],
   ["projects", "stashes", "infinite", user, project],
-  ["projects", "stash-details", user, project, 0, "sha"],
   ["projects", "discard-preview", user, project],
 ];
 const documents = (user: string, project: string) => [

@@ -166,6 +166,6 @@ Json gitMutation(git_repository *repo, const std::string &operation, const Json 
   if (operation == "git/discard") return discard(repo, args);
   if (operation == "git/undo") return undo(repo, args);
   if (operation == "git/revert") return revert(repo, args);
-  throw WorkspaceError("UNKNOWN_OPERATION", "Unknown local Git operation.");
+  return gitRemoteOperation(repo, operation, args);
 }
 }

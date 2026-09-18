@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <iomanip>
 #include <mutex>
+#include <map>
+#include <memory>
 #include <regex>
 #include <sstream>
 
@@ -35,24 +37,46 @@ fs::path checkedPath(const fs::path &root, const std::string &relative, bool all
 }
 
 std::string execute(const std::string &base, const std::string &request) {
-  // All worktree and Git mutations use this same lock. Native AsyncFunctions run
-  // off the UI thread, so a save cannot race a checkout or another file operation.
-  static std::mutex workspaceMutex;
-  std::lock_guard<std::mutex> lock(workspaceMutex);
-  static const int initialized = git_libgit2_init();
+  static std::mutex registryMutex;
+  static std::map<std::string, std::weak_ptr<std::mutex>> locks;
+  static const int initialized = [] {
+    const int result = git_libgit2_init();
+    if (result >= 0) {
+      git_libgit2_opts(GIT_OPT_SET_SERVER_CONNECT_TIMEOUT, 15000);
+      git_libgit2_opts(GIT_OPT_SET_SERVER_TIMEOUT, 45000);
+    }
+    return result;
+  }();
   try {
     checkGit(initialized);
     const auto input = Json::parse(request);
     const auto id = input.at("projectId").get<std::string>();
     if (!std::regex_match(id, std::regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")))
       throw WorkspaceError("INVALID_PROJECT", "Invalid local project ID.");
+    std::shared_ptr<std::mutex> projectMutex;
+    {
+      std::lock_guard<std::mutex> lock(registryMutex);
+      if (locks.size() > 256) for (auto i = locks.begin(); i != locks.end();) {
+        if (i->second.expired()) i = locks.erase(i); else ++i;
+      }
+      auto &entry = locks[base + "/" + id];
+      projectMutex = entry.lock();
+      if (!projectMutex) { projectMutex = std::make_shared<std::mutex>(); entry = projectMutex; }
+    }
+    // Save and checkout share a per-project lock. Fetching one project must not
+    // block local reads or saves in a different project.
+    std::lock_guard<std::mutex> projectLock(*projectMutex);
     const auto operation = input.at("operation").get<std::string>();
     const auto args = input.value("args", Json::object());
     const fs::path root = fs::path(base) / id;
     fs::create_directories(base);
     if (fs::is_symlink(fs::symlink_status(root))) throw WorkspaceError("INVALID_PROJECT", "Invalid local project folder.");
     Json data;
-    if (operation == "initialize") {
+    if (operation == "clone") {
+      if (fs::exists(root)) throw WorkspaceError("PROJECT_EXISTS", "This project already exists on the device.");
+      try { cloneRepository(root, args); } catch (...) { fs::remove_all(root); throw; }
+      data = true;
+    } else if (operation == "initialize") {
       if (fs::exists(root)) throw WorkspaceError("PROJECT_EXISTS", "This project already exists on the device.");
       fs::create_directory(root);
       try { initializeGit(root); } catch (...) { fs::remove_all(root); throw; }

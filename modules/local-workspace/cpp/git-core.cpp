@@ -79,6 +79,24 @@ void requireMutableBranch(git_repository *repo) {
   if (git_index_has_conflicts(index.get())) throw WorkspaceError("UNRESOLVED_CONFLICTS", "Resolve the file conflicts before continuing.");
 }
 
+void checkoutAndUpdateHead(git_repository *repo, const git_oid *next, const git_oid *expected) {
+  Commit target;
+  checkGit(git_commit_lookup(target.out(), repo, next));
+  git_checkout_options options = GIT_CHECKOUT_OPTIONS_INIT;
+  options.checkout_strategy = GIT_CHECKOUT_SAFE;
+  checkGit(git_checkout_tree(repo, reinterpret_cast<git_object *>(target.get()), &options));
+  const auto branch = currentBranch(repo).get<std::string>();
+  Reference updated;
+  const auto status = git_reference_create_matching(updated.out(), repo, ("refs/heads/" + branch).c_str(), next, 1, expected, "update: Codaloud");
+  if (status < 0) {
+    Commit previous;
+    if (git_commit_lookup(previous.out(), repo, expected) < 0 ||
+      git_checkout_tree(repo, reinterpret_cast<git_object *>(previous.get()), &options) < 0)
+      throw WorkspaceError("HEAD_UPDATE_OUTCOME_UNKNOWN", "The branch could not be updated. Review Git changes before retrying.");
+    checkGit(status);
+  }
+}
+
 void createSignature(Signature &signature, const Json &args) {
   const auto identity = args.at("identity");
   const auto name = identity.at("name").get<std::string>();

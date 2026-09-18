@@ -11,6 +11,7 @@ import { ProjectWorkspaceDock } from "@/features/projects/components/project-wor
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectWorkspaceChangesProvider } from "@/features/projects/hooks/use-project-workspace-changes";
 import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit-schemas";
+import { ProjectGitError } from "@/features/projects/lib/git-errors";
 
 import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
 
@@ -1106,6 +1107,15 @@ it("blocks sync after save failure and presents the failure", async () => {
   expect(git.gitPush.mutateAsync).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenCalledWith(expect.any(String), "Save failed");
   expect(feedback.success).not.toHaveBeenCalled();
+});
+it("offers optional GitHub connection when a remote command needs credentials", async () => {
+  git.gitFetch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Connect GitHub to use repository commands.", "GITHUB_RECONNECT_REQUIRED"));
+  openBranchActions(); click("Fetch"); await act(async () => {});
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Connect GitHub", expect.any(String), expect.any(Array));
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  act(() => buttons.find((button: { text: string }) => button.text === "Open Settings").onPress());
+  expect(navigation.push).toHaveBeenLastCalledWith("/account");
+  expect(git.gitFetch.mutateAsync).toHaveBeenCalledOnce();
 });
 it("cancels a pending force push confirmation after switching accounts", async () => {
   openBranchActions(); click("Force Push"); await act(async () => {});

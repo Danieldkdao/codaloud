@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Alert } from "react-native";
+import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
@@ -7,8 +8,10 @@ import { useTextPrompt } from "@/hooks/use-text-prompt";
 import { useProjectWorkspaceBranch } from "./use-project-workspace-branch";
 import { useProjectFileSaveRegistry } from "./use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "./use-project-workspace-current-file";
+import { ProjectGitError } from "../lib/git-errors";
 
 export const useProjectGitOperation = () => {
+  const router = useRouter();
   const workspace = useProjectWorkspaceBranch();
   const { withSavedFiles } = useProjectFileSaveRegistry();
   const currentFile = useProjectWorkspaceCurrentFile();
@@ -117,6 +120,13 @@ export const useProjectGitOperation = () => {
         });
       });
     } catch (error) {
+      if (!signal?.aborted && error instanceof ProjectGitError && error.code === "GITHUB_RECONNECT_REQUIRED") {
+        Alert.alert("Connect GitHub", "GitHub is optional. Connect it in Settings to fetch, pull, or push repositories.", [
+          { text: "Not now", style: "cancel" },
+          { text: "Open Settings", onPress: () => { if (!signal?.aborted) router.push("/account"); } },
+        ]);
+        return undefined;
+      }
       if (!signal?.aborted)
         Alert.alert(
           "Git operation failed",

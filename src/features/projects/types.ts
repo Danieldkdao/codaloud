@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@/lib/types";
-import type { ProjectSelectData } from "@/db/schemas/project";
+import type { ProjectSelectData } from "@/db/local/project";
 import type { ProjectFileEntrySchema } from "./actions/file-schemas";
 import type { ProjectFileSearchPageSchema } from "./actions/file-search-schemas";
 import type {
@@ -96,7 +96,7 @@ export type ProjectWorkspaceDiffData = Omit<
 // The API serializes database timestamps as ISO strings.
 export type ProjectResponseData = Omit<
   ProjectSelectData,
-  "createdAt" | "updatedAt" | "lastOpenedAt"
+  "createdAt" | "updatedAt" | "lastOpenedAt" | "searchName"
 > & {
   deletionRequested?: boolean;
   createdAt: string;

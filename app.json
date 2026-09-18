@@ -20,7 +20,10 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "web": {
       "output": "server"
     },
@@ -43,7 +46,8 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "./scripts/with-local-workspace.cjs"
     ],
     "experiments": {
       "typedRoutes": true,

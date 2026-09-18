@@ -14,7 +14,12 @@ const session = vi.hoisted(() => ({
   isPending: false,
   error: null as Error | null,
 }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(session),
+}));
 vi.mock("@/features/projects/actions/actions", () => ({ readProjectAction: vi.fn() }));
 
 const read = vi.mocked(readProjectAction);

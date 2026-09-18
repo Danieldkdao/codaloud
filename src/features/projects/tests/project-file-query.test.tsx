@@ -12,7 +12,12 @@ const session = vi.hoisted(() => ({
   error: null as Error | null,
   data: { user: { id: "user-one" } } as { user: { id: string } } | null,
 }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(session),
+}));
 vi.mock("@/features/projects/actions/file-actions", () => ({ readProjectFileContentAction: vi.fn() }));
 
 const read = vi.mocked(readProjectFileContentAction);
@@ -67,7 +72,7 @@ it.each([undefined, false, true])("refreshes a recently cached file only when fr
   expect(current.data).toEqual(freshOnMount ? file : cached);
 });
 
-it.each(["pending", "signed-out", "error"])("waits for authentication when %s, including manual refetch", async (state) => {
+it.each(["pending", "signed-out", "error"])("waits for workspace initialization when %s, including manual refetch", async (state) => {
   if (state === "pending") session.isPending = true;
   if (state === "signed-out") session.data = null;
   if (state === "error") session.error = new Error("Session unavailable");
@@ -101,39 +106,6 @@ it("loads after authentication resolves and isolates cached files, projects, and
   expect(client.getQueryData(["projects", "file", "user-two", "project-two", other.path])).toEqual(other);
 });
 
-it.each([["3", 3000], [null, 3000], ["invalid", 3000], ["0", 3000], ["-1", 3000], ["0.1", 1000], ["60", 30_000]] as const)("retries restoration with Retry-After %s after %s ms", async (header, delay) => {
-  read.mockImplementationOnce(async (_project, _path, _signal, onFailure) => {
-    onFailure?.({ error: true, code: "WORKSPACE_RESTORING", message: "Restoring your workspace." }, header);
-    return null;
-  }).mockResolvedValue(file);
-  await render();
-  expect(current.isPending).toBe(true);
-  await advance(delay - 2);
-  expect(read).toHaveBeenCalledTimes(1);
-  await advance(2);
-  expect(read).toHaveBeenCalledTimes(2);
-  expect(current.data).toEqual(file);
-  expect(current.isSuccess).toBe(true);
-});
-
-it("keeps checking long restorations until file contents load, then stops", async () => {
-  read.mockImplementation(async (_project, _path, _signal, onFailure) => {
-    onFailure?.({ error: true, code: "WORKSPACE_RESTORING", message: "Restoring your workspace." }, "3");
-    return null;
-  });
-  await render();
-  await advance(90_001);
-  expect(read.mock.calls.length).toBeGreaterThan(21);
-  expect(current.isPending).toBe(true);
-  read.mockResolvedValue(file);
-  await advance(3_001);
-  expect(current.data).toEqual(file);
-  expect(current.isSuccess).toBe(true);
-  const completedReads = read.mock.calls.length;
-  await advance(30_000);
-  expect(read).toHaveBeenCalledTimes(completedReads);
-});
-
 it.each(["FILE_TOO_LARGE", "FILE_NOT_FOUND", "UNAUTHENTICATED", "UNSUPPORTED_FILE_ENCODING"])("surfaces %s without automatic retries", async (code) => {
   read.mockImplementation(async (_project, _path, _signal, onFailure) => {
     onFailure?.({ error: true, code, message: "Cannot open this file." }, "3");
@@ -157,23 +129,6 @@ it("turns a statusless null into an error and supports manual retry", async () =
   await act(async () => { await current.refetch(); });
   await advance(1);
   expect(current.isSuccess).toBe(true);
-});
-
-it("cancels the previous file's restoration retries when the path changes", async () => {
-  read.mockImplementation(async (_project, path, _signal, onFailure) => {
-    if (path === file.path) {
-      onFailure?.({ error: true, code: "WORKSPACE_RESTORING", message: "Restoring." }, "3");
-      return null;
-    }
-    return { path, content: "", size: 0 };
-  });
-  await render();
-  const signal = read.mock.calls[0][2];
-  await render("project-one", "new.ts");
-  expect(signal?.aborted).toBe(true);
-  await advance(30_000);
-  expect(read.mock.calls.filter((call) => call[1] === file.path)).toHaveLength(1);
-  expect(current.data?.path).toBe("new.ts");
 });
 
 

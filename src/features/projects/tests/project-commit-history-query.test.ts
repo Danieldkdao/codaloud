@@ -13,7 +13,12 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(session),
+}));
 vi.mock("../actions/git-actions", () => ({ readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn() }));
 
 const read = vi.mocked(readProjectCommitsAction);
@@ -189,13 +194,13 @@ it("guards callbacks during an active fetch and avoids duplicate load-more calls
   await flush();
 });
 
-it("does not load more or retry while offline", async () => {
+it("reads and refreshes local history while offline", async () => {
   onlineManager.setOnline(false);
   await render();
-  expect(current.fetchStatus).toBe("paused");
-  expect(current.onLoadMore()).toBeUndefined();
-  expect(current.retry()).toBeUndefined();
-  expect(read).not.toHaveBeenCalled();
+  expect(current.fetchStatus).toBe("idle");
+  expect(read).toHaveBeenCalledTimes(1);
+  await act(async () => { await current.retry(); });
+  expect(read).toHaveBeenCalledTimes(2);
 });
 
 it("forwards cancellation without showing an error", async () => {
@@ -280,7 +285,7 @@ it.each(["pending", "signed-out", "error"])("blocks committing when authenticati
   if (state === "signed-out") session.data = null;
   if (state === "error") session.error = new Error("Unavailable");
   await render();
-  await run(async () => { await expect(current.gitCommit.mutateAsync(commitInput)).rejects.toThrow("Sign in to commit changes."); });
+  await run(async () => { await expect(current.gitCommit.mutateAsync(commitInput)).rejects.toThrow("The local workspace is not ready."); });
   expect(createCommit).not.toHaveBeenCalled();
 });
 

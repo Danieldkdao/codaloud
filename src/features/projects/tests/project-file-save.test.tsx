@@ -16,7 +16,12 @@ vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, 
   return { remove: () => lifecycle.listeners.delete(listener) };
 } } }));
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: mocks.save, readProjectFileContentAction: mocks.read }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, data: { user: { id: "user-one" } } }) }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(({ isPending: false, data: { user: { id: "user-one" } } })),
+}));
 const hash = (content: string) => createHash("sha256").update(content).digest("hex");
 const success = (content: string, path = "one.ts") => ({ error: false, message: "Saved.", data: { path, size: Buffer.byteLength(content), contentHash: hash(content) } });
 let current: NonNullable<ReturnType<typeof useProjectFileSave>>;

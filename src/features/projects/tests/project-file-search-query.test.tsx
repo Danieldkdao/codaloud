@@ -13,7 +13,12 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => mocks.session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(mocks.session),
+}));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
 vi.mock("../hooks/use-project-file-save", () => ({
   useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }),

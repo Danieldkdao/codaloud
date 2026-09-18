@@ -44,7 +44,12 @@ vi.mock("@/features/projects/components/project-workspace-dock", () => ({ Projec
 vi.mock("@/features/projects/components/project-files-list", () => ({ ProjectFilesList: (props: ComponentProps<typeof ProjectFilesList>) => { fileList = props; return null; } }));
 vi.mock("@/features/projects/components/project-file-create-row", () => ({ ProjectFileCreateRow: (props: ComponentProps<typeof ProjectFileCreateRow>) => { createRow = props; return null; } }));
 vi.mock("@/features/projects/components/project-workspace-state", () => ({ ProjectWorkspaceState: ({ title }: { title: string }) => createElement("span", null, title) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(({ isPending: false, error: null, data: { user: { id: "user-one" } } })),
+}));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFilesAction: async () => [], readProjectFileContentAction: mocks.readContent,
   createProjectFileAction: mocks.create, updateProjectFileAction: mocks.update, deleteProjectFileAction: mocks.delete,

@@ -14,7 +14,12 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(session),
+}));
 vi.mock("../actions/git-actions", () => ({ readProjectChangesAction: vi.fn() }));
 
 const read = vi.mocked(readProjectChangesAction);
@@ -175,11 +180,11 @@ it("does not refresh cached changes on focus or reconnect", async () => {
   expect(read).toHaveBeenCalledOnce();
 });
 
-it("resumes the initial load after reconnecting", async () => {
+it("loads local changes while offline", async () => {
   act(() => onlineManager.setOnline(false));
   await render();
-  expect(current.fetchStatus).toBe("paused");
-  expect(read).not.toHaveBeenCalled();
+  expect(current.fetchStatus).toBe("idle");
+  expect(read).toHaveBeenCalledOnce();
   act(() => onlineManager.setOnline(true));
   await tick();
   expect(current.isSuccess).toBe(true);

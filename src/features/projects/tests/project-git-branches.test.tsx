@@ -84,11 +84,16 @@ const remote = vi.hoisted(() => ({
   query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
-  data: { pages: [{ branches: [{ name: "main" }, { name: "remote-only" }], nextCursor: null }] },
+  data: { pages: [{ branches: ["main", "remote-only"], nextCursor: null }] },
 }));
 vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => ({ data: { githubRepositoryId: live.repositoryId }, isPending: false, error: null }) }));
-vi.mock("@/services/github/hooks/use-github-repository-branches", () => ({ useGitHubRepositoryBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: { user: { id: live.userId } }, isPending: false, error: null }) }));
+vi.mock("../hooks/use-project-remote-branches", () => ({ useProjectRemoteBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(({ data: { user: { id: live.userId } }, isPending: false, error: null })),
+}));
 vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false)) live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -668,11 +673,11 @@ it("shows separate local and remote lists, shares search, and distinguishes iden
   click("Branch: main");
   expect(container.textContent).toContain("Local branches");
   expect(container.textContent).toContain("Remote branches");
-  expect(remote.query).toHaveBeenLastCalledWith("123", { search: "", enabled: true });
+  expect(remote.query).toHaveBeenLastCalledWith(live.projectId, { search: "", enabled: true });
   const input = container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!;
   act(() => { input.value = "MAIN"; input.dispatchEvent(new Event("input", { bubbles: true })); });
   expect(live.query).toHaveBeenLastCalledWith(live.projectId, { search: "MAIN" });
-  expect(remote.query).toHaveBeenLastCalledWith("123", { search: "MAIN", enabled: true });
+  expect(remote.query).toHaveBeenLastCalledWith(live.projectId, { search: "MAIN", enabled: true });
   click("Remote branch: main");
   await act(async () => {});
   click("Branch: main");
@@ -694,7 +699,7 @@ it("keeps local selection usable when GitHub fails or no repository is connected
   click("Branch: feature/live");
   expect(container.textContent).toContain("No GitHub repository connected.");
   expect(container.querySelector('[aria-label="Remote branch: main"]')).toBeNull();
-  expect(remote.query).toHaveBeenLastCalledWith(undefined, { search: "", enabled: false });
+  expect(remote.query).toHaveBeenLastCalledWith(live.projectId, { search: "", enabled: false });
 });
 
 

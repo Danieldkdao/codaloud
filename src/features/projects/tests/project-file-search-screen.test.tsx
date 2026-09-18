@@ -15,7 +15,12 @@ const mocks = vi.hoisted(() => ({ read: vi.fn(), flushSaves: vi.fn(), browse: vi
 vi.mock("../components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => <>{children}</> }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId }), useRouter: () => ({ navigate: mocks.navigate, push: mocks.push }) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(({ isPending: false, error: null, data: { user: { id: "user-one" } } })),
+}));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
 vi.mock("../hooks/use-project-files", () => ({ useProjectFiles: (...args: unknown[]) => {
   mocks.browse(...args);
@@ -362,12 +367,12 @@ it("omits content coverage feedback for title-only searches", async () => {
   expect(container.textContent).not.toContain("No matches in searched files");
 });
 
-it("shows a reconnect message when the initial request is paused offline", async () => {
+it("searches local files while offline", async () => {
   onlineManager.setOnline(false);
   await applySearch("live");
-  expect(container.textContent).toContain("Reconnect to the internet to continue.");
+  expect(container.textContent).not.toContain("Reconnect to the internet to continue.");
   expect(container.textContent).not.toContain("No matching files");
-  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.read).toHaveBeenCalled();
   onlineManager.setOnline(true);
   await flush();
   expect(container.textContent).toContain("live.ts");

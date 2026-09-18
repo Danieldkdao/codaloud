@@ -12,7 +12,12 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => mocks.params, useRouter: () => ({ dismissTo: mocks.dismissTo, navigate: mocks.navigate }) }));
 vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ openFile: mocks.selectFile }) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
+  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
+    ready: !state.isPending,
+    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
+  }))(({ isPending: false, error: null, data: { user: { id: "user-one" } } })),
+}));
 vi.mock("../actions/file-actions", () => ({ readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: mocks.isDarkMode }), useThemeColor: () => "transparent" }));
 vi.mock("@/components/code-editor", () => ({ default: (props: ComponentProps<typeof CodeEditor>) => {
@@ -120,15 +125,15 @@ it.each(["FILE_NOT_FOUND", undefined])("shows a failed fresh read instead of pre
   expect(editorProps().initialValue).toBe("export const answer = 42;");
 });
 
-it("shows reconnect feedback when a cached preview cannot be refreshed offline", async () => {
+it("refreshes cached previews from the device while offline", async () => {
   client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
     path: mocks.params.filePath, content: "cached bytes", size: 12,
   });
   onlineManager.setOnline(false);
   await render();
-  expect(container.textContent).toContain("Reconnect to the internet");
-  expect(container.querySelector('[data-testid="editor"]')).toBeNull();
-  expect(mocks.read).not.toHaveBeenCalled();
+  expect(container.textContent).not.toContain("Reconnect to the internet");
+  expect(container.querySelector('[data-testid="editor"]')).not.toBeNull();
+  expect(mocks.read).toHaveBeenCalledOnce();
   await act(async () => onlineManager.setOnline(true));
   await flush();
   expect(mocks.read).toHaveBeenCalledOnce();
@@ -190,11 +195,11 @@ it("replaces the previous preview when the selected path changes", async () => {
   expect(container.textContent).not.toContain("export const answer");
 });
 
-it("shows reconnect feedback for a paused initial read", async () => {
+it("opens an uncached local file while offline", async () => {
   onlineManager.setOnline(false);
   await render();
-  expect(container.textContent).toContain("Reconnect to the internet");
-  expect(mocks.read).not.toHaveBeenCalled();
+  expect(container.textContent).not.toContain("Reconnect to the internet");
+  expect(mocks.read).toHaveBeenCalledOnce();
 });
 
 

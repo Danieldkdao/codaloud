@@ -1,13 +1,12 @@
 import { Stack, useGlobalSearchParams, useLocalSearchParams, useRouter, useSegments } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
-import { ProjectSandboxState } from "@/features/projects/components/project-sandbox-state";
 import { useProject } from "@/features/projects/hooks/use-project";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -32,7 +31,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
 
   const setupReady = !isError && project?.setupStatus === "ready";
   const { query: workspace } = useProjectFiles(projectId, "", { enabled: setupReady, verifyOnMount: true });
-  // A successful root read proves the sandbox is running and warms the Files tab.
+  // A successful root read verifies the local project folder and warms the Files tab.
   // Background refreshes alone must not unmount the editor or other workspace tabs.
   const ready = setupReady && workspace.isFetchedAfterMount && workspace.isSuccess && workspace.failureCount === 0;
   const workspaceError = setupReady && workspace.isError;
@@ -73,7 +72,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
         }}
       />
       {setupReady && (ready || openedProjectId === projectId) && (
-        // Preserve local editor state during later restoration while making every
+        // Preserve local editor state during a later storage error while making every
         // workspace control unavailable, including to native accessibility services.
         <View
           key={projectId}
@@ -111,7 +110,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
                 {isError
                   ? "Unable to load your workspace. Please try again."
                   : workspaceError
-                    ? "Unable to start your workspace. Please try again."
+                    ? "Unable to open this local workspace. Please try again."
                     : "Workspace setup couldn’t finish. Please check back later."}
               </PText>
               <Button
@@ -123,7 +122,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
               </Button>
             </View>
           ) : (
-            <ProjectSandboxState ready={false} restoring={!project || setupReady} />
+            <ActivityIndicator color={foreground} accessibilityLabel="Opening local workspace" />
           )}
         </AppWrapper>
       )}

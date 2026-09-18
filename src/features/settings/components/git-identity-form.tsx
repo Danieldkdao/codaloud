@@ -17,7 +17,7 @@ export const GitIdentityForm = () => {
   }, [identity.data]);
   const mutation = useMutation({
     mutationFn: saveGitIdentity, networkMode: "always", retry: false,
-    onSuccess: (data) => { client.setQueryData(["workspace", "git-identity"], data); },
+    onSuccess: (data) => { client.setQueryData(["settings", "git-identity"], data); },
   });
   return (
     <View className="gap-3 rounded-2xl bg-card p-4">

@@ -66,20 +66,8 @@ vi.mock("@/components/ui/button", () => ({
   }) => createElement("button", { onClick: onPress, disabled }, children),
 }));
 
-const activeKey = [
-  "projects",
-  "infinite",
-  "cursor",
-  "user-one",
-  projectParamsSchema.parse({}),
-];
-const filteredKey = [
-  "projects",
-  "infinite",
-  "cursor",
-  "user-one",
-  projectParamsSchema.parse({ search: "other" }),
-];
+const activeKey = ["projects", "infinite", "cursor", projectParamsSchema.parse({})];
+const filteredKey = ["projects", "infinite", "cursor", projectParamsSchema.parse({ search: "other" })];
 const repositoryKey = ["github", "repositories"];
 const oldPage = {
   pages: [{ projects: [], nextCursor: null }],

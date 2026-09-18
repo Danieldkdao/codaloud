@@ -7,7 +7,6 @@ import type { ProjectPageData, ProjectResponseData } from "@/features/projects/t
 // Validate the JSON representation, including timestamps serialized by the API.
 export const projectResponseSchema = z.object({
   id: z.string().min(1),
-  userId: z.string().min(1),
   name: z.string().min(1),
   setupStatus: z.enum(projectSetupStatuses),
   setupError: z.string().nullable(),

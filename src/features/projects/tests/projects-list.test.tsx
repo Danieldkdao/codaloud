@@ -143,7 +143,7 @@ const project = (
   setupStatus: ProjectResponseData["setupStatus"] = "ready",
 ): ProjectResponseData => ({
   id,
-  userId: "owner",
+
   name: `Project ${id}`,
   setupStatus,
   setupError: null,

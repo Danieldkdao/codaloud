@@ -4,7 +4,7 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import { useGitHubProfile } from "@/services/github/hooks/use-github-profile";
 import { GitHubConnection } from "@/services/github/components/github-connection";
-import { GitIdentityForm } from "@/features/workspace/components/git-identity-form";
+import { GitIdentityForm } from "@/features/settings/components/git-identity-form";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { useState } from "react";

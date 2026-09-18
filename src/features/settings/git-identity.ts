@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
+import Storage from "expo-sqlite/kv-store";
 import { z } from "zod";
-import { db } from "@/db/db";
-import { WorkspaceTable } from "@/db/schemas/workspace";
 
 export const gitIdentitySchema = z.strictObject({
   name: z.string().trim().min(1, "Enter your Git author name.").max(200).regex(/^[^<>\r\n\0]+$/),
@@ -10,18 +8,17 @@ export const gitIdentitySchema = z.strictObject({
 export type GitIdentitySchema = z.infer<typeof gitIdentitySchema>;
 
 export const readGitIdentity = async (): Promise<GitIdentitySchema | null> => {
-  const existingWorkspace = db.select({ name: WorkspaceTable.gitAuthorName, email: WorkspaceTable.gitAuthorEmail })
-    .from(WorkspaceTable).where(eq(WorkspaceTable.id, 1)).get();
-  const result = gitIdentitySchema.safeParse(existingWorkspace);
-  return result.success ? result.data : null;
+  try {
+    const savedIdentity = await Storage.getItem("git-identity");
+    if (!savedIdentity) return null;
+    const result = gitIdentitySchema.safeParse(JSON.parse(savedIdentity));
+    return result.success ? result.data : null;
+  } catch { return null; }
 };
 
 export const saveGitIdentity = async (input: GitIdentitySchema) => {
   const identity = gitIdentitySchema.parse(input);
-  const updatedWorkspace = db.update(WorkspaceTable)
-    .set({ gitAuthorName: identity.name, gitAuthorEmail: identity.email })
-    .where(eq(WorkspaceTable.id, 1)).returning({ id: WorkspaceTable.id }).get();
-  if (!updatedWorkspace) throw new Error("The local workspace is not ready.");
+  await Storage.setItem("git-identity", JSON.stringify(identity));
   return identity;
 };
 

@@ -28,7 +28,6 @@ import { ContentSheet } from "@/components/ui/content-sheet";
 import { useProject } from "../hooks/use-project";
 import { useProjectRemoteBranches } from "../hooks/use-project-remote-branches";
 import { formatProjectBranchLabel } from "../lib/formatters";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
 import { projectCommitParamsSchema } from "../lib/commit-params";
@@ -62,8 +61,6 @@ export const ProjectBranchSelect = ({
     retryCheckoutRecovery,
   } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
-  const device = useDeviceWorkspace();
-  const userId = device.workspace?.ownerId;
   const { withSavedFiles } = useProjectFileSaveRegistry();
   const { refreshFiles } = useProjectWorkspaceCurrentFile();
   const [search, setSearch] = useState("");
@@ -102,45 +99,41 @@ export const ProjectBranchSelect = ({
     if (checkoutError) Alert.alert("Couldn’t switch branches", checkoutError);
   }, [checkoutError]);
   const refreshWorkspace = async () => {
-    if (userId) {
-      const folders = { queryKey: ["projects", "files", userId, projectId] };
-      await queryClient.cancelQueries(folders);
-      // Keep folder data as readiness evidence, but discard branch-specific bytes
-      // and pagination even when checkout's response was lost.
-      await Promise.allSettled([
-        queryClient.invalidateQueries(folders),
-        queryClient.resetQueries({
-          queryKey: ["projects", "file", userId, projectId],
-        }),
-        queryClient.resetQueries({
-          queryKey: ["projects", "file-search", "infinite", userId, projectId],
-        }),
-        queryClient.resetQueries({
-          queryKey: [
-            "projects",
-            "commits",
-            "infinite",
-            "cursor",
-            userId,
-            projectId,
-          ],
-          predicate: ({ queryKey }) =>
-            projectCommitParamsSchema.safeParse(queryKey[6]).data?.source ===
-            "local",
-        }),
-        queryClient.resetQueries({
-          queryKey: [
-            "projects",
-            "branches",
-            "infinite",
-            "cursor",
-            userId,
-            projectId,
-            "local",
-          ],
-        }),
-      ]);
-    }
+    const folders = { queryKey: ["projects", "files", projectId] };
+    await queryClient.cancelQueries(folders);
+    // Keep folder data as readiness evidence, but discard branch-specific bytes
+    // and pagination even when checkout's response was lost.
+    await Promise.allSettled([
+      queryClient.invalidateQueries(folders),
+      queryClient.resetQueries({
+        queryKey: ["projects", "file", projectId],
+      }),
+      queryClient.resetQueries({
+        queryKey: ["projects", "file-search", "infinite", projectId],
+      }),
+      queryClient.resetQueries({
+        queryKey: [
+          "projects",
+          "commits",
+          "infinite",
+          "cursor",
+          projectId,
+        ],
+        predicate: ({ queryKey }) =>
+          projectCommitParamsSchema.safeParse(queryKey[5]).data?.source ===
+          "local",
+      }),
+      queryClient.resetQueries({
+        queryKey: [
+          "projects",
+          "branches",
+          "infinite",
+          "cursor",
+          projectId,
+          "local",
+        ],
+      }),
+    ]);
     refreshFiles();
   };
   const selectBranch = (

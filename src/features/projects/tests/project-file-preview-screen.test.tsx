@@ -12,12 +12,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => mocks.params, useRouter: () => ({ dismissTo: mocks.dismissTo, navigate: mocks.navigate }) }));
 vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ openFile: mocks.selectFile }) }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(({ isPending: false, error: null, data: { user: { id: "user-one" } } })),
-}));
 vi.mock("../actions/file-actions", () => ({ readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: mocks.isDarkMode }), useThemeColor: () => "transparent" }));
 vi.mock("@/components/code-editor", () => ({ default: (props: ComponentProps<typeof CodeEditor>) => {
@@ -85,7 +79,7 @@ it("fetches the selected file through the shared hook and renders a read-only ed
 
 it("refreshes recently cached content on every preview mount and replaces it with confirmed bytes", async () => {
   const cached = { path: mocks.params.filePath, content: "old bytes", size: 9 };
-  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], cached);
+  client.setQueryData(["projects", "file", "project-one", mocks.params.filePath], cached);
   let finish!: (value: unknown) => void;
   mocks.read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await render();
@@ -105,7 +99,7 @@ it("refreshes recently cached content on every preview mount and replaces it wit
 });
 
 it.each(["FILE_NOT_FOUND", undefined])("shows a failed fresh read instead of presenting cached content (%s)", async (code) => {
-  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
+  client.setQueryData(["projects", "file", "project-one", mocks.params.filePath], {
     path: mocks.params.filePath, content: "cached bytes", size: 12,
   });
   mocks.read.mockImplementationOnce(async (_project, _path, _signal, onFailure) => {
@@ -126,7 +120,7 @@ it.each(["FILE_NOT_FOUND", undefined])("shows a failed fresh read instead of pre
 });
 
 it("refreshes cached previews from the device while offline", async () => {
-  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
+  client.setQueryData(["projects", "file", "project-one", mocks.params.filePath], {
     path: mocks.params.filePath, content: "cached bytes", size: 12,
   });
   onlineManager.setOnline(false);

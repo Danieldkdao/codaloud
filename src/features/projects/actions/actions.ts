@@ -17,23 +17,23 @@ const failure = (error: unknown) => ({
 export const readProjectAction = async (projectId: string, signal?: AbortSignal): Promise<ProjectResponseData | null> => {
   try {
     const id = z.uuid().parse(projectId).toLowerCase();
-    const { store, ownerId } = await getLocalProjects();
-    return signal?.aborted ? null : store.read(ownerId, id);
+    const store = await getLocalProjects();
+    return signal?.aborted ? null : store.read(id);
   } catch { return null; }
 };
 
-export const readUserProjectsAction = async (params: Partial<ProjectParamsSchema> = {}, signal?: AbortSignal): Promise<ProjectPageData | null> => {
+export const readProjectsAction = async (params: Partial<ProjectParamsSchema> = {}, signal?: AbortSignal): Promise<ProjectPageData | null> => {
   try {
     const input = projectParamsSchema.parse(params);
-    const { store, ownerId } = await getLocalProjects();
-    return signal?.aborted ? null : store.list(ownerId, input);
+    const store = await getLocalProjects();
+    return signal?.aborted ? null : store.list(input);
   } catch { return null; }
 };
 
 export const createProjectAction = async (unsafeData: CreateProjectFormSchema) => {
   try {
     const input = createProjectFormSchema.parse(unsafeData);
-    const { store, ownerId } = await getLocalProjects();
+    const store = await getLocalProjects();
     const id = randomUUID();
     if (input.source === "github") {
       const accessToken = await getGitHubAccessToken();
@@ -42,7 +42,7 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
     } else await executeWorkspace(id, "initialize");
     const now = new Date().toISOString();
     try {
-      store.insert({ id, userId: ownerId, name: input.name,
+      store.insert({ id, name: input.name,
         setupStatus: "ready", setupError: null,
         githubRepositoryId: input.source === "github" ? input.repositoryId : null,
         lastOpenedFilePath: null, lastOpenedAt: null, createdAt: now, updatedAt: now });
@@ -60,8 +60,8 @@ export const updateProjectAction = async (projectId: string, unsafeData: UpdateP
   try {
     const id = z.uuid().parse(projectId).toLowerCase();
     const input = updateProjectSchema.parse(unsafeData);
-    const { store, ownerId } = await getLocalProjects();
-    const updatedProject = store.rename(ownerId, id, input.name!);
+    const store = await getLocalProjects();
+    const updatedProject = store.rename(id, input.name!);
     if (!updatedProject) throw new Error("This project is not on this device.");
     return { error: false as const, message: "Project updated.", projectId: id };
   } catch (error) { return failure(error); }
@@ -70,11 +70,11 @@ export const updateProjectAction = async (projectId: string, unsafeData: UpdateP
 export const deleteProjectAction = async (projectId: string) => {
   try {
     const id = z.uuid().parse(projectId).toLowerCase();
-    const { store, ownerId } = await getLocalProjects();
-    if (!store.read(ownerId, id)) throw new Error("This project is not on this device.");
+    const store = await getLocalProjects();
+    if (!store.read(id)) throw new Error("This project is not on this device.");
     await executeWorkspace(id, "archive-project");
     try {
-      if (!store.remove(ownerId, id)) throw new Error("Unable to remove this project.");
+      if (!store.remove(id)) throw new Error("Unable to remove this project.");
     } catch (error) {
       await executeWorkspace(id, "restore-project");
       throw error;

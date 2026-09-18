@@ -8,10 +8,10 @@ import type { ProjectPageData } from "../types";
 const { searchName: _searchName, ...projectColumns } = getTableColumns(ProjectTable);
 
 export const createLocalProjectStore = (db: Db) => ({
-  read: (userId: string, projectId: string) => db.select(projectColumns).from(ProjectTable)
-    .where(and(eq(ProjectTable.userId, userId), eq(ProjectTable.id, projectId))).get() ?? null,
+  read: (projectId: string) => db.select(projectColumns).from(ProjectTable)
+    .where(eq(ProjectTable.id, projectId)).get() ?? null,
 
-  list: (userId: string, unsafeParams: Partial<ProjectParamsSchema> = {}): ProjectPageData => {
+  list: (unsafeParams: Partial<ProjectParamsSchema> = {}): ProjectPageData => {
     const { search, sortBy, sortOrder, pageSize, cursor } = projectParamsSchema.parse(unsafeParams);
     const column = ProjectTable[sortBy];
     const position = cursor ? readProjectCursor(cursor) : null;
@@ -19,7 +19,6 @@ export const createLocalProjectStore = (db: Db) => ({
     const sort = sortOrder === "asc" ? asc : desc;
     const escapedSearch = search.replace(/[\\%_]/g, "\\$&");
     const existingProjects = db.select(projectColumns).from(ProjectTable).where(and(
-      eq(ProjectTable.userId, userId),
       search ? sql`${ProjectTable.searchName} LIKE ${`%${escapedSearch.toLowerCase()}%`} ESCAPE '\\'` : undefined,
       position ? or(after(column, position.value), and(eq(column, position.value), gt(ProjectTable.id, position.id))) : undefined,
     )).orderBy(sort(column), asc(ProjectTable.id)).limit(pageSize + 1).all();
@@ -41,16 +40,16 @@ export const createLocalProjectStore = (db: Db) => ({
     return insertedProject;
   },
 
-  rename: (userId: string, projectId: string, name: string) => {
+  rename: (projectId: string, name: string) => {
     const input = updateProjectSchema.parse({ name });
     const updatedProject = db.update(ProjectTable).set({ ...input, searchName: input.name!.toLowerCase(), updatedAt: new Date().toISOString() })
-      .where(and(eq(ProjectTable.userId, userId), eq(ProjectTable.id, projectId))).returning(projectColumns).get();
+      .where(eq(ProjectTable.id, projectId)).returning(projectColumns).get();
     return updatedProject ?? null;
   },
 
-  remove: (userId: string, projectId: string) => {
+  remove: (projectId: string) => {
     const deletedProject = db.delete(ProjectTable)
-      .where(and(eq(ProjectTable.userId, userId), eq(ProjectTable.id, projectId))).returning(projectColumns).get();
+      .where(eq(ProjectTable.id, projectId)).returning(projectColumns).get();
     return deletedProject ?? null;
   },
 });

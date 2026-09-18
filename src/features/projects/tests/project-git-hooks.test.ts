@@ -9,8 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { useProjectGit } from "../hooks/use-project-git";
-const { session, actions } = vi.hoisted(() => ({
-  session: { data: { user: { id: "user-one" } } as { user: { id: string } } | null, isPending: false, error: null as Error | null },
+const { actions } = vi.hoisted(() => ({
   actions: {
     readProjectGitCountsAction: vi.fn(), fetchProjectGitAction: vi.fn(), pushProjectGitAction: vi.fn(), pullProjectGitAction: vi.fn(),
     createProjectBranchAction: vi.fn(), checkoutProjectBranchAction: vi.fn(), readProjectBranchesAction: vi.fn(),
@@ -21,7 +20,6 @@ const { session, actions } = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({ useDeviceWorkspace: () => ({ workspace: !session.isPending && !session.error && session.data ? { ownerId: session.data.user.id } : null }) }));
 vi.mock("../actions/git-actions", () => actions);
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -53,9 +51,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.resetAllMocks();
   onlineManager.setOnline(true);
-  session.data = { user: { id: "user-one" } };
-  session.error = null;
-  session.isPending = false;
   client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   root = createRoot(document.createElement("div"));
   actions.readProjectGitCountsAction.mockResolvedValue(counts);
@@ -86,7 +81,7 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false, u
   describe(name, () => {
     beforeEach(() => { action.mockResolvedValue({ error: false, message: "Completed.", data: { completed: true } }); });
     it("exports the whole mutation and refreshes files, changes and commit details", async () => {
-      const keys = ["file", "files", "changes", "git-counts", "commit-details"].map((kind) => ["projects", kind, "user-one", projectId]);
+      const keys = ["file", "files", "changes", "git-counts", "commit-details"].map((kind) => ["projects", kind, projectId]);
       keys.forEach((key) => client.setQueryData(key, { before: true }));
       const hook = await renderHook(() => useResult(projectId));
       expect(hook.current.mutate).toEqual(expect.any(Function));
@@ -95,16 +90,13 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false, u
       expect(action).toHaveBeenCalledExactlyOnceWith(...(noInput ? [projectId] : [projectId, input]));
       keys.forEach((key) => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
     });
-    it.each(["pending", "signed-out", "error", "invalid-project"])("blocks invalid requests: %s", async (state) => {
-      if (state === "pending") session.isPending = true;
-      if (state === "signed-out") session.data = null;
-      if (state === "error") session.error = new Error("session");
+    it.each(["invalid-project"])("blocks invalid requests: %s", async (state) => {
       const hook = await renderHook(() => useResult(state === "invalid-project" ? "../other" : projectId));
       await run(async () => { await expect(hook.current.mutateAsync(input)).rejects.toThrow(); });
       expect(action).not.toHaveBeenCalled();
     });
     it("preserves failures, refreshes uncertain outcomes, and never retries writes", async () => {
-      const key = ["projects", "changes", "user-one", projectId];
+      const key = ["projects", "changes", projectId];
       client.setQueryData(key, { before: true });
       action.mockResolvedValue({ error: true, code: unknownCode, message: "Refresh the workspace." });
       const hook = await renderHook(() => useResult(projectId));
@@ -113,18 +105,17 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false, u
       expect(client.getQueryState(key)?.isInvalidated).toBe(true);
       expect(hook.current.error).toMatchObject({ code: unknownCode });
     });
-    it("refreshes the submitted account and project after navigation", async () => {
+    it("refreshes the submitted project after navigation", async () => {
       let finish!: (value: unknown) => void;
       action.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
       let id = projectId;
-      const original = ["projects", "changes", "user-one", id];
-      const other = ["projects", "changes", "user-two", otherProjectId];
+      const original = ["projects", "changes", id];
+      const other = ["projects", "changes", otherProjectId];
       [original, other].forEach((key) => client.setQueryData(key, { before: true }));
       const hook = await renderHook(() => useResult(id));
       let pending!: Promise<unknown>;
       await act(async () => { pending = hook.current.mutateAsync(input); });
       id = otherProjectId;
-      session.data = { user: { id: "user-two" } };
       await hook.rerender();
       await run(async () => { finish({ error: false, message: "Done.", data: {} }); await pending; });
       expect(client.getQueryState(original)?.isInvalidated).toBe(true);
@@ -143,16 +134,13 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false, u
 };
 
 describe("Git counts", () => {
-  it("loads user-scoped counts and forwards cancellation", async () => {
+  it("loads project counts and forwards cancellation", async () => {
     const hook = await renderHook(() => useProjectGit(projectId));
     expect(hook.current.data).toEqual(counts);
     expect(actions.readProjectGitCountsAction).toHaveBeenCalledWith(projectId, expect.any(AbortSignal), expect.any(Function));
-    expect(client.getQueryData(["projects", "git-counts", "user-one", projectId])).toEqual(counts);
+    expect(client.getQueryData(["projects", "git-counts", projectId])).toEqual(counts);
   });
-  it.each(["disabled", "pending", "signed-out", "error", "invalid-project"])("does not automatically load counts when %s", async (state) => {
-    if (state === "pending") session.isPending = true;
-    if (state === "signed-out") session.data = null;
-    if (state === "error") session.error = new Error("session");
+  it.each(["disabled", "invalid-project"])("does not automatically load counts when %s", async (state) => {
     const hook = await renderHook(() => useProjectGit(state === "invalid-project" ? "invalid" : projectId, { enabled: state !== "disabled" }));
     expect(actions.readProjectGitCountsAction).not.toHaveBeenCalled();
     if (state !== "disabled") {
@@ -222,9 +210,8 @@ describe("discard preview", () => {
     expect(hook.current.discardPreview.data).toEqual(preview);
     expect(actions.readProjectDiscardPreviewAction).toHaveBeenCalledWith(projectId, expect.any(AbortSignal), expect.any(Function));
   });
-  it("guards manual preview reads against invalid sessions", async () => {
-    session.data = null;
-    const hook = await renderHook(() => useProjectChanges(projectId, { enabled: false }));
+  it("guards manual preview reads against invalid projects", async () => {
+    const hook = await renderHook(() => useProjectChanges("invalid", { enabled: false }));
     await run(async () => { await expect(hook.current.discardPreview.refetch({ throwOnError: true })).rejects.toThrow(); });
     expect(actions.readProjectDiscardPreviewAction).not.toHaveBeenCalled();
   });
@@ -251,8 +238,7 @@ describe("stash list", () => {
       { search: "work", pageSize: 5, cursor: undefined }, { search: "work", pageSize: 5, cursor: "next" },
     ]);
   });
-  it.each(["disabled", "signed-out", "invalid-project", "invalid-page-size", "invalid-page-limit"])("guards stash reads when %s", async (state) => {
-    if (state === "signed-out") session.data = null;
+  it.each(["disabled", "invalid-project", "invalid-page-size", "invalid-page-limit"])("guards stash reads when %s", async (state) => {
     const hook = await renderHook(() => useProjectStashes(state === "invalid-project" ? "invalid" : projectId, {
       enabled: state !== "disabled", pageSize: state === "invalid-page-size" ? 0 : 20,
       maxPages: state === "invalid-page-limit" ? -1 : 0,
@@ -349,7 +335,7 @@ verifyMutation({
 });
 
 it("resets stash cursors after deletion, including an uncertain response", async () => {
-  const list = ["projects", "stashes", "infinite", "user-one", projectId, {}];
+  const list = ["projects", "stashes", "infinite", projectId, {}];
   client.setQueryData(list, { pages: [{ nextCursor: "stale" }], pageParams: [undefined] });
   actions.deleteProjectStashAction.mockResolvedValue({ error: true, code: "GIT_OUTCOME_UNKNOWN", message: "Refresh stashes." });
   const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false }));

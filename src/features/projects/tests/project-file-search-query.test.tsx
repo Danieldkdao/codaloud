@@ -9,16 +9,9 @@ import type { ProjectFileSearchPageSchema } from "../actions/file-search-schemas
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   flushSaves: vi.fn(),
-  session: { isPending: false, error: null as Error | null, data: { user: { id: "user-one" } } as { user: { id: string } } | null },
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(mocks.session),
-}));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
 vi.mock("../hooks/use-project-file-save", () => ({
   useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }),
@@ -58,9 +51,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   root = createRoot(document.createElement("div"));
-  mocks.session.data = { user: { id: "user-one" } };
-  mocks.session.isPending = false;
-  mocks.session.error = null;
   mocks.read.mockReset().mockResolvedValue(page("first.ts", cursor));
   mocks.flushSaves.mockReset().mockResolvedValue(undefined);
 });
@@ -114,7 +104,7 @@ it("surfaces save failures without starting or automatically retrying a search",
   expect(current.isSuccess).toBe(true);
 });
 
-it.each(["query", "account", "unmount"])("does not send an obsolete search after saves settle on %s change", async (change) => {
+it.each(["query", "unmount"])("does not send an obsolete search after saves settle on %s change", async (change) => {
   let finish!: () => void;
   mocks.flushSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
   await render();
@@ -122,7 +112,6 @@ it.each(["query", "account", "unmount"])("does not send an obsolete search after
   if (change === "unmount") {
     await act(async () => root.render(null));
   } else {
-    if (change === "account") mocks.session.data = { user: { id: "user-two" } };
     await render({ search: "new query" });
   }
   await act(async () => finish());
@@ -169,32 +158,22 @@ it("does not expose validation for the disabled empty query used during typing",
   expect(mocks.read).not.toHaveBeenCalled();
 });
 
-it("requires a valid project, verified session and enabled observer", async () => {
+it("requires a valid project and enabled observer", async () => {
   await render({ search: "needle" }, null);
   await render({ search: "needle" }, "invalid");
   await render({ search: "needle", pageSize: 0 });
   await render({ search: "needle", enabled: false });
-  mocks.session.isPending = true;
-  await render();
-  mocks.session.isPending = false;
-  mocks.session.error = new Error("Session lookup failed");
-  await render();
-  mocks.session.error = null;
-  mocks.session.data = null;
-  await render();
-  await act(async () => { await current.refetch(); });
   expect(mocks.read).not.toHaveBeenCalled();
 });
 
-it("starts fresh and cancels the obsolete request when filters or account change", async () => {
+it("starts fresh and cancels the obsolete request when filters or project change", async () => {
   mocks.read.mockImplementationOnce(() => new Promise(() => {}));
   await render();
   const signal = mocks.read.mock.calls[0][2] as AbortSignal;
   await render({ search: "next", scope: "title", path: "src", pageSize: 20 });
   expect(signal.aborted).toBe(true);
   expect(mocks.read.mock.lastCall?.[1]).toEqual({ search: "next", scope: "title", path: "src", pageSize: 20, cursor: undefined });
-  mocks.session.data = { user: { id: "user-two" } };
-  await render({ search: "next", scope: "title", path: "src", pageSize: 20 });
+  await render({ search: "next", scope: "title", path: "src", pageSize: 20 }, "22222222-2222-4222-8222-222222222222");
   expect(mocks.read).toHaveBeenCalledTimes(3);
   expect(current.data?.pageParams).toEqual([null]);
   expect(mocks.flushSaves).toHaveBeenCalledTimes(3);

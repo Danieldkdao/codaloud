@@ -19,7 +19,6 @@ import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectWorkspaceBranch } from "../hooks/use-project-workspace-branch";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectChanges } from "../hooks/use-project-changes";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 
 export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
@@ -36,16 +35,14 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     assertWorkspaceCurrent,
     runWorkspaceOperation,
   } = useProjectWorkspaceBranch();
-  const device = useDeviceWorkspace();
-  const userId = device.workspace?.ownerId ?? null;
   const { gitCommit } = useProjectCommitHistory(projectId, { enabled: false });
   const { refetch } = useProjectChanges(projectId, { enabled: false });
   const { withSavedFiles } = useProjectFileSaveRegistry();
   const showSuccess = useSuccessFeedback();
   const blocked = useRef(false);
   useEffect(() => {
-    blocked.current = !enabled || isCheckingOut || !userId;
-  }, [enabled, isCheckingOut, userId]);
+    blocked.current = !enabled || isCheckingOut;
+  }, [enabled, isCheckingOut]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -59,7 +56,6 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
   const busy = submitting || gitCommit.isPending;
   const canSubmit =
     enabled &&
-    Boolean(userId) &&
     !isWorkspaceBusy &&
     commitSelection.isReady &&
     input.success &&
@@ -86,7 +82,6 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
               "Unable to refresh changes. Try again before committing.",
             );
           const freshScope = JSON.stringify([
-            userId,
             projectId,
             fresh.currentBranch,
             fresh.headSha,

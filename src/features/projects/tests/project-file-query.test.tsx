@@ -6,18 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { readProjectFileContentAction } from "@/features/projects/actions/file-actions";
 import { useProjectFile } from "@/features/projects/hooks/use-project-file";
-
-const session = vi.hoisted(() => ({
-  isPending: false,
-  error: null as Error | null,
-  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
-}));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(session),
-}));
 vi.mock("@/features/projects/actions/file-actions", () => ({ readProjectFileContentAction: vi.fn() }));
 
 const read = vi.mocked(readProjectFileContentAction);
@@ -44,9 +32,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient();
   root = createRoot(document.createElement("div"));
-  session.isPending = false;
-  session.error = null;
-  session.data = { user: { id: "user-one" } };
   read.mockReset().mockResolvedValue(file);
 });
 afterEach(() => {
@@ -61,26 +46,18 @@ it("returns the query result with empty file contents and forwards cancellation"
   expect(current.data).toEqual(file);
   expect(current.refetch).toEqual(expect.any(Function));
   expect(read).toHaveBeenCalledExactlyOnceWith("project-one", file.path, expect.any(AbortSignal), expect.any(Function));
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", file.path])).toEqual(file);
+  expect(client.getQueryData(["projects", "file", "project-one", file.path])).toEqual(file);
 });
 
 it.each([undefined, false, true])("refreshes a recently cached file only when freshOnMount is enabled (%s)", async (freshOnMount) => {
   const cached = { ...file, content: "old", size: 3 };
-  client.setQueryData(["projects", "file", "user-one", "project-one", file.path], cached);
+  client.setQueryData(["projects", "file", "project-one", file.path], cached);
   await render("project-one", file.path, freshOnMount);
   expect(read).toHaveBeenCalledTimes(freshOnMount ? 1 : 0);
   expect(current.data).toEqual(freshOnMount ? file : cached);
 });
 
-it.each(["pending", "signed-out", "error"])("waits for workspace initialization when %s, including manual refetch", async (state) => {
-  if (state === "pending") session.isPending = true;
-  if (state === "signed-out") session.data = null;
-  if (state === "error") session.error = new Error("Session unavailable");
-  await render();
-  expect(current.fetchStatus).toBe("idle");
-  await act(async () => { await current.refetch(); });
-  expect(read).not.toHaveBeenCalled();
-});
+it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
 it.each([["", "file.ts"], ["project-one", ""], ["project-one", null]])("does not request a missing project or file (%s, %s)", async (projectId, path) => {
   await render(projectId!, path);
@@ -89,21 +66,17 @@ it.each([["", "file.ts"], ["project-one", ""], ["project-one", null]])("does not
   expect(read).not.toHaveBeenCalled();
 });
 
-it("loads after authentication resolves and isolates cached files, projects, and accounts", async () => {
-  session.isPending = true;
-  await render();
-  session.isPending = false;
+it("isolates cached files and projects", async () => {
   await render();
   const other = { ...file, path: "src/other.ts", content: "other", size: 5 };
   read.mockResolvedValue(other);
   await render("project-one", other.path);
   expect(current.data).toEqual(other);
   await render("project-two", other.path);
-  session.data = { user: { id: "user-two" } };
   await render("project-two", other.path);
-  expect(read).toHaveBeenCalledTimes(4);
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", file.path])).toEqual(file);
-  expect(client.getQueryData(["projects", "file", "user-two", "project-two", other.path])).toEqual(other);
+  expect(read).toHaveBeenCalledTimes(3);
+  expect(client.getQueryData(["projects", "file", "project-one", file.path])).toEqual(file);
+  expect(client.getQueryData(["projects", "file", "project-two", other.path])).toEqual(other);
 });
 
 it.each(["FILE_TOO_LARGE", "FILE_NOT_FOUND", "UNAUTHENTICATED", "UNSUPPORTED_FILE_ENCODING"])("surfaces %s without automatic retries", async (code) => {

@@ -6,15 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { checkoutProjectBranchAction, readProjectBranchesAction } from "../actions/git-actions";
 import { useProjectBranches } from "../hooks/use-project-branches";
 import type { ProjectBranchPageSchema } from "../actions/branch-schemas";
-
-const session = vi.hoisted(() => ({
-  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
-  isPending: false,
-  error: null as Error | null,
-}));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({ useDeviceWorkspace: () => ({ workspace: !session.isPending && !session.error && session.data ? { ownerId: session.data.user.id } : null }) }));
 vi.mock("../actions/git-actions", () => ({ readProjectBranchesAction: vi.fn(), checkoutProjectBranchAction: vi.fn() }));
 
 const read = vi.mocked(readProjectBranchesAction);
@@ -52,9 +45,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
   root = createRoot(document.createElement("div"));
-  session.data = { user: { id: "user-one" } };
-  session.isPending = false;
-  session.error = null;
   read.mockReset().mockResolvedValue(page([]));
   checkout.mockReset().mockResolvedValue({
     error: false,
@@ -91,24 +81,16 @@ it("shares normalized searches and starts new searches and page sizes from page 
     .toEqual([["feature", 20, null], ["fix", 20, null], ["fix", 5, null]]);
 });
 
-it.each(["pending", "signed-out", "error"])("blocks requests and manual refetch while authentication is %s", async (state) => {
-  if (state === "pending") session.isPending = true;
-  if (state === "signed-out") session.data = null;
-  if (state === "error") session.error = new Error("Session unavailable");
-  await render();
-  await run(() => current.refetch());
-  expect(read).not.toHaveBeenCalled();
-});
+it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
-it("isolates projects and accounts in the cache", async () => {
+it("isolates projects in the cache", async () => {
   read.mockResolvedValueOnce(page(["a"])).mockResolvedValueOnce(page(["b"])).mockResolvedValueOnce(page(["c"]));
   await render();
   await render({}, otherProjectId);
   expect(current.data?.pages).toEqual([page(["b"])]);
-  session.data = { user: { id: "user-two" } };
   await render();
-  expect(current.data?.pages).toEqual([page(["c"])]);
-  expect(client.getQueryCache().getAll()).toHaveLength(3);
+  expect(current.data?.pages).toEqual([page(["a"])]);
+  expect(client.getQueryCache().getAll()).toHaveLength(2);
 });
 
 it.each<Options>([{ pageSize: 0 }, { search: "x".repeat(201) }, { cursor: "invalid" }, { maxPages: -1 }, { maxPages: 1.5 }])(
@@ -233,10 +215,7 @@ it.each([401, 403, 429])("does not automatically retry HTTP %s", async (status) 
 
 
 it("does not reuse cached pages from the former combined local and remote list", async () => {
-  client.setQueryData([
-    "projects", "branches", "infinite", "cursor", "user-one", projectId,
-    { projectId, search: "", pageSize: 20, cursor: null },
-  ], { pages: [page(["main", "remote-only"])], pageParams: [null] });
+  client.setQueryData(["projects", "branches", "infinite", "cursor", projectId, { projectId, search: "", pageSize: 20, cursor: null }], { pages: [page(["main", "remote-only"])], pageParams: [null] });
   read.mockResolvedValueOnce(page(["main"]));
   await render();
   expect(read).toHaveBeenCalledOnce();
@@ -276,17 +255,6 @@ it("exposes actionable checkout errors and does not inherit automatic retries", 
   expect(checkout).toHaveBeenCalledOnce();
 });
 
-it.each(["pending", "signed-out", "error"])("blocks checkout while workspace initialization is %s", async (state) => {
-  if (state === "pending") session.isPending = true;
-  if (state === "signed-out") session.data = null;
-  if (state === "error") session.error = new Error("Session unavailable");
-  await render();
-  await run(async () => {
-    await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("The local workspace is not ready.");
-  });
-  expect(checkout).not.toHaveBeenCalled();
-});
-
 it("rejects checkout without a project", async () => {
   await render({}, null);
   await run(async () => {
@@ -301,11 +269,11 @@ it("uses the current project after navigation independently of branch query filt
   await run(() => current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }));
   expect(checkout).toHaveBeenCalledExactlyOnceWith(otherProjectId, { branchName: "feature/checkout" });
   expect(client.getMutationCache().getAll()[0].options.mutationKey)
-    .toEqual(["projects", "branches", "checkout", "user-one", otherProjectId]);
+    .toEqual(["projects", "branches", "checkout", otherProjectId]);
 });
 
 it("refreshes active changes after checkout even when their stale time is infinite", async () => {
-  const queryKey = ["projects", "changes", "user-one", projectId];
+  const queryKey = ["projects", "changes", projectId];
   client.setQueryData(queryKey, { currentBranch: "main" });
   const readChanges = vi.fn().mockResolvedValue({ currentBranch: "feature/checkout" });
   const observer = new QueryObserver(client, { queryKey, queryFn: readChanges, staleTime: Infinity });
@@ -319,17 +287,16 @@ it("refreshes active changes after checkout even when their stale time is infini
   } finally { unsubscribe(); }
 });
 
-it("marks only the submitted account and project's inactive changes stale after navigation", async () => {
-  const originalKey = ["projects", "changes", "user-one", projectId];
-  const otherProjectKey = ["projects", "changes", "user-one", otherProjectId];
-  const otherAccountKey = ["projects", "changes", "user-two", projectId];
-  for (const queryKey of [originalKey, otherProjectKey, otherAccountKey]) client.setQueryData(queryKey, { currentBranch: "main" });
+it("marks only the submitted project's inactive changes stale after navigation", async () => {
+  const originalKey = ["projects", "changes", projectId];
+  const otherProjectKey = ["projects", "changes", otherProjectId];
+  const thirdProjectKey = ["projects", "changes", "third-project"];
+  for (const queryKey of [originalKey, otherProjectKey, thirdProjectKey]) client.setQueryData(queryKey, { currentBranch: "main" });
   let finish!: (value: Awaited<ReturnType<typeof checkoutProjectBranchAction>>) => void;
   checkout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await render({ enabled: false });
   let pending!: ReturnType<typeof current.gitCheckout.mutateAsync>;
   await act(async () => { pending = current.gitCheckout.mutateAsync({ branchName: "feature/checkout" }); });
-  session.data = { user: { id: "user-two" } };
   await render({ enabled: false }, otherProjectId);
   await run(async () => {
     finish({ error: false, message: "Checked out.", data: { previousBranch: "main", currentBranch: "feature/checkout" } });
@@ -337,11 +304,11 @@ it("marks only the submitted account and project's inactive changes stale after 
   });
   expect(client.getQueryState(originalKey)?.isInvalidated).toBe(true);
   expect(client.getQueryState(otherProjectKey)?.isInvalidated).toBe(false);
-  expect(client.getQueryState(otherAccountKey)?.isInvalidated).toBe(false);
+  expect(client.getQueryState(thirdProjectKey)?.isInvalidated).toBe(false);
 });
 
 it("keeps the changes snapshot valid when checkout fails", async () => {
-  const queryKey = ["projects", "changes", "user-one", projectId];
+  const queryKey = ["projects", "changes", projectId];
   client.setQueryData(queryKey, { currentBranch: "main" });
   checkout.mockResolvedValueOnce({ error: true, message: "Commit or stash your changes." });
   await render({ enabled: false });
@@ -351,7 +318,7 @@ it("keeps the changes snapshot valid when checkout fails", async () => {
 });
 
 it("refreshes changes after an unknown checkout outcome without retrying the checkout", async () => {
-  const queryKey = ["projects", "changes", "user-one", projectId];
+  const queryKey = ["projects", "changes", projectId];
   client.setQueryData(queryKey, { currentBranch: "main" });
   const readChanges = vi.fn().mockResolvedValue({ currentBranch: "feature/checkout" });
   const observer = new QueryObserver(client, { queryKey, queryFn: readChanges, staleTime: Infinity });
@@ -369,7 +336,7 @@ it("refreshes changes after an unknown checkout outcome without retrying the che
 });
 
 it("replaces an unfinished changes read started before checkout", async () => {
-  const queryKey = ["projects", "changes", "user-one", projectId];
+  const queryKey = ["projects", "changes", projectId];
   let finishOldRead!: (value: { currentBranch: string }) => void;
   let oldSignal!: AbortSignal;
   const readChanges = vi.fn<({ signal }: { signal: AbortSignal }) => Promise<{ currentBranch: string }>>().mockImplementationOnce(({ signal }) => {

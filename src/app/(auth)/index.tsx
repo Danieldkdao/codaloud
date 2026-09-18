@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
+import { useOnboarding } from "@/features/settings/hooks/use-onboarding";
 import { Image } from "@/components/ui/image";
 import { HeadingText, PText } from "@/components/ui/text";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 
 const Index = () => {
-  const { enter, isEntering, error } = useDeviceWorkspace();
+  const { complete, isCompleting, error } = useOnboarding();
   return (
     <>
       <Stack.Screen
@@ -38,7 +38,7 @@ const Index = () => {
           </View>
         </View>
         <View className="shrink-0 gap-3">
-          <Button size="lg" className="min-h-14" loading={isEntering} onPress={() => void enter()}>
+          <Button size="lg" className="min-h-14" loading={isCompleting} onPress={() => void complete()}>
             Get started
           </Button>
           <PText className="text-center">No account needed. Connect GitHub whenever you need it.</PText>

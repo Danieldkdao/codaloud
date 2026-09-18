@@ -17,7 +17,6 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import {
   projectCommitParamsSchema,
   type ProjectCommitParamsSchema,
@@ -60,8 +59,6 @@ export const useProjectCommitHistory = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const { workspace } = useDeviceWorkspace();
-  const userId = workspace?.ownerId ?? null;
   const params = projectCommitParamsSchema.safeParse({
     ...filters,
     projectId,
@@ -73,7 +70,6 @@ export const useProjectCommitHistory = (
     "commits",
     "infinite",
     "cursor",
-    userId,
     projectId,
     params.success ? params.data : filters,
   ] as const;
@@ -81,7 +77,7 @@ export const useProjectCommitHistory = (
   const query = useInfiniteQuery({
     networkMode: "always",
     queryKey,
-    enabled: enabled && Boolean(userId) && params.success && validPageLimit,
+    enabled: enabled && params.success && validPageLimit,
     initialPageParam: null as string | null,
     maxPages: validPageLimit ? maxPages : 0,
     // Restoration is expected on remount. Other transient failures get two retries.
@@ -94,8 +90,7 @@ export const useProjectCommitHistory = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ pageParam, signal }) => {
-      // Manual refetch bypasses enabled, so validate authentication and options here too.
-      if (!userId) throw new Error("The local workspace is not ready.");
+      // Manual refetch bypasses enabled, so validate options here too.
       if (!params.success || !validPageLimit) {
         throw new Error(
           "Invalid project, branch, or commit search and pagination.",
@@ -138,15 +133,14 @@ export const useProjectCommitHistory = (
     ProjectCreatedCommitSchema,
     ProjectCommitError,
     CreateProjectCommitSchema,
-    { userId: string | null; projectId: string | null | undefined }
+    { projectId: string | null | undefined }
   >({
-    mutationKey: ["projects", "commits", "create", userId, projectId],
+    mutationKey: ["projects", "commits", "create", projectId],
     retry: false,
     // Do not defer an offline commit until the workspace may have changed.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input) => {
-      if (!userId) throw new ProjectCommitError("The local workspace is not ready.");
       if (!projectId || !isValidIds(projectId))
         throw new ProjectCommitError("Invalid project ID.");
       const result = await createProjectCommitAction(projectId, input);
@@ -162,7 +156,6 @@ export const useProjectCommitHistory = (
   const onLoadMore = () => {
     if (
       enabled &&
-      userId &&
       params.success &&
       validPageLimit &&
       query.hasNextPage &&
@@ -176,7 +169,6 @@ export const useProjectCommitHistory = (
   const retry = () => {
     if (
       !enabled ||
-      !userId ||
       !params.success ||
       !validPageLimit ||
       query.isFetching ||
@@ -202,18 +194,18 @@ export const useProjectCommitHistory = (
     z.input<typeof gitRevertSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "revert", userId, projectId],
+    mutationKey: ["projects", "git", "revert", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitRevertSchema> = {}) => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await revertProjectCommitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });
@@ -224,18 +216,18 @@ export const useProjectCommitHistory = (
     z.input<typeof gitUndoSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "undo", userId, projectId],
+    mutationKey: ["projects", "git", "undo", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitUndoSchema>) => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await undoProjectCommitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });

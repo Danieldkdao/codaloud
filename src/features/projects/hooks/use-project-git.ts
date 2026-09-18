@@ -14,7 +14,6 @@ import { gitPushSchema } from "../server/git-push-schemas";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import {
   ProjectGitError,
   ProjectGitRequestError,
@@ -26,13 +25,11 @@ export const useProjectGit = (
   { enabled = true }: { enabled?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
-  const { workspace } = useDeviceWorkspace();
-  const userId = workspace?.ownerId ?? null;
   const validProject = !!projectId && isValidIds(projectId);
   const query = useQuery({
     networkMode: "always",
-    queryKey: ["projects", "git-counts", userId, projectId],
-    enabled: enabled && Boolean(userId) && validProject,
+    queryKey: ["projects", "git-counts", projectId],
+    enabled: enabled && validProject,
     // Post-mutation refreshes run together. Another Git status read can briefly
     // own the repository lock; retry this read so counts follow the new branch.
     retry: (failureCount, error) =>
@@ -46,7 +43,7 @@ export const useProjectGit = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ signal }) => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       let failure: ProjectGitRequestError | undefined;
       const counts = await readProjectGitCountsAction(
         id,
@@ -69,18 +66,18 @@ export const useProjectGit = (
     void,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "fetch", userId, projectId],
+    mutationKey: ["projects", "git", "fetch", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async () => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await fetchProjectGitAction(id);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
@@ -91,18 +88,18 @@ export const useProjectGit = (
     z.input<typeof gitPushSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "push", userId, projectId],
+    mutationKey: ["projects", "git", "push", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitPushSchema> = {}) => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await pushProjectGitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });
@@ -113,18 +110,18 @@ export const useProjectGit = (
     z.input<typeof gitPullSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "pull", userId, projectId],
+    mutationKey: ["projects", "git", "pull", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitPullSchema> = {}) => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await pullProjectGitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context, { remote: true }),
   });

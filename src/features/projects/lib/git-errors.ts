@@ -19,8 +19,7 @@ export class ProjectGitRequestError extends ProjectGitError {
   }
 }
 
-export const requireLocalGitProject = (userId: string | null, projectId: string | null | undefined) => {
-  if (!userId) throw new ProjectGitError("The local workspace is not ready.", "WORKSPACE_UNAVAILABLE");
+export const requireLocalGitProject = (projectId: string | null | undefined) => {
   if (!projectId || !isValidIds(projectId)) throw new ProjectGitError("Invalid project ID.", "INVALID_PROJECT");
   return projectId;
 };

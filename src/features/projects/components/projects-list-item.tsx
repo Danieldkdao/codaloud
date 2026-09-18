@@ -74,7 +74,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
             accepted = true;
             setDeletionAccepted(true);
             const listFilters = {
-              queryKey: ["projects", "infinite", "cursor", project.userId],
+              queryKey: ["projects", "infinite", "cursor"],
             };
             await queryClient.cancelQueries(listFilters);
             // Preserve accepted deletion across failed refreshes and list remounts.

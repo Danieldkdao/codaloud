@@ -23,12 +23,6 @@ vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const saveFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(({ isPending: false, data: { user: { id: "user-one" } } })),
-}));
 const readFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));

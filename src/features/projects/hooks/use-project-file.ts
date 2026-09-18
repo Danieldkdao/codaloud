@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { readProjectFileContentAction } from "@/features/projects/actions/file-actions";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 
 class ProjectFileReadError extends Error {
   constructor(message: string, readonly code: string | undefined, readonly retryAfterMs: number) {
@@ -15,19 +14,15 @@ export const useProjectFile = (
   filePath: string | null,
   { freshOnMount = false }: { freshOnMount?: boolean } = {},
 ) => {
-  const { workspace } = useDeviceWorkspace();
-  const userId = workspace?.ownerId ?? null;
-
   return useQuery({
     networkMode: "always",
-    queryKey: ["projects", "file", userId, projectId, filePath],
-    enabled: Boolean(userId && projectId && filePath),
+    queryKey: ["projects", "file", projectId, filePath],
+    enabled: Boolean(projectId && filePath),
     staleTime: 5_000,
     // Search previews must recheck local file contents even after a recent cached read.
     refetchOnMount: freshOnMount ? "always" : true,
     retry: false,
     queryFn: async ({ signal }) => {
-      if (!userId) throw new Error("The local workspace is not ready.");
       if (!projectId || !filePath) throw new Error("Choose a project file to open.");
 
       let readError: ProjectFileReadError | undefined;

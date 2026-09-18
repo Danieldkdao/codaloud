@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { useTextPrompt } from "@/hooks/use-text-prompt";
 import { useProjectWorkspaceBranch } from "./use-project-workspace-branch";
@@ -18,8 +17,6 @@ export const useProjectGitOperation = () => {
   const selectedFile = useRef(currentFile);
   selectedFile.current = currentFile;
   const client = useQueryClient();
-  const device = useDeviceWorkspace();
-  const userId = device.workspace?.ownerId;
   const showSuccess = useSuccessFeedback();
   const lifetime = useRef<AbortController | null>(null);
   const textPrompt = useTextPrompt();
@@ -27,7 +24,7 @@ export const useProjectGitOperation = () => {
     const controller = new AbortController();
     lifetime.current = controller;
     return () => controller.abort();
-  }, [userId, workspace.projectId]);
+  }, [workspace.projectId]);
 
   const confirm = (
     title: string,
@@ -87,8 +84,7 @@ export const useProjectGitOperation = () => {
               return (
                 key?.[0] === "projects" &&
                 key[1] === "files" &&
-                key[3] === userId &&
-                key[4] === workspace.projectId
+                key[3] === workspace.projectId
               );
             },
           })
@@ -110,7 +106,7 @@ export const useProjectGitOperation = () => {
             if (options.changesFiles) {
               workspace.assertWorkspaceCurrent();
               await client.resetQueries({
-                queryKey: ["projects", "file", userId, workspace.projectId],
+                queryKey: ["projects", "file", workspace.projectId],
               });
               workspace.assertWorkspaceCurrent();
               const file = selectedFile.current;

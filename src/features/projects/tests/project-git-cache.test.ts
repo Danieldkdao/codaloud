@@ -3,26 +3,26 @@ import { expect, it, vi } from "vitest";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
-const workspace = { userId: "user-one", projectId };
-const snapshots = (user: string, project: string) => [
-  ["projects", "commits", "infinite", "cursor", user, project, { source: "local" }],
-  ["projects", "commits", "infinite", "cursor", user, project, { source: "remote" }],
-  ["projects", "branches", "infinite", "cursor", user, project, "local"],
-  ["projects", "file-search", "infinite", user, project],
-  ["projects", "stashes", "infinite", user, project],
-  ["projects", "discard-preview", user, project],
+const workspace = { projectId };
+const snapshots = (project: string) => [
+  ["projects", "commits", "infinite", "cursor", project, { source: "local" }],
+  ["projects", "commits", "infinite", "cursor", project, { source: "remote" }],
+  ["projects", "branches", "infinite", "cursor", project, "local"],
+  ["projects", "file-search", "infinite", project],
+  ["projects", "stashes", "infinite", project],
+  ["projects", "discard-preview", project],
 ];
-const documents = (user: string, project: string) => [
-  ...["file", "files", "changes", "git-counts", "commit-details", "detail"].map((kind) => ["projects", kind, user, project]),
-  ["projects", "file", user, project, "src/file.ts"],
-  ["projects", "files", user, project, "src/nested"],
+const documents = (project: string) => [
+  ...["file", "files", "changes", "git-counts", "commit-details", "detail"].map((kind) => ["projects", kind, project]),
+  ["projects", "file", project, "src/file.ts"],
+  ["projects", "files", project, "src/nested"],
 ];
 
-it("resets cursor snapshots and invalidates all workspace documents without touching other accounts or projects", async () => {
+it("resets cursor snapshots and invalidates all workspace documents without touching other projects", async () => {
   const client = new QueryClient();
-  const reset = snapshots(workspace.userId, projectId);
-  const invalidated = documents(workspace.userId, projectId);
-  const unrelated = [...snapshots("other-user", projectId), ...documents("other-user", projectId), ...snapshots(workspace.userId, "other-project")];
+  const reset = snapshots(projectId);
+  const invalidated = documents(projectId);
+  const unrelated = [...snapshots("other-project"), ...documents("other-project")];
   for (const key of [...reset, ...invalidated, ...unrelated]) client.setQueryData(key, { cached: true });
   await refreshProjectGitQueries(client, workspace);
   for (const key of reset) expect(client.getQueryData(key)).toBeUndefined();
@@ -36,7 +36,7 @@ it("resets cursor snapshots and invalidates all workspace documents without touc
 
 it("cancels an initial file read before refetching so it cannot overwrite the newer contents", async () => {
   const client = new QueryClient();
-  const queryKey = ["projects", "file", workspace.userId, projectId, "file.ts"];
+  const queryKey = ["projects", "file", projectId, "file.ts"];
   let finish!: (value: string) => void;
   let signal!: AbortSignal;
   const read = vi.fn().mockImplementationOnce((context) => {
@@ -55,15 +55,15 @@ it("cancels an initial file read before refetching so it cannot overwrite the ne
   client.clear();
 });
 
-it("refreshes GitHub branch pickers for the submitting account after remote operations", async () => {
+it("refreshes GitHub branch pickers after remote operations", async () => {
   const client = new QueryClient();
-  const key = ["github", "repositories", "repo", "branches", "infinite", "cursor", workspace.userId];
+  const key = ["github", "repositories", "repo", "branches", "infinite", "cursor", "github-user"];
   const other = [...key.slice(0, 6), "other-user"];
   client.setQueryData(key, { pages: [] });
   client.setQueryData(other, { pages: [] });
   await refreshProjectGitQueries(client, workspace, { remote: true });
   expect(client.getQueryData(key)).toBeUndefined();
-  expect(client.getQueryData(other)).toBeDefined();
+  expect(client.getQueryData(other)).toBeUndefined();
   client.clear();
 });
 

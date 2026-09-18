@@ -19,7 +19,6 @@ import {
   projectBranchParamsSchema,
   type ProjectBranchParamsSchema,
 } from "../lib/branch-params";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import type {
   CheckoutProjectBranchSchema,
   ProjectBranchCheckoutSchema,
@@ -58,8 +57,6 @@ export const useProjectBranches = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const { workspace } = useDeviceWorkspace();
-  const userId = workspace?.ownerId ?? null;
   const params = projectBranchParamsSchema.safeParse({
     ...filters,
     projectId,
@@ -74,12 +71,11 @@ export const useProjectBranches = (
       "branches",
       "infinite",
       "cursor",
-      userId,
       projectId,
       "local",
       params.success ? params.data : filters,
     ],
-    enabled: enabled && Boolean(userId) && params.success && validPageLimit,
+    enabled: enabled && params.success && validPageLimit,
     initialPageParam: (params.success ? (params.data.cursor ?? null) : null) as
       string | null,
     maxPages: validPageLimit ? maxPages : 0,
@@ -94,7 +90,6 @@ export const useProjectBranches = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch can run while the query is disabled.
-      if (!userId) throw new Error("The local workspace is not ready.");
       if (!params.success || !validPageLimit) {
         throw new Error("Invalid project branch search or pagination.");
       }
@@ -128,15 +123,13 @@ export const useProjectBranches = (
     ProjectBranchCheckoutSchema,
     ProjectBranchCheckoutError,
     CheckoutProjectBranchSchema,
-    { userId: string | null; projectId: string | null | undefined }
+    { projectId: string | null | undefined }
   >({
-    mutationKey: ["projects", "branches", "checkout", userId, projectId],
+    mutationKey: ["projects", "branches", "checkout", projectId],
     retry: false,
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input) => {
-      if (!userId)
-        throw new ProjectBranchCheckoutError("The local workspace is not ready.");
       if (!projectId || !isValidIds(projectId))
         throw new ProjectBranchCheckoutError("Invalid project ID.");
       // The action validates input and confirms the response matches the requested branch.
@@ -153,7 +146,7 @@ export const useProjectBranches = (
   });
 
   const recoverCheckout = async (): Promise<ProjectBranchCheckoutSchema> => {
-    if (!userId || !projectId)
+    if (!projectId)
       throw new Error("The local workspace is not ready.");
     // Capture this hook's workspace, rather than refetching an observer that may
     // have moved to another project while the checkout response was in flight.
@@ -172,7 +165,6 @@ export const useProjectBranches = (
   const loadMore = () => {
     if (
       enabled &&
-      userId &&
       params.success &&
       validPageLimit &&
       query.hasNextPage &&
@@ -186,7 +178,6 @@ export const useProjectBranches = (
   const retry = () => {
     if (
       !enabled ||
-      !userId ||
       !params.success ||
       !validPageLimit ||
       query.isFetching ||
@@ -204,18 +195,18 @@ export const useProjectBranches = (
     z.input<typeof gitCreateBranchSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "createBranch", userId, projectId],
+    mutationKey: ["projects", "git", "createBranch", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitCreateBranchSchema>) => {
-      const id = requireLocalGitProject(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await createProjectBranchAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });

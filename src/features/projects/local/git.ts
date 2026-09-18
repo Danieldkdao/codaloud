@@ -1,4 +1,4 @@
-import { requireGitIdentity } from "@/features/workspace/git-identity";
+import { requireGitIdentity } from "@/features/settings/git-identity";
 import { getGitHubAccessToken } from "@/services/github/credentials";
 import { executeWorkspace, LocalWorkspaceError } from "@/services/local-workspace/execute";
 import { requireLocalProject } from "./access";

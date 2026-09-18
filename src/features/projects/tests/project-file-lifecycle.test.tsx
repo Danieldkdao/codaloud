@@ -44,12 +44,6 @@ vi.mock("@/features/projects/components/project-workspace-dock", () => ({ Projec
 vi.mock("@/features/projects/components/project-files-list", () => ({ ProjectFilesList: (props: ComponentProps<typeof ProjectFilesList>) => { fileList = props; return null; } }));
 vi.mock("@/features/projects/components/project-file-create-row", () => ({ ProjectFileCreateRow: (props: ComponentProps<typeof ProjectFileCreateRow>) => { createRow = props; return null; } }));
 vi.mock("@/features/projects/components/project-workspace-state", () => ({ ProjectWorkspaceState: ({ title }: { title: string }) => createElement("span", null, title) }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(({ isPending: false, error: null, data: { user: { id: "user-one" } } })),
-}));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFilesAction: async () => [], readProjectFileContentAction: mocks.readContent,
   createProjectFileAction: mocks.create, updateProjectFileAction: mocks.update, deleteProjectFileAction: mocks.delete,
@@ -257,7 +251,7 @@ it.each([
   { selected: "src-other/main.ts", source: "src", destination: "lib", expected: "src-other/main.ts", kind: "folder" as const },
 ])("retargets $selected only when it belongs to the renamed $source", async ({ selected, source, destination, expected, kind }) => {
   await select(selected);
-  client.setQueryData(["projects", "file", "user-one", "project-one", expected], { path: expected, content: "obsolete destination", size: 20 });
+  client.setQueryData(["projects", "file", "project-one", expected], { path: expected, content: "obsolete destination", size: 20 });
   mocks.update.mockResolvedValueOnce(result(destination, kind === "folder"));
   await act(async () => { await fileList.onUpdate({ parentPath: "", previousName: source, name: destination, kind }); });
   await flush();
@@ -349,7 +343,7 @@ it.each([0, 6_000])("loads fresh contents when a deleted path is recreated after
   await act(async () => { await fileList.onDelete({ parentPath: "", name: "old.ts", kind: "file" }); });
   await flush();
   // Also cover stale contents left by a previously opened incarnation of this path.
-  client.setQueryData(["projects", "file", "user-one", "project-one", "old.ts"], { path: "old.ts", content: "obsolete", size: 8 }, { updatedAt: Date.now() - age });
+  client.setQueryData(["projects", "file", "project-one", "old.ts"], { path: "old.ts", content: "obsolete", size: 8 }, { updatedAt: Date.now() - age });
   act(() => creation.begin("file"));
   mocks.create.mockResolvedValueOnce(result("old.ts"));
   mocks.readContent.mockImplementation(async (_project: string, path: string) => ({ path, content: "", size: 0 }));

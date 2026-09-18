@@ -33,9 +33,9 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 const projectId = "project-one";
-const listKey = ["projects", "infinite", "cursor", "user-one", {}];
-const detailKey = ["projects", "detail", "user-one", projectId];
-const filteredKey = ["projects", "infinite", "cursor", "user-one", { search: "old" }];
+const listKey = ["projects", "infinite", "cursor", {}];
+const detailKey = ["projects", "detail", projectId];
+const filteredKey = ["projects", "infinite", "cursor", { search: "old" }];
 const unrelatedKey = ["github", "repositories"];
 let client: QueryClient;
 let root: Root;

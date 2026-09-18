@@ -60,14 +60,14 @@ vi.mock("@/components/ui/text", () => {
 });
 
 const project: ProjectResponseData = {
-  id: "project-one", userId: "user-one", name: "My project",
+  id: "project-one", name: "My project",
   setupStatus: "pending", setupError: null, githubRepositoryId: null,
   lastOpenedFilePath: null, lastOpenedAt: null,
   createdAt: "2026-09-07T12:00:00.000Z", updatedAt: "2026-09-07T12:00:00.000Z",
 };
-const listKey = ["projects", "infinite", "cursor", project.userId, {}];
-const detailKey = ["projects", "detail", project.userId, project.id];
-const filteredKey = ["projects", "infinite", "cursor", project.userId, { search: "My" }];
+const listKey = ["projects", "infinite", "cursor", {}];
+const detailKey = ["projects", "detail", project.id];
+const filteredKey = ["projects", "infinite", "cursor", { search: "My" }];
 const pageData = (projects: ProjectResponseData[]) => ({ pages: [{ projects, nextCursor: null }], pageParams: [null] });
 let client: QueryClient;
 let root: Root;

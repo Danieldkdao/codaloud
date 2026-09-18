@@ -3,7 +3,7 @@ import "../global.css";
 import { QueryProvider } from "@/components/query-provider";
 import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
 import { SuccessFeedbackProvider } from "@/hooks/use-success-feedback";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
+import { useOnboarding } from "@/features/settings/hooks/use-onboarding";
 import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
@@ -22,7 +22,7 @@ SplashScreen.preventAutoHideAsync();
 const RootNavigator = () => {
   const { isReady: isThemeReady } = useTheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
-  const { ready: isWorkspaceReady, workspace, error, retry } = useDeviceWorkspace();
+  const { ready: isAppReady, hasCompletedOnboarding, error, retry } = useOnboarding();
 
   useEffect(subscribeToQueryLifecycle, []);
 
@@ -31,16 +31,16 @@ const RootNavigator = () => {
       console.error("Unable to load custom fonts", fontError);
     }
 
-    if ((fontsLoaded || fontError) && isWorkspaceReady && isThemeReady) {
+    if ((fontsLoaded || fontError) && isAppReady && isThemeReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, isWorkspaceReady, isThemeReady]);
+  }, [fontsLoaded, fontError, isAppReady, isThemeReady]);
 
-  if ((!fontsLoaded && !fontError) || !isWorkspaceReady || !isThemeReady) {
+  if ((!fontsLoaded && !fontError) || !isAppReady || !isThemeReady) {
     return null;
   }
 
-  if (!workspace) {
+  if (hasCompletedOnboarding === null) {
     return (
       <AppWrapper>
         <PText accessibilityLiveRegion="polite">{error}</PText>
@@ -67,7 +67,7 @@ const RootNavigator = () => {
                 headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
               }}
             >
-              <Stack.Protected guard={workspace.hasEntered}>
+              <Stack.Protected guard={hasCompletedOnboarding}>
                 <Stack.Screen name="(main)" options={{ headerShown: false }} />
                 <Stack.Screen name="projects/[projectId]" options={{ title: "Project" }} />
                 <Stack.Screen
@@ -93,7 +93,7 @@ const RootNavigator = () => {
                   }}
                 />
               </Stack.Protected>
-              <Stack.Protected guard={!workspace.hasEntered}>
+              <Stack.Protected guard={!hasCompletedOnboarding}>
                 <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               </Stack.Protected>
               <Stack.Screen name="github-connect" options={{ headerShown: false }} />

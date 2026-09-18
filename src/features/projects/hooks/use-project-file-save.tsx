@@ -15,7 +15,6 @@ import {
   createFileSaveDocument,
   type SaveSnapshot,
 } from "@/features/projects/lib/project-file-save-document";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 export type { ProjectFileSaveStatus } from "@/features/projects/lib/project-file-save-document";
 
 type SaveDocument = ReturnType<typeof createFileSaveDocument>;
@@ -40,11 +39,9 @@ const FileSaveContext = createContext<ProjectFileSaveState | null>(null);
 
 const FileSaveRegistry = ({
   projectId,
-  userId,
   children,
 }: {
   projectId: string;
-  userId: string | null;
   children: ReactNode;
 }) => {
   const queryClient = useQueryClient();
@@ -102,16 +99,16 @@ const FileSaveRegistry = ({
         (savedPath, savedContent, size) => {
           // Cache only confirmed bytes; newer local edits remain in this document.
           queryClient.setQueryData(
-            ["projects", "file", userId, projectId, savedPath],
+            ["projects", "file", projectId, savedPath],
             { path: savedPath, content: savedContent, size },
           );
           void queryClient.invalidateQueries({
-            queryKey: ["projects", "files", userId, projectId],
+            queryKey: ["projects", "files", projectId],
           });
           // Refresh an active changes panel, or mark its snapshot stale so it
           // reloads when reopened. Only confirmed writes reach this callback.
           void queryClient.invalidateQueries({
-            queryKey: ["projects", "changes", userId, projectId],
+            queryKey: ["projects", "changes", projectId],
             exact: true,
           });
         },
@@ -136,7 +133,6 @@ const FileSaveRegistry = ({
       projectId,
       queryClient,
       registerDocument,
-      userId,
       gitOperation,
       protectedDrafts,
     ],
@@ -303,13 +299,10 @@ export const ProjectFileSaveRegistryProvider = ({
   projectId: string;
   children: ReactNode;
 }) => {
-  const { workspace } = useDeviceWorkspace();
-  const userId = workspace?.ownerId ?? null;
   return (
     <FileSaveRegistry
-      key={`${userId}/${projectId}`}
+      key={projectId}
       projectId={projectId}
-      userId={userId}
     >
       {children}
     </FileSaveRegistry>

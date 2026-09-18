@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), project: vi.fn(), identity: vi.fn(), token: vi.fn() }));
 vi.mock("@/services/local-workspace/execute", () => ({ executeWorkspace: mocks.execute, LocalWorkspaceError: class extends Error { constructor(readonly code: string, message: string) { super(message); } } }));
 vi.mock("../local/access", () => ({ requireLocalProject: mocks.project }));
-vi.mock("@/features/workspace/git-identity", () => ({ requireGitIdentity: mocks.identity }));
+vi.mock("@/features/settings/git-identity", () => ({ requireGitIdentity: mocks.identity }));
 vi.mock("@/services/github/credentials", () => ({ getGitHubAccessToken: mocks.token }));
 import { readProjectBranchesAction, createProjectCommitAction, fetchProjectGitAction, readProjectCommitsAction } from "../actions/git-actions";
 const id = "00000000-0000-4000-8000-000000000001";

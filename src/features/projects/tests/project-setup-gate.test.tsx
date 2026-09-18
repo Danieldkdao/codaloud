@@ -50,12 +50,6 @@ vi.mock("@/components/ui/button", () => ({
   Button: ({ children, onPress, disabled }: { children?: ReactNode; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, children),
 }));
 vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => state.query }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(({ isPending: false, error: null, data: { user: { id: "user-one" } } })),
-}));
 vi.mock("@/features/projects/actions/file-actions", () => ({ readProjectFilesAction: state.readFiles }));
 vi.mock("react-native-reanimated", () => ({
   default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
@@ -179,7 +173,7 @@ it("blocks a stale ready result on a query error and offers a retry", async () =
 });
 
 it("verifies a cached workspace after pending setup becomes ready", async () => {
-  client.setQueryData(["projects", "files", "user-one", "project-one", ""], []);
+  client.setQueryData(["projects", "files", "project-one", ""], []);
   state.query.data = { name: "Example", setupStatus: "running" };
   await render();
   expect(state.readFiles).not.toHaveBeenCalled();
@@ -204,7 +198,7 @@ it("keeps workspace routes mounted during ordinary background folder refreshes",
   await render();
   const workspace = container.querySelector("p");
   state.readFiles.mockImplementationOnce(() => new Promise(() => {}));
-  await act(async () => { void client.invalidateQueries({ queryKey: ["projects", "files", "user-one", "project-one", ""] }); });
+  await act(async () => { void client.invalidateQueries({ queryKey: ["projects", "files", "project-one", ""] }); });
   await advance();
   expect(container.textContent).toBe("Requested workspace route");
   expect(container.querySelector("p")).toBe(workspace);

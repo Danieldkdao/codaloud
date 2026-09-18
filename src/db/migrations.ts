@@ -1,8 +1,7 @@
 // Keep migrations bundled with the native app so startup never needs a network request.
-export const localWorkspaceMigration = `
+export const projectsMigration = `
 CREATE TABLE projects (
   id TEXT PRIMARY KEY NOT NULL,
-  user_id TEXT NOT NULL,
   name TEXT NOT NULL CHECK (length(trim(name)) > 0),
   search_name TEXT NOT NULL,
   setup_status TEXT NOT NULL CHECK (setup_status IN ('pending', 'running', 'ready', 'failed')),
@@ -13,7 +12,7 @@ CREATE TABLE projects (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX projects_user_id_updated_at_idx ON projects (user_id, updated_at DESC);
+CREATE INDEX projects_updated_at_idx ON projects (updated_at DESC);
 `;
 
 export const localWorkspacePreferencesMigration = `
@@ -36,4 +35,11 @@ DROP TABLE IF EXISTS migration_imports;
 
 export const removeSandboxReferenceMigration = `
 ALTER TABLE projects DROP COLUMN sandbox_id;
+`;
+
+export const removeLocalOwnershipMigration = `
+DROP INDEX IF EXISTS projects_user_id_updated_at_idx;
+ALTER TABLE projects DROP COLUMN user_id;
+CREATE INDEX projects_updated_at_idx ON projects (updated_at DESC);
+DROP TABLE workspace;
 `;

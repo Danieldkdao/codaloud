@@ -16,12 +16,6 @@ vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, 
   return { remove: () => lifecycle.listeners.delete(listener) };
 } } }));
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: mocks.save, readProjectFileContentAction: mocks.read }));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(({ isPending: false, data: { user: { id: "user-one" } } })),
-}));
 const hash = (content: string) => createHash("sha256").update(content).digest("hex");
 const success = (content: string, path = "one.ts") => ({ error: false, message: "Saved.", data: { path, size: Buffer.byteLength(content), contentHash: hash(content) } });
 let current: NonNullable<ReturnType<typeof useProjectFileSave>>;
@@ -66,7 +60,7 @@ it("flushes all pending documents, including edits and documents added while wai
   expect(mocks.save.mock.calls.map((call) => [call[1].path, call[1].content])).toEqual([
     ["one.ts", "first"], ["one.ts", "second"], ["two.ts", "another file"],
   ]);
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: "second" });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toMatchObject({ content: "second" });
   await tick();
   expect(mocks.save).toHaveBeenCalledTimes(3);
 });
@@ -126,7 +120,7 @@ it("debounces only edits for three seconds, retaining exact text and confirmed c
   await tick(1);
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "one.ts", content: "你好\r\n", expectedContentHash: hash("original") });
   expect(current.status).toBe("saved");
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toEqual({ path: "one.ts", content: "你好\r\n", size: 8 });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toEqual({ path: "one.ts", content: "你好\r\n", size: 8 });
   expect(current.initialValue).toBe("original");
 });
 
@@ -154,7 +148,7 @@ it("releases an unused document only after its entire save queue settles", async
   await act(async () => finishes[0](success("first")));
   expect(registry.getDocument("one.ts", 0, "first")).toBe(previous);
   await act(async () => finishes[1](success("second")));
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: "second" });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toMatchObject({ content: "second" });
   expect(registry.getDocument("one.ts", 0, "second")).not.toBe(previous);
 });
 
@@ -400,7 +394,7 @@ it.each([
   expect(disk).toBe(latest);
   expect(current.status).toBe("saved");
   expect(mocks.read).toHaveBeenCalledWith("project-one", "one.ts");
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: latest });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toMatchObject({ content: latest });
   expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: latest, expectedContentHash: hash(submitted) });
 });
 
@@ -498,11 +492,11 @@ it("keeps the document active when React checks initializers twice in Strict Mod
 });
 
 
-it.each([true, false])("invalidates only this account and project's changes after a confirmed save (active: %s)", async (active) => {
-  const key = ["projects", "changes", "user-one", "project-one"];
+it.each([true, false])("invalidates only this project's changes after a confirmed save (active: %s)", async (active) => {
+  const key = ["projects", "changes", "project-one"];
   const unrelated = [
-    ["projects", "changes", "user-two", "project-one"],
-    ["projects", "changes", "user-one", "project-two"],
+    ["projects", "changes", "project-three"],
+    ["projects", "changes", "project-two"],
   ];
   for (const queryKey of [key, ...unrelated]) client.setQueryData(queryKey, { revision: "before" });
   const fetchChanges = vi.fn().mockResolvedValue({ revision: "after" });
@@ -532,7 +526,7 @@ it.each([true, false])("invalidates only this account and project's changes afte
 });
 
 it("does not invalidate changes for failed saves", async () => {
-  const key = ["projects", "changes", "user-one", "project-one"];
+  const key = ["projects", "changes", "project-one"];
   client.setQueryData(key, { revision: "before" });
   mocks.save.mockResolvedValueOnce({ error: true, message: "Save failed." });
   await render();

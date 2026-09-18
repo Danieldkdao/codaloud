@@ -2,16 +2,14 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import type { SQLiteDatabase } from "expo-sqlite";
-import { localWorkspaceMigration } from "@/db/migrations";
+import { projectsMigration } from "@/db/migrations";
 import * as schema from "@/db/schema";
 import { createLocalProjectStore } from "../local/projects";
 
-const owner = "00000000-0000-4000-8000-000000000001";
-const otherOwner = "00000000-0000-4000-8000-000000000002";
 const timestamp = "2026-09-18T12:00:00.000Z";
-const project = (id: number, name: string, userId = owner) => ({
+const project = (id: number, name: string) => ({
   id: `00000000-0000-4000-8000-${String(id).padStart(12, "0")}`,
-  userId, name, setupStatus: "ready" as const,
+  name, setupStatus: "ready" as const,
   setupError: null, githubRepositoryId: null, lastOpenedFilePath: null,
   lastOpenedAt: null, createdAt: timestamp, updatedAt: timestamp,
 });
@@ -22,7 +20,7 @@ describe("local project storage", () => {
 
   beforeEach(() => {
     sqlite = new DatabaseSync(":memory:");
-    sqlite.exec(localWorkspaceMigration);
+    sqlite.exec(projectsMigration);
     // Run the production Drizzle queries against actual SQLite, without loading
     // React Native. Only Expo's native statement boundary is adapted here.
     const client = {
@@ -47,19 +45,21 @@ describe("local project storage", () => {
 
   afterEach(() => sqlite.close());
 
-  it("isolates reads, updates, and deletion by owner", () => {
-    store.insert(project(10, "Private", otherOwner));
-    expect(store.read(owner, project(10, "").id)).toBeNull();
-    expect(store.list(owner).projects).toEqual([]);
-    expect(store.rename(owner, project(10, "").id, "Changed")).toBeNull();
-    expect(store.remove(owner, project(10, "").id)).toBeNull();
-    expect(store.read(otherOwner, project(10, "").id)?.name).toBe("Private");
+  it("reads, renames, and deletes device projects by project ID", () => {
+    const original = project(10, "Local");
+    store.insert(original);
+    expect(store.read(original.id)).toEqual(original);
+    expect(store.list().projects).toEqual([original]);
+    expect(store.rename(original.id, "Changed")?.name).toBe("Changed");
+    expect(store.remove(original.id)?.id).toBe(original.id);
+    expect(store.read(original.id)).toBeNull();
+    expect(store.list().projects).toEqual([]);
   });
 
   it("paginates tied values without skipping or repeating projects", () => {
     for (const id of [12, 10, 11]) store.insert(project(id, "Same"));
-    const first = store.list(owner, { pageSize: 2, sortBy: "name" });
-    const second = store.list(owner, { pageSize: 2, sortBy: "name", cursor: first.nextCursor });
+    const first = store.list({ pageSize: 2, sortBy: "name" });
+    const second = store.list({ pageSize: 2, sortBy: "name", cursor: first.nextCursor });
     expect([...first.projects, ...second.projects].map((item) => item.id))
       .toEqual([10, 11, 12].map((id) => project(id, "").id));
     expect(second.nextCursor).toBeNull();
@@ -68,30 +68,30 @@ describe("local project storage", () => {
   it("searches case-insensitively and treats SQL wildcards literally", () => {
     store.insert(project(10, "100%_Ready"));
     store.insert(project(11, "Another project"));
-    expect(store.list(owner, { search: "%_rEaDy" }).projects.map((item) => item.name))
+    expect(store.list({ search: "%_rEaDy" }).projects.map((item) => item.name))
       .toEqual(["100%_Ready"]);
   });
 
   it("searches Unicode names after creation and renaming", () => {
     const original = project(10, "ÉCOLE");
     store.insert(original);
-    expect(store.list(owner, { search: "école" }).projects).toHaveLength(1);
-    store.rename(owner, original.id, "ÜBER");
-    expect(store.list(owner, { search: "über" }).projects).toHaveLength(1);
-    expect(store.list(owner, { search: "école" }).projects).toHaveLength(0);
+    expect(store.list({ search: "école" }).projects).toHaveLength(1);
+    store.rename(original.id, "ÜBER");
+    expect(store.list({ search: "über" }).projects).toHaveLength(1);
+    expect(store.list({ search: "école" }).projects).toHaveLength(0);
   });
 
   it("keeps project IDs and timestamps and refuses duplicate inserts", () => {
     const original = project(10, "Saved");
     expect(store.insert(original)).toEqual(original);
     expect(() => store.insert(original)).toThrow();
-    expect(store.read(owner, original.id)).toEqual(original);
+    expect(store.read(original.id)).toEqual(original);
   });
 
   it("rejects cursors from a different search and refuses invalid updates", () => {
     for (const id of [10, 11]) store.insert(project(id, "Same"));
-    const page = store.list(owner, { pageSize: 1 });
-    expect(() => store.list(owner, { cursor: page.nextCursor, search: "different" })).toThrow();
-    expect(() => store.rename(owner, project(10, "").id, "   ")).toThrow();
+    const page = store.list({ pageSize: 1 });
+    expect(() => store.list({ cursor: page.nextCursor, search: "different" })).toThrow();
+    expect(() => store.rename(project(10, "").id, "   ")).toThrow();
   });
 });

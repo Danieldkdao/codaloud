@@ -5,8 +5,8 @@ import { expect, it, vi } from "vitest";
 import Module from "node:module";
 import WelcomeScreen from "@/app/(auth)/index";
 
-const state = vi.hoisted(() => ({ enter: vi.fn(), isEntering: false, error: null as string | null }));
-vi.mock("../hooks/use-device-workspace", () => ({ useDeviceWorkspace: () => state }));
+const state = vi.hoisted(() => ({ complete: vi.fn(), isCompleting: false, error: null as string | null }));
+vi.mock("../hooks/use-onboarding", () => ({ useOnboarding: () => state }));
 vi.mock("react-native", () => ({ View: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 vi.mock("@/components/ui/image", () => ({ Image: () => null }));
@@ -31,7 +31,7 @@ it("offers direct entry without an OAuth choice and keeps storage errors visible
     expect(container.querySelectorAll("button")).toHaveLength(1);
     expect(container.textContent).not.toContain("Continue with GitHub");
     await act(async () => { container.querySelector("button")!.click(); });
-    expect(state.enter).toHaveBeenCalledTimes(1);
+    expect(state.complete).toHaveBeenCalledTimes(1);
     state.error = "Unable to save your preference on this device.";
     await act(async () => { root.render(createElement(WelcomeScreen)); });
     expect(container.textContent).toContain(state.error);

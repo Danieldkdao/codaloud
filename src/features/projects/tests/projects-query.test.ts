@@ -4,30 +4,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { readUserProjectsAction } from "@/features/projects/actions/actions";
+import { readProjectsAction } from "@/features/projects/actions/actions";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import type { ProjectParamsSchema } from "@/features/projects/lib/project-params";
 import type { ProjectPageData } from "@/features/projects/types";
+vi.mock("@/features/projects/actions/actions", () => ({ readProjectsAction: vi.fn() }));
 
-const session = vi.hoisted(() => ({
-  data: { user: { id: "user-one" } },
-  isPending: false,
-  error: null as Error | null,
-}));
-vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({
-  useDeviceWorkspace: () => ((state: { isPending?: boolean; error?: unknown; data?: { user: { id: string } } | null }) => ({
-    ready: !state.isPending,
-    workspace: !state.isPending && !state.error && state.data ? { ownerId: state.data.user.id } : null,
-  }))(session),
-}));
-vi.mock("@/features/projects/actions/actions", () => ({ readUserProjectsAction: vi.fn() }));
-
-const read = vi.mocked(readUserProjectsAction);
+const read = vi.mocked(readProjectsAction);
 let client: QueryClient;
 let root: Root;
 let current: ReturnType<typeof useProjects>;
 const page = (ids: string[], nextCursor: string | null = null): ProjectPageData => ({ projects: ids.map((id) => ({
-  id, userId: "user-one", name: id, setupStatus: "pending",
+  id, name: id, setupStatus: "pending",
   setupError: null, githubRepositoryId: null, lastOpenedFilePath: null,
   lastOpenedAt: null, createdAt: "2026-09-07T12:00:00.000Z", updatedAt: "2026-09-07T12:00:00.000Z",
 })), nextCursor });
@@ -55,9 +43,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   root = createRoot(document.createElement("div"));
-  session.data = { user: { id: "user-one" } };
-  session.isPending = false;
-  session.error = null;
   read.mockReset();
 });
 
@@ -182,21 +167,7 @@ describe("useProjects", () => {
     expect(current.data?.pages).toEqual([page(["c"])]);
   });
 
-  it("waits for authentication and isolates account changes", async () => {
-    session.isPending = true;
-    await render();
-    expect(read).not.toHaveBeenCalled();
-    await run(() => current.refetch());
-    expect(read).not.toHaveBeenCalled();
-    read.mockResolvedValueOnce(page(["a"])).mockResolvedValueOnce(page(["b"]));
-    session.isPending = false;
-    await render();
-    expect(current.data?.pages).toEqual([page(["a"])]);
-    session.data = { user: { id: "user-two" } };
-    await render();
-    expect(current.data?.pages).toEqual([page(["b"])]);
-    expect(read).toHaveBeenCalledTimes(2);
-  });
+  it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
   it("forwards cancellation to the read action", async () => {
     let requestSignal: AbortSignal | undefined;

@@ -1,7 +1,6 @@
 import { isValidIds } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { readProjectFilesAction } from "../actions/file-actions";
 import {
   projectFileSearchQuerySchema,
@@ -35,8 +34,6 @@ export const useProjectFileSearch = (
     enabled?: boolean;
   } = {},
 ) => {
-  const { workspace } = useDeviceWorkspace();
-  const userId = workspace?.ownerId ?? null;
   const queryClient = useQueryClient();
   const { flushPendingSaves } = useProjectFileSaveRegistry();
   // Preserve meaningful spaces in literal content searches; blank searches are invalid.
@@ -51,17 +48,16 @@ export const useProjectFileSearch = (
     ? null
     : (params.error.issues[0]?.message ?? "Invalid project file search or pagination.");
   const canSearch =
-    enabled && Boolean(userId) && validProject && params.success;
+    enabled && validProject && params.success;
   const queryKey = useMemo(
     () => [
       "projects",
       "file-search",
       "infinite",
-      userId,
       projectId,
       { search, scope, path, pageSize },
     ],
-    [userId, projectId, search, scope, path, pageSize],
+    [projectId, search, scope, path, pageSize],
   );
 
   const query = useInfiniteQuery({
@@ -86,7 +82,6 @@ export const useProjectFileSearch = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch bypasses enabled, so validate again before sending a request.
-      if (!userId) throw new Error("The local workspace is not ready.");
       if (!projectId || !validProject) {
         throw new Error("Invalid project file search or pagination.");
       }

@@ -322,25 +322,44 @@ export const formatProjectChangeCount = (count: number) =>
 export const formatProjectEditorTab = (path: string, openPaths: string[]) => {
   const file = formatProjectChangePath(path);
   const dot = file.name.lastIndexOf(".");
-  const duplicates = openPaths.filter((other) => other !== path && formatProjectChangePath(other).name === file.name);
+  const duplicates = openPaths.filter(
+    (other) =>
+      other !== path && formatProjectChangePath(other).name === file.name,
+  );
   let directory: string | null = null;
   if (duplicates.length) {
     const folders = path.split("/").slice(0, -1);
     directory = folders.length ? folders.join("/") : "Project root";
     for (let length = 1; length <= folders.length; length++) {
       const suffix = folders.slice(-length).join("/");
-      if (duplicates.every((other) => other.split("/").slice(0, -1).slice(-length).join("/") !== suffix)) {
+      if (
+        duplicates.every(
+          (other) =>
+            other.split("/").slice(0, -1).slice(-length).join("/") !== suffix,
+        )
+      ) {
         directory = suffix;
         break;
       }
     }
   }
-  return { name: dot > 0 ? file.name.slice(0, dot) : file.name, extension: dot > 0 ? file.name.slice(dot) : "", directory };
+  return {
+    name: dot > 0 ? file.name.slice(0, dot) : file.name,
+    extension: dot > 0 ? file.name.slice(dot) : "",
+    directory,
+  };
 };
 
-export const formatProjectEditorTabStyle = (selected: boolean) => selected
-  ? { container: "bg-secondary border-primary", text: "text-secondary-foreground font-semibold" }
-  : { container: "bg-background border-border", text: "text-muted-foreground" };
+export const formatProjectEditorTabStyle = (selected: boolean) =>
+  selected
+    ? {
+        container: "bg-secondary border-primary",
+        text: "text-secondary-foreground font-semibold",
+      }
+    : {
+        container: "bg-background border-border",
+        text: "text-muted-foreground",
+      };
 
 export const formatProjectChangeSelection = (selected: number, total: number) =>
   `${selected} of ${formatProjectChangeCount(total)} selected`;

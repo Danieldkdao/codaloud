@@ -3,10 +3,21 @@ import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import { diagnosticSeverities } from "@/features/projects/actions/code-intelligence-schemas";
-import { formatCodeAnalysisLabel, formatCodeDiagnostic, formatCodeDiagnosticCount, formatProjectFileSaveStatus } from "@/features/projects/lib/formatters";
+import {
+  formatCodeAnalysisLabel,
+  formatCodeDiagnostic,
+  formatCodeDiagnosticCount,
+  formatProjectFileSaveStatus,
+} from "@/features/projects/lib/formatters";
 import type { SaveSnapshot } from "../lib/project-file-save-document";
 
-export const ProjectCodeStatus = ({ status: save, analysis, onShowProblems, onRetry, readError = false }: {
+export const ProjectCodeStatus = ({
+  status: save,
+  analysis,
+  onShowProblems,
+  onRetry,
+  readError = false,
+}: {
   readError?: boolean;
   status: SaveSnapshot;
   analysis?: CodeEditorAnalysis;
@@ -29,34 +40,69 @@ export const ProjectCodeStatus = ({ status: save, analysis, onShowProblems, onRe
         >
           {analysis.status === "unavailable" ? (
             <View className="flex-row items-center gap-1.5">
-              <Icon family="Feather" name="alert-circle" size={18} className="text-muted-foreground" />
-              <PText className="text-base text-muted-foreground">Unavailable</PText>
+              <Icon
+                family="Feather"
+                name="alert-circle"
+                size={18}
+                className="text-muted-foreground"
+              />
+              <PText className="text-base text-muted-foreground">
+                Unavailable
+              </PText>
             </View>
-          ) : diagnosticSeverities.map((severity) => {
-            const count = analysis.diagnostics.filter((item) => item.severity === severity).length;
-            const presentation = formatCodeDiagnostic(severity);
-            const className = count ? presentation.className : "text-muted-foreground";
-            return (
-              <View key={severity} className="flex-row items-center gap-1" accessible={false}>
-                <Icon family="Feather" name={presentation.icon} size={16} className={className} />
-                <PText className={`text-base ${className}`}>{analysis.status === "checking" ? "·" : formatCodeDiagnosticCount(count)}</PText>
-              </View>
-            );
-          })}
+          ) : (
+            diagnosticSeverities.map((severity) => {
+              const count = analysis.diagnostics.filter(
+                (item) => item.severity === severity,
+              ).length;
+              const presentation = formatCodeDiagnostic(severity);
+              const className = count
+                ? presentation.className
+                : "text-muted-foreground";
+              return (
+                <View
+                  key={severity}
+                  className="flex-row items-center gap-1"
+                  accessible={false}
+                >
+                  <Icon
+                    family="Feather"
+                    name={presentation.icon}
+                    size={16}
+                    className={className}
+                  />
+                  <PText className={`text-base ${className}`}>
+                    {analysis.status === "checking"
+                      ? "·"
+                      : formatCodeDiagnosticCount(count)}
+                  </PText>
+                </View>
+              );
+            })
+          )}
         </Pressable>
       ) : null}
       <IndicatorContainer
         accessible
         accessibilityRole={canRetry ? "button" : "image"}
-        accessibilityLabel={readError ? "Couldn't load file. Tap to retry." : presentation.label}
+        accessibilityLabel={
+          readError ? "Couldn't load file. Tap to retry." : presentation.label
+        }
         accessibilityHint={canRetry ? save.message : undefined}
         accessibilityState={{ busy: presentation.busy }}
         accessibilityLiveRegion="polite"
         onPress={canRetry ? onRetry : undefined}
         className="min-h-11 min-w-11 items-center justify-center"
       >
-        {presentation.busy ? <ActivityIndicator size="small" className="text-muted-foreground" /> : (
-          <Icon family="MaterialCommunityIcons" name={presentation.icon} size={22} className={presentation.className} />
+        {presentation.busy ? (
+          <ActivityIndicator size="small" className="text-muted-foreground" />
+        ) : (
+          <Icon
+            family="MaterialCommunityIcons"
+            name={presentation.icon}
+            size={22}
+            className={presentation.className}
+          />
         )}
       </IndicatorContainer>
     </View>

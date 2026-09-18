@@ -16,9 +16,7 @@ import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-pro
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useProjectFileSearch } from "@/features/projects/hooks/use-project-file-search";
 import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
-import {
-  getDirectoryFiles,
-} from "@/features/projects/lib/files";
+import { getDirectoryFiles } from "@/features/projects/lib/files";
 
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();

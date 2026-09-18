@@ -17,7 +17,8 @@ export const unstable_settings = { initialRouteName: "files" };
 const ProjectLayout = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const segments = useSegments();
-  const isWorkspaceDiff = segments[2] === "git" && segments[3] === "workspace-diff";
+  const isWorkspaceDiff =
+    segments[2] === "git" && segments[3] === "workspace-diff";
 
   return (
     <ProjectWorkspaceCurrentFileProvider projectId={projectId}>
@@ -28,15 +29,49 @@ const ProjectLayout = () => {
               <ProjectSetupGate>
                 <ProjectFileSaveRegistryProvider projectId={projectId}>
                   <ProjectWorkspaceFileSearchProvider key={projectId}>
-                    <Tabs key={projectId} asChild options={{ backBehavior: "none" }}>
+                    <Tabs
+                      key={projectId}
+                      asChild
+                      options={{ backBehavior: "none" }}
+                    >
                       <View className="flex-1 bg-background">
                         <TabSlot style={{ flex: 1 }} />
                         <TabList style={{ display: "none" }}>
-                          <TabTrigger name="project-index" href={{ pathname: "/projects/[projectId]", params: { projectId } }} />
-                          <TabTrigger name="files" href={{ pathname: "/projects/[projectId]/files", params: { projectId } }} />
-                          <TabTrigger name="code" href={{ pathname: "/projects/[projectId]/code", params: { projectId } }} />
-                          <TabTrigger name="git" href={{ pathname: "/projects/[projectId]/git", params: { projectId } }} />
-                          <TabTrigger name="agent" href={{ pathname: "/projects/[projectId]/agent", params: { projectId } }} />
+                          <TabTrigger
+                            name="project-index"
+                            href={{
+                              pathname: "/projects/[projectId]",
+                              params: { projectId },
+                            }}
+                          />
+                          <TabTrigger
+                            name="files"
+                            href={{
+                              pathname: "/projects/[projectId]/files",
+                              params: { projectId },
+                            }}
+                          />
+                          <TabTrigger
+                            name="code"
+                            href={{
+                              pathname: "/projects/[projectId]/code",
+                              params: { projectId },
+                            }}
+                          />
+                          <TabTrigger
+                            name="git"
+                            href={{
+                              pathname: "/projects/[projectId]/git",
+                              params: { projectId },
+                            }}
+                          />
+                          <TabTrigger
+                            name="agent"
+                            href={{
+                              pathname: "/projects/[projectId]/agent",
+                              params: { projectId },
+                            }}
+                          />
                         </TabList>
                         {!isWorkspaceDiff ? <ProjectWorkspaceDock /> : null}
                       </View>

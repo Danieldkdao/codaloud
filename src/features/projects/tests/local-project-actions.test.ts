@@ -13,9 +13,10 @@ const id = "00000000-0000-4000-8000-000000000001";
 beforeEach(() => { vi.resetAllMocks(); mocks.execute.mockResolvedValue(true); });
 it("creates a ready local project without credentials or network", async () => {
   expect(await createProjectAction({ source: "new", name: "Offline" })).toMatchObject({ error: false, projectId: id });
+  expect(mocks.insert.mock.calls[0][0]).not.toHaveProperty("sandboxId");
   expect(mocks.token).not.toHaveBeenCalled();
   expect(mocks.execute).toHaveBeenCalledWith(id, "initialize");
-  expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner", sandboxId: null, setupStatus: "ready" }));
+  expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner", setupStatus: "ready" }));
 });
 it("does not insert metadata when native creation fails", async () => {
   mocks.execute.mockRejectedValue(new Error("Storage full"));

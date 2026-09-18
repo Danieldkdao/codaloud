@@ -791,7 +791,7 @@ it("clears old documents after an unknown checkout and retries recovery without 
 it("keeps workspace readiness intact while checkout refreshes the root folder", async () => {
   const projectKey = ["projects", "detail", live.userId, live.projectId];
   const filesKey = ["projects", "files", live.userId, live.projectId, ""];
-  const project = { setupStatus: "ready", sandboxId: "sandbox-one" };
+  const project = { setupStatus: "ready" };
   queryClient.setQueryData(projectKey, project);
   queryClient.setQueryData(filesKey, [{ path: "app.ts" }]);
   const readProject = vi.fn(async () => project);

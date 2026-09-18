@@ -5,7 +5,6 @@ CREATE TABLE projects (
   user_id TEXT NOT NULL,
   name TEXT NOT NULL CHECK (length(trim(name)) > 0),
   search_name TEXT NOT NULL,
-  sandbox_id TEXT,
   setup_status TEXT NOT NULL CHECK (setup_status IN ('pending', 'running', 'ready', 'failed')),
   setup_error TEXT,
   github_repository_id TEXT,
@@ -33,4 +32,8 @@ ALTER TABLE workspace ADD COLUMN git_author_email TEXT;
 // Version 4 only created the retired cloud-import audit table.
 export const removeImportHistoryMigration = `
 DROP TABLE IF EXISTS migration_imports;
+`;
+
+export const removeSandboxReferenceMigration = `
+ALTER TABLE projects DROP COLUMN sandbox_id;
 `;

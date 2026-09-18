@@ -145,7 +145,6 @@ const project = (
   id,
   userId: "owner",
   name: `Project ${id}`,
-  sandboxId: "sandbox",
   setupStatus,
   setupError: null,
   githubRepositoryId: null,

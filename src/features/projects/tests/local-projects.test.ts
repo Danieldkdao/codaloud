@@ -11,7 +11,7 @@ const otherOwner = "00000000-0000-4000-8000-000000000002";
 const timestamp = "2026-09-18T12:00:00.000Z";
 const project = (id: number, name: string, userId = owner) => ({
   id: `00000000-0000-4000-8000-${String(id).padStart(12, "0")}`,
-  userId, name, sandboxId: null, setupStatus: "ready" as const,
+  userId, name, setupStatus: "ready" as const,
   setupError: null, githubRepositoryId: null, lastOpenedFilePath: null,
   lastOpenedAt: null, createdAt: timestamp, updatedAt: timestamp,
 });
@@ -81,8 +81,8 @@ describe("local project storage", () => {
     expect(store.list(owner, { search: "école" }).projects).toHaveLength(0);
   });
 
-  it("keeps imported IDs and timestamps and refuses duplicate inserts", () => {
-    const original = project(10, "Imported");
+  it("keeps project IDs and timestamps and refuses duplicate inserts", () => {
+    const original = project(10, "Saved");
     expect(store.insert(original)).toEqual(original);
     expect(() => store.insert(original)).toThrow();
     expect(store.read(owner, original.id)).toEqual(original);

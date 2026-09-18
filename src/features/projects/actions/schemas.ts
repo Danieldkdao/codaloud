@@ -9,7 +9,6 @@ export const projectResponseSchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
   name: z.string().min(1),
-  sandboxId: z.string().nullable(),
   setupStatus: z.enum(projectSetupStatuses),
   setupError: z.string().nullable(),
   deletionRequested: z.boolean().optional(),

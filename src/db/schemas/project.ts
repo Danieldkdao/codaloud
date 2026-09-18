@@ -3,14 +3,12 @@ import { check, index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createdAt, id, updatedAt } from "../helpers";
 import { projectSetupStatuses } from "../shared";
 
-// Keep imported UUIDs and timestamp strings verbatim. Repository contents live
-// in the device filesystem; sandboxId is retained only as migration provenance.
+// Repository contents live in the device filesystem; this table stores metadata.
 export const ProjectTable = sqliteTable("projects", {
   id,
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
   searchName: text("search_name").notNull(),
-  sandboxId: text("sandbox_id"),
   setupStatus: text("setup_status", { enum: projectSetupStatuses }).notNull(),
   setupError: text("setup_error"),
   githubRepositoryId: text("github_repository_id"),

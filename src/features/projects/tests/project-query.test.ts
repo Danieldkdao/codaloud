@@ -24,7 +24,7 @@ vi.mock("@/features/projects/actions/actions", () => ({ readProjectAction: vi.fn
 
 const read = vi.mocked(readProjectAction);
 const project: ProjectResponseData = {
-  id: "project-one", userId: "user-one", name: "My project", sandboxId: null,
+  id: "project-one", userId: "user-one", name: "My project",
   setupStatus: "pending", setupError: null, githubRepositoryId: null,
   lastOpenedFilePath: null, lastOpenedAt: null,
   createdAt: "2026-09-07T12:00:00.000Z", updatedAt: "2026-09-07T12:00:00.000Z",

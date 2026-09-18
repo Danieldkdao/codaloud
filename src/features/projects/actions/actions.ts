@@ -42,7 +42,7 @@ export const createProjectAction = async (unsafeData: CreateProjectFormSchema) =
     } else await executeWorkspace(id, "initialize");
     const now = new Date().toISOString();
     try {
-      store.insert({ id, userId: ownerId, name: input.name, sandboxId: null,
+      store.insert({ id, userId: ownerId, name: input.name,
         setupStatus: "ready", setupError: null,
         githubRepositoryId: input.source === "github" ? input.repositoryId : null,
         lastOpenedFilePath: null, lastOpenedAt: null, createdAt: now, updatedAt: now });

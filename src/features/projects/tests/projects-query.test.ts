@@ -27,7 +27,7 @@ let client: QueryClient;
 let root: Root;
 let current: ReturnType<typeof useProjects>;
 const page = (ids: string[], nextCursor: string | null = null): ProjectPageData => ({ projects: ids.map((id) => ({
-  id, userId: "user-one", name: id, sandboxId: null, setupStatus: "pending",
+  id, userId: "user-one", name: id, setupStatus: "pending",
   setupError: null, githubRepositoryId: null, lastOpenedFilePath: null,
   lastOpenedAt: null, createdAt: "2026-09-07T12:00:00.000Z", updatedAt: "2026-09-07T12:00:00.000Z",
 })), nextCursor });

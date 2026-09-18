@@ -33,8 +33,8 @@ locally or cloned from GitHub through the normal project creation flow.
 
 Bundled SQLite migrations remain for creating and updating the on-device tables.
 Startup checks SQLite's schema version and applies missing schema changes without
-network access. The schema upgrade drops the obsolete cloud-import audit table;
-it does not restore or copy any cloud records or files.
+network access. Schema upgrades drop the obsolete cloud-import audit table and
+sandbox reference column; they do not restore or copy any cloud records or files.
 
 The workspace row still stores current device preferences and Git author details.
 Local archive/restore operations protect against interrupted project deletions;

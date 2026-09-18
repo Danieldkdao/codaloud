@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   headerOptions: {} as { headerTitle?: string; headerBackVisible?: boolean; headerLeft?: () => ReactNode },
   readFiles: vi.fn(),
   query: {
-    data: undefined as { name: string; setupStatus: string; sandboxId: string | null } | undefined,
+    data: undefined as { name: string; setupStatus: string } | undefined,
     isError: false,
     isFetching: false,
     refetch: vi.fn(),
@@ -105,7 +105,7 @@ it("provides an explicit home action while the workspace is loading", async () =
 });
 
 it.each(["local", "remote"])("uses the short SHA for a %s commit and restores the normal titles on navigation", async (source) => {
-  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "ready" };
   state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
   state.commitParams = { commitSha: "40d01ac" + "a".repeat(33), source };
   await render();
@@ -126,7 +126,7 @@ it.each([
   { commitSha: ["a".repeat(40)], source: "local" },
   { commitSha: "a".repeat(40), source: "invalid" },
 ])("keeps the workspace title for incomplete commit parameters: %j", async (params) => {
-  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "ready" };
   state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
   state.commitParams = params;
   await render();
@@ -148,7 +148,7 @@ it("does not mount a requested child route before the project loads", async () =
 });
 
 it.each(["pending", "running", "failed"])("blocks workspace routes while setup is %s, even with a sandbox ID", async (setupStatus) => {
-  state.query.data = { name: "Example", setupStatus, sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus };
   await render();
   expect(state.readFiles).not.toHaveBeenCalled();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ it.each(["pending", "running", "failed"])("blocks workspace routes while setup i
 });
 
 it("opens the requested child when setup and the workspace become ready, and removes it if setup regresses", async () => {
-  state.query.data = { name: "Example", setupStatus: "running", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "running" };
   await render();
   state.query.data = { ...state.query.data, setupStatus: "ready" };
   await render();
@@ -168,7 +168,7 @@ it("opens the requested child when setup and the workspace become ready, and rem
 });
 
 it("blocks a stale ready result on a query error and offers a retry", async () => {
-  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "ready" };
   state.query.isError = true;
   await render();
   expect(state.readFiles).not.toHaveBeenCalled();
@@ -180,7 +180,7 @@ it("blocks a stale ready result on a query error and offers a retry", async () =
 
 it("verifies a cached workspace after pending setup becomes ready", async () => {
   client.setQueryData(["projects", "files", "user-one", "project-one", ""], []);
-  state.query.data = { name: "Example", setupStatus: "running", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "running" };
   await render();
   expect(state.readFiles).not.toHaveBeenCalled();
   state.query.data = { ...state.query.data, setupStatus: "ready" };
@@ -190,7 +190,7 @@ it("verifies a cached workspace after pending setup becomes ready", async () => 
 });
 
 it("keeps terminal workspace errors outside the tabs without automatic retries", async () => {
-  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "ready" };
   state.readFiles.mockResolvedValue(null);
   await render();
   await advance(30_000);
@@ -200,7 +200,7 @@ it("keeps terminal workspace errors outside the tabs without automatic retries",
 });
 
 it("keeps workspace routes mounted during ordinary background folder refreshes", async () => {
-  state.query.data = { name: "Example", setupStatus: "ready", sandboxId: "sandbox-one" };
+  state.query.data = { name: "Example", setupStatus: "ready" };
   await render();
   const workspace = container.querySelector("p");
   state.readFiles.mockImplementationOnce(() => new Promise(() => {}));

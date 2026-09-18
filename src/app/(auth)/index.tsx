@@ -1,11 +1,12 @@
-import { OAuthButton } from "@/components/auth/oath-button";
-import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { Image } from "@/components/ui/image";
 import { HeadingText, PText } from "@/components/ui/text";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 
 const Index = () => {
+  const { enter, isEntering, error } = useDeviceWorkspace();
   return (
     <>
       <Stack.Screen
@@ -37,37 +38,11 @@ const Index = () => {
           </View>
         </View>
         <View className="shrink-0 gap-3">
-          <OAuthButton
-            provider="github"
-            size="lg"
-            className="min-h-14"
-            contentClassName="gap-3"
-            accessibilityLabel="Continue with GitHub"
-          >
-            <Icon
-              name="github"
-              size={22}
-              className="text-primary-foreground"
-              accessible={false}
-            />
-            Continue with GitHub
-          </OAuthButton>
-          <OAuthButton
-            provider="apple"
-            variant="outline"
-            size="lg"
-            className="min-h-14"
-            contentClassName="gap-3"
-            accessibilityLabel="Continue with Apple"
-          >
-            <Icon
-              name="apple"
-              size={22}
-              className="text-foreground"
-              accessible={false}
-            />
-            Continue with Apple
-          </OAuthButton>
+          <Button size="lg" className="min-h-14" loading={isEntering} onPress={() => void enter()}>
+            Get started
+          </Button>
+          <PText className="text-center">No account needed. Connect GitHub whenever you need it.</PText>
+          {error && <PText accessibilityLiveRegion="polite" className="text-destructive">{error}</PText>}
         </View>
       </View>
     </>

@@ -11,7 +11,7 @@ type GitHubConnectionProps = {
 export const GitHubConnection = ({
   callbackURL = "/account",
 }: GitHubConnectionProps) => {
-  const { isConnected, isPending, isChecking, status, connectionError, handleConnect } =
+  const { isConnected, isPending, isChecking, status, connectionError, handleConnect, handleDisconnect } =
     useGitHubConnected(callbackURL);
 
   return (
@@ -27,11 +27,11 @@ export const GitHubConnection = ({
         <Button
           variant="secondary"
           className="rounded-xl px-3"
-          accessibilityLabel={isConnected ? "Reconnect GitHub" : "Connect GitHub"}
-          onPress={handleConnect}
+          accessibilityLabel={isConnected ? "Disconnect GitHub" : "Connect GitHub"}
+          onPress={isConnected ? handleDisconnect : handleConnect}
           loading={isPending || isChecking}
         >
-          {isConnected ? "Reconnect" : "Connect"}
+          {isConnected ? "Disconnect" : "Connect"}
         </Button>
       </View>
       {!isConnected && (

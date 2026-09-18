@@ -3,7 +3,10 @@ import "../global.css";
 import { QueryProvider } from "@/components/query-provider";
 import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
 import { SuccessFeedbackProvider } from "@/hooks/use-success-feedback";
-import { authClient } from "@/lib/auth/auth-client";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
+import { AppWrapper } from "@/components/app-wrapper";
+import { Button } from "@/components/ui/button";
+import { PText } from "@/components/ui/text";
 import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
 import { fontAssets } from "@/lib/fonts";
 import { subscribeToQueryLifecycle } from "@/lib/query-lifecycle";
@@ -19,7 +22,7 @@ SplashScreen.preventAutoHideAsync();
 const RootNavigator = () => {
   const { isReady: isThemeReady } = useTheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const { ready: isWorkspaceReady, workspace, error, retry } = useDeviceWorkspace();
 
   useEffect(subscribeToQueryLifecycle, []);
 
@@ -28,18 +31,26 @@ const RootNavigator = () => {
       console.error("Unable to load custom fonts", fontError);
     }
 
-    if ((fontsLoaded || fontError) && !isSessionPending && isThemeReady) {
+    if ((fontsLoaded || fontError) && isWorkspaceReady && isThemeReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, isSessionPending, isThemeReady]);
+  }, [fontsLoaded, fontError, isWorkspaceReady, isThemeReady]);
 
-  if ((!fontsLoaded && !fontError) || isSessionPending || !isThemeReady) {
+  if ((!fontsLoaded && !fontError) || !isWorkspaceReady || !isThemeReady) {
     return null;
   }
 
+  if (!workspace) {
+    return (
+      <AppWrapper>
+        <PText accessibilityLiveRegion="polite">{error}</PText>
+        <Button onPress={() => void retry()}>Try again</Button>
+      </AppWrapper>
+    );
+  }
+
   return (
-    // Remount the cache on sign-out or account changes before rendering new screens.
-    <QueryProvider key={session?.user.id ?? "anonymous"}>
+    <QueryProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ProjectSearchOverlayProvider>
           <SuccessFeedbackProvider>
@@ -56,7 +67,7 @@ const RootNavigator = () => {
                 headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
               }}
             >
-              <Stack.Protected guard={!!session}>
+              <Stack.Protected guard={workspace.hasEntered}>
                 <Stack.Screen name="(main)" options={{ headerShown: false }} />
                 <Stack.Screen name="projects/[projectId]" options={{ title: "Project" }} />
                 <Stack.Screen
@@ -82,9 +93,10 @@ const RootNavigator = () => {
                   }}
                 />
               </Stack.Protected>
-              <Stack.Protected guard={!session}>
+              <Stack.Protected guard={!workspace.hasEntered}>
                 <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               </Stack.Protected>
+              <Stack.Screen name="github-connect" options={{ headerShown: false }} />
             </Stack>
           </SuccessFeedbackProvider>
         </ProjectSearchOverlayProvider>

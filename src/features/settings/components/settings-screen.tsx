@@ -1,9 +1,8 @@
 import { AppWrapper } from "@/components/app-wrapper";
-import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
-import { authClient } from "@/lib/auth/auth-client";
+import { useGitHubProfile } from "@/services/github/hooks/use-github-profile";
 import { GitHubConnection } from "@/services/github/components/github-connection";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
@@ -14,15 +13,15 @@ import { AppearanceSelector } from "./appearance-selector";
 import { SettingsRow, SettingsSection } from "./settings-section";
 
 export const SettingsScreen = () => {
-  const { data: session } = authClient.useSession();
+  const { profile } = useGitHubProfile();
   const [voiceHints, setVoiceHints] = useState(true);
   const [taskNotifications, setTaskNotifications] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const primary = useThemeColor("primary");
   const border = useThemeColor("border");
-  const name = session?.user.name || "Your account";
-  const email = session?.user.email;
-  const avatar = session?.user.image;
+  const name = profile?.name || profile?.login || "Your workspace";
+  const email = profile?.email;
+  const avatar = profile?.avatar_url;
 
   return (
     <AppWrapper tabBarShown>
@@ -41,7 +40,7 @@ export const SettingsScreen = () => {
           <View className="min-w-0 flex-1 gap-1">
             <PText selectable className="text-xl font-semibold text-foreground">{name}</PText>
             {email && <PText selectable>{email}</PText>}
-            <PText className="text-secondary-foreground">Personal account</PText>
+            <PText className="text-secondary-foreground">{profile ? `GitHub · @${profile.login}` : "Stored on this device"}</PText>
           </View>
         </View>
 
@@ -75,20 +74,6 @@ export const SettingsScreen = () => {
           </Pressable>
         </SettingsSection>
 
-        <SettingsSection title="Danger zone">
-          <SignOutButton
-            accessibilityLabel="Log out"
-            variant="ghost"
-            className="rounded-none p-0 active:bg-destructive/10"
-            contentClassName="w-full"
-            textClassName="text-destructive"
-          >
-            <SettingsRow label="Log out" icon={{ family: "Feather", name: "log-out" }} destructive />
-          </SignOutButton>
-          <Pressable disabled accessibilityRole="button" accessibilityLabel="Delete account" accessibilityState={{ disabled: true }}>
-            <SettingsRow label="Delete account" icon={{ family: "Feather", name: "trash-2" }} destructive last />
-          </Pressable>
-        </SettingsSection>
         <View className="items-center gap-1 pb-2">
           <HeadingText className="text-xl text-muted-foreground">Codaloud</HeadingText>
           <PText>{formatAppVersion(Constants.expoConfig?.version)}</PText>

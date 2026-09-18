@@ -12,6 +12,8 @@ export const removeWorkspaceFiles = (state: ProjectOpenFilesState, paths: string
   const previousPaths = [...state.openFilePaths];
   const remainingPaths = previousPaths.filter((path) => !removed.has(path));
   const activeIndex = previousPaths.indexOf(state.activeFilePath ?? "");
+  const versions = new Map(state.versions);
+  for (const path of removed) versions.set(path, (versions.get(path) ?? 0) + 1);
   return {
     ...state,
     openFilePaths: new Set(remainingPaths),
@@ -19,18 +21,18 @@ export const removeWorkspaceFiles = (state: ProjectOpenFilesState, paths: string
       ? remainingPaths[Math.min(activeIndex, remainingPaths.length - 1)] ?? null
       : state.activeFilePath,
     // Reopening the same path must not resurrect an old editor/undo history.
-    versions: { ...state.versions, ...Object.fromEntries(paths.map((path) => [path, (state.versions[path] ?? 0) + 1])) },
+    versions,
   };
 };
 
 export const renameWorkspaceFiles = (state: ProjectOpenFilesState, previousPath: string, nextPath: string): ProjectOpenFilesState => {
   const rename = (path: string) => isProjectFilePathWithin(path, previousPath) ? nextPath + path.slice(previousPath.length) : path;
-  const versions = { ...state.versions };
+  const versions = new Map(state.versions);
   for (const path of state.openFilePaths) {
     const destination = rename(path);
     if (destination !== path) {
-      versions[destination] = versions[path] ?? 0;
-      versions[path] = (versions[path] ?? 0) + 1;
+      versions.set(destination, versions.get(path) ?? 0);
+      versions.set(path, (versions.get(path) ?? 0) + 1);
     }
   }
   return {

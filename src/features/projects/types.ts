@@ -194,5 +194,5 @@ export type ProjectGitMutationContext = {
 export type ProjectOpenFilesState = {
   openFilePaths: Set<string>;
   activeFilePath: string | null;
-  versions: Record<string, number>;
+  versions: Map<string, number>;
 };

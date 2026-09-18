@@ -86,3 +86,22 @@ it("stores paths in a Set and never mutates previously published state", () => {
   expect([...renamed]).toEqual(["lib/a.ts"]);
   expect(files.openFilePaths.size).toBe(0);
 });
+
+
+it.each(["constructor", "__proto__"])("tracks generations for the file path %s without changing earlier state", (path) => {
+  act(() => files.openFile(path));
+  const opened = files;
+  expect(files.getFileVersion(path)).toBe(0);
+  act(() => files.refreshFile(path));
+  expect(files.getFileVersion(path)).toBe(1);
+  expect(opened.getFileVersion(path)).toBe(0);
+  const refreshed = files;
+  act(() => files.renameFiles(path, "renamed.ts"));
+  expect(files.getFileVersion("renamed.ts")).toBe(1);
+  expect(files.getFileVersion(path)).toBe(2);
+  expect(refreshed.getFileVersion(path)).toBe(1);
+  act(() => { files.closeFile("renamed.ts"); files.openFile("renamed.ts"); });
+  expect(files.getFileVersion("renamed.ts")).toBe(2);
+  act(() => files.refreshFiles());
+  expect(files.getFileVersion("renamed.ts")).toBe(3);
+});

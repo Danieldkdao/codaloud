@@ -239,6 +239,6 @@ Json gitOperation(const fs::path &root, const std::string &operation, const Json
     if (!active.is_null()) names.insert(active.get<std::string>());
     return {{"branches", names}, {"currentBranch", active}};
   }
-  throw WorkspaceError("UNKNOWN_OPERATION", "Unknown local Git operation.");
+  return gitReadOperation(repo.get(), operation, args);
 }
 }

@@ -14,11 +14,11 @@ import { gitPushSchema } from "../server/git-push-schemas";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import {
   ProjectGitError,
   ProjectGitRequestError,
-  requireProjectGitSession,
+  requireLocalGitProject,
 } from "../lib/git-errors";
 
 export const useProjectGit = (
@@ -26,13 +26,11 @@ export const useProjectGit = (
   { enabled = true }: { enabled?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const validProject = !!projectId && isValidIds(projectId);
   const query = useQuery({
+    networkMode: "always",
     queryKey: ["projects", "git-counts", userId, projectId],
     enabled: enabled && Boolean(userId) && validProject,
     // Post-mutation refreshes run together. Another Git status read can briefly
@@ -48,7 +46,7 @@ export const useProjectGit = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ signal }) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       let failure: ProjectGitRequestError | undefined;
       const counts = await readProjectGitCountsAction(
         id,
@@ -77,7 +75,7 @@ export const useProjectGit = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async () => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await fetchProjectGitAction(id);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
@@ -99,7 +97,7 @@ export const useProjectGit = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitPushSchema> = {}) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await pushProjectGitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
@@ -121,7 +119,7 @@ export const useProjectGit = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitPullSchema> = {}) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await pullProjectGitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;

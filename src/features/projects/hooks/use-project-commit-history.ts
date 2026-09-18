@@ -10,14 +10,14 @@ import {
 } from "../actions/git-actions";
 import { gitRevertSchema } from "../server/git-revert-schemas";
 import type { z } from "zod";
-import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
+import { ProjectGitError, requireLocalGitProject } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import {
   projectCommitParamsSchema,
   type ProjectCommitParamsSchema,
@@ -60,11 +60,8 @@ export const useProjectCommitHistory = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const params = projectCommitParamsSchema.safeParse({
     ...filters,
     projectId,
@@ -82,6 +79,7 @@ export const useProjectCommitHistory = (
   ] as const;
 
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey,
     enabled: enabled && Boolean(userId) && params.success && validPageLimit,
     initialPageParam: null as string | null,
@@ -97,7 +95,7 @@ export const useProjectCommitHistory = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch bypasses enabled, so validate authentication and options here too.
-      if (!userId) throw new Error("Sign in to view commit history.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       if (!params.success || !validPageLimit) {
         throw new Error(
           "Invalid project, branch, or commit search and pagination.",
@@ -148,7 +146,7 @@ export const useProjectCommitHistory = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input) => {
-      if (!userId) throw new ProjectCommitError("Sign in to commit changes.");
+      if (!userId) throw new ProjectCommitError("The local workspace is not ready.");
       if (!projectId || !isValidIds(projectId))
         throw new ProjectCommitError("Invalid project ID.");
       const result = await createProjectCommitAction(projectId, input);
@@ -210,7 +208,7 @@ export const useProjectCommitHistory = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitRevertSchema> = {}) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await revertProjectCommitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
@@ -232,7 +230,7 @@ export const useProjectCommitHistory = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitUndoSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await undoProjectCommitAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;

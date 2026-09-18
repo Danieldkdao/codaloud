@@ -19,8 +19,8 @@ export class ProjectGitRequestError extends ProjectGitError {
   }
 }
 
-export const requireProjectGitSession = (userId: string | null, projectId: string | null | undefined) => {
-  if (!userId) throw new ProjectGitError("Sign in to use project Git.", "UNAUTHENTICATED");
+export const requireLocalGitProject = (userId: string | null, projectId: string | null | undefined) => {
+  if (!userId) throw new ProjectGitError("The local workspace is not ready.", "WORKSPACE_UNAVAILABLE");
   if (!projectId || !isValidIds(projectId)) throw new ProjectGitError("Invalid project ID.", "INVALID_PROJECT");
   return projectId;
 };

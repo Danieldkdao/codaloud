@@ -3,7 +3,7 @@ import type { GitCreatedBranchSchema } from "../server/git-branch-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitCreateBranchSchema } from "../server/git-branch-schemas";
 import type { z } from "zod";
-import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
+import { ProjectGitError, requireLocalGitProject } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   createProjectBranchAction,
@@ -19,7 +19,7 @@ import {
   projectBranchParamsSchema,
   type ProjectBranchParamsSchema,
 } from "../lib/branch-params";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import type {
   CheckoutProjectBranchSchema,
   ProjectBranchCheckoutSchema,
@@ -58,11 +58,8 @@ export const useProjectBranches = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const params = projectBranchParamsSchema.safeParse({
     ...filters,
     projectId,
@@ -71,6 +68,7 @@ export const useProjectBranches = (
   const validPageLimit = Number.isSafeInteger(maxPages) && maxPages >= 0;
 
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey: [
       "projects",
       "branches",
@@ -85,8 +83,7 @@ export const useProjectBranches = (
     initialPageParam: (params.success ? (params.data.cursor ?? null) : null) as
       string | null,
     maxPages: validPageLimit ? maxPages : 0,
-    // A remount can refresh cached branches while Daytona is waking up. Retry
-    // restoration while observed, and give transient network/server failures two retries.
+    // Retry transient storage failures while this view is observed.
     retry: (failureCount, error) =>
       error instanceof ProjectBranchRequestError &&
       ((error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
@@ -97,7 +94,7 @@ export const useProjectBranches = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch can run while the query is disabled.
-      if (!userId) throw new Error("Sign in to view project branches.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       if (!params.success || !validPageLimit) {
         throw new Error("Invalid project branch search or pagination.");
       }
@@ -139,7 +136,7 @@ export const useProjectBranches = (
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input) => {
       if (!userId)
-        throw new ProjectBranchCheckoutError("Sign in to switch branches.");
+        throw new ProjectBranchCheckoutError("The local workspace is not ready.");
       if (!projectId || !isValidIds(projectId))
         throw new ProjectBranchCheckoutError("Invalid project ID.");
       // The action validates input and confirms the response matches the requested branch.
@@ -157,7 +154,7 @@ export const useProjectBranches = (
 
   const recoverCheckout = async (): Promise<ProjectBranchCheckoutSchema> => {
     if (!userId || !projectId)
-      throw new Error("Sign in to confirm the current branch.");
+      throw new Error("The local workspace is not ready.");
     // Capture this hook's workspace, rather than refetching an observer that may
     // have moved to another project while the checkout response was in flight.
     const branches = await readProjectBranchesAction(projectId, {
@@ -213,7 +210,7 @@ export const useProjectBranches = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitCreateBranchSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await createProjectBranchAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;

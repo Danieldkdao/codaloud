@@ -14,7 +14,7 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({ useDeviceWorkspace: () => ({ workspace: !session.isPending && !session.error && session.data ? { ownerId: session.data.user.id } : null }) }));
 vi.mock("../actions/git-actions", () => ({ readProjectBranchesAction: vi.fn(), checkoutProjectBranchAction: vi.fn() }));
 
 const read = vi.mocked(readProjectBranchesAction);
@@ -276,13 +276,13 @@ it("exposes actionable checkout errors and does not inherit automatic retries", 
   expect(checkout).toHaveBeenCalledOnce();
 });
 
-it.each(["pending", "signed-out", "error"])("blocks checkout while authentication is %s", async (state) => {
+it.each(["pending", "signed-out", "error"])("blocks checkout while workspace initialization is %s", async (state) => {
   if (state === "pending") session.isPending = true;
   if (state === "signed-out") session.data = null;
   if (state === "error") session.error = new Error("Session unavailable");
   await render();
   await run(async () => {
-    await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("Sign in to switch branches.");
+    await expect(current.gitCheckout.mutateAsync({ branchName: "feature/checkout" })).rejects.toThrow("The local workspace is not ready.");
   });
   expect(checkout).not.toHaveBeenCalled();
 });

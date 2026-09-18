@@ -11,12 +11,12 @@ import {
 import {
   ProjectGitError,
   ProjectGitRequestError,
-  requireProjectGitSession,
+  requireLocalGitProject,
 } from "../lib/git-errors";
 import { useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 export const useProjectChanges = (
   projectId: string | null | undefined,
   {
@@ -25,14 +25,12 @@ export const useProjectChanges = (
   }: { enabled?: boolean; discardPreviewEnabled?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const validProject = !!projectId && isValidIds(projectId);
 
   const query = useQuery({
+    networkMode: "always",
     queryKey: ["projects", "changes", userId, projectId],
     enabled: enabled && Boolean(userId) && validProject,
     // Keep snapshots until a manual refresh or an explicit invalidation after
@@ -48,7 +46,7 @@ export const useProjectChanges = (
     retry: false,
     queryFn: async ({ signal }) => {
       // Manual refetch bypasses enabled, so guard the request here too.
-      if (!userId) throw new Error("Sign in to view project changes.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       if (!projectId || !validProject) throw new Error("Invalid project ID.");
 
       const changes = await readProjectChangesAction(projectId, signal);
@@ -59,6 +57,7 @@ export const useProjectChanges = (
     },
   });
   const discardPreview = useQuery({
+    networkMode: "always",
     queryKey: ["projects", "discard-preview", userId, projectId],
     enabled:
       enabled && discardPreviewEnabled && Boolean(userId) && validProject,
@@ -72,7 +71,7 @@ export const useProjectChanges = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ signal }) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       let failure: ProjectGitRequestError | undefined;
       const preview = await readProjectDiscardPreviewAction(
         id,
@@ -119,7 +118,7 @@ export const useProjectChanges = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitDiscardSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await discardProjectChangesAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;

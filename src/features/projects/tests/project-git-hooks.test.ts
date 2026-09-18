@@ -21,7 +21,7 @@ const { session, actions } = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
+vi.mock("@/features/workspace/hooks/use-device-workspace", () => ({ useDeviceWorkspace: () => ({ workspace: !session.isPending && !session.error && session.data ? { ownerId: session.data.user.id } : null }) }));
 vi.mock("../actions/git-actions", () => actions);
 
 const projectId = "11111111-1111-4111-8111-111111111111";

@@ -25,11 +25,11 @@ import {
   useMutation,
 } from "@tanstack/react-query";
 import type { z } from "zod";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import {
   ProjectGitError,
   ProjectGitRequestError,
-  requireProjectGitSession,
+  requireLocalGitProject,
 } from "../lib/git-errors";
 
 export const useProjectStashes = (
@@ -44,11 +44,8 @@ export const useProjectStashes = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const validProject = !!projectId && isValidIds(projectId);
   const params = gitStashQuerySchema.safeParse({
     ...filters,
@@ -67,6 +64,7 @@ export const useProjectStashes = (
     params.success ? params.data : filters,
   ] as const;
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey,
     enabled:
       enabled &&
@@ -85,7 +83,7 @@ export const useProjectStashes = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ pageParam, signal }) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       if (!params.success || !validPageLimit)
         throw new Error("Invalid stash search or pagination.");
       let failure: ProjectGitRequestError | undefined;
@@ -156,7 +154,7 @@ export const useProjectStashes = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitStashPushSchema> = {}) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await stashProjectChangesAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
@@ -178,7 +176,7 @@ export const useProjectStashes = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: z.input<typeof gitStashPopSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await popProjectStashAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
@@ -199,7 +197,7 @@ export const useProjectStashes = (
     networkMode: "always",
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(userId, projectId);
       const result = await deleteProjectStashAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;

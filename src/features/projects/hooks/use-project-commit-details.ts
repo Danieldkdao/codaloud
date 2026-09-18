@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import {
   projectCommitDetailsParamsSchema,
   type ProjectCommitDetailsParamsSchema,
@@ -17,11 +17,8 @@ export const useProjectCommitDetails = (
     enabled?: boolean;
   } = {},
 ) => {
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const params = projectCommitDetailsParamsSchema.safeParse({
     projectId,
     commitSha,
@@ -29,6 +26,7 @@ export const useProjectCommitDetails = (
   });
 
   return useQuery({
+    networkMode: "always",
     queryKey: [
       "projects",
       "commit-details",
@@ -42,7 +40,7 @@ export const useProjectCommitDetails = (
     retry: false,
     queryFn: async ({ signal }) => {
       // Manual refetch bypasses enabled, so guard the request here too.
-      if (!userId) throw new Error("Sign in to view commit details.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       if (!params.success)
         throw new Error("Invalid project, commit SHA, or source.");
 

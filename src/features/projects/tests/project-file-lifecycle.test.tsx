@@ -364,11 +364,11 @@ it("keeps all tabs in sync when an inactive folder is renamed then deleted", asy
   await select("other.ts");
   mocks.update.mockResolvedValueOnce(result("lib", true));
   await act(async () => { await fileList.onUpdate({ parentPath: "", previousName: "src", name: "lib", kind: "folder" }); });
-  expect(selection.openFilePaths).toEqual(["lib/one.ts", "lib/two.ts", "other.ts"]);
+  expect([...selection.openFilePaths]).toEqual(["lib/one.ts", "lib/two.ts", "other.ts"]);
   expect(selection.activeFilePath).toBe("other.ts");
   mocks.delete.mockResolvedValueOnce(result("lib", true));
   await act(async () => { await fileList.onDelete({ parentPath: "", name: "lib", kind: "folder" }); });
-  expect(selection.openFilePaths).toEqual(["other.ts"]);
+  expect([...selection.openFilePaths]).toEqual(["other.ts"]);
 });
 
 
@@ -383,7 +383,7 @@ it("drains edits before deletion and ignores late edits after confirmed deletion
   await act(async () => { deletion = fileList.onDelete({ parentPath: "", name: "old.ts", kind: "file" }); });
   expect(mocks.delete).not.toHaveBeenCalled();
   await act(async () => { finish(); await deletion; });
-  expect(selection.openFilePaths).toEqual([]);
+  expect([...selection.openFilePaths]).toEqual([]);
   await act(async () => lateChange("late"));
   expect(mocks.save).toHaveBeenCalledOnce();
 });

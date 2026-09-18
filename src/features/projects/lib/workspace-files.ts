@@ -3,19 +3,20 @@ import type { ProjectOpenFilesState } from "../types";
 
 export const openWorkspaceFile = (state: ProjectOpenFilesState, path: string): ProjectOpenFilesState => ({
   ...state,
-  openFilePaths: state.openFilePaths.includes(path) ? state.openFilePaths : [...state.openFilePaths, path],
+  openFilePaths: new Set(state.openFilePaths).add(path),
   activeFilePath: path,
 });
 
 export const removeWorkspaceFiles = (state: ProjectOpenFilesState, paths: string[]): ProjectOpenFilesState => {
   const removed = new Set(paths);
-  const openFilePaths = state.openFilePaths.filter((path) => !removed.has(path));
-  const activeIndex = state.openFilePaths.indexOf(state.activeFilePath ?? "");
+  const previousPaths = [...state.openFilePaths];
+  const remainingPaths = previousPaths.filter((path) => !removed.has(path));
+  const activeIndex = previousPaths.indexOf(state.activeFilePath ?? "");
   return {
     ...state,
-    openFilePaths,
+    openFilePaths: new Set(remainingPaths),
     activeFilePath: state.activeFilePath && removed.has(state.activeFilePath)
-      ? openFilePaths[Math.min(activeIndex, openFilePaths.length - 1)] ?? null
+      ? remainingPaths[Math.min(activeIndex, remainingPaths.length - 1)] ?? null
       : state.activeFilePath,
     // Reopening the same path must not resurrect an old editor/undo history.
     versions: { ...state.versions, ...Object.fromEntries(paths.map((path) => [path, (state.versions[path] ?? 0) + 1])) },
@@ -33,7 +34,7 @@ export const renameWorkspaceFiles = (state: ProjectOpenFilesState, previousPath:
     }
   }
   return {
-    openFilePaths: [...new Set(state.openFilePaths.map(rename))],
+    openFilePaths: new Set([...state.openFilePaths].map(rename)),
     activeFilePath: state.activeFilePath ? rename(state.activeFilePath) : null,
     versions,
   };

@@ -578,7 +578,7 @@ it("blocks renames and dependent flushes while Git holds the documents", async (
 
 let editorDocuments: ReturnType<typeof useProjectEditorDocuments>;
 const EditorProbe = ({ path, content, paths }: { path: string; content: string; paths: string[] }) => {
-  editorDocuments = useProjectEditorDocuments({ activeFilePath: path, openFilePaths: paths, getFileVersion: () => 0 }, content);
+  editorDocuments = useProjectEditorDocuments({ activeFilePath: path, openFilePaths: new Set(paths), getFileVersion: () => 0 }, content);
   registry = useProjectFileSaveRegistry();
   return null;
 };

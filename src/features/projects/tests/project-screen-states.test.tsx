@@ -10,7 +10,7 @@ import GitScreen from "@/app/projects/[projectId]/git";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
-const selection = vi.hoisted(() => ({ activeFilePath: null as string | null, version: 0, openFile: vi.fn(), closeFile: vi.fn(), getFileVersion: () => 0, get openFilePaths() { return selection.activeFilePath ? [selection.activeFilePath] : []; }, refreshFile: vi.fn() }));
+const selection = vi.hoisted(() => ({ activeFilePath: null as string | null, version: 0, openFile: vi.fn(), closeFile: vi.fn(), getFileVersion: () => 0, get openFilePaths() { return new Set(selection.activeFilePath ? [selection.activeFilePath] : []); }, refreshFile: vi.fn() }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => selection }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const saveFile = vi.hoisted(() => vi.fn());

@@ -61,7 +61,7 @@ const CodeScreen = () => {
       await documents.flushFile(path);
       if (alive.current && current.current.files.getFileVersion(path) === version) current.current.files.closeFile(path);
     } catch (error) {
-      if (alive.current && current.current.files.getFileVersion(path) === version && current.current.files.openFilePaths.includes(path)) {
+      if (alive.current && current.current.files.getFileVersion(path) === version && current.current.files.openFilePaths.has(path)) {
         current.current.files.openFile(path);
         Alert.alert("Couldn't close this file", error instanceof Error ? error.message : "Save your changes and try again.");
       }
@@ -73,7 +73,7 @@ const CodeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <ProjectCodeTabs paths={files.openFilePaths} activePath={files.activeFilePath} onSelect={files.openFile}
+      <ProjectCodeTabs paths={[...files.openFilePaths]} activePath={files.activeFilePath} onSelect={files.openFile}
         onClose={(path) => { void closeFile(path); }} onOpenFile={openFile} disabled={isWorkspaceBusy} closingPath={closingPath} />
       <View className="flex-1">
         {/* Keep one WebView mounted through loading and file switches. CodeMirror

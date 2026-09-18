@@ -15,7 +15,7 @@ afterEach(() => { act(() => root.unmount()); });
 
 it("keeps every opened path in order and activates existing tabs without duplicates", () => {
   act(() => { files.openFile("src/a.ts"); files.openFile("b.ts"); files.openFile("src/a.ts"); });
-  expect(files.openFilePaths).toEqual(["src/a.ts", "b.ts"]);
+  expect([...files.openFilePaths]).toEqual(["src/a.ts", "b.ts"]);
   expect(files.activeFilePath).toBe("src/a.ts");
 });
 
@@ -23,7 +23,7 @@ it("preserves tabs when a workspace section unmounts and remounts", () => {
   act(() => files.openFile("a.ts"));
   render("one", null);
   render();
-  expect(files.openFilePaths).toEqual(["a.ts"]);
+  expect([...files.openFilePaths]).toEqual(["a.ts"]);
   expect(files.activeFilePath).toBe("a.ts");
 });
 
@@ -35,16 +35,16 @@ it("closes inactive tabs without moving selection and selects a neighbor for act
   expect(files.activeFilePath).toBe("c.ts");
   act(() => files.closeFile("c.ts"));
   expect(files.activeFilePath).toBeNull();
-  expect(files.openFilePaths).toEqual([]);
+  expect([...files.openFilePaths]).toEqual([]);
 });
 
 it("renames every open descendant and removes only the deleted subtree", () => {
   act(() => { files.openFile("src/a.ts"); files.openFile("src/nested/b.ts"); files.openFile("src-other/c.ts"); });
   act(() => files.renameFiles("src", "lib"));
-  expect(files.openFilePaths).toEqual(["lib/a.ts", "lib/nested/b.ts", "src-other/c.ts"]);
+  expect([...files.openFilePaths]).toEqual(["lib/a.ts", "lib/nested/b.ts", "src-other/c.ts"]);
   expect(files.activeFilePath).toBe("src-other/c.ts");
   act(() => files.removeFiles("lib"));
-  expect(files.openFilePaths).toEqual(["src-other/c.ts"]);
+  expect([...files.openFilePaths]).toEqual(["src-other/c.ts"]);
 });
 
 it("refreshes inactive documents and gives reopened paths a new generation", () => {
@@ -64,6 +64,25 @@ it("isolates projects and ignores actions captured by a previous project", () =>
   const previous = files;
   render("two");
   act(() => { files.openFile("b.ts"); previous.openFile("late.ts"); previous.renameFiles("a.ts", "old.ts"); });
-  expect(files.openFilePaths).toEqual(["b.ts"]);
+  expect([...files.openFilePaths]).toEqual(["b.ts"]);
   expect(files.activeFilePath).toBe("b.ts");
+});
+
+
+it("stores paths in a Set and never mutates previously published state", () => {
+  const empty = files.openFilePaths;
+  expect(empty).toBeInstanceOf(Set);
+  act(() => files.openFile("src/a.ts"));
+  const opened = files.openFilePaths;
+  expect(opened.has("src/a.ts")).toBe(true);
+  expect(empty.size).toBe(0);
+  act(() => files.openFile("src/a.ts"));
+  expect(files.openFilePaths.size).toBe(1);
+  act(() => files.renameFiles("src", "lib"));
+  const renamed = files.openFilePaths;
+  expect([...opened]).toEqual(["src/a.ts"]);
+  expect(renamed.has("lib/a.ts")).toBe(true);
+  act(() => files.closeFile("lib/a.ts"));
+  expect([...renamed]).toEqual(["lib/a.ts"]);
+  expect(files.openFilePaths.size).toBe(0);
 });

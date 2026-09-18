@@ -4,7 +4,7 @@ import { openWorkspaceFile, removeWorkspaceFiles, renameWorkspaceFiles } from ".
 import { isProjectFilePathWithin } from "../lib/files";
 
 type ProjectWorkspaceCurrentFileState = {
-  openFilePaths: string[];
+  openFilePaths: ReadonlySet<string>;
   activeFilePath: string | null;
   openFile: (path: string) => void;
   closeFile: (path: string) => void;
@@ -19,7 +19,7 @@ type ProjectWorkspaceCurrentFileState = {
 const ProjectWorkspaceCurrentFileContext = createContext<ProjectWorkspaceCurrentFileState | null>(null);
 
 const WorkspaceFiles = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<ProjectOpenFilesState>({ openFilePaths: [], activeFilePath: null, versions: {} });
+  const [state, setState] = useState<ProjectOpenFilesState>({ openFilePaths: new Set(), activeFilePath: null, versions: {} });
   const refresh = (paths: string[]) => setState((current) => ({
     ...current,
     versions: { ...current.versions, ...Object.fromEntries(paths.map((path) => [path, (current.versions[path] ?? 0) + 1])) },
@@ -31,10 +31,10 @@ const WorkspaceFiles = ({ children }: { children: ReactNode }) => {
       openFile: (path) => setState((current) => openWorkspaceFile(current, path)),
       closeFile: (path) => setState((current) => removeWorkspaceFiles(current, [path])),
       renameFiles: (previous, next) => setState((current) => renameWorkspaceFiles(current, previous, next)),
-      removeFiles: (root) => setState((current) => removeWorkspaceFiles(current, current.openFilePaths.filter((path) => isProjectFilePathWithin(path, root)))),
+      removeFiles: (root) => setState((current) => removeWorkspaceFiles(current, [...current.openFilePaths].filter((path) => isProjectFilePathWithin(path, root)))),
       getFileVersion: (path) => state.versions[path] ?? 0,
       refreshFile: (path) => refresh([path]),
-      refreshFiles: () => setState((current) => ({ ...current, versions: { ...current.versions, ...Object.fromEntries(current.openFilePaths.map((path) => [path, (current.versions[path] ?? 0) + 1])) } })),
+      refreshFiles: () => setState((current) => ({ ...current, versions: { ...current.versions, ...Object.fromEntries([...current.openFilePaths].map((path) => [path, (current.versions[path] ?? 0) + 1])) } })),
     }}>
       {children}
     </ProjectWorkspaceCurrentFileContext>

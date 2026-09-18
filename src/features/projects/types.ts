@@ -192,7 +192,7 @@ export type ProjectGitMutationContext = {
 };
 
 export type ProjectOpenFilesState = {
-  openFilePaths: string[];
+  openFilePaths: Set<string>;
   activeFilePath: string | null;
   versions: Record<string, number>;
 };

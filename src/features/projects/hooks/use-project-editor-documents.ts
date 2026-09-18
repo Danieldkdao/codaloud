@@ -14,7 +14,7 @@ type EditorDocument = {
 };
 type WorkspaceFiles = {
   activeFilePath: string | null;
-  openFilePaths: string[];
+  openFilePaths: ReadonlySet<string>;
   getFileVersion: (path: string) => number;
 };
 const loading: SaveSnapshot = { status: "loading" };
@@ -52,7 +52,7 @@ export const useProjectEditorDocuments = (files: WorkspaceFiles, content: string
     // Keep clean documents registered while their tabs are open. The regular
     // save registry can still release documents used by other transient views.
     for (const [key, item] of entries) {
-      if (!files.openFilePaths.includes(item.path) || files.getFileVersion(item.path) !== item.version || (entry && item.path === entry.path && item !== entry)) {
+      if (!files.openFilePaths.has(item.path) || files.getFileVersion(item.path) !== item.version || (entry && item.path === entry.path && item !== entry)) {
         cancelSave(item);
         item.release?.();
         entries.delete(key);
@@ -99,7 +99,7 @@ export const useProjectEditorDocuments = (files: WorkspaceFiles, content: string
   return {
     editor: entry ?? lastEditor.current,
     activeKey: entry?.key,
-    openDocumentKeys: [...entries.values()].filter((item) => files.openFilePaths.includes(item.path) && files.getFileVersion(item.path) === item.version).map((item) => item.key),
+    openDocumentKeys: [...entries.values()].filter((item) => files.openFilePaths.has(item.path) && files.getFileVersion(item.path) === item.version).map((item) => item.key),
     status, onChange, flushFile, retry,
     getPath: (key: string) => entries.get(key)?.path,
   };

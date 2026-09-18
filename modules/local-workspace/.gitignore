@@ -1,0 +1,5 @@
+/vendor/
+/build-*/
+/ios/Frameworks/
+/android/.cxx/
+/android/build/

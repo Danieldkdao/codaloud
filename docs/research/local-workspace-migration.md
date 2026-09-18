@@ -8,9 +8,9 @@ Android runtime and live OAuth verification remain outstanding.
 
 The landing screen enters a persistent local workspace without an account. Its
 random device owner ID scopes local records and query caches; it is not a server
-identity. SQLite stores projects, entry preferences, Git author details, and the
-migration audit trail. Normal working trees and `.git` directories live alongside
-it in the app's private documents/files directory.
+identity. SQLite stores projects, entry preferences, and Git author details.
+Normal working trees and `.git` directories live alongside it in the app's private
+documents/files directory.
 
 GitHub is optional. Its OAuth code exchange retains two Expo API routes and the
 server-held OAuth client secret. The native app validates authorization state and
@@ -24,52 +24,21 @@ TanStack Query local operations run even when the network manager reports offlin
 Remote branch/history views read fetched tracking refs. Clone/fetch/pull/push
 remain network operations. The supported remote transport is HTTPS GitHub.
 
-## Development data cutover — September 18, 2026
+## Fresh local projects and schema upgrades
 
-- Git branch: `feat/code-editing-features`.
-- Neon project: `broad-mouse-05015150`; development branch:
-  `br-frosty-rice-a5zwwgyu`. Production was not queried or modified.
-- All three development projects were exported with their complete workspace
-  archives and per-file manifests, including ignored/untracked content and Git
-  metadata where present. Source worktrees were not replaced with fresh clones.
-- The importer verified archive and file SHA-256 hashes, Git refs, worktree/index
-  status, and repository integrity before publishing the worktrees and SQLite
-  records. The source project without `.git` received a new empty local repository.
-- Three projects and fifteen historical operation records were imported into the
-  development iOS simulator (`BC20715B-DFC7-4C91-AC19-3422DDF2301C`). Original owner
-  references remain in the audit metadata; project ownership uses the device ID.
-- Source account sessions and encrypted OAuth credentials were not copied. Reconnect
-  GitHub explicitly. Unsafe host-specific Git config and embedded credentials are
-  excluded from portable repository configuration; the original archive is intact.
-- SQLite integrity/foreign-key checks passed. Repeating the same import is a no-op;
-  conflicting existing project IDs/folders are rejected rather than overwritten.
-- Neon rows and original Daytona worktrees remain intact. Sandboxes were stopped
-  after their snapshots to stay within the workspace's concurrent-memory quota.
-  No source sandbox or database was deleted.
+Legacy Neon/Daytona data transfer is no longer supported or required. The export,
+snapshot, extraction, and import scripts and the import-history model have been
+removed. New installations start with an empty project list. Projects are created
+locally or cloned from GitHub through the normal project creation flow.
 
-The private export currently lives at `/tmp/codaloud-development-migration`; it
-must not be committed, bundled with the app, or mistaken for durable backup storage.
-The imported simulator data is in its app Documents directory. No physical device
-or Android device has received these development projects yet.
+Bundled SQLite migrations remain for creating and updating the on-device tables.
+Startup checks SQLite's schema version and applies missing schema changes without
+network access. The schema upgrade drops the obsolete cloud-import audit table;
+it does not restore or copy any cloud records or files.
 
-## Migration tools
-
-The input `metadata.json` is the read-only Neon development export with `source`,
-`authors` (public author fields only), `projects`, and terminal `operations`.
-
-1. `node --env-file=.env scripts/export-legacy-workspaces.mjs <export-directory>`
-   uses the existing Daytona key solely to recover old workspaces. The Python
-   snapshot helper locks Git mutations and compares inventories before/after export.
-2. `node scripts/import-legacy-workspaces.mjs <export-directory> <app-documents>`
-   requires Node 24+, Python 3.11+, and Git. Stop the app before running it against
-   its data directory. It stages extraction, validates contents, sanitizes portable
-   Git config, then inserts SQLite records transactionally.
-3. Normal startup applies bundled SQLite migrations without a network request.
-
-Failed imports roll back database writes and remove only directories created by
-that attempt. A process crash during directory publication may leave an orphan
-folder; the next run refuses to overwrite it. Inspect/recover that folder before
-retrying rather than deleting it blindly.
+The workspace row still stores current device preferences and Git author details.
+Local archive/restore operations protect against interrupted project deletions;
+they do not retrieve data from the previous cloud architecture.
 
 ## Native engine and builds
 
@@ -104,7 +73,7 @@ new execution UI or an anonymous endpoint funded by an application's shared key.
 
 - The legacy Postgres schemas/migrations, mandatory session backend, persistent
   Daytona workspace adapters, Trigger jobs, and their obsolete transport tests have
-  been removed. Device SQLite, native Git, optional GitHub OAuth, migration tools,
+  been removed. Device SQLite, native Git, optional GitHub OAuth, schema migrations,
   and temporary Daytona execution remain. No Neon data or source worktree was deleted.
 - Verification after pruning cloud dependencies: TypeScript passed and all 74 test
   suites passed (1,221 tests; no skipped tests). The retained OAuth routes export
@@ -112,8 +81,8 @@ new execution UI or an anonymous endpoint funded by an application's shared key.
   exports, including the embedded CodeMirror DOM bundle, also passed after cleanup.
 - Removing source Trigger tasks does not disable any previously deployed schedules.
   No remote Trigger deployment or schedule was modified.
-- The standalone iOS app passed native checks for Get started entry, imported project visibility,
-  restart persistence, reading the imported file tree, and opening local Git status
+- The standalone iOS app previously passed native checks for Get started entry, project visibility,
+  restart persistence, reading the local file tree, and opening local Git status
   without Metro. The Android
   Kotlin/JNI module and all its configured native architectures compiled successfully.
   The complete Android arm64 debug app also compiled successfully. Android runtime

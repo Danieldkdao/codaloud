@@ -111,7 +111,7 @@ new execution UI or an anonymous endpoint funded by an application's shared key.
   81, and failed to load nine obsolete transport suites; no executed assertion failed.
 - Removing source Trigger tasks does not disable any previously deployed schedules.
   No remote Trigger deployment or schedule was modified.
-- The standalone iOS app passed native checks for imported project visibility,
+- The standalone iOS app passed native checks for Get started entry, imported project visibility,
   restart persistence, reading the imported file tree, and opening local Git status
   without Metro. The Android
   Kotlin/JNI module and all its configured native architectures compiled successfully.

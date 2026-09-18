@@ -1,5 +1,6 @@
 /vendor/
 /build-*/
 /ios/Frameworks/
+/ios/licenses/
 /android/.cxx/
 /android/build/

@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../modules/local-workspace");
+// CocoaPods only includes resource paths within its ios podspec source root.
+await mkdir(join(root, "ios/licenses"), { recursive: true });
+await copyFile(join(root, "licenses/third-party-notices.txt"), join(root, "ios/licenses/third-party-notices.txt"));
 const dependencies = [
   {
     name: "libgit2", version: "1.9.7", archive: true,

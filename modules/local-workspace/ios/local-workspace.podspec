@@ -23,7 +23,7 @@ Pod::Spec.new do |s|
   s.source_files = '*.{h,mm,swift}'
   s.public_header_files = 'local-workspace-bridge.h'
   s.vendored_frameworks = 'Frameworks/CodaloudWorkspace.xcframework'
-  s.resource_bundles = { 'CodaloudWorkspaceNotices' => ['../licenses/*.txt'] }
+  s.resource_bundles = { 'CodaloudWorkspaceNotices' => ['licenses/*.txt'] }
   s.frameworks = 'Security', 'CoreFoundation'
   s.libraries = 'c++', 'z', 'iconv'
 end

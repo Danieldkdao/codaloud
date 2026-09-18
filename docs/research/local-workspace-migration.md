@@ -1,8 +1,8 @@
 # Local workspace migration
 
 Status: the application now uses device SQLite, local files, and a native libgit2
-engine. Mandatory Codaloud sign-in is removed. Retirement of obsolete cloud implementation
-files awaits approval; Android runtime and live OAuth verification remain outstanding.
+engine. Mandatory Codaloud sign-in and the obsolete cloud implementation are removed.
+Android runtime and live OAuth verification remain outstanding.
 
 ## Device ownership and optional connections
 
@@ -100,15 +100,16 @@ Cleanup failures propagate to the caller. Returned files must be conflict-checke
 before applying them to a local workspace. This is an integration boundary, not a
 new execution UI or an anonymous endpoint funded by an application's shared key.
 
-## Remaining work and limits
+## Verification and remaining limits
 
-- Bulk retirement of legacy Postgres/session helpers, persistent-sandbox Trigger
-  jobs, and obsolete transport tests awaits approval after automatic review blocked
-  the deletion. They are no longer called by the mobile project/file/Git flows.
-- The full suite still contains obsolete HTTP action tests that cannot load the
-  new native action implementation under their old mocks. Their replacements cover
-  local actions plus real libgit2 integration; final suite reconciliation is pending. The final run passed 1,672 tests, skipped
-  81, and failed to load nine obsolete transport suites; no executed assertion failed.
+- The legacy Postgres schemas/migrations, mandatory session backend, persistent
+  Daytona workspace adapters, Trigger jobs, and their obsolete transport tests have
+  been removed. Device SQLite, native Git, optional GitHub OAuth, migration tools,
+  and temporary Daytona execution remain. No Neon data or source worktree was deleted.
+- Verification after pruning cloud dependencies: TypeScript passed and all 74 test
+  suites passed (1,221 tests; no skipped tests). The retained OAuth routes export
+  independently of Postgres and Better Auth. iOS and Android production JavaScript
+  exports, including the embedded CodeMirror DOM bundle, also passed after cleanup.
 - Removing source Trigger tasks does not disable any previously deployed schedules.
   No remote Trigger deployment or schedule was modified.
 - The standalone iOS app passed native checks for Get started entry, imported project visibility,

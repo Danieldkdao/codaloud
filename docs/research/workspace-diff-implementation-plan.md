@@ -1,5 +1,10 @@
 # Real workspace diff implementation plan
 
+> Historical cloud implementation research. The Daytona adapters, API routes, and
+> Linux test runner referenced below have been retired. See
+> [Local workspace migration](local-workspace-migration.md) for the current native
+> implementation and verification.
+
 Researched September 13, 2026. Planning only: the examples below describe proposed changes, not application code implemented by this document. Read [the provider notes](workspace-diff-api-notes.md) for the Daytona/Git evidence behind this plan.
 
 ## Implemented parsing checkpoint — September 13, 2026

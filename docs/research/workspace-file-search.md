@@ -1,5 +1,10 @@
 # Workspace file search research
 
+> Historical cloud implementation research. The Daytona adapters, API routes, and
+> Linux test runner referenced below have been retired. See
+> [Local workspace migration](local-workspace-migration.md) for the current native
+> implementation and verification.
+
 Researched September 12, 2026; Daytona search signatures reverified September 13 against current official documentation (v0.211) and installed `@daytona/sdk` `0.210.0`. The API implementation described below was added September 13. Verification runs the real sandbox helper in a disposable Linux container through a mocked Daytona HTTP transport; no live project sandbox was used. The older research sections below record the initial proposal and alternatives.
 
 ## Implemented API contract — September 13

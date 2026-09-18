@@ -1,23 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createProjectFileAction, deleteProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
 import type { CreateProjectFileSchema, DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { isProjectFilePathWithin } from "@/features/projects/lib/files";
-
-class WorkspaceRestoringError extends Error {
-  constructor(readonly retryAfterMs: number) {
-    super("Your workspace is still restoring. Please try again shortly.");
-    this.name = "WorkspaceRestoringError";
-  }
-}
 
 export const useProjectFiles = (
   projectId: string,
   directoryPath: string,
   { enabled = true, verifyOnMount = false }: { enabled?: boolean; verifyOnMount?: boolean } = {},
 ) => {
-  const session = useAuthSession();
-  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const queryClient = useQueryClient();
   const clearFileContents = async (userId: string | null, projectId: string, paths: readonly string[]) => {
     const contentQueries = {
@@ -33,36 +26,27 @@ export const useProjectFiles = (
     queryClient.removeQueries(contentQueries);
   };
   const query = useQuery({
+    networkMode: "always",
     queryKey: ["projects", "files", userId, projectId, directoryPath],
     enabled: Boolean(userId) && enabled,
-    // The workspace gate must check Daytona again on entry, including when
-    // setup finishes after this observer mounts. Cached files do not prove readiness.
     staleTime: verifyOnMount ? 0 : 5_000,
     refetchOnMount: verifyOnMount ? "always" : true,
-    // Restoration is ongoing work, not a terminal failure. Keep checking while
-    // this query is observed; success or a different error ends the retries.
-    retry: (_failureCount, error) => error instanceof WorkspaceRestoringError,
-    retryDelay: (_attempt, error) => error instanceof WorkspaceRestoringError ? error.retryAfterMs : 0,
+    retry: false,
     queryFn: async ({ signal }) => {
-      if (!userId) throw new Error("Sign in to view project files.");
-      let restoringError: WorkspaceRestoringError | undefined;
-      const files = await readProjectFilesAction(projectId, directoryPath, signal, (retryAfter) => {
-        const seconds = Number(retryAfter);
-        const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 3000;
-        restoringError = new WorkspaceRestoringError(Math.min(Math.max(delay, 1000), 30_000));
-      });
-      if (files === null && restoringError) throw restoringError;
-      if (files === null) throw new Error("Unable to load this folder. Your workspace may still be restoring. Please try again.");
+      if (!userId) throw new Error("The local workspace is not ready.");
+      const files = await readProjectFilesAction(projectId, directoryPath, signal);
+      if (files === null) throw new Error("Unable to read this folder on the device. Please try again.");
       return files;
     },
   });
 
   const creation = useMutation({
+    networkMode: "always",
     mutationKey: ["projects", "files", "create", userId, projectId],
     retry: false,
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: CreateProjectFileSchema) => {
-      if (!userId) throw new Error("Sign in to create files.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       const result = await createProjectFileAction(projectId, input);
       if (result.error) throw new Error(result.message);
       return result.data;
@@ -79,11 +63,12 @@ export const useProjectFiles = (
   });
 
   const update = useMutation({
+    networkMode: "always",
     mutationKey: ["projects", "files", "update", userId, projectId],
     retry: false,
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: UpdateProjectFileSchema) => {
-      if (!userId) throw new Error("Sign in to update files.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       const result = await updateProjectFileAction(projectId, input);
       if (result.error) throw new Error(result.message);
       return result.data;
@@ -123,11 +108,12 @@ export const useProjectFiles = (
   });
 
   const deletion = useMutation({
+    networkMode: "always",
     mutationKey: ["projects", "files", "delete", userId, projectId],
     retry: false,
     onMutate: () => ({ userId, projectId }),
     mutationFn: async (input: DeleteProjectFileSchema) => {
-      if (!userId) throw new Error("Sign in to delete files.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       const result = await deleteProjectFileAction(projectId, input);
       if (result.error) throw new Error(result.message);
       return result.data;

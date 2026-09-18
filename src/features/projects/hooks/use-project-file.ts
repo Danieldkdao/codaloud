@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { readProjectFileContentAction } from "@/features/projects/actions/file-actions";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 
 class ProjectFileReadError extends Error {
   constructor(message: string, readonly code: string | undefined, readonly retryAfterMs: number) {
@@ -15,22 +15,19 @@ export const useProjectFile = (
   filePath: string | null,
   { freshOnMount = false }: { freshOnMount?: boolean } = {},
 ) => {
-  const session = useAuthSession();
-  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
 
   return useQuery({
+    networkMode: "always",
     queryKey: ["projects", "file", userId, projectId, filePath],
     enabled: Boolean(userId && projectId && filePath),
     staleTime: 5_000,
-    // Search previews must recheck sandbox bytes even after a recent cached read.
+    // Search previews must recheck local file contents even after a recent cached read.
     refetchOnMount: freshOnMount ? "always" : true,
-    // Archived workspaces can take longer than a fixed retry budget to start.
-    // Keep checking restoration, while surfacing all other failures normally.
-    retry: (_failureCount, error) =>
-      error instanceof ProjectFileReadError && error.code === "WORKSPACE_RESTORING",
-    retryDelay: (_attempt, error) => error instanceof ProjectFileReadError ? error.retryAfterMs : 0,
+    retry: false,
     queryFn: async ({ signal }) => {
-      if (!userId) throw new Error("Sign in to view project files.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       if (!projectId || !filePath) throw new Error("Choose a project file to open.");
 
       let readError: ProjectFileReadError | undefined;

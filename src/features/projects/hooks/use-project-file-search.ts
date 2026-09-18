@@ -1,7 +1,7 @@
 import { isValidIds } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { readProjectFilesAction } from "../actions/file-actions";
 import {
   projectFileSearchQuerySchema,
@@ -35,11 +35,8 @@ export const useProjectFileSearch = (
     enabled?: boolean;
   } = {},
 ) => {
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   const queryClient = useQueryClient();
   const { flushPendingSaves } = useProjectFileSaveRegistry();
   // Preserve meaningful spaces in literal content searches; blank searches are invalid.
@@ -68,6 +65,7 @@ export const useProjectFileSearch = (
   );
 
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey,
     enabled: canSearch,
     initialPageParam: null as string | null,
@@ -88,13 +86,13 @@ export const useProjectFileSearch = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch bypasses enabled, so validate again before sending a request.
-      if (!userId) throw new Error("Sign in to search project files.");
+      if (!userId) throw new Error("The local workspace is not ready.");
       if (!projectId || !validProject) {
         throw new Error("Invalid project file search or pagination.");
       }
       if (!params.success) throw new Error(validationError!);
       // A new snapshot must include pending editor writes. Continuations keep
-      // their existing snapshot and use the server's workspace-change recovery.
+      // their existing snapshot and use the local snapshot.
       if (pageParam === null) await flushPendingSaves();
       // Canceling search must not cancel accepted saves, but it must prevent
       // an obsolete request from starting once those saves settle.

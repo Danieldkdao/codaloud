@@ -15,7 +15,7 @@ import {
   createFileSaveDocument,
   type SaveSnapshot,
 } from "@/features/projects/lib/project-file-save-document";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 export type { ProjectFileSaveStatus } from "@/features/projects/lib/project-file-save-document";
 
 type SaveDocument = ReturnType<typeof createFileSaveDocument>;
@@ -303,11 +303,8 @@ export const ProjectFileSaveRegistryProvider = ({
   projectId: string;
   children: ReactNode;
 }) => {
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
+  const { workspace } = useDeviceWorkspace();
+  const userId = workspace?.ownerId ?? null;
   return (
     <FileSaveRegistry
       key={`${userId}/${projectId}`}

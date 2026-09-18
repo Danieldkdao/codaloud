@@ -1,12 +1,3 @@
-import {
-  AlertDialog,
-  Column,
-  Host,
-  OutlinedTextField,
-  Text,
-  TextButton,
-  useNativeState,
-} from "@expo/ui/jetpack-compose";
 import { useTheme, useThemeColor } from "@/hooks/use-theme";
 
 export type TextPromptProps = {
@@ -22,6 +13,10 @@ export type TextPromptProps = {
 export const TextPrompt = ({
   title, message, actionText, placeholder, defaultValue = "", onSubmit, onCancel,
 }: TextPromptProps) => {
+  // API-route discovery imports screen modules on the server. Initialize Compose
+  // only when this Android component renders, not while discovering routes.
+  const { AlertDialog, Column, Host, OutlinedTextField, Text, TextButton, useNativeState } =
+    require("@expo/ui/jetpack-compose") as typeof import("@expo/ui/jetpack-compose");
   const value = useNativeState(defaultValue);
   const { isDarkMode } = useTheme();
   const primary = useThemeColor("primary");

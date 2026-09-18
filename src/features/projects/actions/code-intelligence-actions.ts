@@ -1,25 +1,18 @@
-import { codeIntelligenceRequestSchema, codeIntelligenceResultSchema, type CodeIntelligenceRequestSchema, type CodeIntelligenceResultSchema } from "./code-intelligence-schemas";
-import { createRequestHeaders, fetchBase, isValidIds } from "@/lib/utils";
+import { codeIntelligenceRequestSchema, type CodeIntelligenceRequestSchema, type CodeIntelligenceResultSchema } from "./code-intelligence-schemas";
+import { projectFileContentSchema } from "./file-schemas";
+import { requireLocalProject } from "../local/access";
+import { executeWorkspace } from "@/services/local-workspace/execute";
 
 export const readProjectCodeIntelligence = async (
   projectId: string, unsafeInput: CodeIntelligenceRequestSchema,
 ): Promise<CodeIntelligenceResultSchema | null> => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 70_000);
   try {
-    if (!isValidIds(projectId)) return null;
     const input = codeIntelligenceRequestSchema.parse(unsafeInput);
-    const headers = await createRequestHeaders({ "Content-Type": "application/json" });
-    if (!headers.has("Cookie")) return null;
-    const response = await fetchBase(`/api/projects/${projectId}/code-intelligence`, {
-      method: "POST", headers, credentials: "omit", body: JSON.stringify(input), signal: controller.signal,
+    const project = await requireLocalProject(projectId);
+    const { analyzeTypeScript } = await import("@/services/typescript/analysis");
+    return await analyzeTypeScript(input, async (path) => {
+      try { return projectFileContentSchema.parse(await executeWorkspace(project.id, "read-file", { path })).content; }
+      catch { return null; }
     });
-    if (!response.ok) return null;
-    const result = await response.json();
-    if (result.error !== false) return null;
-    const data = codeIntelligenceResultSchema.parse(result.data);
-    if (input.position === undefined ? !("diagnostics" in data) : !("completions" in data)) return null;
-    return data;
   } catch { return null; }
-  finally { clearTimeout(timeout); }
 };

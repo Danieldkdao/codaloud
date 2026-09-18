@@ -87,6 +87,7 @@
     "@types/react": "~19.2.2",
     "@types/react-dom": "^19.2.7",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.27.7",
     "happy-dom": "^20.14.0",
     "material-icon-theme": "^5.38.1",
     "postcss": "^8.5.28",
@@ -109,7 +110,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:icons": "node scripts/generate-material-icons.mjs",
-    "check:icons": "node scripts/generate-material-icons.mjs --check"
+    "check:icons": "node scripts/generate-material-icons.mjs --check",
+    "generate:typescript": "node scripts/build-local-typescript.mjs",
+    "prestart": "node scripts/build-local-typescript.mjs",
+    "pretest": "node scripts/build-local-typescript.mjs"
   },
   "private": true,
   "packageManager": "pnpm@12.4.1"

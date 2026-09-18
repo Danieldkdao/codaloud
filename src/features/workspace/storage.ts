@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm";
 import { randomUUID } from "expo-crypto";
-import { getLocalDatabase } from "@/db/local/database";
+import { db } from "@/db/db";
+import { migrateDatabase } from "@/db/migrate";
 import { WorkspaceTable } from "@/db/schemas/workspace";
 import type { WorkspaceStorage } from "./types";
 
 export const workspaceStorage: WorkspaceStorage = {
   load: async () => {
-    const db = await getLocalDatabase();
+    await migrateDatabase();
     // The singleton key also makes concurrent first launches converge on one ID.
     db.insert(WorkspaceTable).values({ id: 1, ownerId: randomUUID() }).onConflictDoNothing().run();
     const existingWorkspace = db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, 1)).get();
@@ -14,7 +15,6 @@ export const workspaceStorage: WorkspaceStorage = {
     return { ownerId: existingWorkspace.ownerId, hasEntered: existingWorkspace.hasEntered };
   },
   enter: async () => {
-    const db = await getLocalDatabase();
     const updatedWorkspace = db.update(WorkspaceTable).set({ hasEntered: true })
       .where(eq(WorkspaceTable.id, 1)).returning().get();
     if (!updatedWorkspace) throw new Error("The local workspace is not ready.");

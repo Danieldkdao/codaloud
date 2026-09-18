@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, getTableColumns, gt, lt, or, sql } from "drizzle-orm";
-import type { LocalDatabase } from "@/db/local/database";
+import type { Db } from "@/db/db";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
 import { projectResponseSchema, updateProjectSchema } from "../actions/schemas";
 import { projectParamsSchema, readProjectCursor, type ProjectCursorSchema, type ProjectParamsSchema } from "../lib/project-params";
@@ -7,7 +7,7 @@ import type { ProjectPageData } from "../types";
 
 const { searchName: _searchName, ...projectColumns } = getTableColumns(ProjectTable);
 
-export const createLocalProjectStore = (db: LocalDatabase) => ({
+export const createLocalProjectStore = (db: Db) => ({
   read: (userId: string, projectId: string) => db.select(projectColumns).from(ProjectTable)
     .where(and(eq(ProjectTable.userId, userId), eq(ProjectTable.id, projectId))).get() ?? null,
 

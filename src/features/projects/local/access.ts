@@ -1,4 +1,4 @@
-import { getLocalDatabase } from "@/db/local/database";
+import { db } from "@/db/db";
 import { ProjectTable } from "@/db/schemas/project";
 import { getDeviceWorkspace } from "@/features/workspace/hooks/use-device-workspace";
 import { executeWorkspace, LocalWorkspaceError } from "@/services/local-workspace/execute";
@@ -6,7 +6,7 @@ import { createLocalProjectStore } from "./projects";
 
 let recovery: Promise<void> | undefined;
 export const getLocalProjects = async () => {
-  const [db, workspace] = await Promise.all([getLocalDatabase(), getDeviceWorkspace()]);
+  const workspace = await getDeviceWorkspace();
   // Recover once at startup, before any action can start a new deletion. A row
   // still present in SQLite means the deletion never committed.
   recovery ??= (async () => {

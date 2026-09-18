@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { getLocalDatabase } from "@/db/local/database";
+import { db } from "@/db/db";
 import { WorkspaceTable } from "@/db/schemas/workspace";
 
 export const gitIdentitySchema = z.strictObject({
@@ -10,7 +10,6 @@ export const gitIdentitySchema = z.strictObject({
 export type GitIdentitySchema = z.infer<typeof gitIdentitySchema>;
 
 export const readGitIdentity = async (): Promise<GitIdentitySchema | null> => {
-  const db = await getLocalDatabase();
   const existingWorkspace = db.select({ name: WorkspaceTable.gitAuthorName, email: WorkspaceTable.gitAuthorEmail })
     .from(WorkspaceTable).where(eq(WorkspaceTable.id, 1)).get();
   const result = gitIdentitySchema.safeParse(existingWorkspace);
@@ -19,7 +18,6 @@ export const readGitIdentity = async (): Promise<GitIdentitySchema | null> => {
 
 export const saveGitIdentity = async (input: GitIdentitySchema) => {
   const identity = gitIdentitySchema.parse(input);
-  const db = await getLocalDatabase();
   const updatedWorkspace = db.update(WorkspaceTable)
     .set({ gitAuthorName: identity.name, gitAuthorEmail: identity.email })
     .where(eq(WorkspaceTable.id, 1)).returning({ id: WorkspaceTable.id }).get();

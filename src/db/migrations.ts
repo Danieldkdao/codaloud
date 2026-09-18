@@ -1,5 +1,4 @@
-// This database is separate from the legacy server database. Keep migrations
-// bundled with the native app so startup never needs a network request.
+// Keep migrations bundled with the native app so startup never needs a network request.
 export const localWorkspaceMigration = `
 CREATE TABLE projects (
   id TEXT PRIMARY KEY NOT NULL,

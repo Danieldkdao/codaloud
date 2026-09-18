@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { localWorkspaceMigration, localWorkspacePreferencesMigration, localGitIdentityMigration, localImportHistoryMigration } from "../src/db/local/migrations.ts";
+import { localWorkspaceMigration, localWorkspacePreferencesMigration, localGitIdentityMigration, localImportHistoryMigration } from "../src/db/migrations.ts";
 
 const source = resolve(process.argv[2] ?? "/tmp/codaloud-development-migration");
 const destination = resolve(process.argv[3] ?? join(source, "device-data"));

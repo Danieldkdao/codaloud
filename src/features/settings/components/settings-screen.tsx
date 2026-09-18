@@ -4,6 +4,7 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import { useGitHubProfile } from "@/services/github/hooks/use-github-profile";
 import { GitHubConnection } from "@/services/github/components/github-connection";
+import { GitIdentityForm } from "@/features/workspace/components/git-identity-form";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { useState } from "react";
@@ -56,6 +57,8 @@ export const SettingsScreen = () => {
             <Switch accessibilityLabel="Task notifications" value={taskNotifications} onValueChange={setTaskNotifications} trackColor={{ false: border, true: primary }} ios_backgroundColor={border} />
           </SettingsRow>
         </SettingsSection>
+
+        <GitIdentityForm />
 
         <SettingsSection title="Connections">
           <View className="p-4"><GitHubConnection /></View>

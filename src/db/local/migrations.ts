@@ -25,3 +25,8 @@ CREATE TABLE workspace (
   has_entered INTEGER NOT NULL DEFAULT 0 CHECK (has_entered IN (0, 1))
 );
 `;
+
+export const localGitIdentityMigration = `
+ALTER TABLE workspace ADD COLUMN git_author_name TEXT;
+ALTER TABLE workspace ADD COLUMN git_author_email TEXT;
+`;

@@ -98,15 +98,19 @@ vi.mock("expo-router/ui", () => ({
   TabTrigger: ({ children }: { children: ReactNode }) => children,
   useTabTrigger: () => ({ switchTab }),
 }));
-vi.mock("react-native-reanimated", () => ({
-  default: { View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
-    createElement("div", { style: Object.assign({}, ...([style].flat().filter(Boolean) as object[])) }, children) },
-  ReduceMotion: { System: "system" },
-  useSharedValue: (value: number) => useRef({ value }).current,
-  useAnimatedStyle: (callback: () => object) => callback(),
-  withSpring: (value: number) => value,
-  withTiming: (value: number) => value,
-}));
+vi.mock("react-native-reanimated", () => {
+  const transition = { duration: () => transition, reduceMotion: () => transition };
+  return {
+    default: { createAnimatedComponent: (component: unknown) => component, View: ({ children, style, testID }: { children?: ReactNode; style?: unknown; testID?: string }) =>
+      createElement("div", { "data-testid": testID, style: Object.assign({}, ...([style].flat().filter(Boolean) as object[])) }, children) },
+    LinearTransition: transition,
+    ReduceMotion: { System: "system" },
+    useSharedValue: (value: number) => useRef({ value }).current,
+    useAnimatedStyle: (callback: () => object) => callback(),
+    withSpring: (value: number) => value,
+    withTiming: (value: number) => value,
+  };
+});
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, onPress, disabled, accessibilityLabel }: { children: ReactNode; onPress?: () => void; disabled?: boolean; accessibilityLabel?: string }) =>
     createElement("button", { onClick: onPress, disabled, "aria-label": accessibilityLabel }, children),

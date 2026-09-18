@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
+import Animated, { LinearTransition, ReduceMotion } from "react-native-reanimated";
 
 import { Icon } from "@/components/ui/icon";
 import { ActionSheet } from "@/components/ui/action-sheet";
@@ -23,6 +24,9 @@ const syncActions = [
   "pull-rebase",
   "fetch",
 ] as const;
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const badgeTransition = LinearTransition.duration(240).reduceMotion(ReduceMotion.System);
 
 type ProjectBranchMenuProps = {
   maxWidth: number;
@@ -108,7 +112,10 @@ export const ProjectBranchMenu = ({
 
   return (
     <>
-      <Pressable
+      <AnimatedPressable
+        layout={badgeTransition}
+        style={{ maxWidth }}
+        className="min-h-12 flex-row items-center gap-2 overflow-hidden rounded-full border border-border bg-secondary px-3"
         accessibilityRole="button"
         accessibilityLabel={`Branch actions: ${label}, ${formatProjectGitCount(outgoing)} to push, ${formatProjectGitCount(incoming)} to pull`}
         accessibilityState={{ expanded: open, busy: isWorkspaceBusy }}
@@ -117,41 +124,39 @@ export const ProjectBranchMenu = ({
           setOpen(true);
         }}
       >
-        <View
-          style={{ maxWidth }}
-          className="min-h-12 flex-row items-center gap-2 rounded-full border border-border bg-secondary px-3"
+        <Icon
+          family="Feather"
+          name={formatProjectBranchSource(branchSource ?? "local").icon}
+          size={20}
+          className="text-secondary-foreground"
+          accessible={false}
+        />
+        <Animated.View
+          layout={badgeTransition}
+          testID="branch-indicator"
+          accessibilityLiveRegion="polite"
+          style={{ maxWidth: Math.max(40, maxWidth - 190) }}
+          className="min-w-0 shrink"
         >
-          <Icon
-            family="Feather"
-            name={formatProjectBranchSource(branchSource ?? "local").icon}
-            size={20}
-            className="text-secondary-foreground"
-            accessible={false}
-          />
-          <View
-            testID="branch-indicator"
-            accessibilityLiveRegion="polite"
-            style={{ maxWidth: Math.max(40, maxWidth - 190) }}
-            className="min-w-0 shrink"
-          >
-            {loadingBranch ? (
-              <ActivityIndicator className="text-primary" accessibilityLabel={label} />
-            ) : (
-              <CodeText
-                className="text-lg font-medium text-secondary-foreground"
-                numberOfLines={1}
-                ellipsizeMode="middle"
-              >
-                {label}
-              </CodeText>
-            )}
-          </View>
-          {!loadingBranch && (isWorkspaceBusy || git.isFetching) && (
-            <ActivityIndicator
-              className="text-primary"
-              accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"}
-            />
+          {loadingBranch ? (
+            <ActivityIndicator className="text-primary" accessibilityLabel={label} />
+          ) : (
+            <CodeText
+              className="text-lg font-medium text-secondary-foreground"
+              numberOfLines={1}
+              ellipsizeMode="middle"
+            >
+              {label}
+            </CodeText>
           )}
+        </Animated.View>
+        {!loadingBranch && (isWorkspaceBusy || git.isFetching) && (
+          <ActivityIndicator
+            className="text-primary"
+            accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"}
+          />
+        )}
+        <Animated.View layout={badgeTransition} className="shrink-0 flex-row items-center gap-2">
           <Icon
             family="Entypo"
             name="dot-single"
@@ -188,8 +193,8 @@ export const ProjectBranchMenu = ({
               accessible={false}
             />
           </View>
-        </View>
-      </Pressable>
+        </Animated.View>
+      </AnimatedPressable>
       <ActionSheet
         open={open}
         onOpenChange={setOpen}

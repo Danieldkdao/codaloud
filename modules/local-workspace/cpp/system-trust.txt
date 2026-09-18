@@ -1,0 +1,2 @@
+# Intentionally empty. Android supplies its platform trust anchors at runtime.
+# Without successful trust-store initialization, HTTPS must fail closed.

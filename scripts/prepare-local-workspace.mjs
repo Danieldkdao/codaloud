@@ -17,6 +17,11 @@ const dependencies = [
     url: "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/single_include/nlohmann/json.hpp",
     sha256: "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63",
   },
+  {
+    name: "mbedtls", version: "3.6.7", archive: true,
+    url: "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2",
+    sha256: "a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6",
+  },
 ];
 
 await mkdir(join(root, "vendor"), { recursive: true });
@@ -37,7 +42,7 @@ for (const dependency of dependencies) {
     if (dependency.archive) {
       const archive = join(temporary, "source.tar.gz");
       await writeFile(archive, bytes);
-      execFileSync("tar", ["-xzf", archive, "--strip-components=1", "-C", staging]);
+      execFileSync("tar", ["-xf", archive, "--strip-components=1", "-C", staging]);
     } else {
       await writeFile(join(staging, "json.hpp"), bytes);
     }

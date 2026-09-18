@@ -48,10 +48,11 @@ vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, onReady, onChange }: { initialValue: string; onReady: () => Promise<void>; onChange: (value: string) => Promise<void> }) => {
+vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, onSelect }: { paths: string[]; onSelect: (path: string) => void }) => createElement("div", null, paths.map((path) => createElement("button", { key: path, onClick: () => onSelect(path) }, path))) }));
+vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, documentKey, onReady, onChange }: { documentKey: string; initialValue: string; onReady: () => Promise<void>; onChange: (value: string) => Promise<void> }) => {
   mocks.change = onChange;
   useEffect(() => { void onReady(); }, [onReady]);
-  return createElement("textarea", { defaultValue: initialValue });
+  return createElement("textarea", { key: documentKey, defaultValue: initialValue });
 } }));
 vi.mock("@/components/code-editor-loading", () => ({ CodeEditorLoading: () => createElement("span", null, "Loading editor") }));
 vi.mock("@/components/ui/text", () => {
@@ -265,7 +266,7 @@ it.each([
   await flush();
   expect(selection.filePath).toBe(expected);
   if (expected === null) {
-    expect(container.querySelector("textarea")).toBeNull();
+    // The WebView remains mounted but hidden when the final tab closes.
     expect(container.textContent).toContain("No file selected");
   } else expect(container.querySelector("textarea")?.value).toBe("server contents");
 });

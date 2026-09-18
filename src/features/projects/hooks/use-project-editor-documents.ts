@@ -29,13 +29,20 @@ export const useProjectEditorDocuments = (files: WorkspaceFiles, content: string
   const entries = useMemo(() => new Map<string, EditorDocument>(), [getDocument]);
   const path = files.activeFilePath;
   const version = path ? files.getFileVersion(path) : 0;
-  const document = useMemo(() => path && content !== undefined ? getDocument(path, version, content) : null, [getDocument, path, version, content]);
+  const document = useMemo(() => {
+    if (!path) return null;
+    // An open editor owns its baseline until an explicit workspace refresh.
+    // Background reads must not reset live text or its undo history.
+    const existing = [...entries.values()].find((item) => item.path === path && item.version === version);
+    return existing?.document ?? (content !== undefined ? getDocument(path, version, content) : null);
+  }, [entries, getDocument, path, version, content]);
   let entry = [...entries.values()].find((item) => item.document === document && item.path === path && item.version === version);
   if (!entry && document && path) {
     entry = { key: `${owner}/${++sequence.current}`, path, version, initialValue: document.getContent(), document };
     entries.set(entry.key, entry);
   }
   const active = useRef(entry);
+  if (entry && active.current !== entry) entry.initialValue = entry.document.getContent();
   active.current = entry;
   const lastEditor = useRef<EditorDocument | undefined>(undefined);
   if (entry) lastEditor.current = entry;

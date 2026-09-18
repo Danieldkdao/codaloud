@@ -10,7 +10,7 @@ import GitScreen from "@/app/projects/[projectId]/git";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
-const selection = vi.hoisted(() => ({ filePath: null as string | null, version: 0, setFilePath: vi.fn(), refreshFile: vi.fn() }));
+const selection = vi.hoisted(() => ({ activeFilePath: null as string | null, version: 0, openFile: vi.fn(), closeFile: vi.fn(), getFileVersion: () => 0, get openFilePaths() { return selection.activeFilePath ? [selection.activeFilePath] : []; }, refreshFile: vi.fn() }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => selection }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 const saveFile = vi.hoisted(() => vi.fn());
@@ -24,10 +24,11 @@ vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readPr
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn() }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/components/code-editor", () => ({ default: ({ onReady, onAnalysis, onChange, colorScheme, initialValue }: { onChange: (value: string) => Promise<void>; onReady: () => Promise<void>; onAnalysis: (value: CodeEditorAnalysis) => Promise<void>; colorScheme: string; initialValue: string }) => {
+vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths }: { paths: string[] }) => createElement("span", null, paths.join(" ")) }));
+vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string }) => {
   state.change = onChange;
-  state.ready = onReady;
-  state.analysis = onAnalysis;
+  state.ready = () => onReady(documentKey);
+  state.analysis = (value) => onAnalysis(value, documentKey);
   return createElement("textarea", { key: initialValue, defaultValue: initialValue, "data-theme": colorScheme });
 } }));
 vi.mock("@/components/code-editor-loading", () => ({ CodeEditorLoading: () => createElement("span", null, "Initializing your editor") }));
@@ -100,14 +101,14 @@ it.each([
 });
 
 const renderCode = (path: string | null = "app/page.tsx") => {
-  selection.filePath = path;
+  selection.activeFilePath = path;
   act(() => root.render(createElement(QueryClientProvider, { client }, createElement(ProjectFileSaveRegistryProvider, { projectId: "project-one", children: createElement(CodeScreen) }))));
 };
 const finishLoading = (content = "const value = 1;", path = "app/page.tsx") => {
   Object.assign(fileQuery, { data: { path, content, size: content.length }, isPending: false, isFetching: false, isError: false });
 };
 
-it("shows severity counts beside the filename and resets them for another file", async () => {
+it("shows severity counts in the floating badge and resets them for another file", async () => {
   finishLoading();
   renderCode();
   expect(container.textContent).toContain("app/page.tsx");

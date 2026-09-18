@@ -1,29 +1,23 @@
 import { ActivityIndicator, Pressable, View } from "react-native";
-import { ProjectIcon } from "@/components/project-icon";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import { diagnosticSeverities } from "@/features/projects/actions/code-intelligence-schemas";
 import { formatCodeAnalysisLabel, formatCodeDiagnostic, formatCodeDiagnosticCount, formatProjectFileSaveStatus } from "@/features/projects/lib/formatters";
-import { useProjectFileSave, type ProjectFileSaveStatus } from "@/features/projects/hooks/use-project-file-save";
+import type { SaveSnapshot } from "../lib/project-file-save-document";
 
-export const ProjectCodeHeader = ({ filePath, fileStatus, analysis, onShowProblems }: {
-  filePath: string;
-  fileStatus?: Extract<ProjectFileSaveStatus, "loading" | "error">;
+export const ProjectCodeStatus = ({ status: save, analysis, onShowProblems, onRetry }: {
+  status: SaveSnapshot;
   analysis?: CodeEditorAnalysis;
-  onShowProblems?: () => void;
+  onShowProblems: () => void;
+  onRetry: () => void;
 }) => {
-  const save = useProjectFileSave();
-  const status = fileStatus ?? save?.status ?? "loading";
+  const status = save.status;
   const presentation = formatProjectFileSaveStatus(status);
-  const canRetry = !fileStatus && status === "error" && Boolean(save);
+  const canRetry = status === "error";
   const IndicatorContainer = canRetry ? Pressable : View;
   return (
-    <View className="min-h-18 flex-row items-center gap-2.5 border-b border-border px-4 py-2">
-      <ProjectIcon name={filePath} isDirectory={false} />
-      <View className="min-w-0 flex-1">
-        <PText className="text-lg font-medium text-foreground" numberOfLines={1} ellipsizeMode="middle">{filePath}</PText>
-      </View>
+    <View className="min-h-12 flex-row items-center gap-2 rounded-full border border-border bg-secondary px-3">
       {analysis && analysis.status !== "unsupported" ? (
         <Pressable
           accessibilityRole="button"
@@ -53,11 +47,11 @@ export const ProjectCodeHeader = ({ filePath, fileStatus, analysis, onShowProble
       <IndicatorContainer
         accessible
         accessibilityRole={canRetry ? "button" : "image"}
-        accessibilityLabel={fileStatus === "error" ? "Couldn't load file" : presentation.label}
-        accessibilityHint={canRetry ? save?.message : undefined}
+        accessibilityLabel={presentation.label}
+        accessibilityHint={canRetry ? save.message : undefined}
         accessibilityState={{ busy: presentation.busy }}
         accessibilityLiveRegion="polite"
-        onPress={canRetry ? save?.retry : undefined}
+        onPress={canRetry ? onRetry : undefined}
         className="min-h-11 min-w-11 items-center justify-center"
       >
         {presentation.busy ? <ActivityIndicator size="small" className="text-muted-foreground" /> : (

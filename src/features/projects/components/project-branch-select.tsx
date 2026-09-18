@@ -72,7 +72,7 @@ export const ProjectBranchSelect = ({
   const session = useAuthSession();
   const userId = session.data?.user.id;
   const { withSavedFiles } = useProjectFileSaveRegistry();
-  const { filePath, refreshFile } = useProjectWorkspaceCurrentFile();
+  const { refreshFiles } = useProjectWorkspaceCurrentFile();
   const [search, setSearch] = useState("");
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
@@ -148,7 +148,7 @@ export const ProjectBranchSelect = ({
         }),
       ]);
     }
-    if (filePath) refreshFile(filePath);
+    refreshFiles();
   };
   const selectBranch = (
     name: string,

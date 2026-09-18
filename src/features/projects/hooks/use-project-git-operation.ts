@@ -113,7 +113,7 @@ export const useProjectGitOperation = () => {
               });
               workspace.assertWorkspaceCurrent();
               const file = selectedFile.current;
-              if (file.filePath) file.refreshFile(file.filePath);
+              file.refreshFiles();
             }
           }
         });

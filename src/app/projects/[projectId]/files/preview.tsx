@@ -77,7 +77,7 @@ const FilePreviewScreen = () => {
             search={search}
             dockHeight={dockHeight}
             onOpen={() => {
-              currentFile.setFilePath(filePath);
+              currentFile.openFile(filePath);
               router.navigate({ pathname: "/projects/[projectId]/code", params: { projectId } });
             }}
           />

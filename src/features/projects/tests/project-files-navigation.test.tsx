@@ -27,7 +27,7 @@ vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFi
 vi.mock("@/features/projects/hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => fileCreation }));
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), selectFile: vi.fn(), confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
-vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: null, version: 0, setFilePath: mocks.selectFile, refreshFile: vi.fn() }) }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: null, version: 0, openFile: mocks.selectFile, refreshFile: vi.fn(), renameFiles: vi.fn(), removeFiles: vi.fn() }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
 vi.mock("@/lib/utils", () => ({ confirmAction: mocks.confirm }));
@@ -67,9 +67,9 @@ const files = [
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ navigate: mocks.navigate }) }));
 vi.mock("@/features/projects/hooks/use-project-files", () => ({ useProjectFiles: (_id: string, path: string) => ({
   query: { data: getDirectoryFiles(files, path), isPending: false, isError: false, isFetching: false, refetch: vi.fn() },
-  update: { mutateAsync: mocks.update, isPending: mocks.updatePending, variables: { parentPath: "", previousName: "app" } },
+  update: { mutateAsync: async (input: { parentPath: string; name: string }) => { await mocks.update(input); return { path: [input.parentPath, input.name].filter(Boolean).join("/") }; }, isPending: mocks.updatePending, variables: { parentPath: "", previousName: "app" } },
   creation: { mutateAsync: mocks.create },
-  deletion: { mutateAsync: mocks.delete, isPending: mocks.deletePending, variables: mocks.deleteVariables },
+  deletion: { mutateAsync: async (input: { parentPath: string; name: string }) => { await mocks.delete(input); return { path: [input.parentPath, input.name].filter(Boolean).join("/") }; }, isPending: mocks.deletePending, variables: mocks.deleteVariables },
 }) }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ onPress, accessibilityLabel, disabled }: { onPress: () => void; accessibilityLabel: string; disabled: boolean }) =>
   createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, disabled }),

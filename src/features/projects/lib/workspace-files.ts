@@ -28,7 +28,7 @@ export const renameWorkspaceFiles = (state: ProjectOpenFilesState, previousPath:
   for (const path of state.openFilePaths) {
     const destination = rename(path);
     if (destination !== path) {
-      versions[destination] = Math.max(versions[destination] ?? 0, versions[path] ?? 0) + 1;
+      versions[destination] = versions[path] ?? 0;
       versions[path] = (versions[path] ?? 0) + 1;
     }
   }

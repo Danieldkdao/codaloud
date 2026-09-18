@@ -18,7 +18,6 @@ import { useProjectFileSearch } from "@/features/projects/hooks/use-project-file
 import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 import {
   getDirectoryFiles,
-  isProjectFilePathWithin,
 } from "@/features/projects/lib/files";
 
 const FilesScreen = () => {
@@ -54,7 +53,7 @@ const FilesScreen = () => {
   const renameInFlight = useRef(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const openFile = (path: string) => {
-    currentFile.setFilePath(path);
+    currentFile.openFile(path);
     router.navigate({
       pathname: "/projects/[projectId]/code",
       params: { projectId },
@@ -229,11 +228,7 @@ const FilesScreen = () => {
                   },
                 );
                 assertCurrent();
-                currentFile.setFilePath((path) =>
-                  path !== null && isProjectFilePathWithin(path, previousPath)
-                    ? updatedFile.path + path.slice(previousPath.length)
-                    : path,
-                );
+                currentFile.renameFiles(previousPath, updatedFile.path);
                 showSuccess(
                   formatProjectFileKind(input.kind).updateSuccessMessage,
                 );
@@ -254,12 +249,7 @@ const FilesScreen = () => {
                 assertCurrent();
                 const deletedFile = await deletion.mutateAsync(input);
                 assertCurrent();
-                currentFile.setFilePath((path) =>
-                  path !== null &&
-                  isProjectFilePathWithin(path, deletedFile.path)
-                    ? null
-                    : path,
-                );
+                currentFile.removeFiles(deletedFile.path);
                 showSuccess(
                   formatProjectFileKind(input.kind).deleteSuccessMessage,
                 );

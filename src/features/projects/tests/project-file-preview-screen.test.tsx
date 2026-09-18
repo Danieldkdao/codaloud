@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   nextMatch: vi.fn(), previousMatch: vi.fn(), dismissTo: vi.fn(), navigate: vi.fn(), selectFile: vi.fn(), read: vi.fn(), editor: vi.fn(), isDarkMode: false,
 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => mocks.params, useRouter: () => ({ dismissTo: mocks.dismissTo, navigate: mocks.navigate }) }));
-vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ setFilePath: mocks.selectFile }) }));
+vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ openFile: mocks.selectFile }) }));
 vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
 vi.mock("../actions/file-actions", () => ({ readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: mocks.isDarkMode }), useThemeColor: () => "transparent" }));

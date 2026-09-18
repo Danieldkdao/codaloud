@@ -355,3 +355,17 @@ it("refreshes an actively selected path recreated after an external deletion", a
   expect(selection.filePath).toBe("old.ts");
   expect(container.querySelector("textarea")?.value).toBe("");
 });
+
+
+it("keeps all tabs in sync when an inactive folder is renamed then deleted", async () => {
+  await select("src/one.ts");
+  await select("src/two.ts");
+  await select("other.ts");
+  mocks.update.mockResolvedValueOnce(result("lib", true));
+  await act(async () => { await fileList.onUpdate({ parentPath: "", previousName: "src", name: "lib", kind: "folder" }); });
+  expect(selection.openFilePaths).toEqual(["lib/one.ts", "lib/two.ts", "other.ts"]);
+  expect(selection.activeFilePath).toBe("other.ts");
+  mocks.delete.mockResolvedValueOnce(result("lib", true));
+  await act(async () => { await fileList.onDelete({ parentPath: "", name: "lib", kind: "folder" }); });
+  expect(selection.openFilePaths).toEqual(["other.ts"]);
+});

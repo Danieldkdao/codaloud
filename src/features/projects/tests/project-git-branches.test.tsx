@@ -74,11 +74,11 @@ const live = vi.hoisted(() => ({
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
 }));
-const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
+const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPendingSaves: vi.fn(), refreshFiles: vi.fn(), alert: vi.fn() }));
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
-vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFile: workspaceFiles.refreshFile }) }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFiles: workspaceFiles.refreshFiles }) }));
 let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({
   query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
@@ -266,7 +266,7 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   workspaceFiles.withSavedFiles.mockReset().mockImplementation(async (action: () => Promise<unknown>) => { await workspaceFiles.flushPendingSaves(); return action(); });
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
-  workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
+  workspaceFiles.refreshFiles.mockReset(); workspaceFiles.alert.mockReset();
   live.gitCheckout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
   live.recoverCheckout.mockReset().mockResolvedValue({ previousBranch: "main", currentBranch: "feature/live" });
   Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
@@ -741,7 +741,7 @@ it("finishes pending saves before checkout and refreshes only the submitted work
   expect(live.gitCheckout.mutateAsync).toHaveBeenCalledOnce();
   expect(queryClient.getQueryData(key)).toBeUndefined();
   expect(queryClient.getQueryData(otherKey)).toEqual({ content: "other account" });
-  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(workspaceFiles.refreshFiles).toHaveBeenCalledWith();
 });
 
 it("reverts without checkout when saving fails", async () => {
@@ -767,7 +767,7 @@ it("clears old documents after an unknown checkout and retries recovery without 
   await act(async () => {});
   for (const key of [fileKey, searchKey, branchKey]) expect(queryClient.getQueryData(key)).toBeUndefined();
   expect(queryClient.getQueryData(otherKey)).toBe("old bytes");
-  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(workspaceFiles.refreshFiles).toHaveBeenCalledWith();
   expect(container.querySelector('[aria-label="Retry branch recovery"]')).not.toBeNull();
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).not.toBe("main");
   click("Retry branch recovery");
@@ -1241,7 +1241,7 @@ it("cancels stash without changing Git or showing success", async () => {
 it("refreshes file contents after pull conflicts without success feedback", async () => {
   git.gitPull.mutateAsync.mockRejectedValueOnce(new Error("Resolve conflicts before continuing."));
   openBranchActions(); click("Pull 3"); await act(async () => {});
-  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(workspaceFiles.refreshFiles).toHaveBeenCalledWith();
   expect(feedback.success).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Resolve conflicts before continuing.");
 });

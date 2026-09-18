@@ -22,7 +22,7 @@ vi.mock("../hooks/use-project-files", () => ({ useProjectFiles: (...args: unknow
   return { query: { data: [], isPending: false, isError: false }, creation: {}, update: {}, deletion: {} };
 } }));
 vi.mock("../hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => ({ kind: null }) }));
-vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ setFilePath: mocks.select }) }));
+vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ openFile: mocks.select }) }));
 vi.mock("../hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }) }));
 vi.mock("../hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 80 }) }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));

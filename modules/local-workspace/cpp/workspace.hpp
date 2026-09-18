@@ -12,7 +12,7 @@ struct WorkspaceError : std::runtime_error {
   WorkspaceError(std::string code, std::string message) : std::runtime_error(message), code(std::move(code)) {}
 };
 std::string execute(const std::string &base, const std::string &request);
-fs::path checkedPath(const fs::path &root, const std::string &relative, bool allowRoot = false);
+fs::path checkedPath(const fs::path &root, const std::string &relative, bool allowRoot = false, bool allowLeafSymlink = false);
 std::string readText(const fs::path &path);
 std::string sha256(const std::string &value);
 std::string timestamp(std::time_t time = std::time(nullptr));

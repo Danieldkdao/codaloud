@@ -1,5 +1,5 @@
 #include "workspace.hpp"
-#include <git2.h>
+#include "git.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <mutex>
@@ -15,7 +15,7 @@ std::string timestamp(std::time_t time) {
   return output.str();
 }
 
-fs::path checkedPath(const fs::path &root, const std::string &relative, bool allowRoot) {
+fs::path checkedPath(const fs::path &root, const std::string &relative, bool allowRoot, bool allowLeafSymlink) {
   if (relative.empty() && allowRoot) return root;
   if (relative.empty() || relative.size() > 4096 || relative.front() == '/' || relative.back() == '/' || relative.find('\0') != std::string::npos)
     throw WorkspaceError("INVALID_PATH", "Choose a relative path inside this project.");
@@ -28,7 +28,7 @@ fs::path checkedPath(const fs::path &root, const std::string &relative, bool all
     if (part.empty() || part == "." || part == ".." || lower == ".git")
       throw WorkspaceError("INVALID_PATH", "This path is reserved or outside the project.");
     result /= part;
-    if (fs::is_symlink(fs::symlink_status(result)))
+    if (fs::is_symlink(fs::symlink_status(result)) && !(allowLeafSymlink && parts.eof()))
       throw WorkspaceError("UNSUPPORTED_FILE", "Symbolic links cannot be opened or edited.");
   }
   return result;
@@ -39,7 +39,9 @@ std::string execute(const std::string &base, const std::string &request) {
   // off the UI thread, so a save cannot race a checkout or another file operation.
   static std::mutex workspaceMutex;
   std::lock_guard<std::mutex> lock(workspaceMutex);
+  static const int initialized = git_libgit2_init();
   try {
+    checkGit(initialized);
     const auto input = Json::parse(request);
     const auto id = input.at("projectId").get<std::string>();
     if (!std::regex_match(id, std::regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")))
@@ -53,10 +55,11 @@ std::string execute(const std::string &base, const std::string &request) {
     if (operation == "initialize") {
       if (fs::exists(root)) throw WorkspaceError("PROJECT_EXISTS", "This project already exists on the device.");
       fs::create_directory(root);
+      try { initializeGit(root); } catch (...) { fs::remove_all(root); throw; }
       data = true;
     } else {
       if (!fs::is_directory(root)) throw WorkspaceError("PROJECT_NOT_FOUND", "This project is not available on the device.");
-      data = fileOperation(root, operation, args);
+      data = operation.rfind("git/", 0) == 0 ? gitOperation(root, operation, args) : fileOperation(root, operation, args);
     }
     return Json({{"ok", true}, {"data", data}}).dump();
   } catch (const WorkspaceError &error) {

@@ -1,6 +1,6 @@
 import { createGitOperationCommand } from "./git-command";
 
-export const sandboxGitStashViewCommand = createGitOperationCommand(String.raw`
+export const sandboxGitStashListCommand = createGitOperationCommand(String.raw`
   const crypto = require("node:crypto");
   const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
   const search = (input.search ?? "").trim().toLowerCase();
@@ -12,12 +12,11 @@ export const sandboxGitStashViewCommand = createGitOperationCommand(String.raw`
       cursor = JSON.parse(Buffer.from(input.cursor, "base64url").toString("utf8"));
       if (!cursor || Object.keys(cursor).length !== 5 || cursor.version !== 1 || cursor.scope !== scope ||
         !/^[a-f0-9]{64}$/.test(cursor.snapshot) || !Number.isSafeInteger(cursor.afterIndex) || cursor.afterIndex < 0 ||
-        !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(cursor.afterSha) || input.index !== undefined) throw new Error();
+        !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(cursor.afterSha)) throw new Error();
     } catch { fail("INVALID_STASH_CURSOR"); }
   }
 
   const args = ["stash", "list", "--format=%gd%x00%H%x00%gs%x00%aI", "-z"];
-  if (input.index !== undefined) args.push("--skip=" + input.index, "--max-count=1");
   // Fingerprint every list entry, including duplicate SHAs and nonmatching messages.
   // The shared Git helper bounds output to 4 MiB and enforces the command deadline.
   let raw;
@@ -33,14 +32,6 @@ export const sandboxGitStashViewCommand = createGitOperationCommand(String.raw`
     const selector = /^stash@\{(\d+)\}$/.exec(fields[index]);
     if (!selector || !Number.isSafeInteger(Number(selector[1]))) fail("GIT_REQUEST_FAILED");
     entries.push({ index: Number(selector[1]), sha: fields[index + 1], message: fields[index + 2], createdAt: fields[index + 3] });
-  }
-
-  if (input.index !== undefined) {
-    if (!entries.length) fail("GIT_STASH_NOT_FOUND");
-    if (entries[0].sha !== input.stashSha) fail("GIT_STASH_CHANGED");
-    const patch = git(["stash", "show", "--patch", "--include-untracked", "--no-ext-diff", "--no-textconv", "--no-color", input.stashSha]);
-    if (Buffer.byteLength(patch) > 3 * 1024 * 1024) fail("GIT_RESULT_TOO_LARGE");
-    return { stashes: entries, nextCursor: null, patch };
   }
 
   const matches = (entry) => entry.message.toLowerCase().includes(search);
@@ -60,5 +51,5 @@ export const sandboxGitStashViewCommand = createGitOperationCommand(String.raw`
   const nextCursor = hasMore ? Buffer.from(JSON.stringify({
     version: 1, scope, snapshot, afterIndex: last.index, afterSha: last.sha,
   })).toString("base64url") : null;
-  return { stashes, nextCursor, patch: null };
+  return { stashes, nextCursor };
 `);

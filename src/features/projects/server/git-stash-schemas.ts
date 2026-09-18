@@ -1,32 +1,21 @@
 import { z } from "zod";
 import { commitHashSchema } from "../actions/commit-schemas";
 
-export const gitStashQuerySchema = z
-  .strictObject({
-    cursor: z
-      .string()
-      .min(1)
-      .max(4096)
-      .regex(/^[A-Za-z0-9_-]+$/)
-      .optional(),
-    pageSize: z.coerce.number().int().min(1).max(100).default(20),
-    search: z
-      .string()
-      .trim()
-      .max(200)
-      .regex(/^[^\r\n\0]*$/)
-      .default(""),
-    index: z.coerce.number().int().min(0).max(10000).optional(),
-    stashSha: commitHashSchema.optional(),
-  })
-  .refine(
-    (value) => (value.index === undefined) === (value.stashSha === undefined),
-  )
-  .refine(
-    (value) =>
-      value.index === undefined ||
-      (value.search === "" && value.cursor === undefined),
-  );
+export const gitStashQuerySchema = z.strictObject({
+  cursor: z
+    .string()
+    .min(1)
+    .max(4096)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  search: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(/^[^\r\n\0]*$/)
+    .default(""),
+});
 export type GitStashQuerySchema = z.infer<typeof gitStashQuerySchema>;
 export const gitStashListSchema = z.object({
   stashes: z
@@ -40,10 +29,6 @@ export const gitStashListSchema = z.object({
     )
     .max(100),
   nextCursor: z.string().min(1).max(4096).nullable(),
-  patch: z
-    .string()
-    .max(3 * 1024 * 1024)
-    .nullable(),
 });
 export type GitStashListSchema = z.infer<typeof gitStashListSchema>;
 

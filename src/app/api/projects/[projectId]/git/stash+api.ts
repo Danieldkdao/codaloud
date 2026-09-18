@@ -3,7 +3,7 @@ import {
   gitStashQuerySchema,
   gitStashListSchema,
 } from "@/features/projects/server/git-stash-schemas";
-import { sandboxGitStashViewCommand } from "@/services/daytona/git-stash-view-command";
+import { sandboxGitStashListCommand } from "@/services/daytona/git-stash-list-command";
 import {
   gitStashPushSchema,
   gitStashPushedSchema,
@@ -13,7 +13,7 @@ import { sandboxGitStashPushCommand } from "@/services/daytona/git-stash-push-co
 export const GET = createGitRoute({
   input: gitStashQuerySchema,
   output: gitStashListSchema,
-  script: sandboxGitStashViewCommand,
+  script: sandboxGitStashListCommand,
   message: "Stash entries loaded.",
 });
 

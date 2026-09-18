@@ -12,7 +12,7 @@ import { POST as undo } from "@/app/api/projects/[projectId]/git/undo+api";
 import { POST as fetchGit } from "@/app/api/projects/[projectId]/git/fetch+api";
 import { POST as pushGit } from "@/app/api/projects/[projectId]/git/push+api";
 import { POST as pullGit } from "@/app/api/projects/[projectId]/git/pull+api";
-import { GET as viewStash } from "@/app/api/projects/[projectId]/git/stash+api";
+import { GET as listStashes } from "@/app/api/projects/[projectId]/git/stash+api";
 
 const mocks = vi.hoisted(() => ({ user: vi.fn(), project: vi.fn(), repository: vi.fn(), request: vi.fn(), credentials: vi.fn(), access: vi.fn() }));
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.user }));
@@ -133,17 +133,17 @@ for (const route of mutationRoutes) {
   });
 }
 
-it("view stash: validates pagination and returns an empty collection", async () => {
-  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextCursor: null, patch: null }) });
-  expect((await viewStash(request(), { projectId })).status).toBe(200);
-  expect((await viewStash(new Request("https://codaloud.test/?pageSize=1000"), { projectId })).status).toBe(400);
-  expect((await viewStash(new Request("https://codaloud.test/?index=0"), { projectId })).status).toBe(400);
+it("list stashes: validates pagination and returns an empty collection", async () => {
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextCursor: null }) });
+  expect((await listStashes(request(), { projectId })).status).toBe(200);
+  expect((await listStashes(new Request("https://codaloud.test/?pageSize=1000"), { projectId })).status).toBe(400);
+  expect((await listStashes(new Request("https://codaloud.test/?index=0"), { projectId })).status).toBe(400);
 });
 
-it("view stash: forwards trimmed search and pagination through requestDaytona", async () => {
-  const output = { stashes: [{ index: 7, sha: "b".repeat(40), message: "On main: Login", createdAt: "2026-09-15T00:00:00Z" }], nextCursor: "opaque-next-cursor", patch: null };
+it("list stashes: forwards trimmed search and pagination through requestDaytona", async () => {
+  const output = { stashes: [{ index: 7, sha: "b".repeat(40), message: "On main: Login", createdAt: "2026-09-15T00:00:00Z" }], nextCursor: "opaque-next-cursor" };
   mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify(output) });
-  const response = await viewStash(new Request("https://codaloud.test/?search=%20Login%20&cursor=opaque-cursor&pageSize=1"), { projectId });
+  const response = await listStashes(new Request("https://codaloud.test/?search=%20Login%20&cursor=opaque-cursor&pageSize=1"), { projectId });
   expect(response.status).toBe(200);
   expect((await response.json()).data).toEqual(output);
   const { envs } = JSON.parse(mocks.request.mock.calls[0][1].body);
@@ -151,39 +151,40 @@ it("view stash: forwards trimmed search and pagination through requestDaytona", 
   expect(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8"))).toMatchObject({ search: "Login", cursor: "opaque-cursor", pageSize: 1, projectId, sandboxId: "sandbox" });
 });
 
-it.each(["", "   "])("view stash: accepts blank search %j", async (search) => {
-  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextCursor: null, patch: null }) });
-  expect((await viewStash(new Request("https://codaloud.test/?" + new URLSearchParams({ search })), { projectId })).status).toBe(200);
+it.each(["", "   "])("list stashes: accepts blank search %j", async (search) => {
+  mocks.request.mockResolvedValue({ exitCode: 0, result: JSON.stringify({ stashes: [], nextCursor: null }) });
+  expect((await listStashes(new Request("https://codaloud.test/?" + new URLSearchParams({ search })), { projectId })).status).toBe(200);
 });
 
 it.each<Record<string, string>>([
   { search: "x".repeat(201) },
   { search: "one\ntwo" },
   { search: "one\0two" },
+  { index: "0", stashSha: "b".repeat(40) },
   { search: "login", index: "0", stashSha: "b".repeat(40) },
-])("view stash: rejects invalid or ambiguous search %j before workspace access", async (query) => {
+])("list stashes: rejects invalid search and obsolete detail parameters %j before workspace access", async (query) => {
   const params = new URLSearchParams(query);
-  expect((await viewStash(new Request("https://codaloud.test/?" + params), { projectId })).status).toBe(400);
+  expect((await listStashes(new Request("https://codaloud.test/?" + params), { projectId })).status).toBe(400);
   expect(mocks.project).not.toHaveBeenCalled();
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
-it("view stash: rejects duplicate search parameters", async () => {
-  expect((await viewStash(new Request("https://codaloud.test/?search=one&search=two"), { projectId })).status).toBe(400);
+it("list stashes: rejects duplicate search parameters", async () => {
+  expect((await listStashes(new Request("https://codaloud.test/?search=one&search=two"), { projectId })).status).toBe(400);
   expect(mocks.request).not.toHaveBeenCalled();
 });
 
 it.each(["offset=0", "page=1", "cursor=", "cursor=bad!", "cursor=" + "x".repeat(4097), "cursor=one&cursor=two", "index=0&stashSha=" + "b".repeat(40) + "&cursor=opaque"])(
-  "view stash: rejects legacy pagination and invalid cursors %s", async (query) => {
-    expect((await viewStash(new Request("https://codaloud.test/?" + query), { projectId })).status).toBe(400);
+  "list stashes: rejects legacy pagination and invalid cursors %s", async (query) => {
+    expect((await listStashes(new Request("https://codaloud.test/?" + query), { projectId })).status).toBe(400);
     expect(mocks.request).not.toHaveBeenCalled();
   },
 );
 
 it.each([["INVALID_STASH_CURSOR", 400], ["GIT_STASH_CHANGED", 409]] as const)(
-  "view stash: maps %s to %s without retrying", async (code, status) => {
+  "list stashes: maps %s to %s without retrying", async (code, status) => {
     mocks.request.mockResolvedValue({ exitCode: 1, result: JSON.stringify({ code }) });
-    const response = await viewStash(new Request("https://codaloud.test/?cursor=opaque"), { projectId });
+    const response = await listStashes(new Request("https://codaloud.test/?cursor=opaque"), { projectId });
     expect(response.status).toBe(status);
     expect(await response.json()).toMatchObject({ code });
     expect(mocks.request).toHaveBeenCalledTimes(1);

@@ -323,6 +323,10 @@ const verifyReadRetries = (name: string, useRead: () => { refetch: (options: { t
     if (typeof shouldRetry !== "function" || typeof delay !== "function") throw new Error("Expected retry functions.");
     expect(shouldRetry(0, new Error("invalid response"))).toBe(false);
     expect(shouldRetry(0, new ProjectGitRequestError(409, null, "STALE_SELECTION"))).toBe(false);
+    if (resource === "git-counts") {
+      expect(shouldRetry(0, new ProjectGitRequestError(409, null, "GIT_BUSY"))).toBe(true);
+      expect(shouldRetry(2, new ProjectGitRequestError(409, null, "GIT_BUSY"))).toBe(false);
+    }
     expect(shouldRetry(0, new ProjectGitRequestError(0, null))).toBe(true);
     expect(shouldRetry(1, new ProjectGitRequestError(502, null))).toBe(true);
     expect(shouldRetry(2, new ProjectGitRequestError(502, null))).toBe(false);
@@ -351,4 +355,32 @@ it("resets stash cursors after deletion, including an uncertain response", async
   const hook = await renderHook(() => useProjectStashes(projectId, { enabled: false }));
   await run(async () => { await expect(hook.current.gitDeleteStash.mutateAsync({ stashIndex: 0, stashSha: "a".repeat(40) })).rejects.toThrow(); });
   expect(client.getQueryData(list)).toBeUndefined();
+});
+
+it.each([false, true])("refreshes counts after creating a branch (temporary Git lock: %s)", async (busy) => {
+  actions.readProjectGitCountsAction.mockResolvedValue({ ...counts, upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3 });
+  const createdCounts = { ...counts, currentBranch: "feature/new" };
+  const hook = await renderHook(() => ({
+    branches: useProjectBranches(projectId, { enabled: false }),
+    git: useProjectGit(projectId),
+  }));
+  expect(hook.current.git.data?.currentBranch).toBe("main");
+  actions.createProjectBranchAction.mockResolvedValue({ error: false, message: "Created", data: { previousBranch: "main", currentBranch: "feature/new", headSha: counts.headSha } });
+  if (busy) actions.readProjectGitCountsAction.mockImplementationOnce(async (_id, _signal, onFailure) => {
+    onFailure(409, null, "GIT_BUSY");
+    return null;
+  });
+  actions.readProjectGitCountsAction.mockResolvedValue(createdCounts);
+  vi.useFakeTimers();
+  try {
+    let creation!: Promise<unknown>;
+    await act(async () => { creation = hook.current.branches.gitCreateBranch.mutateAsync({ branchName: "feature/new" }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    await act(async () => { await creation; });
+    expect(hook.current.git.data).toEqual(createdCounts);
+    expect(hook.current.git.error).toBeNull();
+    expect(actions.createProjectBranchAction).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
 });

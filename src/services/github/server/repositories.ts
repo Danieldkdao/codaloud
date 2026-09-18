@@ -3,11 +3,16 @@ import type {
   GitHubRepositoryBranchPage,
   GitHubRepositoryPagination,
 } from "@/services/github/types";
-import { Octokit } from "octokit";
+import { Octokit as CoreOctokit } from "@octokit/core";
+import { restEndpointMethods } from "@octokit/plugin-rest-endpoint-methods";
 import { gitHubRepositoryRequestSchema, gitHubRepositorySchema } from "@/services/github/schemas";
 import { GitHubAccessError } from "../access-error";
 import { paginateGitHubRepositories } from "./repository-pagination";
 import { paginateGitHubSearch } from "./search-pagination";
+
+// The all-in-one SDK includes Node-only webhook handlers; mobile only needs REST.
+const Octokit = CoreOctokit.plugin(restEndpointMethods);
+type Octokit = InstanceType<typeof Octokit>;
 
 const repositoryOptions = {
   visibility: "all",
@@ -42,9 +47,6 @@ export const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
   new Octokit({
     auth: accessToken,
     request: { signal, timeout: 15_000 },
-    // Let the caller handle rate limits instead of keeping an API request waiting.
-    throttle: { enabled: false },
-    retry: { enabled: false },
   });
 
 export const verifyGitHubRepositoryAccess = async (

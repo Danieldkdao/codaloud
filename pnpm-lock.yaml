@@ -229,6 +229,12 @@ importers:
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
+      '@octokit/core':
+        specifier: ^7.0.8
+        version: 7.0.8
+      '@octokit/plugin-rest-endpoint-methods':
+        specifier: ^17.0.0
+        version: 17.0.0(@octokit/core@7.0.8)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1

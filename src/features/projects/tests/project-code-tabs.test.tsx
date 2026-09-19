@@ -10,6 +10,8 @@ const layoutEvents = new Map<string, (event: { nativeEvent: { layout: { x: numbe
 const scrollTo = vi.fn();
 const scrollToIndex = vi.fn();
 
+vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
+
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition, springify: () => transition, dampingRatio: () => transition };
   return {

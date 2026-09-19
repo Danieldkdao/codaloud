@@ -19,6 +19,7 @@ import { ContentSheet } from "@/components/ui/content-sheet";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
+import { cn } from "@/lib/utils";
 import { ProjectCodeTabIndicator } from "./project-code-tab-indicator";
 import {
   formatProjectChangeCount,
@@ -173,7 +174,7 @@ export const ProjectCodeTabs = ({
             const style = formatProjectEditorTabStyle(selected);
             const content = (
               <View
-                className={`flex-row items-center rounded-full ${style.tabContainer}`}
+                className={cn("flex-row items-center rounded-full", style.tabContainer)}
               >
                 <Pressable
                   accessibilityRole="tab"
@@ -191,11 +192,11 @@ export const ProjectCodeTabs = ({
                     <PText
                       numberOfLines={1}
                       ellipsizeMode="middle"
-                      className={`shrink text-base ${style.text}`}
+                      className={cn("shrink text-base", style.text)}
                     >
                       {label.name}
                     </PText>
-                    <PText className={`text-base ${style.text}`}>
+                    <PText className={cn("text-base", style.text)}>
                       {label.extension}
                     </PText>
                   </View>
@@ -268,29 +269,16 @@ export const ProjectCodeTabs = ({
       </View>
       <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
         <View className="gap-3 px-4 pb-8 pt-4">
-          <View className="flex-row items-center justify-between">
-            <HeadingText className="text-2xl">Open files</HeadingText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss open files"
-              onPress={() => setOpen(false)}
-              className="size-11 items-center justify-center"
-            >
-              <Icon
-                family="Feather"
-                name="x"
-                size={22}
-                className="text-foreground"
-              />
-            </Pressable>
-          </View>
           <ScrollView style={{ maxHeight: 380 }}>
             {paths.map((path) => {
               const label = formatProjectChangePath(path);
               return (
                 <View
                   key={path}
-                  className={`flex-row items-center rounded-xl ${formatProjectEditorTabStyle(path === activePath).container}`}
+                  className={cn(
+                    "flex-row items-center rounded-xl",
+                    formatProjectEditorTabStyle(path === activePath).container,
+                  )}
                 >
                   <Pressable
                     accessibilityRole="button"
@@ -347,7 +335,7 @@ export const ProjectCodeTabs = ({
             accessibilityLabel="Open another file"
             disabled={disabled}
             onPress={openFile}
-            className="min-h-12 flex-row items-center justify-center gap-2 rounded-full bg-secondary"
+            className="min-h-12 flex-row items-center justify-center gap-2 rounded-full bg-secondary border border-primary/40"
           >
             <Icon
               family="Feather"

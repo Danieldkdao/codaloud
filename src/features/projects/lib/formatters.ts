@@ -357,12 +357,12 @@ export const formatProjectEditorTab = (path: string, openPaths: string[]) => {
 export const formatProjectEditorTabStyle = (selected: boolean) =>
   selected
     ? {
-        container: "bg-secondary border-primary",
+        container: "bg-secondary border border-primary/40",
         tabContainer: "bg-transparent",
         text: "text-secondary-foreground font-semibold",
       }
     : {
-        container: "bg-background border-border",
+        container: "bg-transparent",
         tabContainer: "bg-secondary/40",
         text: "text-muted-foreground",
       };

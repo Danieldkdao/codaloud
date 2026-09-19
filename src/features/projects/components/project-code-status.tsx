@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import { diagnosticSeverities } from "@/features/projects/actions/code-intelligence-schemas";
 import {
@@ -81,7 +82,7 @@ export const ProjectCodeStatus = ({
                     size={16}
                     className={className}
                   />
-                  <PText className={`text-base ${className}`}>
+                  <PText className={cn("text-base", className)}>
                     {analysis.status === "checking"
                       ? "·"
                       : formatCodeDiagnosticCount(count)}

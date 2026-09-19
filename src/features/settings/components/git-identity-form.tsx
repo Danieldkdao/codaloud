@@ -40,7 +40,12 @@ export const GitIdentityForm = () => {
   });
   return (
     <View className="gap-3 rounded-2xl bg-card p-4">
-      <PText className="font-medium">Git author</PText>
+      <PText
+        accessibilityRole="header"
+        className="text-xl font-semibold text-foreground"
+      >
+        Git author
+      </PText>
       <PText className="text-muted-foreground">
         This name and email appear in your commits. No account is required.
       </PText>

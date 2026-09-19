@@ -2,67 +2,27 @@ import { AppWrapper } from "@/components/app-wrapper";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
-import { useGitHubProfile } from "@/services/github/hooks/use-github-profile";
 import { GitHubConnection } from "@/services/github/components/github-connection";
 import { GitIdentityForm } from "@/features/settings/components/git-identity-form";
 import Constants from "expo-constants";
-import { Image } from "expo-image";
 import { useState } from "react";
 import { Pressable, Switch, View } from "react-native";
-import { formatAppVersion, formatProfileInitials } from "../lib/formatters";
+import { formatAppVersion } from "../lib/formatters";
 import { AppearanceSelector } from "./appearance-selector";
 import { SettingsRow, SettingsSection } from "./settings-section";
 
 export const SettingsScreen = () => {
-  const { profile } = useGitHubProfile();
   const [voiceHints, setVoiceHints] = useState(true);
   const [taskNotifications, setTaskNotifications] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
   const primary = useThemeColor("primary");
   const border = useThemeColor("border");
-  const name = profile?.name || profile?.login || "Your workspace";
-  const email = profile?.email;
-  const avatar = profile?.avatar_url;
 
   return (
     <AppWrapper tabBarShown>
       <View className="w-full max-w-xl gap-6 self-center">
-        <View className="gap-2">
-          <HeadingText accessibilityRole="header" className="text-4xl">
-            Settings
-          </HeadingText>
-          <PText>Make Codaloud feel like you.</PText>
-        </View>
-
-        <View
-          className="flex-row items-center gap-4 rounded-2xl bg-card p-4"
-          style={{ borderCurve: "continuous" }}
-        >
-          <View className="size-14 items-center justify-center overflow-hidden rounded-full bg-secondary">
-            {avatar && !imageFailed ? (
-              <Image
-                source={{ uri: avatar }}
-                style={{ width: 56, height: 56 }}
-                contentFit="cover"
-                onError={() => setImageFailed(true)}
-                accessibilityLabel={`${name}’s profile photo`}
-              />
-            ) : (
-              <HeadingText className="text-2xl text-secondary-foreground">
-                {formatProfileInitials(name)}
-              </HeadingText>
-            )}
-          </View>
-          <View className="min-w-0 flex-1 gap-1">
-            <PText selectable className="text-xl font-semibold text-foreground">
-              {name}
-            </PText>
-            {email && <PText selectable>{email}</PText>}
-            <PText className="text-secondary-foreground">
-              {profile ? `GitHub · @${profile.login}` : "Stored on this device"}
-            </PText>
-          </View>
-        </View>
+        <HeadingText accessibilityRole="header" className="text-4xl">
+          Settings
+        </HeadingText>
 
         <SettingsSection title="Appearance">
           <AppearanceSelector />

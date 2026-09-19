@@ -55,7 +55,7 @@ export const useGitHubConnected = (_callbackURL = "/account") => {
         ? "Updating GitHub connection…"
         : isConnected
           ? "GitHub connected. Repository permission granted."
-          : "GitHub is optional. Your local projects work without it. Importing repositories, pushing, pulling, and fetching from GitHub require a connection."),
+          : null),
     handleConnect,
     handleDisconnect,
     refreshConnection: loadGitHubConnection,

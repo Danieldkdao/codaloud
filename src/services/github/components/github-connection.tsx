@@ -55,9 +55,10 @@ export const GitHubConnection = ({
           write access to public and private repositories.
         </PText>
       )}
-      {(!isConnected || isPending || isChecking || connectionError) && (
-        <PText accessibilityLiveRegion="polite">{status}</PText>
-      )}
+      {status &&
+        (!isConnected || isPending || isChecking || connectionError) && (
+          <PText accessibilityLiveRegion="polite">{status}</PText>
+        )}
     </View>
   );
 };

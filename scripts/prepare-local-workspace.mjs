@@ -23,29 +23,7 @@ await copyFile(
   join(root, "licenses/third-party-notices.txt"),
   join(root, "ios/licenses/third-party-notices.txt"),
 );
-const dependencies = [
-  {
-    name: "libgit2",
-    version: "1.9.7",
-    archive: true,
-    url: "https://api.github.com/repos/libgit2/libgit2/tarball/v1.9.7",
-    sha256: "f0b6d303fb659bd5a9d5343bb2c7795a21f5cb29ae7336ccfdb980921af07162",
-  },
-  {
-    name: "nlohmann",
-    version: "3.12.0",
-    archive: false,
-    url: "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/single_include/nlohmann/json.hpp",
-    sha256: "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63",
-  },
-  {
-    name: "mbedtls",
-    version: "3.6.7",
-    archive: true,
-    url: "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2",
-    sha256: "a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6",
-  },
-];
+const dependencies = JSON.parse(await readFile(new URL("./native-dependencies.json", import.meta.url), "utf8"));
 
 await mkdir(join(root, "vendor"), { recursive: true });
 for (const dependency of dependencies) {

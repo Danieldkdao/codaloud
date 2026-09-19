@@ -102,7 +102,8 @@
     "build:native:host": "node scripts/build-local-workspace-host.mjs",
     "postinstall": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs",
     "preios": "node scripts/build-local-typescript.mjs && node scripts/build-local-workspace-ios.mjs",
-    "preandroid": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs"
+    "preandroid": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs",
+    "update:native": "node scripts/update-native-dependencies.mjs"
   },
   "private": true,
   "packageManager": "pnpm@12.4.1"

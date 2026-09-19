@@ -1,4 +1,4 @@
-import { desc, relations, sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import { check, index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createdAt, id, updatedAt } from "../helpers";
 import { projectSetupStatuses } from "../shared";
@@ -30,4 +30,3 @@ export const ProjectTable = sqliteTable(
 
 export type ProjectSelectData = typeof ProjectTable.$inferSelect;
 export type ProjectInsertData = typeof ProjectTable.$inferInsert;
-export const projectRelations = relations(ProjectTable, () => ({}));

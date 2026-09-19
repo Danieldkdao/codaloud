@@ -60,7 +60,7 @@ const CodeScreen = () => {
       ? analysis?.value
       : { status: "checking" as const, diagnostics: [] };
   const onReady = useCallback(async (key?: string) => {
-    setReadyKey(key ?? current.current.documents.activeKey);
+    if (key && key === current.current.documents.activeKey) setReadyKey(key);
   }, []);
   const onAnalysis = useCallback(
     async (value: CodeEditorAnalysis, key?: string) => {
@@ -115,63 +115,64 @@ const CodeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <ProjectCodeTabs
-        paths={[...files.openFilePaths]}
-        activePath={files.activeFilePath}
-        onSelect={files.openFile}
-        onClose={(path) => {
-          void closeFile(path);
-        }}
-        onOpenFile={openFile}
-        disabled={isWorkspaceBusy}
-        closingPath={closingPath}
-      />
+      {files.openFilePaths.size > 0 ? (
+        <ProjectCodeTabs
+          paths={[...files.openFilePaths]}
+          activePath={files.activeFilePath}
+          onSelect={files.openFile}
+          onClose={(path) => {
+            void closeFile(path);
+          }}
+          onOpenFile={openFile}
+          disabled={isWorkspaceBusy}
+          closingPath={closingPath}
+        />
+      ) : null}
       <View className="flex-1">
-        {/* Keep one WebView mounted through loading and file switches. CodeMirror
-            keeps each open document's selection and undo state inside that view. */}
-        {documents.editor ? (
-          <View
-            className="absolute inset-0"
-            style={{ opacity: isReady ? 1 : 0 }}
-            pointerEvents={isReady ? "auto" : "none"}
-            accessibilityElementsHidden={!isReady}
-            importantForAccessibility={isReady ? "auto" : "no-hide-descendants"}
-          >
-            <CodeEditor
-              ref={editor}
-              documentKey={documents.editor.key}
-              openDocumentKeys={documents.openDocumentKeys}
-              filename={documents.editor.path}
-              initialValue={documents.editor.initialValue}
-              readOnly={
-                isWorkspaceBusy || !documents.activeKey || Boolean(closingPath)
-              }
-              colorScheme={isDarkMode ? "dark" : "light"}
-              onReady={onReady}
-              onChange={documents.onChange}
-              onRequestAnalysis={requestAnalysis}
-              onAnalysis={onAnalysis}
-              analysisPanelRequest={analysisPanelRequest}
-              bottomInset={bottomInset}
-              dom={{
-                onLoadStart: () => setReadyKey(undefined),
-                style: { flex: 1 },
-                containerStyle: { flex: 1 },
-                scrollEnabled: true,
-                bounces: false,
-                contentInsetAdjustmentBehavior: "never",
-                automaticallyAdjustContentInsets: false,
-                hideKeyboardAccessoryView: false,
-              }}
-            />
-          </View>
-        ) : null}
+        {/* Warm the WebView before the first file read, then reuse it for every
+            document. The empty editor stays hidden, read-only, and unfocused. */}
+        <View
+          className="absolute inset-0"
+          style={{ opacity: isReady ? 1 : 0 }}
+          pointerEvents={isReady ? "auto" : "none"}
+          accessibilityElementsHidden={!isReady}
+          importantForAccessibility={isReady ? "auto" : "no-hide-descendants"}
+        >
+          <CodeEditor
+            ref={editor}
+            documentKey={documents.editor?.key ?? `prewarm/${projectId}`}
+            openDocumentKeys={documents.openDocumentKeys}
+            filename={documents.editor?.path ?? ""}
+            initialValue={documents.editor?.initialValue ?? ""}
+            readOnly={
+              isWorkspaceBusy || !documents.activeKey || Boolean(closingPath)
+            }
+            colorScheme={isDarkMode ? "dark" : "light"}
+            onReady={onReady}
+            onChange={documents.onChange}
+            onRequestAnalysis={requestAnalysis}
+            onAnalysis={onAnalysis}
+            analysisPanelRequest={analysisPanelRequest}
+            bottomInset={bottomInset}
+            dom={{
+              onLoadStart: () => setReadyKey(undefined),
+              style: { flex: 1 },
+              containerStyle: { flex: 1 },
+              scrollEnabled: true,
+              bounces: false,
+              contentInsetAdjustmentBehavior: "never",
+              automaticallyAdjustContentInsets: false,
+              hideKeyboardAccessoryView: false,
+            }}
+          />
+        </View>
         {!files.activeFilePath ? (
           <View className="flex-1" style={{ paddingBottom: dockHeight }}>
             <ProjectWorkspaceState
               icon="code"
               title="No file selected"
               description="Choose a file from the Files tab to start editing."
+              action={<Button onPress={openFile}>Open file</Button>}
             />
           </View>
         ) : !documents.activeKey && query.isError ? (

@@ -120,4 +120,17 @@ export const localProjectStore = {
       .get();
     return deletedProject ?? null;
   },
+
+  connectGitHub: (projectId: string, repositoryId: string) => {
+    const updatedProject = db
+      .update(ProjectTable)
+      .set({
+        githubRepositoryId: repositoryId,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(ProjectTable.id, projectId))
+      .returning(projectColumns)
+      .get();
+    return updatedProject ?? null;
+  },
 };

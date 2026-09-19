@@ -176,6 +176,10 @@ export const formatProjectFileDeletion = (
   }
 };
 
+// Repository IDs describe a connection, not how the workspace was created.
+export const formatProjectGitHubConnection = (repositoryId: string | null) =>
+  repositoryId ? "GitHub connected" : null;
+
 export const formatProjectSource = (
   source: CreateProjectSchema["source"],
 ): {
@@ -812,3 +816,25 @@ export const formatProjectDiscardChoice = (includeUntracked: boolean) =>
   includeUntracked
     ? "Discard tracked and untracked changes"
     : "Discard tracked changes";
+export const formatProjectRepositoryName = (name: string) => {
+  const formatted = name
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, "-")
+    .slice(0, 100);
+  return formatted === "." || formatted === ".." ? "" : formatted;
+};
+
+export const formatProjectRepositoryVisibility = (isPrivate: boolean) =>
+  isPrivate
+    ? {
+        title: "Private",
+        description:
+          "Only you and people you invite can access this repository.",
+        icon: "lock" as const,
+      }
+    : {
+        title: "Public",
+        description:
+          "Anyone can view this repository and its committed history.",
+        icon: "globe" as const,
+      };

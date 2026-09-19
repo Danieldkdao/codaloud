@@ -210,14 +210,27 @@ describe("ProjectsList", () => {
     };
     render();
     expect(container.textContent).toContain(label);
-    expect(container.textContent).toContain("GitHub import");
-    expect(container.querySelector("a")?.getAttribute("aria-label")).toContain("GitHub import");
+    expect(container.textContent).toContain("GitHub connected");
+    expect(container.querySelector("a")?.getAttribute("aria-label")).toContain("GitHub connected");
+    expect(container.textContent).not.toContain("GitHub import");
   });
 
   it("does not label projects without a repository as GitHub imports", () => {
     render();
     expect(container.textContent).not.toContain("GitHub import");
     expect(container.querySelector("a")?.getAttribute("aria-label")).not.toContain("GitHub import");
+  });
+
+  it("describes a published local project's connection without changing its origin", () => {
+    mocks.query.data = { pages: [page([project("local")])] };
+    render();
+    expect(container.textContent).not.toContain("GitHub connected");
+    mocks.query.data = { pages: [page([{ ...project("local"), githubRepositoryId: "42" }])] };
+    render();
+    expect(container.textContent).toContain("Project local");
+    expect(container.textContent).toContain("GitHub connected");
+    expect(container.textContent).not.toContain("GitHub import");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/local");
   });
 
   it("clears an unmatched search through the screen while preserving sorting", () => {

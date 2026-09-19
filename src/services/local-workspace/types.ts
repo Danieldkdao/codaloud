@@ -22,6 +22,7 @@ import type {
 } from "@/features/projects/server/git-stash-schemas";
 import type { GitUndoSchema } from "@/features/projects/server/git-undo-schemas";
 import type { GitIdentitySchema } from "@/features/settings/git-identity";
+import type { GitPublishSchema } from "@/features/projects/actions/publish-schemas";
 
 type WithIdentity = { identity: GitIdentitySchema };
 type WithAccessToken = { accessToken: string };
@@ -65,6 +66,7 @@ export type WorkspaceArguments = {
   "git/revert": GitRevertSchema & WithIdentity;
   "git/fetch": WithAccessToken;
   "git/push": GitPushSchema & WithAccessToken;
+  "git/publish": GitPublishSchema & WithAccessToken;
   "git/pull": GitPullSchema & WithAccessToken & WithIdentity;
 };
 export type WorkspaceOperation = keyof WorkspaceArguments;

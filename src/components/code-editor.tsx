@@ -181,8 +181,12 @@ const CodeEditor = ({
     Boolean(onRequestAnalysis) && CODE_INTELLIGENCE_FILE_PATTERN.test(filename);
   const analysisStatus = useRef<CodeEditorAnalysis["status"]>("checking");
   const pendingProblemsPanel = useRef(false);
-  const notifiedEditor = useRef<EditorView | null>(null);
-  const [preparedEditor, setPreparedEditor] = useState<EditorView | null>(null);
+  const notifiedEditor = useRef<object | null>(null);
+  const [preparedEditor, setPreparedEditor] = useState<{
+    editor: EditorView;
+    key?: string;
+  } | null>(null);
+  const fontsReady = useRef(false);
   const [languageError, setLanguageError] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number>();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -190,6 +194,7 @@ const CodeEditor = ({
     EditorMono: JetBrainsMono_400Regular,
     EditorUI: Outfit_400Regular,
   });
+  fontsReady.current = Boolean(fontsLoaded || fontError);
   const effectiveInset = keyboardVisible ? 12 : bottomInset + 16;
   inset.current = effectiveInset;
 
@@ -297,24 +302,22 @@ const CodeEditor = ({
       EditorView.scrollMargins.of(() => ({ bottom: inset.current })),
     ];
     const buffer = documentKey ? buffers.current.get(documentKey) : undefined;
-    const editor = new EditorView({
-      parent: host.current,
-      state: buffer
-        ? buffer.state.update({
-            effects: [
-              StateEffect.reconfigure.of(extensions),
-              editability.reconfigure([
-                EditorState.readOnly.of(readOnlyRef.current),
-                EditorView.editable.of(!readOnlyRef.current),
-              ]),
-            ],
-          }).state
-        : EditorState.create({ doc: initialValue, extensions }),
-    });
-    if (buffer) {
-      editor.scrollDOM.scrollTop = buffer.top;
-      editor.scrollDOM.scrollLeft = buffer.left;
-    }
+    const state = buffer
+      ? buffer.state.update({
+          effects: [
+            StateEffect.reconfigure.of(extensions),
+            editability.reconfigure([
+              EditorState.readOnly.of(readOnlyRef.current),
+              EditorView.editable.of(!readOnlyRef.current),
+            ]),
+          ],
+        }).state
+      : EditorState.create({ doc: initialValue, extensions });
+    // A tab owns its EditorState; the WebView and EditorView stay warm.
+    const editor = view.current ?? new EditorView({ parent: host.current, state });
+    if (view.current) editor.setState(state);
+    editor.scrollDOM.scrollTop = buffer?.top ?? 0;
+    editor.scrollDOM.scrollLeft = buffer?.left ?? 0;
     view.current = editor;
     reportedMatches.current = null;
     if (!hasAnalysis)
@@ -323,7 +326,7 @@ const CodeEditor = ({
         .catch(() => {});
     const description = LanguageDescription.matchFilename(languages, filename);
     setLanguageError(false);
-    const languageSetup = description
+    void description
       ?.load()
       .then((support) => {
         if (!disposed)
@@ -334,9 +337,14 @@ const CodeEditor = ({
           setLanguageError(true);
         }
       });
-    void Promise.resolve(languageSetup).then(() => {
-      if (!disposed) setPreparedEditor(editor);
-    });
+    const prepared = { editor, key: documentKey };
+    setPreparedEditor(prepared);
+    // Once fonts/layout are initialized, changing buffers is synchronous.
+    // Highlighting can load afterward without hiding the file behind a spinner.
+    if (fontsReady.current && notifiedEditor.current) {
+      notifiedEditor.current = prepared;
+      void readyCallback.current?.(documentKey).catch(() => {});
+    }
     return () => {
       disposed = true;
       if (
@@ -350,10 +358,17 @@ const CodeEditor = ({
         });
       }
       intelligence?.destroy();
-      editor.destroy();
-      view.current = null;
     };
   }, [filename, initialValue, hasAnalysis, editability, documentKey]);
+
+  useEffect(
+    () => () => {
+      view.current?.destroy();
+      view.current = null;
+      notifiedEditor.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     const editor = view.current;
@@ -390,21 +405,21 @@ const CodeEditor = ({
     if (
       (!fontsLoaded && !fontError) ||
       !preparedEditor ||
-      preparedEditor !== view.current
+      preparedEditor.editor !== view.current
     )
       return;
     let disposed = false;
     // Wait for CodeMirror's measured layout, not just the WebView load event.
-    preparedEditor.requestMeasure({
+    preparedEditor.editor.requestMeasure({
       read: () => undefined,
       write: () => {
         if (disposed || notifiedEditor.current === preparedEditor) return;
         notifiedEditor.current = preparedEditor;
         requestAnimationFrame(() => {
-          if (!disposed && view.current === preparedEditor)
-            scrollToActiveCodeEditorMatch(preparedEditor);
+          if (!disposed && view.current === preparedEditor.editor)
+            scrollToActiveCodeEditorMatch(preparedEditor.editor);
         });
-        void readyCallback.current?.(documentKey).catch((error: unknown) => {
+        void readyCallback.current?.(preparedEditor.key).catch((error: unknown) => {
           console.warn("Unable to report editor readiness", error);
         });
       },

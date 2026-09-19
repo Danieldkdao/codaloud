@@ -59,6 +59,14 @@ describe("local project storage", () => {
     expect(store.list().projects).toEqual([]);
   });
 
+  it("persists a published GitHub repository without changing project files or its name", () => {
+    const original = project(10, "Local");
+    store.insert(original);
+    expect(store.connectGitHub(original.id, "42")?.githubRepositoryId).toBe("42");
+    expect(store.read(original.id)).toMatchObject({ name: "Local", githubRepositoryId: "42" });
+    expect(store.connectGitHub(project(11, "Missing").id, "42")).toBeNull();
+  });
+
   it("paginates tied values without skipping or repeating projects", () => {
     for (const id of [12, 10, 11]) store.insert(project(id, "Same"));
     const first = store.list({ pageSize: 2, sortBy: "name" });

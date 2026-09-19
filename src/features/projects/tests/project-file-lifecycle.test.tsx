@@ -11,6 +11,7 @@ import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-p
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
+import type { Tabs, TabSlot } from "expo-router/ui";
 
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition };
@@ -33,11 +34,13 @@ const SelectionProbe = () => {
   creation = useProjectWorkspaceFileCreation();
   return null;
 };
+let tabOptions: ComponentProps<typeof Tabs>["options"];
+let detachInactiveScreens: ComponentProps<typeof TabSlot>["detachInactiveScreens"];
 vi.mock("expo-router/ui", () => ({
-  Tabs: (props: { children?: ReactNode }) => createElement(Children, props),
+  Tabs: (props: ComponentProps<typeof Tabs>) => { tabOptions = props.options; return createElement(Children, props); },
   TabList: () => null,
   TabTrigger: () => null,
-  TabSlot: () => createElement(Fragment, null, createElement(SelectionProbe), createElement(FilesScreen), createElement(CodeScreen)),
+  TabSlot: (props: ComponentProps<typeof TabSlot>) => { detachInactiveScreens = props.detachInactiveScreens; return createElement(Fragment, null, createElement(SelectionProbe), createElement(FilesScreen), createElement(CodeScreen)); },
 }));
 vi.mock("@/features/projects/components/project-setup-gate", () => ({ ProjectSetupGate: (props: { children?: ReactNode }) => createElement(Children, props) }));
 vi.mock("@/features/projects/components/project-workspace-dock", () => ({ ProjectWorkspaceDock: () => null }));
@@ -56,9 +59,9 @@ vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readPr
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, onSelect }: { paths: string[]; onSelect: (path: string) => void }) => createElement("div", null, paths.map((path) => createElement("button", { key: path, onClick: () => onSelect(path) }, path))) }));
-vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, documentKey, onReady, onChange }: { documentKey: string; initialValue: string; onReady: () => Promise<void>; onChange: (value: string) => Promise<void> }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, documentKey, onReady, onChange }: { documentKey: string; initialValue: string; onReady: (key?: string) => Promise<void>; onChange: (value: string) => Promise<void> }) => {
   mocks.change = onChange;
-  useEffect(() => { void onReady(); }, [onReady]);
+  useEffect(() => { void onReady(documentKey); }, [onReady, documentKey]);
   return createElement("textarea", { key: documentKey, defaultValue: initialValue });
 } }));
 vi.mock("@/components/code-editor-loading", () => ({ CodeEditorLoading: () => createElement("span", null, "Loading editor") }));
@@ -104,6 +107,12 @@ beforeEach(async () => {
   await render();
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); });
+
+it("retains native screen containment and default lazy navigation without reading an unselected file", () => {
+  expect(tabOptions?.screenOptions).toBeUndefined();
+  expect(detachInactiveScreens).toBe(true);
+  expect(mocks.readContent).not.toHaveBeenCalled();
+});
 
 it("waits for pending and subsequently queued edits before renaming", async () => {
   await select("old.ts");

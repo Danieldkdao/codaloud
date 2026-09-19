@@ -5,10 +5,12 @@ import type {
   CodeIntelligenceResultSchema,
 } from "@/features/projects/actions/code-intelligence-schemas";
 import type {
+  CompilerHost,
   CompilerOptions,
   DiagnosticCategory,
   IScriptSnapshot,
   LanguageService,
+  LanguageServiceHost,
   ScriptElementKind,
 } from "typescript";
 
@@ -66,16 +68,23 @@ export const createTypeScriptAnalyzer = (
   let service: LanguageService | undefined;
   let queued = Promise.resolve();
   let closed = false;
-  const reset = () => {
-    service?.dispose();
-    service = undefined;
+  const resetGraph = () => {
     files.clear();
     versions.clear();
-    snapshots.clear();
+    for (const path of snapshots.keys()) {
+      if (!path.startsWith("/lib/")) snapshots.delete(path);
+    }
     pending.clear();
     bytes = 0;
     target = "";
-    invalidatedResolutions = false;
+    invalidatedResolutions = true;
+    revision++;
+  };
+  const reset = () => {
+    service?.dispose();
+    service = undefined;
+    resetGraph();
+    snapshots.clear();
   };
   const update = (path: string, content: string | null) => {
     if (files.has(path) && files.get(path) === content) return;
@@ -116,9 +125,9 @@ export const createTypeScriptAnalyzer = (
     input: CodeIntelligenceRequestSchema,
   ): Promise<CodeIntelligenceResultSchema> => {
     const nextTarget = normalize(`/workspace/${input.path}`);
-    // Keep only the current file's graph on mobile, rather than retaining a
-    // language service (and its standard libraries) for every tab ever opened.
-    if (target !== nextTarget) reset();
+    // Bound project files to the active graph, but retain the compiler and its
+    // immutable standard libraries so every tab does not pay a cold parse cost.
+    if (target !== nextTarget) resetGraph();
     target = nextTarget;
     update(target, input.content);
     // The editor buffer wins over the saved copy. Revalidate dependencies and
@@ -162,12 +171,11 @@ export const createTypeScriptAnalyzer = (
         ...parsed?.options,
         noEmit: true,
       };
-      if (invalidatedResolutions) {
-        service?.cleanupSemanticCache();
-        invalidatedResolutions = false;
-      }
-      service ??= ts.createLanguageService({
+      const host = {
         ...hostFiles,
+        // TypeScript 6 also reads this compiler-host hook from its language
+        // service host. Preserve parsed libraries while re-resolving imports.
+        hasInvalidatedResolutions: () => invalidatedResolutions,
         useCaseSensitiveFileNames: () => true,
         getCompilationSettings: () => options,
         getScriptFileNames: () => [target],
@@ -186,7 +194,8 @@ export const createTypeScriptAnalyzer = (
           }
           return snapshot;
         },
-      });
+      } satisfies LanguageServiceHost & Pick<CompilerHost, "hasInvalidatedResolutions">;
+      service ??= ts.createLanguageService(host);
       let result: CodeIntelligenceResultSchema;
       if (input.position !== undefined) {
         const completion = service.getCompletionsAtPosition(
@@ -234,6 +243,7 @@ export const createTypeScriptAnalyzer = (
             })),
         };
       }
+      invalidatedResolutions = false;
       if (!pending.size) return result;
       if (files.size + pending.size > 4096)
         throw new Error(

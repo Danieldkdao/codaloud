@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { View } from "react-native";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 
 import { AppWrapper } from "@/components/app-wrapper";
@@ -8,12 +9,14 @@ type ProjectWorkspacePlaceholderProps = {
   title: string;
   description?: string;
   children?: ReactNode;
+  action?: ReactNode;
 };
 
 export const ProjectWorkspacePlaceholder = ({
   title,
   description,
   children,
+  action,
 }: ProjectWorkspacePlaceholderProps) => {
   const { dockHeight } = useProjectWorkspaceDockHeight();
 
@@ -41,6 +44,7 @@ export const ProjectWorkspacePlaceholder = ({
           {description}
         </PText>
       ) : null}
+      {action ? <View className="pt-4">{action}</View> : null}
     </AppWrapper>
   );
 };

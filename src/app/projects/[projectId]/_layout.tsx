@@ -35,7 +35,7 @@ const ProjectLayout = () => {
                       options={{ backBehavior: "none" }}
                     >
                       <View className="flex-1 bg-background">
-                        <TabSlot style={{ flex: 1 }} />
+                        <TabSlot style={{ flex: 1 }} detachInactiveScreens />
                         <TabList style={{ display: "none" }}>
                           <TabTrigger
                             name="project-index"

@@ -13,15 +13,17 @@ const scrollToIndex = vi.fn();
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition, springify: () => transition, dampingRatio: () => transition };
   return {
-    default: { View: ({ children, style, testID, pointerEvents, layout }: { children?: ReactNode; style?: object; testID?: string; pointerEvents?: string; layout?: unknown }) => createElement("div", { style, "data-testid": testID, "data-pointer-events": pointerEvents, "data-layout-animation": Boolean(layout) }, children) },
+    default: { View: ({ children, style, testID, pointerEvents, layout }: { children?: ReactNode; style?: object; testID?: string; pointerEvents?: string; layout?: unknown }) => createElement("div", { style: Object.assign({}, ...[style].flat()), "data-testid": testID, "data-pointer-events": pointerEvents, "data-layout-animation": Boolean(layout) }, children) },
+    useAnimatedStyle: (callback: () => object) => callback(),
+    withTiming: (value: number) => value,
     LinearTransition: transition,
     ReduceMotion: { System: "system" },
   };
 });
 vi.mock("react-native", () => ({
-  View: ({ children, testID, onLayout }: { children: ReactNode; testID?: string; onLayout?: (event: never) => void }) => {
+  View: ({ children, testID, onLayout, className }: { children: ReactNode; testID?: string; onLayout?: (event: never) => void; className?: string }) => {
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
-    return createElement("div", { "data-testid": testID }, children);
+    return createElement("div", { "data-testid": testID, "data-class": className }, children);
   },
   FlatList: ({ data, renderItem, CellRendererComponent, ListHeaderComponent, ref, testID, onLayout }: {
     data: string[]; renderItem: (info: { item: string }) => ReactNode;
@@ -38,7 +40,7 @@ vi.mock("react-native", () => ({
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
     return createElement("div", { "data-testid": testID }, children);
   },
-  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, disabled }: { children: ReactNode; onPress: () => void; accessibilityLabel: string; accessibilityState?: { selected?: boolean }; disabled?: boolean }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-selected": accessibilityState?.selected, disabled }, children),
+  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, disabled, className }: { children: ReactNode; onPress: () => void; accessibilityLabel: string; accessibilityState?: { selected?: boolean }; disabled?: boolean; className?: string }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-selected": accessibilityState?.selected, "data-class": className, disabled }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
 }));
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", { "data-glass": true }, children) }));
@@ -118,28 +120,30 @@ const measure = (id: string, x: number, width: number, height = 48) => act(() =>
   layoutEvents.get(id)!({ nativeEvent: { layout: { x, y: 8, width, height } } });
 });
 
-it("slides one glass selection between measured tabs and follows tab removal and resizing", () => {
+it("keeps glass inside the selected cell before measurement and after switching, removal, and resizing", () => {
   const renderTabs = (activePath: string | null, paths = ["a.ts", "b.ts"]) => act(() => root.render(createElement(ProjectCodeTabs, {
     paths, activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
   })));
+  const expectGlass = (path: string) => {
+    const indicators = container.querySelectorAll('[data-testid="code-tab-indicator"]');
+    expect(indicators).toHaveLength(1);
+    expect(container.querySelector(`[data-testid="code-tab-${path}"]`)?.contains(indicators[0])).toBe(true);
+    expect(indicators[0].querySelector(`[aria-label="${path}"]`)).not.toBeNull();
+    expect(indicators[0].querySelector('[data-glass]')).not.toBeNull();
+  };
   renderTabs("a.ts");
+  expectGlass("a.ts");
   measure("code-tab-a.ts", 8, 150);
   measure("code-tab-b.ts", 162, 210);
-  const pill = container.querySelector<HTMLElement>('[data-testid="code-tab-indicator"]')!;
-  expect(pill).not.toBeNull();
-  expect(pill.querySelector('[data-glass]')).not.toBeNull();
-  expect(pill.getAttribute("data-pointer-events")).toBe("none");
-  expect(pill.style.left).toBe("8px");
-  expect(pill.style.width).toBe("150px");
   renderTabs("b.ts");
-  expect(container.querySelector('[data-testid="code-tab-indicator"]')).toBe(pill);
-  expect(pill.style.left).toBe("162px");
-  expect(pill.style.width).toBe("210px");
+  expectGlass("b.ts");
   renderTabs("b.ts", ["b.ts"]);
+  expectGlass("b.ts");
   measure("code-tab-b.ts", 8, 240, 56);
-  expect(pill.style.left).toBe("8px");
-  expect(pill.style.width).toBe("240px");
-  expect(pill.style.height).toBe("56px");
+  expectGlass("b.ts");
+  renderTabs("b.ts", ["a.ts", "b.ts"]);
+  measure("code-tab-b.ts", 320, 240, 56);
+  expectGlass("b.ts");
   renderTabs(null, []);
   expect(container.querySelector('[data-testid="code-tab-indicator"]')).toBeNull();
 });
@@ -157,4 +161,25 @@ it("only scrolls the strip when the active tab is outside its visible area", () 
   expect(scrollTo).not.toHaveBeenCalled();
   measure("code-tab-b.ts", 320, 160);
   expect(scrollTo).toHaveBeenLastCalledWith({ offset: 192, animated: true });
+});
+
+
+it("uses glass for the fixed file-count control", () => {
+  act(() => root.render(createElement(ProjectCodeTabs, {
+    paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+  })));
+  const count = container.querySelector('[aria-label="1 file open. Show all files."]')!;
+  expect(count).not.toBeNull();
+  expect(count.closest('[data-glass]')).not.toBeNull();
+});
+
+it("gives the count and add-file controls matching 48-point glass surfaces", () => {
+  act(() => root.render(createElement(ProjectCodeTabs, {
+    paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+  })));
+  for (const label of ["Open another file", "1 file open. Show all files."]) {
+    const control = container.querySelector(`[aria-label="${label}"]`)!;
+    expect(control.getAttribute("data-class")?.split(" ")).toContain("size-12");
+    expect(control.closest('[data-glass]')).not.toBeNull();
+  }
 });

@@ -24,19 +24,21 @@ vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ 
 const saveFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
 const readFile = vi.hoisted(() => vi.fn());
+const navigate = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));
-const state = vi.hoisted(() => ({ empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
+const state = vi.hoisted(() => ({ editorMounts: 0, empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn() }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn(), navigate }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths }: { paths: string[] }) => createElement("span", null, paths.join(" ")) }));
-vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string }) => {
+vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths }: { paths: string[] }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" ")) }));
+vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
+  useEffect(() => { state.editorMounts++; }, []);
   state.change = onChange;
   state.ready = () => onReady(documentKey);
   state.analysis = (value) => onAnalysis(value, documentKey);
-  return createElement("textarea", { key: initialValue, defaultValue: initialValue, "data-theme": colorScheme });
+  return createElement("textarea", { key: initialValue, defaultValue: initialValue, readOnly, "data-theme": colorScheme });
 } }));
 vi.mock("@/components/code-editor-loading", () => ({ CodeEditorLoading: () => createElement("span", null, "Initializing your editor") }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
@@ -83,8 +85,10 @@ beforeEach(() => {
   Object.assign(fileQuery, { data: undefined, isPending: true, isError: false, isFetching: true, error: null });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   saveFile.mockReset();
+  navigate.mockClear();
   state.empty = false;
   state.focus = 0;
+  state.editorMounts = 0;
   container = document.createElement("div");
   root = createRoot(container);
 });
@@ -115,6 +119,24 @@ const finishLoading = (content = "const value = 1;", path = "app/page.tsx") => {
   Object.assign(fileQuery, { data: { path, content, size: content.length }, isPending: false, isFetching: false, isError: false });
 };
 
+it("warms one read-only editor before selecting or reading a file without accepting stale readiness", async () => {
+  renderCode(null);
+  expect(container.querySelector("textarea")?.readOnly).toBe(true);
+  expect(state.editorMounts).toBe(1);
+  const warmReady = state.ready!;
+  renderCode();
+  expect(state.editorMounts).toBe(1);
+  expect(container.querySelector("textarea")?.readOnly).toBe(true);
+  finishLoading();
+  renderCode();
+  await act(async () => warmReady());
+  expect(container.textContent).toContain("Initializing your editor");
+  await act(async () => state.ready!());
+  expect(container.textContent).not.toContain("Initializing your editor");
+  expect(container.querySelector("textarea")?.readOnly).toBe(false);
+  expect(state.editorMounts).toBe(1);
+});
+
 it("shows severity counts in the floating badge and resets them for another file", async () => {
   finishLoading();
   renderCode();
@@ -138,7 +160,7 @@ it("shows the same loading UI for fetching and editor startup, without a preview
   renderCode();
   expect(readFile).toHaveBeenLastCalledWith("project-one", "app/page.tsx");
   expect(container.textContent).toContain("Initializing your editor");
-  expect(container.querySelector("textarea")).toBeNull();
+  expect(container.querySelector("textarea")?.readOnly).toBe(true);
   finishLoading();
   renderCode();
   expect(container.querySelector("textarea")?.value).toBe("const value = 1;");
@@ -187,14 +209,30 @@ it("shows a selection prompt immediately when there is no current file", () => {
   expect(readFile).toHaveBeenLastCalledWith("project-one", null);
   expect(container.textContent).toContain("No file selected");
   expect(container.textContent).not.toContain("Initializing your editor");
-  expect(container.querySelector("textarea")).toBeNull();
+  expect(container.querySelector("textarea")?.readOnly).toBe(true);
+});
+
+it("replaces the empty tab header with Open file and restores it only while files are open", () => {
+  renderCode(null);
+  expect(container.querySelector('[data-testid="code-tabs"]')).toBeNull();
+  const open = [...container.querySelectorAll("button")].find((button) => button.textContent === "Open file");
+  expect(open).toBeDefined();
+  act(() => open!.click());
+  expect(navigate).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/files", params: { projectId: "project-one" } });
+  finishLoading();
+  renderCode();
+  expect(container.querySelector('[data-testid="code-tabs"]')).not.toBeNull();
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Open file")).toBe(false);
+  renderCode(null);
+  expect(container.querySelector('[data-testid="code-tabs"]')).toBeNull();
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Open file")).toBe(true);
 });
 
 it("shows file errors with a retry and resumes loading while retrying", () => {
   Object.assign(fileQuery, { isPending: false, isFetching: false, isError: true, error: new Error("This file is too large to open.") });
   renderCode();
   expect(container.textContent).toContain("This file is too large to open.");
-  expect(container.querySelector("textarea")).toBeNull();
+  expect(container.querySelector("textarea")?.readOnly).toBe(true);
   act(() => container.querySelector("button")!.click());
   expect(fileQuery.refetch).toHaveBeenCalledTimes(1);
   Object.assign(fileQuery, { isPending: true, isFetching: true, isError: false });

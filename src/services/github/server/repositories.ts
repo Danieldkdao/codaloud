@@ -10,6 +10,7 @@ import {
   gitHubRepositorySchema,
 } from "@/services/github/schemas";
 import { GitHubAccessError } from "../access-error";
+import { GITHUB_API_VERSION } from "../constants";
 import { paginateGitHubRepositories } from "./repository-pagination";
 import { paginateGitHubSearch } from "./search-pagination";
 
@@ -24,9 +25,21 @@ const repositoryOptions = {
   direction: "desc",
 } as const;
 
-type GitHubApiRepository = Awaited<
-  ReturnType<Octokit["rest"]["repos"]["listForAuthenticatedUser"]>
->["data"][number];
+type GitHubApiRepository = Pick<
+  Awaited<
+    ReturnType<Octokit["rest"]["repos"]["listForAuthenticatedUser"]>
+  >["data"][number],
+  | "id"
+  | "name"
+  | "full_name"
+  | "description"
+  | "private"
+  | "archived"
+  | "default_branch"
+  | "clone_url"
+  | "html_url"
+  | "permissions"
+>;
 
 // Return only picker data, never GitHub's complete response or credentials.
 const toGitHubRepository = (
@@ -48,11 +61,35 @@ const toGitHubRepository = (
   },
 });
 
-export const createGitHubClient = (accessToken: string, signal?: AbortSignal) =>
-  new Octokit({
+export const createGitHubClient = (
+  accessToken: string,
+  signal?: AbortSignal,
+) => {
+  const octokit = new Octokit({
     auth: accessToken,
     request: { signal, timeout: 15_000 },
   });
+  // Core's constructor does not forward custom headers. The hook covers both
+  // generated REST methods and direct requests such as the repository ID lookup.
+  octokit.hook.before("request", (options) => {
+    options.headers["x-github-api-version"] = GITHUB_API_VERSION;
+  });
+  return octokit;
+};
+
+export const createGitHubRepository = async (
+  accessToken: string,
+  input: Pick<GitHubRepository, "name" | "private"> & { description?: string },
+) => {
+  const { data } = await createGitHubClient(
+    accessToken,
+  ).rest.repos.createForAuthenticatedUser({
+    ...input,
+    // Local history supplies the initial commit; a generated README would diverge.
+    auto_init: false,
+  });
+  return gitHubRepositorySchema.parse(toGitHubRepository(data));
+};
 
 export const verifyGitHubRepositoryAccess = async (
   accessToken: string,

@@ -2,6 +2,7 @@ import { AuthRequest, ResponseType } from "expo-auth-session";
 import { randomUUID } from "expo-crypto";
 import { openAuthSessionAsync } from "expo-web-browser";
 import { fetchBase } from "@/lib/utils";
+import { GITHUB_API_VERSION } from "./constants";
 import {
   gitHubOAuthConfigSchema,
   gitHubOAuthTokenSchema,
@@ -73,6 +74,7 @@ export const connectGitHub = async () => {
     headers: {
       Authorization: `Bearer ${token.accessToken}`,
       Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": GITHUB_API_VERSION,
     },
     redirect: "error",
     credentials: "omit",

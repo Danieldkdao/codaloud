@@ -58,7 +58,12 @@ Json currentBranch(git_repository *repo) {
 }
 
 Json gitCounts(git_repository *repo) {
+  git_strarray remotes{};
+  checkGit(git_remote_list(&remotes, repo));
+  const bool hasRemote = remotes.count > 0;
+  git_strarray_dispose(&remotes);
   Json counts = {{"currentBranch", currentBranch(repo)},
+                 {"hasRemote", hasRemote},
                  {"headSha", nullptr},
                  {"upstream", nullptr},
                  {"upstreamSha", nullptr},

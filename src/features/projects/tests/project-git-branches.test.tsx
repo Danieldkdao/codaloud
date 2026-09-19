@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
+import { ProjectBranchMenu } from "../components/project-branch-menu";
 import GitScreen from "@/app/projects/[projectId]/git/index";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
@@ -15,6 +16,9 @@ import { ProjectGitError } from "@/features/projects/lib/git-errors";
 
 import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
 
+vi.mock("../components/project-publish-form", () => ({
+  ProjectPublishForm: ({ open }: { open: boolean }) => open ? createElement("div", { "data-testid": "publish-form" }) : null,
+}));
 const stashes = vi.hoisted(() => ({
   data: { pages: [{ stashes: [{ index: 0, sha: "c".repeat(40), message: "Saved mobile work", createdAt: "2026-09-16T12:00:00Z" }], nextCursor: null }] },
   refetch: vi.fn(), retry: vi.fn(), loadMore: vi.fn(), isFetching: false, isPending: false, hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
@@ -22,7 +26,7 @@ const stashes = vi.hoisted(() => ({
 }));
 vi.mock("@/features/projects/hooks/use-project-stashes", () => ({ useProjectStashes: () => stashes }));
 const git = vi.hoisted(() => ({
-  data: { currentBranch: "main", headSha: "a".repeat(40), upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3, isShallow: false, observedAt: "2026-09-16T12:00:00Z" },
+  data: { hasRemote: undefined as boolean | undefined, currentBranch: "main", headSha: "a".repeat(40) as string | null, upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3, isShallow: false, observedAt: "2026-09-16T12:00:00Z" },
   isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn(),
   gitFetch: { mutateAsync: vi.fn() }, gitPush: { mutateAsync: vi.fn() }, gitPull: { mutateAsync: vi.fn() },
 }));
@@ -204,7 +208,7 @@ vi.mock("react-native", () => ({
     createElement("div", { role: "dialog" }, children, createElement("button", { onClick: onRequestClose, "aria-label": "System back" })),
   ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   StyleSheet: { absoluteFill: {} },
-  View: ({ children, testID, accessibilityLabel }: { children?: ReactNode; testID?: string; accessibilityLabel?: string }) => createElement("div", { "data-testid": testID, "aria-label": accessibilityLabel }, children),
+  View: ({ children, testID, accessibilityLabel, style }: { children?: ReactNode; testID?: string; accessibilityLabel?: string; style?: object }) => createElement("div", { "data-testid": testID, "aria-label": accessibilityLabel, style }, children),
   FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent, ListFooterComponent, onEndReached }: {
     data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode;
     ListHeaderComponent?: ReactNode; ListEmptyComponent?: ReactNode; ListFooterComponent?: ReactNode; onEndReached?: () => void;
@@ -246,6 +250,8 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  git.data.headSha = "a".repeat(40);
+  git.data.hasRemote = undefined;
   changesQuery.gitInitialize.mutateAsync.mockReset().mockResolvedValue({ currentBranch: "main", headSha: null });
   changesQuery.gitInitialize.isPending = false;
   git.data.currentBranch = "main";
@@ -304,6 +310,10 @@ it("switches workspace sections through the menu and reflects the active route",
     act(() => option!.click());
     expect(switchTab).toHaveBeenLastCalledWith(name, { resetOnFocus: false });
     act(() => root.render(createElement(Workspace)));
+    const dock = container.querySelector<HTMLElement>('[data-testid="project-workspace-dock"]');
+    expect(dock).not.toBeNull();
+    expect(Number(dock!.style.zIndex)).toBeGreaterThan(1);
+    expect(dock!.querySelector('[aria-label="Microphone"]')).not.toBeNull();
     expect(container.querySelector(`[aria-label="Workspace: ${label}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-branch="${label}"]`)?.getAttribute("aria-checked")).toBe("true");
     expect(container.querySelectorAll('[data-branch][aria-checked="true"]')).toHaveLength(1);
@@ -1359,4 +1369,63 @@ it("reports stale stash deletion failures without a success toast", async () => 
   await confirmAlert("Delete Stash");
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Stashes changed. Refresh the list.");
   expect(feedback.success).not.toHaveBeenCalled();
+});
+
+it("offers publishing only when the native repository has no remote", () => {
+  git.data.hasRemote = false;
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  openBranchActions();
+  const button = container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')!;
+  expect(button).not.toBeNull();
+  expect(button.disabled).toBe(false);
+  click("Publish to GitHub");
+  expect(container.querySelector('[data-testid="publish-form"]')).not.toBeNull();
+});
+
+it.each([true, undefined])("disables publishing when native remote state is %s", (hasRemote) => {
+  git.data.hasRemote = hasRemote;
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  openBranchActions();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(true);
+});
+
+
+it("shows Publish in the badge for a local repository without a remote", () => {
+  git.data.hasRemote = false;
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  const badge = container.querySelector('[aria-label^="Branch actions:"]')!;
+  expect(badge.textContent).toContain("Publish");
+  expect(badge.getAttribute("aria-label")).not.toContain("to pull");
+});
+
+it("shows only Publish when Git is not initialized", () => {
+  git.error = new ProjectGitError("No repository", "NOT_INITIALIZED");
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  const badge = container.querySelector('[aria-label^="Branch actions:"]')!;
+  expect(badge.textContent).toBe("Publish");
+});
+
+
+it("enables publish from native status without waiting for the branch picker to mount", () => {
+  git.data.hasRemote = false;
+  live.repositoryId = null;
+  act(() => root.render(<QueryClientProvider client={queryClient}><ProjectWorkspaceBranchProvider><ProjectBranchMenu maxWidth={300} onChangeBranch={vi.fn()} /></ProjectWorkspaceBranchProvider></QueryClientProvider>));
+  openBranchActions();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(false);
+});
+
+
+it("shows Publish instead of empty counts before the first commit", () => {
+  git.data.hasRemote = true;
+  git.data.headSha = null;
+  act(() => root.render(createElement(Workspace)));
+  const badge = container.querySelector('[aria-label^="Branch actions:"]')!;
+  expect(badge.textContent).toContain("Publish");
+  openBranchActions();
+  // The prompt never enables creating a second remote.
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(true);
 });

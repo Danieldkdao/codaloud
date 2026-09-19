@@ -8,9 +8,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { usePublishProject } from "../hooks/use-publish-project";
 import { useProjectGitRemote } from "../hooks/use-project-git-remote";
 const { actions } = vi.hoisted(() => ({
   actions: {
+    publishProjectAction: vi.fn(),
     readProjectGitCountsAction: vi.fn(), fetchProjectGitAction: vi.fn(), pushProjectGitAction: vi.fn(), pullProjectGitAction: vi.fn(),
     createProjectBranchAction: vi.fn(), checkoutProjectBranchAction: vi.fn(), readProjectBranchesAction: vi.fn(),
     readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn(), revertProjectCommitAction: vi.fn(), undoProjectCommitAction: vi.fn(),
@@ -21,6 +23,7 @@ const { actions } = vi.hoisted(() => ({
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 vi.mock("../actions/git-actions", () => actions);
+vi.mock("../actions/publish-actions", () => ({ publishProjectAction: actions.publishProjectAction }));
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const otherProjectId = "22222222-2222-4222-8222-222222222222";
@@ -389,4 +392,11 @@ it.each([false, true])("refreshes counts after creating a branch (temporary Git 
   } finally {
     vi.useRealTimers();
   }
+});
+
+verifyMutation({
+  name: "publish",
+  useResult: (id) => usePublishProject(id),
+  action: actions.publishProjectAction,
+  input: { name: "mobile", description: "", private: true },
 });

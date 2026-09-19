@@ -152,10 +152,6 @@ export const ProjectCodeTabs = ({
           extraData={{ activePath, disabled, closingPath }}
           CellRendererComponent={TabCell}
           removeClippedSubviews={false}
-          ListHeaderComponent={
-            activeFrame ? <ProjectCodeTabIndicator frame={activeFrame} /> : null
-          }
-          ListHeaderComponentStyle={{ position: "absolute", left: 0, top: 0 }}
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             strip.current?.scrollToOffset({
               offset: index * averageItemLength,
@@ -175,7 +171,7 @@ export const ProjectCodeTabs = ({
             const selected = activePath === path;
             const label = formatProjectEditorTab(path, paths);
             const style = formatProjectEditorTabStyle(selected);
-            return (
+            const content = (
               <View
                 className={`flex-row items-center rounded-full ${style.tabContainer}`}
               >
@@ -230,6 +226,11 @@ export const ProjectCodeTabs = ({
                 </Pressable>
               </View>
             );
+            return selected ? (
+              <ProjectCodeTabIndicator>{content}</ProjectCodeTabIndicator>
+            ) : (
+              content
+            );
           }}
         />
         <View className="shrink-0 pl-1">
@@ -250,18 +251,20 @@ export const ProjectCodeTabs = ({
             </Pressable>
           </GlassSurface>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${formatProjectChangeCount(paths.length)} open. Show all files.`}
-          onPress={() => setOpen(true)}
-          className="size-14 shrink-0 items-center justify-center"
-        >
-          <View className="size-9 items-center justify-center rounded-full bg-secondary">
-            <PText className="text-base font-semibold text-secondary-foreground">
-              {paths.length}
-            </PText>
-          </View>
-        </Pressable>
+        <View className="shrink-0 px-1">
+          <GlassSurface borderRadius={24} shadow={false}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${formatProjectChangeCount(paths.length)} open. Show all files.`}
+              onPress={() => setOpen(true)}
+              className="size-12 items-center justify-center rounded-full active:bg-secondary"
+            >
+              <PText className="text-base font-semibold text-foreground">
+                {paths.length}
+              </PText>
+            </Pressable>
+          </GlassSurface>
+        </View>
       </View>
       <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
         <View className="gap-3 px-4 pb-8 pt-4">

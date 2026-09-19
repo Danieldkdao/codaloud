@@ -17,7 +17,7 @@ export type RadioItemProps<Value extends string = string> = Omit<
   icon?: IconProps;
 };
 
-export const RadioItem = <Value extends string,>({
+export const RadioItem = <Value extends string>({
   value,
   selectedValue,
   onValueChange,
@@ -31,7 +31,8 @@ export const RadioItem = <Value extends string,>({
   ...props
 }: RadioItemProps<Value>) => {
   const selected = value === selectedValue;
-  const isDisabled = disabled ?? ariaDisabled ?? accessibilityState?.disabled ?? false;
+  const isDisabled =
+    disabled ?? ariaDisabled ?? accessibilityState?.disabled ?? false;
 
   return (
     <Pressable
@@ -39,13 +40,19 @@ export const RadioItem = <Value extends string,>({
       accessibilityHint={description}
       {...props}
       accessibilityRole="radio"
-      accessibilityState={{ ...accessibilityState, checked: selected, disabled: isDisabled }}
+      accessibilityState={{
+        ...accessibilityState,
+        checked: selected,
+        disabled: isDisabled,
+      }}
       disabled={isDisabled}
       aria-disabled={isDisabled}
       onPress={() => onValueChange(value)}
       className={cn(
         "flex-row items-center gap-4 rounded-xl border-2 p-4 active:opacity-80",
-        selected ? "border-primary bg-secondary" : "border-border bg-card",
+        selected
+          ? "border-primary bg-secondary"
+          : "border-border bg-background",
         isDisabled && "opacity-50",
         className,
       )}
@@ -74,7 +81,9 @@ export const RadioItem = <Value extends string,>({
         accessible={false}
         aria-hidden
       >
-        {selected && <View className="size-2 rounded-full bg-primary-foreground" />}
+        {selected && (
+          <View className="size-2 rounded-full bg-primary-foreground" />
+        )}
       </View>
     </Pressable>
   );

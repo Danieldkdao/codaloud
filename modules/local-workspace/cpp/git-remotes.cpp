@@ -124,13 +124,14 @@ static std::string trackingBranch(git_repository *repo) {
   return upstream.substr(7);
 }
 
-static Json push(git_repository *repo, const Json &args) {
+static Json push(git_repository *repo, const Json &args,
+                 bool publishing = false) {
   requireMutableBranch(repo);
   const auto counts = gitCounts(repo);
   if (counts.at("headSha").is_null())
     throw WorkspaceError("UNBORN_HEAD", "Create a commit before pushing.");
   const auto branch = counts.at("currentBranch").get<std::string>();
-  const auto remoteBranch = trackingBranch(repo);
+  const auto remoteBranch = publishing ? branch : trackingBranch(repo);
   Remote remote;
   origin(remote, repo);
   RemoteContext context{args.value("accessToken", ""),
@@ -187,6 +188,37 @@ static Json push(git_repository *repo, const Json &args) {
           {"remoteSha", counts.at("headSha")},
           {"trackingUpdated", trackingUpdated},
           {"counts", freshCounts}};
+}
+
+static Json publish(git_repository *repo, const Json &args) {
+  requireMutableBranch(repo);
+  const auto counts = gitCounts(repo);
+  if (counts.at("hasRemote").get<bool>())
+    throw WorkspaceError("REMOTE_ALREADY_CONNECTED",
+                         "This project already has a remote repository.");
+  if (counts.at("headSha").is_null())
+    throw WorkspaceError("UNBORN_HEAD", "Create a commit before publishing.");
+  if (counts.at("currentBranch") != args.at("expectedBranch") ||
+      counts.at("headSha") != args.at("expectedHeadSha"))
+    throw WorkspaceError(
+        "PUBLISH_CHECKOUT_CHANGED",
+        "The branch or commit changed. Review it before publishing.");
+  const auto url = args.at("url").get<std::string>();
+  if (!allowedRemote(url))
+    throw WorkspaceError(
+        "UNSUPPORTED_REMOTE",
+        "Choose an HTTPS GitHub repository without embedded credentials.");
+  Remote remote;
+  checkGit(git_remote_create(remote.out(), repo, "origin", url.c_str()));
+  // Once connected, preserve the remote even if the first push fails. The
+  // existing Push action can retry without creating another GitHub repository.
+  try {
+    const auto pushed =
+        push(repo, {{"accessToken", args.value("accessToken", "")}}, true);
+    return {{"remoteConnected", true}, {"push", pushed}};
+  } catch (...) {
+    return {{"remoteConnected", true}, {"push", nullptr}};
+  }
 }
 
 static git_oid mergeOrRebase(git_repository *repo, const git_oid &localId,
@@ -288,6 +320,8 @@ static Json pull(git_repository *repo, const Json &args) {
 
 Json gitRemoteOperation(git_repository *repo, const std::string &operation,
                         const Json &args) {
+  if (operation == "git/publish")
+    return publish(repo, args);
   if (operation == "git/fetch") {
     fetch(repo, args);
     return gitCounts(repo);

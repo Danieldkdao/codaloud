@@ -13,6 +13,7 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
 import {
   formatProjectSetupStatus,
+  formatProjectGitHubConnection,
   formatProjectUpdatedDate,
 } from "@/features/projects/lib/formatters";
 import type {
@@ -39,7 +40,9 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const status = formatProjectSetupStatus(project.setupStatus);
-  const sourceLabel = project.githubRepositoryId ? "GitHub import" : null;
+  const connectionLabel = formatProjectGitHubConnection(
+    project.githubRepositoryId,
+  );
   const updatedLabel = formatProjectUpdatedDate(project.updatedAt);
 
   const updateProject = () => {
@@ -185,7 +188,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
               accessibilityRole="link"
               accessibilityLabel={[
                 project.name,
-                sourceLabel,
+                connectionLabel,
                 status.label,
                 updatedLabel,
               ]
@@ -233,7 +236,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                     {project.name}
                   </HeadingText>
                   <PText className="text-lg">{updatedLabel}</PText>
-                  {sourceLabel && (
+                  {connectionLabel && (
                     <View className="items-center flex-row gap-2">
                       <Icon
                         family="Feather"
@@ -241,7 +244,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                         className="text-muted-foreground"
                         size={16}
                       />
-                      <PText className="text-lg">{sourceLabel}</PText>
+                      <PText className="text-lg">{connectionLabel}</PText>
                     </View>
                   )}
                 </View>

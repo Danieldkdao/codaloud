@@ -305,7 +305,7 @@ it("creates a fresh document when the file identity changes", async () => {
   const previous = editor();
   act(() => previous.dispatch({ changes: { from: 0, insert: "// old file\n" } }));
   await render("other.unknown");
-  expect(editor()).not.toBe(previous);
+  expect(editor()).toBe(previous);
   expect(editor().state.doc.toString()).toBe("const answer = 42;");
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("other.unknown code editor");
 });
@@ -319,7 +319,7 @@ it("keeps search available to editor commands without a web toolbar", async () =
 });
 
 
-it("reports readiness after fonts and language setup, without resetting edits on callback changes", async () => {
+it("reports readiness after fonts without waiting for language setup, without resetting edits on callback changes", async () => {
   fontState.loaded = false;
   const onReady = vi.fn().mockResolvedValue(undefined);
   let finishLanguage!: (value: LanguageSupport) => void;
@@ -331,7 +331,7 @@ it("reports readiness after fonts and language setup, without resetting edits on
   expect(onReady).not.toHaveBeenCalled();
   fontState.loaded = true;
   await render("demo.ts", 0, onReady);
-  expect(onReady).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
   await act(async () => { finishLanguage({ extension: [] } as unknown as LanguageSupport); });
   await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
   act(() => view.dispatch({ changes: { from: 0, insert: "// keep edits\n" } }));
@@ -355,6 +355,7 @@ it("still becomes ready with fallback fonts and unavailable highlighting", async
 });
 
 it("does not report readiness for an editor removed during initialization", async () => {
+  fontState.loaded = false;
   let finishLanguage!: (value: LanguageSupport) => void;
   vi.spyOn(LanguageDescription, "matchFilename").mockReturnValue({
     load: () => new Promise((resolve) => { finishLanguage = resolve; }),
@@ -477,6 +478,7 @@ it("preserves per-document text, selection, scroll and undo when switching tabs"
   editor().scrollDOM.scrollTop = 84;
   await show("b", "second");
   expect(editor().state.sliceDoc()).toBe("second");
+  expect(editor().scrollDOM.scrollTop).toBe(0);
   act(() => editor().dispatch({ changes: { from: 0, insert: "other " } }));
   await show("a", "first");
   expect(editor().state.sliceDoc()).toBe("edited first");
@@ -501,4 +503,26 @@ it("drops closed buffers and binds queued bridge events to their originating doc
   await show("a", ["a", "b"]);
   expect(editor().state.sliceDoc()).toBe("original");
   expect(undo(editor())).toBe(false);
+});
+
+
+it("switches open tabs in the existing editor without waiting for highlighting", async () => {
+  const onReady = vi.fn().mockResolvedValue(undefined);
+  const show = (key: string) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.ts`, initialValue: `// ${key}`, documentKey: key,
+    openDocumentKeys: ["a", "b"], onReady,
+  })));
+  await show("a");
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith("a"));
+  const first = editor();
+  vi.spyOn(LanguageDescription, "matchFilename").mockReturnValue({
+    load: () => new Promise(() => {}),
+  } as unknown as LanguageDescription);
+  await show("b");
+  expect(editor()).toBe(first);
+  expect(editor().state.doc.toString()).toBe("// b");
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith("b"));
+  await show("a");
+  expect(editor()).toBe(first);
+  expect(onReady.mock.lastCall).toEqual(["a"]);
 });

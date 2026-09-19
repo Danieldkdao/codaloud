@@ -5,12 +5,14 @@ import Animated, {
   ReduceMotion,
 } from "react-native-reanimated";
 
+import { ProjectGitError } from "../lib/git-errors";
 import { Icon } from "@/components/ui/icon";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { CodeText } from "@/components/ui/text";
 import { useProjectGitOperation } from "../hooks/use-project-git-operation";
 import { useProjectGitRemote } from "../hooks/use-project-git-remote";
 import { useProject } from "../hooks/use-project";
+import { ProjectPublishForm } from "./project-publish-form";
 import {
   formatProjectGitCount,
   formatProjectSyncAction,
@@ -57,7 +59,21 @@ export const ProjectBranchMenu = ({
   } = useProjectGitOperation();
   const git = useProjectGitRemote(projectId);
   const project = useProject(projectId);
-  const connected = Boolean(project.data?.githubRepositoryId);
+  const connected =
+    git.data?.hasRemote ?? Boolean(project.data?.githubRepositoryId);
+  const canPublish =
+    git.data?.hasRemote === false &&
+    !git.error &&
+    !project.isPending &&
+    !project.error &&
+    !isWorkspaceBusy;
+  const notInitialized =
+    git.error instanceof ProjectGitError &&
+    git.error.code === "NOT_INITIALIZED";
+  const showPublish =
+    notInitialized ||
+    (!git.error &&
+      (git.data?.hasRemote === false || git.data?.headSha === null));
   const countsMatchBranch =
     !git.error && !isCheckingOut && git.data?.currentBranch === branch;
   const outgoing = countsMatchBranch ? git.data?.outgoing : null;
@@ -113,6 +129,8 @@ export const ProjectBranchMenu = ({
   const label = formatProjectBranchLabel(branch, isBranchLoading);
   const loadingBranch = !branch && isBranchLoading;
   const [open, setOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const publishAfterDismiss = useRef(false);
   const switchAfterDismiss = useRef(false);
 
   return (
@@ -122,42 +140,52 @@ export const ProjectBranchMenu = ({
         style={{ maxWidth }}
         className="min-h-12 flex-row items-center gap-2 overflow-hidden rounded-full border border-border bg-secondary px-3"
         accessibilityRole="button"
-        accessibilityLabel={`Branch actions: ${label}, ${formatProjectGitCount(outgoing)} to push, ${formatProjectGitCount(incoming)} to pull`}
+        accessibilityLabel={
+          showPublish
+            ? `Branch actions: ${notInitialized ? "Publish" : `${label}, Publish`}`
+            : `Branch actions: ${label}, ${formatProjectGitCount(outgoing)} to push, ${formatProjectGitCount(incoming)} to pull`
+        }
         accessibilityState={{ expanded: open, busy: isWorkspaceBusy }}
         accessibilityHint="Opens branch and sync actions"
         onPress={() => {
           setOpen(true);
         }}
       >
-        <Icon
-          family="Feather"
-          name={formatProjectBranchSource(branchSource ?? "local").icon}
-          size={20}
-          className="text-secondary-foreground"
-          accessible={false}
-        />
-        <Animated.View
-          layout={badgeTransition}
-          testID="branch-indicator"
-          accessibilityLiveRegion="polite"
-          style={{ maxWidth: Math.max(40, maxWidth - 190) }}
-          className="min-w-0 shrink"
-        >
-          {loadingBranch ? (
-            <ActivityIndicator
-              className="text-primary"
-              accessibilityLabel={label}
+        {!notInitialized && (
+          <>
+            <Icon
+              family="Feather"
+              name={formatProjectBranchSource(branchSource ?? "local").icon}
+              size={20}
+              className="text-secondary-foreground"
+              accessible={false}
             />
-          ) : (
-            <CodeText
-              className="text-lg font-medium text-secondary-foreground"
-              numberOfLines={1}
-              ellipsizeMode="middle"
+            <Animated.View
+              layout={badgeTransition}
+              testID="branch-indicator"
+              accessibilityLiveRegion="polite"
+              style={{
+                maxWidth: Math.max(40, maxWidth - (showPublish ? 170 : 190)),
+              }}
+              className="min-w-0 shrink"
             >
-              {label}
-            </CodeText>
-          )}
-        </Animated.View>
+              {loadingBranch ? (
+                <ActivityIndicator
+                  className="text-primary"
+                  accessibilityLabel={label}
+                />
+              ) : (
+                <CodeText
+                  className="text-lg font-medium text-secondary-foreground"
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                >
+                  {label}
+                </CodeText>
+              )}
+            </Animated.View>
+          </>
+        )}
         {!loadingBranch && (isWorkspaceBusy || git.isFetching) && (
           <ActivityIndicator
             className="text-primary"
@@ -168,13 +196,15 @@ export const ProjectBranchMenu = ({
           layout={badgeTransition}
           className="shrink-0 flex-row items-center gap-2"
         >
-          <Icon
-            family="Entypo"
-            name="dot-single"
-            size={14}
-            className="shrink-0 text-secondary-foreground"
-            accessible={false}
-          />
+          {!notInitialized && (
+            <Icon
+              family="Entypo"
+              name="dot-single"
+              size={14}
+              className="shrink-0 text-secondary-foreground"
+              accessible={false}
+            />
+          )}
           <View className="shrink-0 flex-row items-center gap-1">
             <Icon
               family="Feather"
@@ -184,18 +214,22 @@ export const ProjectBranchMenu = ({
               accessible={false}
             />
             <CodeText className="text-lg font-medium text-secondary-foreground">
-              {formatProjectGitCount(outgoing)}
+              {showPublish ? "Publish" : formatProjectGitCount(outgoing)}
             </CodeText>
-            <Icon
-              family="Feather"
-              name="arrow-down"
-              size={20}
-              className="text-secondary-foreground"
-              accessible={false}
-            />
-            <CodeText className="text-lg font-medium text-secondary-foreground">
-              {formatProjectGitCount(incoming)}
-            </CodeText>
+            {!showPublish && (
+              <>
+                <Icon
+                  family="Feather"
+                  name="arrow-down"
+                  size={20}
+                  className="text-secondary-foreground"
+                  accessible={false}
+                />
+                <CodeText className="text-lg font-medium text-secondary-foreground">
+                  {formatProjectGitCount(incoming)}
+                </CodeText>
+              </>
+            )}
             <Icon
               family="Feather"
               name="chevron-down"
@@ -212,6 +246,17 @@ export const ProjectBranchMenu = ({
         title={label}
         monospaceTitle
         items={[
+          {
+            id: "publish",
+            label: "Publish to GitHub",
+            icon: "github",
+            chevron: true,
+            disabled: !canPublish,
+            onPress: () => {
+              publishAfterDismiss.current = true;
+              setOpen(false);
+            },
+          },
           ...syncActions.map((action) => ({
             id: action,
             ...formatProjectSyncAction(action),
@@ -258,6 +303,10 @@ export const ProjectBranchMenu = ({
           },
         ]}
         onDismiss={() => {
+          if (publishAfterDismiss.current) {
+            publishAfterDismiss.current = false;
+            if (canPublish) setPublishOpen(true);
+          }
           // Present the picker only after the native actions sheet has finished closing.
           if (!switchAfterDismiss.current) return;
           switchAfterDismiss.current = false;
@@ -265,6 +314,15 @@ export const ProjectBranchMenu = ({
           else if (!isWorkspaceBusy) onChangeBranch();
         }}
       />
+      {publishOpen ? (
+        <ProjectPublishForm
+          key={projectId}
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          projectName={project.data?.name ?? ""}
+          enabled={canPublish}
+        />
+      ) : null}
     </>
   );
 };

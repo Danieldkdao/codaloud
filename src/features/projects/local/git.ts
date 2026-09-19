@@ -80,6 +80,11 @@ export const executeProjectGit = async (
         ...command.args,
         accessToken: await requireAccessToken(),
       });
+    case "git/publish":
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        accessToken: await requireAccessToken(),
+      });
     case "git/pull":
       return executeWorkspace(project.id, command.operation, {
         ...command.args,

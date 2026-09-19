@@ -91,3 +91,57 @@ it("reads fetched remote history and branches without contacting the remote", ()
   expect(call(firstId, "git/branches", { source: "remote" }).data.branches).toEqual(["main"]);
   expect(call(firstId, "git/commit-details", { commitSha: remoteHead, source: "remote" }).data.source).toBe("remote");
 });
+
+const preparePublish = () => {
+  git(join(root, firstId), "remote", "remove", "origin");
+  return {
+    url: `file://${remote}`,
+    expectedBranch: "main",
+    expectedHeadSha: git(join(root, firstId), "rev-parse", "HEAD"),
+  };
+};
+
+it("publishes committed history, connects origin and sets tracking without staging local edits", () => {
+  const args = preparePublish();
+  writeFileSync(join(root, firstId, "base.txt"), "uncommitted\n");
+  expect(call(firstId, "git/counts").data.hasRemote).toBe(false);
+  expect(call(firstId, "git/publish", args)).toMatchObject({ ok: true, data: {
+    remoteConnected: true, push: { pushed: true, trackingUpdated: true, remoteSha: args.expectedHeadSha },
+  } });
+  expect(call(firstId, "git/counts").data.hasRemote).toBe(true);
+  expect(git(remote, "show", "HEAD:base.txt")).toBe("base");
+  expect(git(join(root, firstId), "status", "--porcelain")).toContain("M base.txt");
+  expect(git(join(root, firstId), "rev-parse", "--abbrev-ref", "@{upstream}")).toBe("origin/main");
+});
+
+it("refuses publishing over any existing remote", () => {
+  const args = preparePublish();
+  git(join(root, firstId), "remote", "add", "upstream", "https://github.com/example/existing.git");
+  expect(call(firstId, "git/publish", args)).toMatchObject({ ok: false, code: "REMOTE_ALREADY_CONNECTED" });
+  expect(git(join(root, firstId), "remote")).toBe("upstream");
+});
+
+it("rejects changed commits, changed branches and unsafe URLs before attaching the remote", () => {
+  const args = preparePublish();
+  expect(call(firstId, "git/publish", { ...args, expectedHeadSha: "a".repeat(40) })).toMatchObject({ ok: false, code: "PUBLISH_CHECKOUT_CHANGED" });
+  expect(call(firstId, "git/publish", { ...args, expectedBranch: "other" })).toMatchObject({ ok: false, code: "PUBLISH_CHECKOUT_CHANGED" });
+  expect(call(firstId, "git/publish", { ...args, url: "https://token@github.com/me/repo.git" })).toMatchObject({ ok: false, code: "UNSUPPORTED_REMOTE" });
+  expect(git(join(root, firstId), "remote")).toBe("");
+});
+
+it("keeps an attached remote after a failed initial push so Push can retry", () => {
+  const args = preparePublish();
+  const missing = join(root, "missing.git");
+  expect(call(firstId, "git/publish", { ...args, url: `file://${missing}` })).toMatchObject({ ok: true, data: {
+    remoteConnected: true, push: null,
+  } });
+  expect(git(join(root, firstId), "remote", "get-url", "origin")).toBe(`file://${missing}`);
+  execFileSync("git", ["init", "--quiet", "--bare", "--initial-branch=main", missing]);
+  expect(call(firstId, "git/push")).toMatchObject({ ok: true, data: { pushed: true } });
+});
+
+it("requires a local commit before publishing", () => {
+  expect(call(secondId, "initialize").ok).toBe(true);
+  expect(call(secondId, "git/publish", { url: `file://${remote}`, expectedBranch: "main", expectedHeadSha: "a".repeat(40) })).toMatchObject({ ok: false, code: "UNBORN_HEAD" });
+  expect(git(join(root, secondId), "remote")).toBe("");
+});

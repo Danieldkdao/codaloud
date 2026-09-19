@@ -3,8 +3,6 @@ import { View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
-  FadeOut,
-  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -38,7 +36,6 @@ export const CodeEditorLoading = ({
     <Animated.View
       className="absolute inset-0 items-center justify-center gap-5 bg-background px-6"
       style={{ paddingBottom: bottomInset }}
-      exiting={FadeOut.duration(200).reduceMotion(ReduceMotion.System)}
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel="Initializing your editor"

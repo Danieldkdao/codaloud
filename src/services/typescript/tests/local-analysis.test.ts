@@ -1,5 +1,10 @@
-import { expect, it } from "vitest";
+import ts from "../generated/compiler";
+import { expect, it, vi } from "vitest";
 import { analyzeTypeScript, createTypeScriptAnalyzer } from "../analysis";
+vi.mock("../generated/compiler", async (original) => {
+  const actual = await original<typeof import("../generated/compiler")>();
+  return { default: { ...actual.default, createLanguageService: vi.fn(actual.default.createLanguageService) } };
+});
 const analyze = (content: string, files: Record<string, string> = {}, position?: number) => analyzeTypeScript({ path: "src/main.ts", content, position }, async (path) => files[path] ?? null);
 it("reports syntax and semantic errors using bundled standard libraries offline", async () => {
   const result = await analyze('const value: number = "wrong";\nconst list: Array<string> = [];');
@@ -94,5 +99,19 @@ it("serializes overlapping requests and recovers after a read failure", async ()
     const good = analyzer.analyze({ path: "main.ts", content: "const value: number = 42;" });
     await expect(bad).rejects.toThrow("Read failed");
     expect(diagnosticCodes(await good)).not.toContain(2322);
+  } finally { await analyzer.dispose(); }
+});
+
+
+it("keeps the compiler warm across tab switches while replacing the active graph", async () => {
+  const createService = vi.mocked(ts.createLanguageService);
+  const analyzer = createTypeScriptAnalyzer(async () => null);
+  try {
+    for (const path of ["a.ts", "b.ts", "a.ts", "b.ts", "a.ts"]) {
+      const content = path === "a.ts" ? 'const value: number = "wrong";' : "const value: number = 42;";
+      const codes = diagnosticCodes(await analyzer.analyze({ path, content }));
+      expect(codes.includes(2322)).toBe(path === "a.ts");
+    }
+    expect(createService).toHaveBeenCalledOnce();
   } finally { await analyzer.dispose(); }
 });

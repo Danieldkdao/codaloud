@@ -1,20 +1,32 @@
-import type { GitHubRepositoryPage, GitHubRepositoryBranchPage, ReadGitHubRepositoriesOptions } from "../types";
+import type {
+  GitHubRepositoryPage,
+  GitHubRepositoryBranchPage,
+  ReadGitHubRepositoriesOptions,
+} from "../types";
 import { getGitHubAccessToken } from "../credentials";
-import { listGitHubRepositoryPage, listGitHubRepositoryBranches } from "../server/repositories";
 import {
-  gitHubRepositoryPageSchema, gitHubRepositoryRequestSchema,
-  gitHubRepositoryBranchesRequestSchema, gitHubRepositoryBranchPageSchema,
+  listGitHubRepositoryPage,
+  listGitHubRepositoryBranches,
+} from "../server/repositories";
+import {
+  gitHubRepositoryPageSchema,
+  gitHubRepositoryRequestSchema,
+  gitHubRepositoryBranchesRequestSchema,
+  gitHubRepositoryBranchPageSchema,
 } from "../schemas";
 
 export const readGitHubRepositories = async ({
-  signal, ...pagination
+  signal,
+  ...pagination
 }: ReadGitHubRepositoriesOptions = {}): Promise<GitHubRepositoryPage | null> => {
   try {
     signal?.throwIfAborted();
     const input = gitHubRepositoryRequestSchema.parse(pagination);
     const token = await getGitHubAccessToken();
     signal?.throwIfAborted();
-    const page = gitHubRepositoryPageSchema.parse(await listGitHubRepositoryPage(token, signal, input));
+    const page = gitHubRepositoryPageSchema.parse(
+      await listGitHubRepositoryPage(token, signal, input),
+    );
     if (input.cursor && page.nextCursor === input.cursor) return null;
     return page;
   } catch {
@@ -28,10 +40,20 @@ export const readGitHubRepositoryBranches = async (
 ): Promise<GitHubRepositoryBranchPage | null> => {
   try {
     signal?.throwIfAborted();
-    const input = gitHubRepositoryBranchesRequestSchema.parse({ repositoryId, ...pagination });
+    const input = gitHubRepositoryBranchesRequestSchema.parse({
+      repositoryId,
+      ...pagination,
+    });
     const token = await getGitHubAccessToken();
     signal?.throwIfAborted();
-    const page = gitHubRepositoryBranchPageSchema.parse(await listGitHubRepositoryBranches(token, input.repositoryId, signal, input));
+    const page = gitHubRepositoryBranchPageSchema.parse(
+      await listGitHubRepositoryBranches(
+        token,
+        input.repositoryId,
+        signal,
+        input,
+      ),
+    );
     if (input.cursor && page.nextCursor === input.cursor) return null;
     return page;
   } catch {

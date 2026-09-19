@@ -24,13 +24,7 @@ export const useProjectCommitDetails = (
 
   return useQuery({
     networkMode: "always",
-    queryKey: [
-      "projects",
-      "commit-details",
-      projectId,
-      commitSha,
-      source,
-    ],
+    queryKey: ["projects", "commit-details", projectId, commitSha, source],
     enabled: enabled && params.success,
     // The read action returns null without HTTP status; let the caller retry explicitly.
     retry: false,

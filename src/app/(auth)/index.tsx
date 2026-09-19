@@ -38,11 +38,25 @@ const Index = () => {
           </View>
         </View>
         <View className="shrink-0 gap-3">
-          <Button size="lg" className="min-h-14" loading={isCompleting} onPress={() => void complete()}>
+          <Button
+            size="lg"
+            className="min-h-14"
+            loading={isCompleting}
+            onPress={() => void complete()}
+          >
             Get started
           </Button>
-          <PText className="text-center">No account needed. Connect GitHub whenever you need it.</PText>
-          {error && <PText accessibilityLiveRegion="polite" className="text-destructive">{error}</PText>}
+          <PText className="text-center">
+            No account needed. Connect GitHub whenever you need it.
+          </PText>
+          {error && (
+            <PText
+              accessibilityLiveRegion="polite"
+              className="text-destructive"
+            >
+              {error}
+            </PText>
+          )}
         </View>
       </View>
     </>

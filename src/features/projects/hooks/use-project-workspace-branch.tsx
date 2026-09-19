@@ -55,10 +55,7 @@ export const ProjectWorkspaceBranchProvider = ({
 }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   return (
-    <ProjectWorkspaceBranchStateProvider
-      key={projectId}
-      projectId={projectId}
-    >
+    <ProjectWorkspaceBranchStateProvider key={projectId} projectId={projectId}>
       {children}
     </ProjectWorkspaceBranchStateProvider>
   );
@@ -234,8 +231,7 @@ const ProjectWorkspaceBranchStateProvider = ({
   const setIsBranchLoading = useCallback(
     (loading: boolean) => {
       setBranchLoading((previous) =>
-        previous?.projectId === projectId &&
-        previous.loading === loading
+        previous?.projectId === projectId && previous.loading === loading
           ? previous
           : { projectId, loading },
       );
@@ -245,16 +241,13 @@ const ProjectWorkspaceBranchStateProvider = ({
   // Before the picker reports its first query state, an unknown branch is still resolving.
   const isBranchLoading =
     branch === null &&
-    (branchLoading?.projectId === projectId
-      ? branchLoading.loading
-      : true);
+    (branchLoading?.projectId === projectId ? branchLoading.loading : true);
   const [historyView, setHistoryView] = useState({
     projectId,
     search: "",
     tab: "changes" as ProjectGitTab,
   });
-  const ownsHistoryView =
-    historyView.projectId === projectId;
+  const ownsHistoryView = historyView.projectId === projectId;
   const setCommitSearch = useCallback(
     (search: string) => {
       setHistoryView({ projectId, search, tab: "history" });
@@ -264,8 +257,7 @@ const ProjectWorkspaceBranchStateProvider = ({
   const setGitTab = useCallback(
     (tab: ProjectGitTab) => {
       setHistoryView((previous) => {
-        const sameWorkspace =
-          previous.projectId === projectId;
+        const sameWorkspace = previous.projectId === projectId;
         if (sameWorkspace && previous.tab === tab) return previous;
         return {
           projectId,

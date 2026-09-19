@@ -2,9 +2,9 @@
 #include "git.hpp"
 #include <algorithm>
 #include <iomanip>
-#include <mutex>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <regex>
 #include <sstream>
 
@@ -17,21 +17,29 @@ std::string timestamp(std::time_t time) {
   return output.str();
 }
 
-fs::path checkedPath(const fs::path &root, const std::string &relative, bool allowRoot, bool allowLeafSymlink) {
-  if (relative.empty() && allowRoot) return root;
-  if (relative.empty() || relative.size() > 4096 || relative.front() == '/' || relative.back() == '/' || relative.find('\0') != std::string::npos)
-    throw WorkspaceError("INVALID_PATH", "Choose a relative path inside this project.");
+fs::path checkedPath(const fs::path &root, const std::string &relative,
+                     bool allowRoot, bool allowLeafSymlink) {
+  if (relative.empty() && allowRoot)
+    return root;
+  if (relative.empty() || relative.size() > 4096 || relative.front() == '/' ||
+      relative.back() == '/' || relative.find('\0') != std::string::npos)
+    throw WorkspaceError("INVALID_PATH",
+                         "Choose a relative path inside this project.");
   fs::path result = root;
   std::istringstream parts(relative);
   std::string part;
   while (std::getline(parts, part, '/')) {
     std::string lower = part;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
     if (part.empty() || part == "." || part == ".." || lower == ".git")
-      throw WorkspaceError("INVALID_PATH", "This path is reserved or outside the project.");
+      throw WorkspaceError("INVALID_PATH",
+                           "This path is reserved or outside the project.");
     result /= part;
-    if (fs::is_symlink(fs::symlink_status(result)) && !(allowLeafSymlink && parts.eof()))
-      throw WorkspaceError("UNSUPPORTED_FILE", "Symbolic links cannot be opened or edited.");
+    if (fs::is_symlink(fs::symlink_status(result)) &&
+        !(allowLeafSymlink && parts.eof()))
+      throw WorkspaceError("UNSUPPORTED_FILE",
+                           "Symbolic links cannot be opened or edited.");
   }
   return result;
 }
@@ -51,17 +59,25 @@ std::string execute(const std::string &base, const std::string &request) {
     checkGit(initialized);
     const auto input = Json::parse(request);
     const auto id = input.at("projectId").get<std::string>();
-    if (!std::regex_match(id, std::regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")))
+    if (!std::regex_match(id, std::regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-["
+                                         "a-f0-9]{4}-[a-f0-9]{12}")))
       throw WorkspaceError("INVALID_PROJECT", "Invalid local project ID.");
     std::shared_ptr<std::mutex> projectMutex;
     {
       std::lock_guard<std::mutex> lock(registryMutex);
-      if (locks.size() > 256) for (auto i = locks.begin(); i != locks.end();) {
-        if (i->second.expired()) i = locks.erase(i); else ++i;
-      }
+      if (locks.size() > 256)
+        for (auto i = locks.begin(); i != locks.end();) {
+          if (i->second.expired())
+            i = locks.erase(i);
+          else
+            ++i;
+        }
       auto &entry = locks[base + "/" + id];
       projectMutex = entry.lock();
-      if (!projectMutex) { projectMutex = std::make_shared<std::mutex>(); entry = projectMutex; }
+      if (!projectMutex) {
+        projectMutex = std::make_shared<std::mutex>();
+        entry = projectMutex;
+      }
     }
     // Save and checkout share a per-project lock. Fetching one project must not
     // block local reads or saves in a different project.
@@ -70,38 +86,68 @@ std::string execute(const std::string &base, const std::string &request) {
     const auto args = input.value("args", Json::object());
     const fs::path root = fs::path(base) / id;
     fs::create_directories(base);
-    if (fs::is_symlink(fs::symlink_status(root))) throw WorkspaceError("INVALID_PROJECT", "Invalid local project folder.");
+    if (fs::is_symlink(fs::symlink_status(root)))
+      throw WorkspaceError("INVALID_PROJECT", "Invalid local project folder.");
     Json data;
     const auto archive = fs::path(base) / (id + ".deleted");
-    if (fs::is_symlink(fs::symlink_status(archive))) throw WorkspaceError("INVALID_PROJECT", "Invalid archived project folder.");
+    if (fs::is_symlink(fs::symlink_status(archive)))
+      throw WorkspaceError("INVALID_PROJECT",
+                           "Invalid archived project folder.");
     if (operation == "archive-project") {
-      if (!fs::is_directory(root) || fs::exists(archive)) throw WorkspaceError("PROJECT_UNAVAILABLE", "Unable to prepare project deletion.");
+      if (!fs::is_directory(root) || fs::exists(archive))
+        throw WorkspaceError("PROJECT_UNAVAILABLE",
+                             "Unable to prepare project deletion.");
       fs::rename(root, archive);
       data = true;
     } else if (operation == "restore-project") {
-      if (!fs::exists(root) && fs::is_directory(archive)) fs::rename(archive, root);
+      if (!fs::exists(root) && fs::is_directory(archive))
+        fs::rename(archive, root);
       data = true;
     } else if (operation == "purge-project") {
       fs::remove_all(archive);
       data = true;
     } else if (operation == "clone") {
-      if (fs::exists(root)) throw WorkspaceError("PROJECT_EXISTS", "This project already exists on the device.");
-      try { cloneRepository(root, args); } catch (...) { fs::remove_all(root); throw; }
+      if (fs::exists(root))
+        throw WorkspaceError("PROJECT_EXISTS",
+                             "This project already exists on the device.");
+      try {
+        cloneRepository(root, args);
+      } catch (...) {
+        fs::remove_all(root);
+        throw;
+      }
       data = true;
     } else if (operation == "initialize") {
-      if (fs::exists(root)) throw WorkspaceError("PROJECT_EXISTS", "This project already exists on the device.");
+      if (fs::exists(root))
+        throw WorkspaceError("PROJECT_EXISTS",
+                             "This project already exists on the device.");
       fs::create_directory(root);
-      try { initializeGit(root); } catch (...) { fs::remove_all(root); throw; }
+      try {
+        initializeGit(root);
+      } catch (...) {
+        fs::remove_all(root);
+        throw;
+      }
       data = true;
     } else {
-      if (!fs::is_directory(root)) throw WorkspaceError("PROJECT_NOT_FOUND", "This project is not available on the device.");
-      data = operation.rfind("git/", 0) == 0 ? gitOperation(root, operation, args) : fileOperation(root, operation, args);
+      if (!fs::is_directory(root))
+        throw WorkspaceError("PROJECT_NOT_FOUND",
+                             "This project is not available on the device.");
+      data = operation.rfind("git/", 0) == 0
+                 ? gitOperation(root, operation, args)
+                 : fileOperation(root, operation, args);
     }
     return Json({{"ok", true}, {"data", data}}).dump();
   } catch (const WorkspaceError &error) {
-    return Json({{"ok", false}, {"code", error.code}, {"message", error.what()}}).dump();
+    return Json(
+               {{"ok", false}, {"code", error.code}, {"message", error.what()}})
+        .dump();
   } catch (const std::exception &) {
-    return Json({{"ok", false}, {"code", "LOCAL_WORKSPACE_ERROR"}, {"message", "Unable to complete the operation on this device."}}).dump();
+    return Json({{"ok", false},
+                 {"code", "LOCAL_WORKSPACE_ERROR"},
+                 {"message",
+                  "Unable to complete the operation on this device."}})
+        .dump();
   }
 }
-}
+} // namespace codaloud

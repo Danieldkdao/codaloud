@@ -1,20 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createProjectFileAction, deleteProjectFileAction, readProjectFilesAction, updateProjectFileAction } from "@/features/projects/actions/file-actions";
-import type { CreateProjectFileSchema, DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import {
+  createProjectFileAction,
+  deleteProjectFileAction,
+  readProjectFilesAction,
+  updateProjectFileAction,
+} from "@/features/projects/actions/file-actions";
+import type {
+  CreateProjectFileSchema,
+  DeleteProjectFileSchema,
+  ProjectFileEntrySchema,
+  UpdateProjectFileSchema,
+} from "@/features/projects/actions/file-schemas";
 import { isProjectFilePathWithin } from "@/features/projects/lib/files";
 
 export const useProjectFiles = (
   projectId: string,
   directoryPath: string,
-  { enabled = true, verifyOnMount = false }: { enabled?: boolean; verifyOnMount?: boolean } = {},
+  {
+    enabled = true,
+    verifyOnMount = false,
+  }: { enabled?: boolean; verifyOnMount?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
-  const clearFileContents = async (projectId: string, paths: readonly string[]) => {
+  const clearFileContents = async (
+    projectId: string,
+    paths: readonly string[],
+  ) => {
     const contentQueries = {
       queryKey: ["projects", "file", projectId],
       predicate: (query: { queryKey: readonly unknown[] }) => {
         const path = query.queryKey[3];
-        return typeof path === "string" && paths.some((root) => isProjectFilePathWithin(path, root));
+        return (
+          typeof path === "string" &&
+          paths.some((root) => isProjectFilePathWithin(path, root))
+        );
       },
     };
     // A removed/reused path represents a different document. Invalidation alone
@@ -30,8 +49,15 @@ export const useProjectFiles = (
     refetchOnMount: verifyOnMount ? "always" : true,
     retry: false,
     queryFn: async ({ signal }) => {
-      const files = await readProjectFilesAction(projectId, directoryPath, signal);
-      if (files === null) throw new Error("Unable to read this folder on the device. Please try again.");
+      const files = await readProjectFilesAction(
+        projectId,
+        directoryPath,
+        signal,
+      );
+      if (files === null)
+        throw new Error(
+          "Unable to read this folder on the device. Please try again.",
+        );
       return files;
     },
   });
@@ -49,9 +75,16 @@ export const useProjectFiles = (
     onSuccess: async (entry, input, context) => {
       // Target the submitted folder and project, even if navigation changed.
       await clearFileContents(context.projectId, [entry.path]);
-      const queryKey = ["projects", "files", context.projectId, input.parentPath];
+      const queryKey = [
+        "projects",
+        "files",
+        context.projectId,
+        input.parentPath,
+      ];
       queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
-        files ? [...files.filter((file) => file.path !== entry.path), entry] : undefined,
+        files
+          ? [...files.filter((file) => file.path !== entry.path), entry]
+          : undefined,
       );
       await queryClient.invalidateQueries({ queryKey, exact: true });
     },
@@ -70,8 +103,11 @@ export const useProjectFiles = (
     onSuccess: async (entry, input, context) => {
       const projectKey = ["projects", "files", context.projectId];
       const queryKey = [...projectKey, input.parentPath];
-      const previousPath = [input.parentPath, input.previousName].filter(Boolean).join("/");
-      if (previousPath !== entry.path) await clearFileContents(context.projectId, [previousPath, entry.path]);
+      const previousPath = [input.parentPath, input.previousName]
+        .filter(Boolean)
+        .join("/");
+      if (previousPath !== entry.path)
+        await clearFileContents(context.projectId, [previousPath, entry.path]);
       // An earlier directory read must not put the old name back after the rename.
       await queryClient.cancelQueries({ queryKey, exact: true });
       if (entry.isDir && previousPath !== entry.path) {
@@ -79,8 +115,11 @@ export const useProjectFiles = (
           queryKey: projectKey,
           predicate: (query: { queryKey: readonly unknown[] }) => {
             const path = query.queryKey[3];
-            return typeof path === "string" && [previousPath, entry.path].some((root) =>
-              isProjectFilePathWithin(path, root),
+            return (
+              typeof path === "string" &&
+              [previousPath, entry.path].some((root) =>
+                isProjectFilePathWithin(path, root),
+              )
             );
           },
         };
@@ -89,7 +128,15 @@ export const useProjectFiles = (
         queryClient.removeQueries(subtreeQueries);
       }
       queryClient.setQueryData<ProjectFileEntrySchema[]>(queryKey, (files) =>
-        files ? [...files.filter((file) => file.path !== previousPath && file.path !== entry.path), entry] : undefined,
+        files
+          ? [
+              ...files.filter(
+                (file) =>
+                  file.path !== previousPath && file.path !== entry.path,
+              ),
+              entry,
+            ]
+          : undefined,
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey, exact: true }),
@@ -122,7 +169,10 @@ export const useProjectFiles = (
           queryKey: projectKey,
           predicate: (query: { queryKey: readonly unknown[] }) => {
             const path = query.queryKey[3];
-            return typeof path === "string" && isProjectFilePathWithin(path, entry.path);
+            return (
+              typeof path === "string" &&
+              isProjectFilePathWithin(path, entry.path)
+            );
           },
         };
         await queryClient.cancelQueries(subtreeQueries);

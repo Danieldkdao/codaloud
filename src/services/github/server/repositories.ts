@@ -5,7 +5,10 @@ import type {
 } from "@/services/github/types";
 import { Octokit as CoreOctokit } from "@octokit/core";
 import { restEndpointMethods } from "@octokit/plugin-rest-endpoint-methods";
-import { gitHubRepositoryRequestSchema, gitHubRepositorySchema } from "@/services/github/schemas";
+import {
+  gitHubRepositoryRequestSchema,
+  gitHubRepositorySchema,
+} from "@/services/github/schemas";
 import { GitHubAccessError } from "../access-error";
 import { paginateGitHubRepositories } from "./repository-pagination";
 import { paginateGitHubSearch } from "./search-pagination";
@@ -26,7 +29,9 @@ type GitHubApiRepository = Awaited<
 >["data"][number];
 
 // Return only picker data, never GitHub's complete response or credentials.
-const toGitHubRepository = (repository: GitHubApiRepository): GitHubRepository => ({
+const toGitHubRepository = (
+  repository: GitHubApiRepository,
+): GitHubRepository => ({
   id: repository.id,
   name: repository.name,
   fullName: repository.full_name,
@@ -57,11 +62,19 @@ export const verifyGitHubRepositoryAccess = async (
   const octokit = createGitHubClient(accessToken, signal);
   // GitHub's ID lookup survives renames and avoids scanning every picker page.
   // This REST endpoint is supported by GitHub but absent from Octokit's generated types.
-  const { data: repository } = await octokit.request("GET /repositories/{repository_id}", {
-    repository_id: repositoryId,
-  });
-  if (String(repository?.id) !== repositoryId || repository?.permissions?.pull !== true) {
-    throw new GitHubAccessError("You do not have access to import this GitHub repository.");
+  const { data: repository } = await octokit.request(
+    "GET /repositories/{repository_id}",
+    {
+      repository_id: repositoryId,
+    },
+  );
+  if (
+    String(repository?.id) !== repositoryId ||
+    repository?.permissions?.pull !== true
+  ) {
+    throw new GitHubAccessError(
+      "You do not have access to import this GitHub repository.",
+    );
   }
   return gitHubRepositorySchema.parse(toGitHubRepository(repository));
 };
@@ -73,12 +86,19 @@ export const verifyGitHubRepositoryBranch = async (
   signal?: AbortSignal,
 ) => {
   const [owner, repo] = repository.fullName.split("/");
-  const { data } = await createGitHubClient(accessToken, signal).rest.repos.getBranch({
-    owner, repo, branch: branchName,
+  const { data } = await createGitHubClient(
+    accessToken,
+    signal,
+  ).rest.repos.getBranch({
+    owner,
+    repo,
+    branch: branchName,
   });
   // GitHub may redirect renamed branches; do not silently import a different selection.
   if (data.name !== branchName || !data.commit?.sha) {
-    throw new GitHubAccessError("The selected GitHub branch is no longer available.");
+    throw new GitHubAccessError(
+      "The selected GitHub branch is no longer available.",
+    );
   }
 };
 
@@ -90,14 +110,21 @@ export const listGitHubRepositoryBranches = async (
   pagination: GitHubRepositoryPagination = {},
 ): Promise<GitHubRepositoryBranchPage> => {
   const validatedPagination = gitHubRepositoryRequestSchema.parse(pagination);
-  const repository = await verifyGitHubRepositoryAccess(accessToken, repositoryId, signal);
+  const repository = await verifyGitHubRepositoryAccess(
+    accessToken,
+    repositoryId,
+    signal,
+  );
   const [owner, repo] = repository.fullName.split("/");
   const octokit = createGitHubClient(accessToken, signal);
 
   const { items: branches, nextCursor } = await paginateGitHubSearch({
     loadBatch: async (page, pageSize) => {
       const { data, headers } = await octokit.rest.repos.listBranches({
-        owner, repo, page, per_page: pageSize,
+        owner,
+        repo,
+        page,
+        per_page: pageSize,
       });
       return {
         items: data.map((branch) => ({
@@ -108,7 +135,8 @@ export const listGitHubRepositoryBranches = async (
         hasNextPage: /;\s*rel="next"/.test(headers.link ?? ""),
       };
     },
-    matchesSearch: (branch, search) => branch.name.toLowerCase().includes(search),
+    matchesSearch: (branch, search) =>
+      branch.name.toLowerCase().includes(search),
     pagination: validatedPagination,
     signal,
     scope: `branches:${repositoryId}`,
@@ -121,18 +149,22 @@ export const listGitHubRepositoryPage = async (
   signal?: AbortSignal,
   pagination: GitHubRepositoryPagination = {},
 ) => {
-  const octokit = createGitHubClient(accessToken, signal); 
+  const octokit = createGitHubClient(accessToken, signal);
   return paginateGitHubRepositories(
     async (page, pageSize) => {
-      const { data, headers } = await octokit.rest.repos.listForAuthenticatedUser({
-        ...repositoryOptions,
-        page,
-        per_page: pageSize,
-      });
+      const { data, headers } =
+        await octokit.rest.repos.listForAuthenticatedUser({
+          ...repositoryOptions,
+          page,
+          per_page: pageSize,
+        });
       // Saved scopes can outlive a token replacement or a revoked grant. GitHub
       // returns public-only results with HTTP 200 when an OAuth token lacks repo.
       const grantedScopes = headers["x-oauth-scopes"];
-      if (grantedScopes !== undefined && !grantedScopes.split(",").some((scope) => scope.trim() === "repo")) {
+      if (
+        grantedScopes !== undefined &&
+        !grantedScopes.split(",").some((scope) => scope.trim() === "repo")
+      ) {
         throw new GitHubAccessError(
           "Reconnect GitHub to grant access to public and private repositories.",
           "GITHUB_RECONNECT_REQUIRED",

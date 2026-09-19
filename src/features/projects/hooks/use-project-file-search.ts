@@ -46,9 +46,9 @@ export const useProjectFileSearch = (
   const validProject = !!projectId && isValidIds(projectId);
   const validationError = params.success
     ? null
-    : (params.error.issues[0]?.message ?? "Invalid project file search or pagination.");
-  const canSearch =
-    enabled && validProject && params.success;
+    : (params.error.issues[0]?.message ??
+      "Invalid project file search or pagination.");
+  const canSearch = enabled && validProject && params.success;
   const queryKey = useMemo(
     () => [
       "projects",
@@ -116,8 +116,7 @@ export const useProjectFileSearch = (
       );
       if (result === null) {
         throw (
-          requestError ??
-          new Error(formatProjectFileSearchError(undefined))
+          requestError ?? new Error(formatProjectFileSearchError(undefined))
         );
       }
       return result;

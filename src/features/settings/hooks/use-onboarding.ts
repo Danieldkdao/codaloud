@@ -14,6 +14,8 @@ const state = createOnboardingState({
 
 export const useOnboarding = () => {
   const snapshot = useSyncExternalStore(state.subscribe, state.getSnapshot);
-  useEffect(() => { void state.load(); }, []);
+  useEffect(() => {
+    void state.load();
+  }, []);
   return { ...snapshot, retry: state.load, complete: state.complete };
 };

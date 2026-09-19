@@ -16,7 +16,15 @@ export const projectFileSearchLimits = {
 } as const;
 
 export const projectFileSearchExcludedDirectories = [
-  ".git", "node_modules", ".expo", ".next", "dist", "build", "coverage", "__pycache__", ".venv",
+  ".git",
+  "node_modules",
+  ".expo",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  "__pycache__",
+  ".venv",
 ] as const;
 
 export const projectCommitDetailsLimits = {

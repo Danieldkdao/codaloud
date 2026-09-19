@@ -13,23 +13,34 @@ export const useGitHubRepositories = ({
 } = {}) => {
   const connection = useGitHubProfile();
   const profileId = connection.profile?.id ?? null;
-  const canRead = connection.ready && profileId !== null && connection.scopes.includes("repo");
+  const canRead =
+    connection.ready &&
+    profileId !== null &&
+    connection.scopes.includes("repo");
   const normalizedSearch = search.trim().toLowerCase();
   const query = useInfiniteQuery({
     // Separate the new page shape from older array-based cache entries.
     queryKey: [
-      "github", "repositories", "infinite", "cursor", profileId,
+      "github",
+      "repositories",
+      "infinite",
+      "cursor",
+      profileId,
       { pageSize, search: normalizedSearch },
     ],
     queryFn: async ({ pageParam, signal }) => {
-      if (!canRead) throw new Error("Connect GitHub to view your repositories.");
+      if (!canRead)
+        throw new Error("Connect GitHub to view your repositories.");
       const repositories = await readGitHubRepositories({
         cursor: pageParam,
         pageSize,
         search: normalizedSearch,
         signal,
       });
-      if (repositories === null) throw new Error("Unable to load GitHub repositories. Check your connection and try again.");
+      if (repositories === null)
+        throw new Error(
+          "Unable to load GitHub repositories. Check your connection and try again.",
+        );
       return repositories;
     },
     initialPageParam: null as string | null,
@@ -40,12 +51,25 @@ export const useGitHubRepositories = ({
   });
 
   const loadMore = () => {
-    if (enabled && canRead && query.hasNextPage && !query.isFetching && !query.error && query.fetchStatus !== "paused") {
+    if (
+      enabled &&
+      canRead &&
+      query.hasNextPage &&
+      !query.isFetching &&
+      !query.error &&
+      query.fetchStatus !== "paused"
+    ) {
       return query.fetchNextPage({ cancelRefetch: false });
     }
   };
   const retry = () => {
-    if (!enabled || !canRead || query.isFetching || query.fetchStatus === "paused") return;
+    if (
+      !enabled ||
+      !canRead ||
+      query.isFetching ||
+      query.fetchStatus === "paused"
+    )
+      return;
     return query.isFetchNextPageError
       ? query.fetchNextPage({ cancelRefetch: false })
       : query.refetch();

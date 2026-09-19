@@ -9,7 +9,9 @@ export const useGitHubConnected = (_callbackURL = "/account") => {
   const connection = useGitHubProfile();
   const [isPending, startTransition] = useTransition();
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const isConnected = Boolean(connection.profile && connection.scopes.includes("repo"));
+  const isConnected = Boolean(
+    connection.profile && connection.scopes.includes("repo"),
+  );
   const clearGitHubQueries = async () => {
     await queryClient.cancelQueries({ queryKey: ["github"] });
     queryClient.removeQueries({ queryKey: ["github"] });
@@ -17,21 +19,45 @@ export const useGitHubConnected = (_callbackURL = "/account") => {
   const handleConnect = () => {
     setConnectionError(null);
     startTransition(async () => {
-      try { if (await connectGitHub()) await clearGitHubQueries(); }
-      catch (error) { setConnectionError(error instanceof Error ? error.message : "Unable to connect GitHub. Please try again."); }
+      try {
+        if (await connectGitHub()) await clearGitHubQueries();
+      } catch (error) {
+        setConnectionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to connect GitHub. Please try again.",
+        );
+      }
     });
   };
   const handleDisconnect = () => {
     setConnectionError(null);
     startTransition(async () => {
-      try { await disconnectGitHub(); await clearGitHubQueries(); }
-      catch { setConnectionError("Unable to remove the GitHub connection. Please try again."); }
+      try {
+        await disconnectGitHub();
+        await clearGitHubQueries();
+      } catch {
+        setConnectionError(
+          "Unable to remove the GitHub connection. Please try again.",
+        );
+      }
     });
   };
   return {
-    isConnected, isPending, isChecking: !connection.ready, connectionError,
-    status: connectionError ?? connection.error ?? (isPending ? "Updating GitHub connection…" :
-      isConnected ? "GitHub connected. Repository permission granted." : "GitHub is optional. Your local projects work without it."),
-    handleConnect, handleDisconnect, refreshConnection: loadGitHubConnection,
+    isConnected,
+    isPending,
+    isChecking: !connection.ready,
+    connectionError,
+    status:
+      connectionError ??
+      connection.error ??
+      (isPending
+        ? "Updating GitHub connection…"
+        : isConnected
+          ? "GitHub connected. Repository permission granted."
+          : "GitHub is optional. Your local projects work without it."),
+    handleConnect,
+    handleDisconnect,
+    refreshConnection: loadGitHubConnection,
   };
 };

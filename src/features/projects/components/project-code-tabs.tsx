@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  View,
+  type LayoutRectangle,
+} from "react-native";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import { ProjectIcon } from "@/components/project-icon";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
+import { ProjectCodeTabIndicator } from "./project-code-tab-indicator";
 import {
   formatProjectChangeCount,
   formatProjectChangePath,
@@ -33,14 +40,42 @@ export const ProjectCodeTabs = ({
 }: ProjectCodeTabsProps) => {
   const [open, setOpen] = useState(false);
   const strip = useRef<ScrollView>(null);
-  const positions = useRef(new Map<string, number>());
+  const [layouts, setLayouts] = useState(new Map<string, LayoutRectangle>());
+  const viewport = useRef({ width: 0, offset: 0 });
+  const activeFrame =
+    activePath && paths.includes(activePath)
+      ? layouts.get(activePath)
+      : undefined;
   const card = useThemeColor("card");
   const revealActive = () => {
-    const x = activePath ? positions.current.get(activePath) : undefined;
-    if (x !== undefined)
-      strip.current?.scrollTo({ x: Math.max(0, x - 12), animated: true });
+    if (!activeFrame || !viewport.current.width) return;
+    const { width, offset } = viewport.current;
+    const target =
+      activeFrame.x < offset
+        ? Math.max(0, activeFrame.x - 12)
+        : activeFrame.x + activeFrame.width > offset + width
+          ? Math.max(
+              0,
+              Math.min(
+                activeFrame.x - 12,
+                activeFrame.x + activeFrame.width - width + 12,
+              ),
+            )
+          : offset;
+    if (target !== offset) {
+      viewport.current.offset = target;
+      strip.current?.scrollTo({ x: target, animated: true });
+    }
   };
-  useEffect(revealActive, [activePath]);
+  useEffect(revealActive, [activePath, layouts]);
+  useEffect(() => {
+    const openPaths = new Set(paths);
+    setLayouts((current) =>
+      [...current.keys()].some((path) => !openPaths.has(path))
+        ? new Map([...current].filter(([path]) => openPaths.has(path)))
+        : current,
+    );
+  }, [paths]);
   const choose = (path: string) => {
     setOpen(false);
     onSelect(path);
@@ -54,91 +89,119 @@ export const ProjectCodeTabs = ({
     <>
       <View className="flex-row items-center border-b border-border bg-background">
         <ScrollView
+          testID="code-tab-scroll"
           ref={strip}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={{ flex: 1 }}
           onContentSizeChange={revealActive}
+          onLayout={({ nativeEvent }) => {
+            viewport.current.width = nativeEvent.layout.width;
+            revealActive();
+          }}
+          onScroll={({ nativeEvent }) => {
+            viewport.current.offset = nativeEvent.contentOffset.x;
+          }}
+          scrollEventThrottle={16}
         >
-          {paths.map((path) => {
-            const selected = activePath === path;
-            const label = formatProjectEditorTab(path, paths);
-            const style = formatProjectEditorTabStyle(selected);
-            return (
-              <View
-                key={path}
-                onLayout={({ nativeEvent }) => {
-                  positions.current.set(path, nativeEvent.layout.x);
-                  if (selected) revealActive();
-                }}
-                className={`flex-row items-center border-b-2 ${style.container}`}
-              >
-                <Pressable
-                  accessibilityRole="tab"
-                  accessibilityLabel={path}
-                  accessibilityState={{ selected }}
-                  disabled={disabled}
-                  onPress={() => onSelect(path)}
-                  className="min-h-14 flex-row items-center gap-2 pl-3"
+          <View className="flex-row items-center gap-1 px-2 py-2">
+            {activeFrame ? (
+              <ProjectCodeTabIndicator frame={activeFrame} />
+            ) : null}
+            {paths.map((path) => {
+              const selected = activePath === path;
+              const label = formatProjectEditorTab(path, paths);
+              const style = formatProjectEditorTabStyle(selected);
+              return (
+                <View
+                  key={path}
+                  testID={`code-tab-${path}`}
+                  onLayout={({ nativeEvent }) => {
+                    const frame = nativeEvent.layout;
+                    setLayouts((current) => {
+                      const previous = current.get(path);
+                      if (
+                        previous &&
+                        previous.x === frame.x &&
+                        previous.y === frame.y &&
+                        previous.width === frame.width &&
+                        previous.height === frame.height
+                      )
+                        return current;
+                      return new Map(current).set(path, frame);
+                    });
+                  }}
+                  className={`flex-row items-center rounded-full ${style.tabContainer}`}
                 >
-                  <ProjectIcon name={path} isDirectory={false} size={18} />
-                  <View
-                    className="flex-row items-center"
-                    style={{ maxWidth: 180 }}
+                  <Pressable
+                    accessibilityRole="tab"
+                    accessibilityLabel={path}
+                    accessibilityState={{ selected }}
+                    disabled={disabled}
+                    onPress={() => onSelect(path)}
+                    className="min-h-12 flex-row items-center gap-2 rounded-full pl-3"
                   >
-                    <PText
-                      numberOfLines={1}
-                      ellipsizeMode="middle"
-                      className={`shrink text-base ${style.text}`}
+                    <ProjectIcon name={path} isDirectory={false} size={18} />
+                    <View
+                      className="flex-row items-center"
+                      style={{ maxWidth: 180 }}
                     >
-                      {label.name}
-                    </PText>
-                    <PText className={`text-base ${style.text}`}>
-                      {label.extension}
-                    </PText>
-                  </View>
-                  {label.directory ? (
-                    <PText
-                      numberOfLines={1}
-                      ellipsizeMode="middle"
-                      className="max-w-28 text-base text-muted-foreground"
-                    >
-                      {label.directory}
-                    </PText>
-                  ) : null}
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Close ${path}`}
-                  accessibilityState={{ busy: closingPath === path }}
-                  disabled={disabled || Boolean(closingPath)}
-                  onPress={() => onClose(path)}
-                  className="min-h-14 w-11 items-center justify-center"
-                >
-                  <Icon
-                    family="Feather"
-                    name="x"
-                    size={16}
-                    className="text-muted-foreground"
-                  />
-                </Pressable>
-              </View>
-            );
-          })}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open another file"
-            disabled={disabled}
-            onPress={openFile}
-            className="size-14 items-center justify-center"
-          >
-            <Icon
-              family="Feather"
-              name="plus"
-              size={22}
-              className="text-foreground"
-            />
-          </Pressable>
+                      <PText
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                        className={`shrink text-base ${style.text}`}
+                      >
+                        {label.name}
+                      </PText>
+                      <PText className={`text-base ${style.text}`}>
+                        {label.extension}
+                      </PText>
+                    </View>
+                    {label.directory ? (
+                      <PText
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                        className="max-w-28 text-base text-muted-foreground"
+                      >
+                        {label.directory}
+                      </PText>
+                    ) : null}
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Close ${path}`}
+                    accessibilityState={{ busy: closingPath === path }}
+                    disabled={disabled || Boolean(closingPath)}
+                    onPress={() => onClose(path)}
+                    className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
+                  >
+                    <Icon
+                      family="Feather"
+                      name="x"
+                      size={16}
+                      className="text-muted-foreground"
+                    />
+                  </Pressable>
+                </View>
+              );
+            })}
+            <GlassSurface borderRadius={24} shadow={false}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open another file"
+                disabled={disabled}
+                onPress={openFile}
+                className="size-12 items-center justify-center rounded-full active:bg-secondary"
+              >
+                <Icon
+                  family="Feather"
+                  name="plus"
+                  size={22}
+                  className="text-foreground"
+                />
+              </Pressable>
+            </GlassSurface>
+          </View>
         </ScrollView>
         <Pressable
           accessibilityRole="button"

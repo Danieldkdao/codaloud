@@ -146,8 +146,7 @@ export const useProjectBranches = (
   });
 
   const recoverCheckout = async (): Promise<ProjectBranchCheckoutSchema> => {
-    if (!projectId)
-      throw new Error("The local workspace is not ready.");
+    if (!projectId) throw new Error("The local workspace is not ready.");
     // Capture this hook's workspace, rather than refetching an observer that may
     // have moved to another project while the checkout response was in flight.
     const branches = await readProjectBranchesAction(projectId, {
@@ -211,5 +210,12 @@ export const useProjectBranches = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { gitCreateBranch, ...query, loadMore, retry, gitCheckout, recoverCheckout };
+  return {
+    gitCreateBranch,
+    ...query,
+    loadMore,
+    retry,
+    gitCheckout,
+    recoverCheckout,
+  };
 };

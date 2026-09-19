@@ -112,13 +112,7 @@ export const ProjectBranchSelect = ({
         queryKey: ["projects", "file-search", "infinite", projectId],
       }),
       queryClient.resetQueries({
-        queryKey: [
-          "projects",
-          "commits",
-          "infinite",
-          "cursor",
-          projectId,
-        ],
+        queryKey: ["projects", "commits", "infinite", "cursor", projectId],
         predicate: ({ queryKey }) =>
           projectCommitParamsSchema.safeParse(queryKey[5]).data?.source ===
           "local",

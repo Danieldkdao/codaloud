@@ -11,7 +11,10 @@ import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { deleteProjectAction } from "@/features/projects/actions/actions";
-import { formatProjectSetupStatus, formatProjectUpdatedDate } from "@/features/projects/lib/formatters";
+import {
+  formatProjectSetupStatus,
+  formatProjectUpdatedDate,
+} from "@/features/projects/lib/formatters";
 import type {
   ProjectPageData,
   ProjectResponseData,
@@ -229,9 +232,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                   >
                     {project.name}
                   </HeadingText>
-                  <PText className="text-lg">
-                    {updatedLabel}
-                  </PText>
+                  <PText className="text-lg">{updatedLabel}</PText>
                   {sourceLabel && (
                     <View className="items-center flex-row gap-2">
                       <Icon
@@ -240,9 +241,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                         className="text-muted-foreground"
                         size={16}
                       />
-                      <PText className="text-lg">
-                        {sourceLabel}
-                      </PText>
+                      <PText className="text-lg">{sourceLabel}</PText>
                     </View>
                   )}
                 </View>

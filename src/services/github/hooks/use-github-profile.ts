@@ -1,8 +1,17 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { getGitHubConnectionSnapshot, loadGitHubConnection, subscribeToGitHubConnection } from "../credentials";
+import {
+  getGitHubConnectionSnapshot,
+  loadGitHubConnection,
+  subscribeToGitHubConnection,
+} from "../credentials";
 
 export const useGitHubProfile = () => {
-  const connection = useSyncExternalStore(subscribeToGitHubConnection, getGitHubConnectionSnapshot);
-  useEffect(() => { void loadGitHubConnection(); }, []);
+  const connection = useSyncExternalStore(
+    subscribeToGitHubConnection,
+    getGitHubConnectionSnapshot,
+  );
+  useEffect(() => {
+    void loadGitHubConnection();
+  }, []);
   return connection;
 };

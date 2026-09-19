@@ -116,11 +116,24 @@ export const useProjectGitOperation = () => {
         });
       });
     } catch (error) {
-      if (!signal?.aborted && error instanceof ProjectGitError && error.code === "GITHUB_RECONNECT_REQUIRED") {
-        Alert.alert("Connect GitHub", "GitHub is optional. Connect it in Settings to fetch, pull, or push repositories.", [
-          { text: "Not now", style: "cancel" },
-          { text: "Open Settings", onPress: () => { if (!signal?.aborted) router.push("/account"); } },
-        ]);
+      if (
+        !signal?.aborted &&
+        error instanceof ProjectGitError &&
+        error.code === "GITHUB_RECONNECT_REQUIRED"
+      ) {
+        Alert.alert(
+          "Connect GitHub",
+          "GitHub is optional. Connect it in Settings to fetch, pull, or push repositories.",
+          [
+            { text: "Not now", style: "cancel" },
+            {
+              text: "Open Settings",
+              onPress: () => {
+                if (!signal?.aborted) router.push("/account");
+              },
+            },
+          ],
+        );
         return undefined;
       }
       if (!signal?.aborted)

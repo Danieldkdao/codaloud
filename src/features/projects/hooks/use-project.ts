@@ -14,7 +14,8 @@ export const useProject = (projectId: string) => {
       const existingProject = await readProjectAction(projectId, signal);
 
       // Read actions return null on failure; queries must reject to expose an error.
-      if (existingProject === null) throw new Error("Unable to load project. Please try again.");
+      if (existingProject === null)
+        throw new Error("Unable to load project. Please try again.");
 
       return existingProject;
     },

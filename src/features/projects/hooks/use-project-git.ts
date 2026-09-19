@@ -36,7 +36,8 @@ export const useProjectGit = (
       error instanceof ProjectGitRequestError &&
       ((error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
         (failureCount < 2 &&
-          (error.status === 0 || error.status >= 500 ||
+          (error.status === 0 ||
+            error.status >= 500 ||
             (error.status === 409 && error.code === "GIT_BUSY")))),
     retryDelay: (attempt, error) =>
       error instanceof ProjectGitRequestError

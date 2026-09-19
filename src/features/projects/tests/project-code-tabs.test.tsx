@@ -1,25 +1,36 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ReactNode, useImperativeHandle, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectCodeTabs } from "../components/project-code-tabs";
 import { ProjectCodeStatus } from "../components/project-code-status";
 import { formatProjectEditorTab } from "../lib/formatters";
 
+const layoutEvents = new Map<string, (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void>();
+const scrollTo = vi.fn();
+
 vi.mock("react-native-reanimated", () => {
-  const transition = { duration: () => transition, reduceMotion: () => transition };
+  const transition = { duration: () => transition, reduceMotion: () => transition, springify: () => transition, dampingRatio: () => transition };
   return {
-    default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+    default: { View: ({ children, style, testID, pointerEvents }: { children?: ReactNode; style?: object; testID?: string; pointerEvents?: string }) => createElement("div", { style, "data-testid": testID, "data-pointer-events": pointerEvents }, children) },
     LinearTransition: transition,
     ReduceMotion: { System: "system" },
   };
 });
 vi.mock("react-native", () => ({
-  View: ({ children }: { children: ReactNode }) => createElement("div", null, children),
-  ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+  View: ({ children, testID, onLayout }: { children: ReactNode; testID?: string; onLayout?: (event: never) => void }) => {
+    if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
+    return createElement("div", { "data-testid": testID }, children);
+  },
+  ScrollView: ({ children, ref, testID, onLayout }: { children: ReactNode; ref?: Ref<unknown>; testID?: string; onLayout?: (event: never) => void }) => {
+    useImperativeHandle(ref, () => ({ scrollTo }));
+    if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
+    return createElement("div", null, children);
+  },
   Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, disabled }: { children: ReactNode; onPress: () => void; accessibilityLabel: string; accessibilityState?: { selected?: boolean }; disabled?: boolean }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-selected": accessibilityState?.selected, disabled }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
 }));
+vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", { "data-glass": true }, children) }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/icon", () => ({ Icon: ({ name }: { name: string }) => createElement("span", { "data-icon": name }) }));
 vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", { role: "dialog" }, children) : null }));
@@ -28,7 +39,7 @@ vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "theme-color" }));
 
 let root: Root;
 let container: HTMLDivElement;
-beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); });
+beforeEach(() => { layoutEvents.clear(); scrollTo.mockClear(); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); container = document.createElement("div"); root = createRoot(container); });
 afterEach(() => act(() => root.unmount()));
 const click = (label: string) => act(() => {
   const button = [...container.querySelectorAll("button")].find((item) => item.getAttribute("aria-label") === label);
@@ -69,4 +80,51 @@ it("shows real diagnostic counts and exposes Problems and save retry independent
   click("Couldn't save file. Tap to retry."); expect(onRetry).toHaveBeenCalledOnce();
   act(() => [...container.querySelectorAll("button")].find((button) => button.getAttribute("aria-label")?.includes("error") && !button.getAttribute("aria-label")?.includes("save"))!.click());
   expect(onShowProblems).toHaveBeenCalledOnce();
+});
+
+
+const measure = (id: string, x: number, width: number, height = 48) => act(() => {
+  expect(layoutEvents.has(id)).toBe(true);
+  layoutEvents.get(id)!({ nativeEvent: { layout: { x, y: 8, width, height } } });
+});
+
+it("slides one glass selection between measured tabs and follows tab removal and resizing", () => {
+  const renderTabs = (activePath: string | null, paths = ["a.ts", "b.ts"]) => act(() => root.render(createElement(ProjectCodeTabs, {
+    paths, activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+  })));
+  renderTabs("a.ts");
+  measure("code-tab-a.ts", 8, 150);
+  measure("code-tab-b.ts", 162, 210);
+  const pill = container.querySelector<HTMLElement>('[data-testid="code-tab-indicator"]')!;
+  expect(pill).not.toBeNull();
+  expect(pill.querySelector('[data-glass]')).not.toBeNull();
+  expect(pill.getAttribute("data-pointer-events")).toBe("none");
+  expect(pill.style.left).toBe("8px");
+  expect(pill.style.width).toBe("150px");
+  renderTabs("b.ts");
+  expect(container.querySelector('[data-testid="code-tab-indicator"]')).toBe(pill);
+  expect(pill.style.left).toBe("162px");
+  expect(pill.style.width).toBe("210px");
+  renderTabs("b.ts", ["b.ts"]);
+  measure("code-tab-b.ts", 8, 240, 56);
+  expect(pill.style.left).toBe("8px");
+  expect(pill.style.width).toBe("240px");
+  expect(pill.style.height).toBe("56px");
+  renderTabs(null, []);
+  expect(container.querySelector('[data-testid="code-tab-indicator"]')).toBeNull();
+});
+
+it("only scrolls the strip when the active tab is outside its visible area", () => {
+  const renderTabs = (activePath: string) => act(() => root.render(createElement(ProjectCodeTabs, {
+    paths: ["a.ts", "b.ts"], activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+  })));
+  scrollTo.mockClear();
+  renderTabs("a.ts");
+  measure("code-tab-scroll", 0, 300);
+  measure("code-tab-a.ts", 8, 120);
+  measure("code-tab-b.ts", 132, 120);
+  renderTabs("b.ts");
+  expect(scrollTo).not.toHaveBeenCalled();
+  measure("code-tab-b.ts", 320, 160);
+  expect(scrollTo).toHaveBeenLastCalledWith({ x: 192, animated: true });
 });

@@ -69,7 +69,11 @@ export type ProjectWorkspaceDiffEntry = Pick<
 
 export type ProjectWorkspaceDiffRow = { key: string; path: string } & (
   | { kind: "file"; file: ProjectWorkspaceDiffEntry }
-  | { kind: "comparison"; comparison: ProjectDiffComparison; status: ProjectWorkspaceDiffEntry["indexStatus"] }
+  | {
+      kind: "comparison";
+      comparison: ProjectDiffComparison;
+      status: ProjectWorkspaceDiffEntry["indexStatus"];
+    }
   | { kind: "line"; line: ProjectDiffLine }
 );
 
@@ -118,20 +122,11 @@ export type ProjectCommitData = {
   refs?: string[];
 };
 
-
 export type ProjectAgentActivityKind =
-  | "voice"
-  | "text"
-  | "symbol"
-  | "command"
-  | "review";
+  "voice" | "text" | "symbol" | "command" | "review";
 
 export type ProjectAgentActivityStatus =
-  | "queued"
-  | "running"
-  | "complete"
-  | "failed"
-  | "needs-attention";
+  "queued" | "running" | "complete" | "failed" | "needs-attention";
 
 export type ProjectAgentActivityData = {
   id: string;
@@ -145,7 +140,9 @@ export type ProjectAgentActivityData = {
 
 export type { ProjectFileSearchScope } from "./actions/file-search-schemas";
 
-export type ReadProjectFilesActionResult<Input> = Input extends { search: string }
+export type ReadProjectFilesActionResult<Input> = Input extends {
+  search: string;
+}
   ? ProjectFileSearchPageSchema
   : ProjectFileEntrySchema[];
 
@@ -169,8 +166,7 @@ export type ProjectGitReadFailureHandler = (
 export type ProjectGitMutationFailure = Extract<ApiResponse, { error: true }>;
 
 export type ProjectGitMutationResult<T> =
-  | ProjectGitMutationFailure
-  | { error: false; message: string; data: T };
+  ProjectGitMutationFailure | { error: false; message: string; data: T };
 
 export type ProjectGitMutationContext = {
   projectId: string | null | undefined;

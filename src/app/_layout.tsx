@@ -22,7 +22,12 @@ SplashScreen.preventAutoHideAsync();
 const RootNavigator = () => {
   const { isReady: isThemeReady } = useTheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
-  const { ready: isAppReady, hasCompletedOnboarding, error, retry } = useOnboarding();
+  const {
+    ready: isAppReady,
+    hasCompletedOnboarding,
+    error,
+    retry,
+  } = useOnboarding();
 
   useEffect(subscribeToQueryLifecycle, []);
 
@@ -69,7 +74,10 @@ const RootNavigator = () => {
             >
               <Stack.Protected guard={hasCompletedOnboarding}>
                 <Stack.Screen name="(main)" options={{ headerShown: false }} />
-                <Stack.Screen name="projects/[projectId]" options={{ title: "Project" }} />
+                <Stack.Screen
+                  name="projects/[projectId]"
+                  options={{ title: "Project" }}
+                />
                 <Stack.Screen
                   name="new-project"
                   options={{
@@ -96,7 +104,10 @@ const RootNavigator = () => {
               <Stack.Protected guard={!hasCompletedOnboarding}>
                 <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               </Stack.Protected>
-              <Stack.Screen name="github-connect" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="github-connect"
+                options={{ headerShown: false }}
+              />
             </Stack>
           </SuccessFeedbackProvider>
         </ProjectSearchOverlayProvider>

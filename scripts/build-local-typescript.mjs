@@ -9,13 +9,28 @@ await mkdir(output, { recursive: true });
 // TypeScript supports a host-supplied filesystem. Exclude its Node system probe
 // so the same compiler runs inside the native app without Node polyfills.
 await build({
-  stdin: { contents: `import ts from ${JSON.stringify(compiler)}; export default ts;`, resolveDir: process.cwd() },
-  outfile: join(output, "compiler.js"), bundle: true, platform: "browser", format: "esm",
-  define: { process: "undefined", require: "undefined" }, minify: true, legalComments: "inline",
+  stdin: {
+    contents: `import ts from ${JSON.stringify(compiler)}; export default ts;`,
+    resolveDir: process.cwd(),
+  },
+  outfile: join(output, "compiler.js"),
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  define: { process: "undefined", require: "undefined" },
+  minify: true,
+  legalComments: "inline",
 });
 const libraries = {};
-for (const file of (await readdir(dirname(compiler))).filter((name) => /^lib\..*\.d\.ts$/.test(name)).sort()) {
-  libraries[`/lib/${file}`] = await readFile(join(dirname(compiler), file), "utf8");
+for (const file of (await readdir(dirname(compiler)))
+  .filter((name) => /^lib\..*\.d\.ts$/.test(name))
+  .sort()) {
+  libraries[`/lib/${file}`] = await readFile(
+    join(dirname(compiler), file),
+    "utf8",
+  );
 }
 await writeFile(join(output, "libraries.json"), JSON.stringify(libraries));
-console.log(`Packaged TypeScript and ${Object.keys(libraries).length} standard libraries for offline use.`);
+console.log(
+  `Packaged TypeScript and ${Object.keys(libraries).length} standard libraries for offline use.`,
+);

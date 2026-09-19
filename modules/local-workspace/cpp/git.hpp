@@ -3,9 +3,12 @@
 #include <git2.h>
 
 namespace codaloud {
-template<typename T, void (*Free)(T *)> struct GitHandle {
+template <typename T, void (*Free)(T *)> struct GitHandle {
   T *value = nullptr;
-  ~GitHandle() { if (value) Free(value); }
+  ~GitHandle() {
+    if (value)
+      Free(value);
+  }
   GitHandle() = default;
   GitHandle(const GitHandle &) = delete;
   GitHandle &operator=(const GitHandle &) = delete;
@@ -33,16 +36,21 @@ Json currentBranch(git_repository *repo);
 Json gitCounts(git_repository *repo);
 void requireMutableBranch(git_repository *repo);
 void createSignature(Signature &signature, const Json &args);
-Json gitOperation(const fs::path &root, const std::string &operation, const Json &args);
-Json gitReadOperation(git_repository *repo, const std::string &operation, const Json &args);
-Json gitMutation(git_repository *repo, const std::string &operation, const Json &args);
+Json gitOperation(const fs::path &root, const std::string &operation,
+                  const Json &args);
+Json gitReadOperation(git_repository *repo, const std::string &operation,
+                      const Json &args);
+Json gitMutation(git_repository *repo, const std::string &operation,
+                 const Json &args);
 bool hasChanges(git_repository *repo);
 void cloneRepository(const fs::path &root, const Json &args);
-Json gitRemoteOperation(git_repository *repo, const std::string &operation, const Json &args);
-void checkoutAndUpdateHead(git_repository *repo, const git_oid *next, const git_oid *expected);
+Json gitRemoteOperation(git_repository *repo, const std::string &operation,
+                        const Json &args);
+void checkoutAndUpdateHead(git_repository *repo, const git_oid *next,
+                           const git_oid *expected);
 Json gitChanges(git_repository *repo);
 Json commitMetadata(git_commit *commit, bool detailed = false);
 Json diffPatch(git_diff *diff, size_t index);
 std::string fileMode(uint32_t mode);
 std::string deltaState(git_delta_t status);
-}
+} // namespace codaloud

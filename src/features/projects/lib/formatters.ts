@@ -354,10 +354,12 @@ export const formatProjectEditorTabStyle = (selected: boolean) =>
   selected
     ? {
         container: "bg-secondary border-primary",
+        tabContainer: "bg-transparent",
         text: "text-secondary-foreground font-semibold",
       }
     : {
         container: "bg-background border-border",
+        tabContainer: "bg-secondary/40",
         text: "text-muted-foreground",
       };
 

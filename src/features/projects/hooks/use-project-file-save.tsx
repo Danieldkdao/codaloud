@@ -98,10 +98,11 @@ const FileSaveRegistry = ({
         content,
         (savedPath, savedContent, size) => {
           // Cache only confirmed bytes; newer local edits remain in this document.
-          queryClient.setQueryData(
-            ["projects", "file", projectId, savedPath],
-            { path: savedPath, content: savedContent, size },
-          );
+          queryClient.setQueryData(["projects", "file", projectId, savedPath], {
+            path: savedPath,
+            content: savedContent,
+            size,
+          });
           void queryClient.invalidateQueries({
             queryKey: ["projects", "files", projectId],
           });
@@ -276,7 +277,11 @@ const FileSaveRegistry = ({
   }, [documents]);
   return (
     <RegistryContext
-      value={{ getDocument, flushPendingSaves, withSavedFiles, renameFiles,
+      value={{
+        getDocument,
+        flushPendingSaves,
+        withSavedFiles,
+        renameFiles,
         invalidateFiles: (root) => {
           for (const [path, entry] of documents) {
             if (!isProjectFilePathWithin(path, root)) continue;
@@ -300,10 +305,7 @@ export const ProjectFileSaveRegistryProvider = ({
   children: ReactNode;
 }) => {
   return (
-    <FileSaveRegistry
-      key={projectId}
-      projectId={projectId}
-    >
+    <FileSaveRegistry key={projectId} projectId={projectId}>
       {children}
     </FileSaveRegistry>
   );

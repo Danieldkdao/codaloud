@@ -11,11 +11,25 @@ export type TextPromptProps = {
 };
 
 export const TextPrompt = ({
-  title, message, actionText, placeholder, defaultValue = "", onSubmit, onCancel,
+  title,
+  message,
+  actionText,
+  placeholder,
+  defaultValue = "",
+  onSubmit,
+  onCancel,
 }: TextPromptProps) => {
   // API-route discovery imports screen modules on the server. Initialize Compose
   // only when this Android component renders, not while discovering routes.
-  const { AlertDialog, Column, Host, OutlinedTextField, Text, TextButton, useNativeState } =
+  const {
+    AlertDialog,
+    Column,
+    Host,
+    OutlinedTextField,
+    Text,
+    TextButton,
+    useNativeState,
+  } =
     require("@expo/ui/jetpack-compose") as typeof import("@expo/ui/jetpack-compose");
   const value = useNativeState(defaultValue);
   const { isDarkMode } = useTheme();
@@ -25,12 +39,22 @@ export const TextPrompt = ({
   const muted = useThemeColor("muted-foreground");
 
   return (
-    <Host matchContents colorScheme={isDarkMode ? "dark" : "light"} seedColor={primary}>
+    <Host
+      matchContents
+      colorScheme={isDarkMode ? "dark" : "light"}
+      seedColor={primary}
+    >
       <AlertDialog
         onDismissRequest={onCancel}
-        colors={{ containerColor: card, titleContentColor: foreground, textContentColor: muted }}
+        colors={{
+          containerColor: card,
+          titleContentColor: foreground,
+          textContentColor: muted,
+        }}
       >
-        <AlertDialog.Title><Text style={{ fontSize: 20 }}>{title}</Text></AlertDialog.Title>
+        <AlertDialog.Title>
+          <Text style={{ fontSize: 20 }}>{title}</Text>
+        </AlertDialog.Title>
         <AlertDialog.Text>
           <Column verticalArrangement={{ spacedBy: 12 }}>
             <Text style={{ fontSize: 16 }}>{message}</Text>
@@ -39,18 +63,27 @@ export const TextPrompt = ({
               autoFocus
               singleLine
               textStyle={{ fontSize: 16 }}
-              keyboardOptions={{ capitalization: "sentences", imeAction: "done" }}
+              keyboardOptions={{
+                capitalization: "sentences",
+                imeAction: "done",
+              }}
               keyboardActions={{ onDone: onSubmit }}
             >
-              <OutlinedTextField.Label><Text style={{ fontSize: 16 }}>{placeholder}</Text></OutlinedTextField.Label>
+              <OutlinedTextField.Label>
+                <Text style={{ fontSize: 16 }}>{placeholder}</Text>
+              </OutlinedTextField.Label>
             </OutlinedTextField>
           </Column>
         </AlertDialog.Text>
         <AlertDialog.DismissButton>
-          <TextButton onClick={onCancel}><Text style={{ fontSize: 16 }}>Cancel</Text></TextButton>
+          <TextButton onClick={onCancel}>
+            <Text style={{ fontSize: 16 }}>Cancel</Text>
+          </TextButton>
         </AlertDialog.DismissButton>
         <AlertDialog.ConfirmButton>
-          <TextButton onClick={() => onSubmit(value.get())}><Text style={{ fontSize: 16 }}>{actionText}</Text></TextButton>
+          <TextButton onClick={() => onSubmit(value.get())}>
+            <Text style={{ fontSize: 16 }}>{actionText}</Text>
+          </TextButton>
         </AlertDialog.ConfirmButton>
       </AlertDialog>
     </Host>

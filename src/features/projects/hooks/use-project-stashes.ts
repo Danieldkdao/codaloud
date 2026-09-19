@@ -62,11 +62,7 @@ export const useProjectStashes = (
   const query = useInfiniteQuery({
     networkMode: "always",
     queryKey,
-    enabled:
-      enabled &&
-      validProject &&
-      params.success &&
-      validPageLimit,
+    enabled: enabled && validProject && params.success && validPageLimit,
     initialPageParam: undefined as string | undefined,
     maxPages: validPageLimit ? maxPages : 0,
     retry: (failureCount, error) =>

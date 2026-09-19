@@ -55,8 +55,7 @@ export const useProjectChanges = (
   const discardPreview = useQuery({
     networkMode: "always",
     queryKey: ["projects", "discard-preview", projectId],
-    enabled:
-      enabled && discardPreviewEnabled && validProject,
+    enabled: enabled && discardPreviewEnabled && validProject,
     staleTime: 0,
     retry: (failureCount, error) =>
       error instanceof ProjectGitRequestError &&

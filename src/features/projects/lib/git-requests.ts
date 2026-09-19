@@ -29,9 +29,7 @@ export const readProjectGitRequest = async <
   try {
     if (signal?.aborted) return null;
     const parsed = input.parse(params);
-    const data = output.parse(
-      await execute(parsed),
-    );
+    const data = output.parse(await execute(parsed));
     if (signal?.aborted) return null;
     return !validate || validate(data, parsed) ? data : null;
   } catch (error) {
@@ -84,9 +82,7 @@ export const mutateProjectGitRequest = async <I, O>({
         }
       );
     started = true;
-    const data = output.parse(
-      await execute(parsed.data),
-    );
+    const data = output.parse(await execute(parsed.data));
     if (validate && !validate(data, parsed.data))
       throw new Error(
         "Unable to confirm this Git operation. Refresh the workspace.",

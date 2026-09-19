@@ -11,7 +11,11 @@ import {
 } from "drizzle-orm";
 import { db } from "@/db/db";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
-import { projectResponseSchema, updateProjectSchema, type UpdateProjectSchema } from "../actions/schemas";
+import {
+  projectResponseSchema,
+  updateProjectSchema,
+  type UpdateProjectSchema,
+} from "../actions/schemas";
 import {
   projectParamsSchema,
   readProjectCursor,
@@ -97,7 +101,9 @@ export const localProjectStore = {
       .update(ProjectTable)
       .set({
         ...input,
-        ...(input.name !== undefined ? { searchName: input.name.toLowerCase() } : {}),
+        ...(input.name !== undefined
+          ? { searchName: input.name.toLowerCase() }
+          : {}),
         updatedAt: new Date().toISOString(),
       })
       .where(eq(ProjectTable.id, projectId))

@@ -7,12 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
 import { useGitIdentity } from "../hooks/use-git-identity";
-import { gitIdentitySchema, saveGitIdentity, type GitIdentitySchema } from "../git-identity";
+import {
+  gitIdentitySchema,
+  saveGitIdentity,
+  type GitIdentitySchema,
+} from "../git-identity";
 
 export const GitIdentityForm = () => {
   const identity = useGitIdentity();
   const client = useQueryClient();
-  const { control, handleSubmit, reset, formState: { isSubmitting, dirtyFields } } = useForm<GitIdentitySchema>({
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { isSubmitting, dirtyFields },
+  } = useForm<GitIdentitySchema>({
     resolver: zodResolver(gitIdentitySchema),
     defaultValues: { name: "", email: "" },
     mode: "onTouched",
@@ -38,27 +47,56 @@ export const GitIdentityForm = () => {
       <Controller
         control={control}
         name="name"
-        render={({ field: { ref, value, onChange, onBlur }, fieldState: { error } }) => (
+        render={({
+          field: { ref, value, onChange, onBlur },
+          fieldState: { error },
+        }) => (
           <View className="gap-2">
-            <Input ref={ref} accessibilityLabel="Git author name" placeholder="Name"
-              value={value} onChangeText={onChange} onBlur={onBlur}
-              invalid={!!error} accessibilityHint={error?.message}
-              editable={!identity.isPending && !isSubmitting} />
-            {error && <PText accessibilityRole="alert" className="text-destructive">{error.message}</PText>}
+            <Input
+              ref={ref}
+              accessibilityLabel="Git author name"
+              placeholder="Name"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              invalid={!!error}
+              accessibilityHint={error?.message}
+              editable={!identity.isPending && !isSubmitting}
+            />
+            {error && (
+              <PText accessibilityRole="alert" className="text-destructive">
+                {error.message}
+              </PText>
+            )}
           </View>
         )}
       />
       <Controller
         control={control}
         name="email"
-        render={({ field: { ref, value, onChange, onBlur }, fieldState: { error } }) => (
+        render={({
+          field: { ref, value, onChange, onBlur },
+          fieldState: { error },
+        }) => (
           <View className="gap-2">
-            <Input ref={ref} accessibilityLabel="Git author email" placeholder="Email"
-              value={value} onChangeText={onChange} onBlur={onBlur}
-              autoCapitalize="none" keyboardType="email-address"
-              invalid={!!error} accessibilityHint={error?.message}
-              editable={!identity.isPending && !isSubmitting} />
-            {error && <PText accessibilityRole="alert" className="text-destructive">{error.message}</PText>}
+            <Input
+              ref={ref}
+              accessibilityLabel="Git author email"
+              placeholder="Email"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              invalid={!!error}
+              accessibilityHint={error?.message}
+              editable={!identity.isPending && !isSubmitting}
+            />
+            {error && (
+              <PText accessibilityRole="alert" className="text-destructive">
+                {error.message}
+              </PText>
+            )}
           </View>
         )}
       />
@@ -70,10 +108,12 @@ export const GitIdentityForm = () => {
       <Button
         loading={isSubmitting}
         disabled={identity.isPending || isSubmitting}
-        onPress={() => void handleSubmit(async (data) => {
-          // The mutation owns the visible storage error.
-          await mutation.mutateAsync(data).catch(() => undefined);
-        })()}
+        onPress={() =>
+          void handleSubmit(async (data) => {
+            // The mutation owns the visible storage error.
+            await mutation.mutateAsync(data).catch(() => undefined);
+          })()
+        }
       >
         Save Git author
       </Button>

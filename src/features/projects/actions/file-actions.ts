@@ -45,9 +45,7 @@ const mutateFile = async <I extends object, O>(
   try {
     const args = input.parse(unsafeInput);
     const project = await requireLocalProject(projectId);
-    const data = output.parse(
-      await execute(project.id, args),
-    );
+    const data = output.parse(await execute(project.id, args));
     return {
       error: false as const,
       message: "File updated on this device.",

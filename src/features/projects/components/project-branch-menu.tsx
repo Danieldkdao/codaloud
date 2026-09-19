@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
-import Animated, { LinearTransition, ReduceMotion } from "react-native-reanimated";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
 
 import { Icon } from "@/components/ui/icon";
 import { ActionSheet } from "@/components/ui/action-sheet";
@@ -26,7 +29,9 @@ const syncActions = [
 ] as const;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-const badgeTransition = LinearTransition.duration(240).reduceMotion(ReduceMotion.System);
+const badgeTransition = LinearTransition.duration(240).reduceMotion(
+  ReduceMotion.System,
+);
 
 type ProjectBranchMenuProps = {
   maxWidth: number;
@@ -139,7 +144,10 @@ export const ProjectBranchMenu = ({
           className="min-w-0 shrink"
         >
           {loadingBranch ? (
-            <ActivityIndicator className="text-primary" accessibilityLabel={label} />
+            <ActivityIndicator
+              className="text-primary"
+              accessibilityLabel={label}
+            />
           ) : (
             <CodeText
               className="text-lg font-medium text-secondary-foreground"
@@ -156,7 +164,10 @@ export const ProjectBranchMenu = ({
             accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"}
           />
         )}
-        <Animated.View layout={badgeTransition} className="shrink-0 flex-row items-center gap-2">
+        <Animated.View
+          layout={badgeTransition}
+          className="shrink-0 flex-row items-center gap-2"
+        >
           <Icon
             family="Entypo"
             name="dot-single"

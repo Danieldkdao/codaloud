@@ -23,7 +23,12 @@ await copyFile(
   join(root, "licenses/third-party-notices.txt"),
   join(root, "ios/licenses/third-party-notices.txt"),
 );
-const dependencies = JSON.parse(await readFile(new URL("./native-dependencies.json", import.meta.url), "utf8"));
+const dependencies = JSON.parse(
+  await readFile(
+    new URL("./native-dependencies.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 await mkdir(join(root, "vendor"), { recursive: true });
 for (const dependency of dependencies) {

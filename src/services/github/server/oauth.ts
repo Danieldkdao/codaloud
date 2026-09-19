@@ -9,7 +9,11 @@ const respond = (body: unknown, status = 200) =>
 
 export const handleGitHubOAuthRequest = async (request: Request) => {
   try {
-    const { GITHUB_CLIENT_ID: clientId, GITHUB_CLIENT_SECRET: clientSecret, BETTER_AUTH_URL: baseUrl } = serverEnv;
+    const {
+      GITHUB_CLIENT_ID: clientId,
+      GITHUB_CLIENT_SECRET: clientSecret,
+      BETTER_AUTH_URL: baseUrl,
+    } = serverEnv;
     const redirectUri = new URL(
       "/api/auth/callback/github",
       baseUrl,

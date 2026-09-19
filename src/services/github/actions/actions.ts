@@ -20,10 +20,10 @@ export const readGitHubRepositories = async ({
   ...pagination
 }: ReadGitHubRepositoriesOptions = {}): Promise<GitHubRepositoryPage | null> => {
   try {
-    signal?.throwIfAborted();
+    if (signal?.aborted) return null;
     const input = gitHubRepositoryRequestSchema.parse(pagination);
     const token = await getGitHubAccessToken();
-    signal?.throwIfAborted();
+    if (signal?.aborted) return null;
     const page = gitHubRepositoryPageSchema.parse(
       await listGitHubRepositoryPage(token, signal, input),
     );
@@ -39,13 +39,13 @@ export const readGitHubRepositoryBranches = async (
   { signal, ...pagination }: ReadGitHubRepositoriesOptions = {},
 ): Promise<GitHubRepositoryBranchPage | null> => {
   try {
-    signal?.throwIfAborted();
+    if (signal?.aborted) return null;
     const input = gitHubRepositoryBranchesRequestSchema.parse({
       repositoryId,
       ...pagination,
     });
     const token = await getGitHubAccessToken();
-    signal?.throwIfAborted();
+    if (signal?.aborted) return null;
     const page = gitHubRepositoryBranchPageSchema.parse(
       await listGitHubRepositoryBranches(
         token,

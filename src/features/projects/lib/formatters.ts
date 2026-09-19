@@ -190,7 +190,7 @@ export const formatProjectSource = (
         value: source,
         icon: "box",
         title: "New project",
-        description: "Start from scratch in an empty cloud workspace.",
+        description: "Start from scratch in an empty workspace.",
       };
     case "github":
       return {

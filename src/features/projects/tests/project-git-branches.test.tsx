@@ -28,6 +28,7 @@ const git = vi.hoisted(() => ({
 }));
 vi.mock("@/features/projects/hooks/use-project-git-remote", () => ({ useProjectGitRemote: () => git }));
 const changesQuery = vi.hoisted(() => ({
+  gitInitialize: { mutateAsync: vi.fn(), isPending: false },
   discardPreview: { refetch: vi.fn() }, gitDiscardChanges: { mutateAsync: vi.fn() },
   query: vi.fn(), refetch: vi.fn(), isPending: false, isFetching: false,
   fetchStatus: "idle", error: null as Error | null,
@@ -245,6 +246,8 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  changesQuery.gitInitialize.mutateAsync.mockReset().mockResolvedValue({ currentBranch: "main", headSha: null });
+  changesQuery.gitInitialize.isPending = false;
   git.data.currentBranch = "main";
   changesQuery.discardPreview.refetch.mockReset().mockResolvedValue({ data: { fingerprint: "d".repeat(64), changedPaths: ["file.txt"], currentBranch: "main", headSha: "a".repeat(40) } });
   changesQuery.gitDiscardChanges.mutateAsync.mockReset().mockResolvedValue({ remainingChanges: false });
@@ -573,9 +576,11 @@ it.each(["local", "remote"])("opens a history commit from a %s branch with its f
 
 it("renders the empty state from an empty changes list", () => {
   changesQuery.data = { ...repositoryChanges(), changes: [] };
-  act(() => root.render(createElement(ProjectWorkspaceDockHeightProvider, null,
+  act(() => root.render(createElement(QueryClientProvider, { client: queryClient },
+    createElement(ProjectWorkspaceBranchProvider, null,
+    createElement(ProjectWorkspaceDockHeightProvider, null,
     createElement(ProjectWorkspaceChangesProvider, null,
-      createElement(ProjectChangesPanel, { projectId: live.projectId })))));
+      createElement(ProjectChangesPanel, { projectId: live.projectId })))))));
   expect(container.textContent).toContain("No uncommitted changes");
   expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
   expect(container.querySelector('[aria-label="Open commit form"]')).toBeNull();
@@ -860,6 +865,54 @@ it("distinguishes loading, offline, failure, and an uninitialized repository", (
   act(() => root.render(createElement(Workspace)));
   expect(container.textContent).toContain("Git is not initialized");
   expect(container.textContent).not.toContain("No uncommitted changes");
+});
+
+it("offers initialization only for a confirmed missing repository", () => {
+  expect(container.querySelector('[aria-label="Initialize Git Repository"]')).toBeNull();
+  for (const repositoryState of ["unborn", "not-initialized"] as const) {
+    changesQuery.data = { ...repositoryChanges(), repositoryState, changes: [], headSha: null };
+    act(() => root.render(createElement(Workspace)));
+    expect(Boolean(container.querySelector('[aria-label="Initialize Git Repository"]'))).toBe(repositoryState === "not-initialized");
+  }
+  for (const state of [{ isFetching: true }, { isFetching: false, error: new Error("Read failed") }]) {
+    Object.assign(changesQuery, state);
+    act(() => root.render(createElement(Workspace)));
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Initialize Git Repository"]')?.disabled).toBe(true);
+  }
+});
+
+it("initializes after saving files, blocks duplicate taps and removes the button after refresh", async () => {
+  live.repositoryId = null;
+  changesQuery.data = { ...repositoryChanges(), repositoryState: "not-initialized", currentBranch: null, headSha: null, changes: [] };
+  let finish!: () => void;
+  changesQuery.gitInitialize.mutateAsync.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  act(() => root.render(createElement(Workspace)));
+  click("Initialize Git Repository");
+  await act(async () => {});
+  expect(workspaceFiles.flushPendingSaves).toHaveBeenCalledOnce();
+  expect(changesQuery.gitInitialize.mutateAsync).toHaveBeenCalledOnce();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Initialize Git Repository"]')?.disabled).toBe(true);
+  click("Initialize Git Repository");
+  expect(changesQuery.gitInitialize.mutateAsync).toHaveBeenCalledOnce();
+  changesQuery.data = { ...repositoryChanges(), repositoryState: "unborn", headSha: null, changes: [change("new.txt", true)] };
+  await act(async () => { finish(); });
+  expect(feedback.success).toHaveBeenCalledWith("Git repository initialized.");
+  expect(container.querySelector('[aria-label="Initialize Git Repository"]')).toBeNull();
+  expect(container.textContent).toContain("new.txt");
+});
+
+it("shows initialization errors and leaves the action available to retry", async () => {
+  changesQuery.data = { ...repositoryChanges(), repositoryState: "not-initialized", currentBranch: null, headSha: null, changes: [] };
+  changesQuery.gitInitialize.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unable to initialize Git.", "LOCAL_GIT_ERROR"));
+  act(() => root.render(createElement(Workspace)));
+  click("Initialize Git Repository");
+  await act(async () => {});
+  expect(workspaceFiles.alert).toHaveBeenCalledWith("Git operation failed", "Unable to initialize Git.");
+  expect(feedback.success).not.toHaveBeenCalled();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Initialize Git Repository"]')?.disabled).toBe(false);
+  click("Initialize Git Repository");
+  await act(async () => {});
+  expect(changesQuery.gitInitialize.mutateAsync).toHaveBeenCalledTimes(2);
 });
 
 it("keeps selection and the commit draft through refreshes and reports stale data", () => {

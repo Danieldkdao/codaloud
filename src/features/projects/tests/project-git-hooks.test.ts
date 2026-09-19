@@ -14,7 +14,7 @@ const { actions } = vi.hoisted(() => ({
     readProjectGitCountsAction: vi.fn(), fetchProjectGitAction: vi.fn(), pushProjectGitAction: vi.fn(), pullProjectGitAction: vi.fn(),
     createProjectBranchAction: vi.fn(), checkoutProjectBranchAction: vi.fn(), readProjectBranchesAction: vi.fn(),
     readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn(), revertProjectCommitAction: vi.fn(), undoProjectCommitAction: vi.fn(),
-    readProjectChangesAction: vi.fn(), readProjectDiscardPreviewAction: vi.fn(), discardProjectChangesAction: vi.fn(),
+    readProjectChangesAction: vi.fn(), readProjectDiscardPreviewAction: vi.fn(), discardProjectChangesAction: vi.fn(), initializeProjectGitAction: vi.fn(),
     readProjectStashesAction: vi.fn(), stashProjectChangesAction: vi.fn(), popProjectStashAction: vi.fn(), deleteProjectStashAction: vi.fn(),
   },
 }));
@@ -154,6 +154,26 @@ describe("Git counts", () => {
     expect(hook.current.error).toBeInstanceOf(Error);
     expect(actions.readProjectGitCountsAction).toHaveBeenCalledOnce();
   });
+});
+
+verifyMutation({
+  name: "initialize",
+  useResult: (id) => useProjectChanges(id, { enabled: false }).gitInitialize,
+  action: actions.initializeProjectGitAction,
+  input: undefined,
+  noInput: true,
+});
+
+it("initializes successfully offline and refreshes branch and history snapshots", async () => {
+  onlineManager.setOnline(false);
+  actions.initializeProjectGitAction.mockResolvedValue({ error: false, data: { ...counts, headSha: null } });
+  const branchKey = ["projects", "branches", "infinite", "cursor", projectId];
+  const historyKey = ["projects", "commits", "infinite", "cursor", projectId];
+  [branchKey, historyKey].forEach((key) => client.setQueryData(key, { before: true }));
+  const hook = await renderHook(() => useProjectChanges(projectId, { enabled: false }));
+  expect(await run(() => hook.current.gitInitialize.mutateAsync())).toMatchObject({ currentBranch: "main", headSha: null });
+  expect(client.getQueryData(branchKey)).toBeUndefined();
+  expect(client.getQueryData(historyKey)).toBeUndefined();
 });
 
 verifyMutation({

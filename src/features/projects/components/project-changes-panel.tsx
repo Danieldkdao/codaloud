@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import type { ProjectRepositoryChangeSchema } from "../actions/change-schemas";
 import { useProjectChanges } from "../hooks/use-project-changes";
+import { useProjectGitOperation } from "../hooks/use-project-git-operation";
 import { useProjectWorkspaceDockHeight } from "../hooks/use-project-workspace-dock-height";
 import { useProjectWorkspaceChanges } from "../hooks/use-project-workspace-changes";
 import { ProjectChangeCheckbox } from "./project-change-checkbox";
@@ -29,6 +30,7 @@ export const ProjectChangesPanel = ({
   onViewFullDiff,
 }: ProjectChangesPanelProps) => {
   const query = useProjectChanges(projectId, { enabled: active });
+  const operation = useProjectGitOperation();
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const { setCommitSelection } = useProjectWorkspaceChanges();
   const insets = useSafeAreaInsets();
@@ -246,6 +248,28 @@ export const ProjectChangesPanel = ({
                     ? "Initialize a Git repository in this workspace to track changes."
                     : "Changed and untracked files will appear here, ready for your next commit."}
                 </PText>
+                {data.repositoryState === "not-initialized" ? (
+                  <Button
+                    accessibilityLabel="Initialize Git Repository"
+                    loading={query.gitInitialize.isPending}
+                    disabled={
+                      !active ||
+                      operation.isWorkspaceBusy ||
+                      query.isFetching ||
+                      Boolean(query.error) ||
+                      paused
+                    }
+                    onPress={() =>
+                      void operation.run(
+                        "Initializing Git repository…",
+                        () => query.gitInitialize.mutateAsync(),
+                        { success: () => "Git repository initialized." },
+                      )
+                    }
+                  >
+                    Initialize Git Repository
+                  </Button>
+                ) : null}
               </View>
             )}
           </>

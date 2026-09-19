@@ -23,7 +23,8 @@ export const useProjectRemoteBranches = (
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam, signal }) => {
       const project = await requireLocalProject(projectId);
-      signal.throwIfAborted();
+      if (signal.aborted)
+        throw new DOMException("The request was cancelled.", "AbortError");
       return readLocalBranches(
         project.id,
         {

@@ -323,9 +323,25 @@ static Json commitFiles(git_repository *repo, const fs::path &root,
 
 Json gitOperation(const fs::path &root, const std::string &operation,
                   const Json &args) {
+  // Inspect the entry itself: dangling links and invalid metadata are errors,
+  // not permission to initialize a new repository over existing Git state.
+  const auto metadata = fs::symlink_status(root / ".git");
+  if (!fs::exists(metadata)) {
+    if (operation == "git/changes")
+      return {{"repositoryState", "not-initialized"},
+              {"currentBranch", nullptr},
+              {"headSha", nullptr},
+              {"isDetached", false},
+              {"observedAt", timestamp()},
+              {"changes", Json::array()}};
+    if (operation == "git/initialize")
+      initializeGit(root);
+  }
   Repository repo;
   openRepository(repo, root);
-  if (operation == "git/counts")
+  // A repeated initialization only reads existing state; it must not reset
+  // HEAD.
+  if (operation == "git/counts" || operation == "git/initialize")
     return gitCounts(repo.get());
   if (operation == "git/commit")
     return commitFiles(repo.get(), root, args);

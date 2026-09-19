@@ -40,6 +40,7 @@ export type WorkspaceArguments = {
   "create-file": CreateProjectFileSchema;
   "rename-file": UpdateProjectFileSchema;
   "delete-file": DeleteProjectFileSchema;
+  "git/initialize": undefined;
   "git/counts": undefined;
   "git/changes": undefined;
   "git/branches": { source: ProjectBranchSource };

@@ -20,7 +20,7 @@ export const GitIdentityForm = () => {
     control,
     handleSubmit,
     reset,
-    formState: { isSubmitting, dirtyFields },
+    formState: { isSubmitting, dirtyFields, isDirty },
   } = useForm<GitIdentitySchema>({
     resolver: zodResolver(gitIdentitySchema),
     defaultValues: { name: "", email: "" },
@@ -112,7 +112,7 @@ export const GitIdentityForm = () => {
       )}
       <Button
         loading={isSubmitting}
-        disabled={identity.isPending || isSubmitting}
+        disabled={identity.isPending || isSubmitting || !isDirty}
         onPress={() =>
           void handleSubmit(async (data) => {
             // The mutation owns the visible storage error.

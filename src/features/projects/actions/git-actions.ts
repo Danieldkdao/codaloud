@@ -66,6 +66,15 @@ import {
   type CreateProjectCommitSchema,
 } from "./create-commit-schemas";
 
+export const initializeProjectGitAction = async (projectId: string) =>
+  mutateProjectGitRequest({
+    execute: () =>
+      executeProjectGit(projectId, { operation: "git/initialize" }),
+    input: z.strictObject({}),
+    unsafeInput: {},
+    output: gitCountsSchema,
+  });
+
 export const readProjectGitCountsAction = async (
   projectId: string,
   signal?: AbortSignal,

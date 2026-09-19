@@ -4,10 +4,30 @@ vi.mock("@/services/local-workspace/execute", () => ({ executeWorkspace: mocks.e
 vi.mock("../local/access", () => ({ requireLocalProject: mocks.project }));
 vi.mock("@/features/settings/git-identity", () => ({ requireGitIdentity: mocks.identity }));
 vi.mock("@/services/github/credentials", () => ({ getGitHubAccessToken: mocks.token }));
-import { readProjectBranchesAction, createProjectCommitAction, fetchProjectGitAction, readProjectCommitsAction } from "../actions/git-actions";
+import { initializeProjectGitAction, readProjectBranchesAction, createProjectCommitAction, fetchProjectGitAction, readProjectCommitsAction } from "../actions/git-actions";
+import { LocalWorkspaceError } from "@/services/local-workspace/execute";
 const id = "00000000-0000-4000-8000-000000000001";
 const sha = "a".repeat(40);
 beforeEach(() => { vi.resetAllMocks(); mocks.project.mockResolvedValue({ id }); mocks.identity.mockResolvedValue({ name: "Me", email: "me@example.com" }); });
+it("initializes Git in the existing project without identity or GitHub credentials", async () => {
+  mocks.execute.mockResolvedValue({ currentBranch: "main", headSha: null, upstream: null, upstreamSha: null, outgoing: null, incoming: null, isShallow: false, observedAt: "2026-09-19T12:00:00Z" });
+  expect(await initializeProjectGitAction(id)).toMatchObject({ error: false, data: { currentBranch: "main", headSha: null } });
+  expect(mocks.project).toHaveBeenCalledWith(id);
+  expect(mocks.execute).toHaveBeenCalledExactlyOnceWith(id, "git/initialize");
+  expect(mocks.identity).not.toHaveBeenCalled();
+  expect(mocks.token).not.toHaveBeenCalled();
+});
+it("surfaces initialization failures and rejects unconfirmed native responses", async () => {
+  mocks.execute.mockRejectedValueOnce(new LocalWorkspaceError("INVALID_REPOSITORY", "Invalid local repository."));
+  expect(await initializeProjectGitAction(id)).toMatchObject({ error: true, code: "INVALID_REPOSITORY" });
+  mocks.execute.mockResolvedValueOnce(true);
+  expect(await initializeProjectGitAction(id)).toMatchObject({ error: true, code: "GIT_OUTCOME_UNKNOWN" });
+});
+it("does not initialize a project that is unavailable locally", async () => {
+  mocks.project.mockRejectedValue(new LocalWorkspaceError("PROJECT_NOT_FOUND", "Missing project."));
+  expect(await initializeProjectGitAction(id)).toMatchObject({ error: true, code: "PROJECT_NOT_FOUND" });
+  expect(mocks.execute).not.toHaveBeenCalled();
+});
 it("commits with local identity without asking for GitHub credentials", async () => {
   mocks.execute.mockResolvedValue({ hash: sha, currentBranch: "main", parentHash: null });
   expect(await createProjectCommitAction(id, { message: "Initial", paths: ["a.txt"] })).toMatchObject({ error: false });

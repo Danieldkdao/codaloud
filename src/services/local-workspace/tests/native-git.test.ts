@@ -34,6 +34,53 @@ it("initializes a local main branch and reads unborn counts without a remote", (
   expect(git("symbolic-ref", "--short", "HEAD")).toBe("main");
 });
 
+it("detects a workspace without Git and initializes it without changing local files", () => {
+  rmSync(join(directory, ".git"), { recursive: true });
+  writeFileSync(join(directory, "one.txt"), "existing local work\n");
+  expect(call("git/changes")).toMatchObject({ ok: true, data: {
+    repositoryState: "not-initialized", currentBranch: null, headSha: null,
+    isDetached: false, changes: [], observedAt: expect.any(String),
+  } });
+  expect(call("git/initialize")).toMatchObject({ ok: true, data: {
+    currentBranch: "main", headSha: null, upstream: null,
+  } });
+  expect(readFileSync(join(directory, "one.txt"), "utf8")).toBe("existing local work\n");
+  expect(call("git/changes")).toMatchObject({ ok: true, data: {
+    repositoryState: "unborn", currentBranch: "main",
+    changes: [expect.objectContaining({ path: "one.txt", isUntracked: true })],
+  } });
+  expect(call("git/commit", { paths: ["one.txt"], message: "First commit" }).ok).toBe(true);
+  expect(git("show", "HEAD:one.txt")).toBe("existing local work");
+});
+
+it("safely repeats initialization without resetting existing history, index, branch or remote", () => {
+  const first = commit();
+  git("branch", "-m", "existing");
+  git("remote", "add", "origin", "https://github.com/example/existing.git");
+  writeFileSync(join(directory, "one.txt"), "staged work\n");
+  git("add", "one.txt");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    expect(call("git/initialize")).toMatchObject({ ok: true, data: {
+      currentBranch: "existing", headSha: first.hash,
+    } });
+  }
+  expect(git("show", ":one.txt")).toBe("staged work");
+  expect(git("remote", "get-url", "origin")).toBe("https://github.com/example/existing.git");
+});
+
+it.each(["corrupt", "symlink"])("does not treat %s Git metadata as an absent repository", (kind) => {
+  rmSync(join(directory, ".git"), { recursive: true });
+  if (kind === "symlink") symlinkSync(join(root, "missing-git"), join(directory, ".git"));
+  else writeFileSync(join(directory, ".git"), "invalid Git metadata");
+  expect(call("git/changes").ok).toBe(false);
+  expect(call("git/initialize").ok).toBe(false);
+});
+
+it("does not recreate a missing workspace during Git initialization", () => {
+  rmSync(directory, { recursive: true });
+  expect(call("git/initialize")).toMatchObject({ ok: false, code: "PROJECT_NOT_FOUND" });
+});
+
 it("commits selected working files while preserving unrelated staged entries", () => {
   writeFileSync(join(directory, "other.txt"), "staged\n");
   git("add", "other.txt");

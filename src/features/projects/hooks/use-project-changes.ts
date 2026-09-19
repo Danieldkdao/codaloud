@@ -1,10 +1,12 @@
 import { isValidIds } from "@/lib/utils";
 import type { GitDiscardedSchema } from "../server/git-discard-schemas";
+import type { GitCountsSchema } from "../server/git-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitDiscardSchema } from "../server/git-discard-schemas";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   discardProjectChangesAction,
+  initializeProjectGitAction,
   readProjectDiscardPreviewAction,
   readProjectChangesAction,
 } from "../actions/git-actions";
@@ -101,6 +103,27 @@ export const useProjectChanges = (
     [projectId, queryClient, refetch],
   );
 
+  const gitInitialize = useMutation<
+    GitCountsSchema,
+    ProjectGitError,
+    void,
+    ProjectGitMutationContext
+  >({
+    mutationKey: ["projects", "git", "initialize", projectId],
+    networkMode: "always",
+    retry: false,
+    onMutate: () => ({ projectId }),
+    mutationFn: async () => {
+      const id = requireLocalGitProject(projectId);
+      const result = await initializeProjectGitAction(id);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Re-read even after a lost response: the repository may already exist.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
   const gitDiscardChanges = useMutation<
     GitDiscardedSchema,
     ProjectGitError,
@@ -123,5 +146,11 @@ export const useProjectChanges = (
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { gitDiscardChanges, ...query, refreshAfterSaves, discardPreview };
+  return {
+    gitInitialize,
+    gitDiscardChanges,
+    ...query,
+    refreshAfterSaves,
+    discardPreview,
+  };
 };

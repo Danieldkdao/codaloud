@@ -20,7 +20,12 @@ export const useGitHubConnected = (_callbackURL = "/account") => {
     setConnectionError(null);
     startTransition(async () => {
       try {
-        if (await connectGitHub()) await clearGitHubQueries();
+        if (await connectGitHub()) {
+          await queryClient.cancelQueries({ queryKey: ["github"] });
+          // Reset notifies mounted pickers and refetches them with the saved
+          // connection. Removing an active query leaves its observer stranded.
+          await queryClient.resetQueries({ queryKey: ["github"] });
+        }
       } catch (error) {
         setConnectionError(
           error instanceof Error

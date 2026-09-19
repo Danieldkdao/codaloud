@@ -43,35 +43,35 @@ export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
       return {
         label: "Loading file…",
         busy: true,
-        icon: "cloud-sync-outline" as const,
+        icon: "refresh-cw" as const,
         className: "text-muted-foreground",
       };
     case "pending":
       return {
         label: "Changes waiting to save…",
         busy: true,
-        icon: "cloud-sync-outline" as const,
+        icon: "refresh-cw" as const,
         className: "text-muted-foreground",
       };
     case "saving":
       return {
         label: "Saving file…",
         busy: true,
-        icon: "cloud-sync-outline" as const,
+        icon: "refresh-cw" as const,
         className: "text-muted-foreground",
       };
     case "saved":
       return {
         label: "File saved",
         busy: false,
-        icon: "cloud-check-outline" as const,
+        icon: "check-circle" as const,
         className: "text-success-foreground",
       };
     case "error":
       return {
         label: "Couldn't save file. Tap to retry.",
         busy: false,
-        icon: "cloud-remove-outline" as const,
+        icon: "alert-circle" as const,
         className: "text-destructive",
       };
   }
@@ -606,16 +606,16 @@ export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
     case "code":
       return {
         label: "Code",
-        icon: { family: "Ionicons", name: "document-text-outline" },
+        icon: { family: "Feather", name: "file-text" },
       } as const;
     case "git":
       return {
         label: "Git",
-        icon: { family: "MaterialCommunityIcons", name: "source-branch" },
+        icon: { family: "Feather", name: "git-branch" },
       } as const;
     case "agent":
       return {
-        label: "Agent",
+        label: "Agent log",
         icon: { family: "Ionicons", name: "sparkles-outline" },
       } as const;
     default:

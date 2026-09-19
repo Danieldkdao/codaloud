@@ -10,6 +10,7 @@ type ProjectWorkspaceStateProps = {
   icon: "code" | "git-commit" | "activity";
   isLoading?: boolean;
   action?: ReactNode;
+  centerInWindow?: boolean;
 };
 
 export const ProjectWorkspaceState = ({
@@ -18,11 +19,13 @@ export const ProjectWorkspaceState = ({
   icon,
   isLoading = false,
   action,
+  centerInWindow,
 }: ProjectWorkspaceStateProps) => (
   <ProjectWorkspacePlaceholder
     title={title}
     description={description}
     action={action}
+    centerInWindow={centerInWindow}
   >
     {isLoading ? (
       <ActivityIndicator

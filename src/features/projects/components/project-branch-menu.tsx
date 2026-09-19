@@ -197,11 +197,8 @@ export const ProjectBranchMenu = ({
           className="shrink-0 flex-row items-center gap-2"
         >
           {!notInitialized && (
-            <Icon
-              family="Entypo"
-              name="dot-single"
-              size={14}
-              className="shrink-0 text-secondary-foreground"
+            <View
+              className="size-1 shrink-0 rounded-full bg-secondary-foreground"
               accessible={false}
             />
           )}

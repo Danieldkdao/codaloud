@@ -52,6 +52,7 @@ vi.mock("@/components/app-wrapper", () => ({ AppWrapper: ({ children }: { childr
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
+  useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   View: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   Pressable: ({ children, accessibilityLabel, onPress }: { children?: ReactNode; accessibilityLabel?: string; onPress?: () => void }) => createElement("button", { "aria-label": accessibilityLabel, onClick: onPress }, children),
@@ -264,25 +265,25 @@ it("shows loading, debounced saving, success, and failure icons after the lint c
   finishLoading();
   renderCode();
   await act(async () => state.ready!());
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')?.getAttribute("data-class")).toBe("text-success-foreground");
+  expect(container.querySelector('[data-icon="check-circle"]')?.getAttribute("data-class")).toBe("text-success-foreground");
   const diagnostic = { from: 0, to: 1, message: "Problem", code: 1, severity: "error" as const };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [diagnostic] }));
   const icons = [...container.querySelectorAll('[data-icon]')].map((icon) => icon.getAttribute("data-icon"));
-  expect(icons.at(-1)).toBe("cloud-check-outline");
+  expect(icons.at(-1)).toBe("check-circle");
   let finish!: (value: unknown) => void;
   saveFile.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await act(async () => state.change!("edited"));
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')).toBeNull();
+  expect(container.querySelector('[data-icon="check-circle"]')).toBeNull();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(3000));
   expect(saveFile).toHaveBeenCalledOnce();
   await act(async () => finish({ error: true, message: "Save failed." }));
-  expect(container.querySelector('[data-icon="cloud-remove-outline"]')?.getAttribute("data-class")).toBe("text-destructive");
+  expect(container.querySelector('[data-icon="alert-circle"]')?.getAttribute("data-class")).toBe("text-destructive");
   expect(container.querySelector("textarea")?.value).toBe("const value = 1;");
   saveFile.mockResolvedValueOnce({ error: false, message: "Saved.", data: { path: "app/page.tsx", size: 6, contentHash: "a".repeat(64) } });
   await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t save file. Tap to retry."]')!.click());
   expect(saveFile).toHaveBeenCalledTimes(2);
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')).not.toBeNull();
+  expect(container.querySelector('[data-icon="check-circle"]')).not.toBeNull();
 });
 
 

@@ -110,7 +110,7 @@ export const ProjectCodeStatus = ({
             <ActivityIndicator size="small" className="text-muted-foreground" />
           ) : (
             <Icon
-              family="MaterialCommunityIcons"
+              family="Feather"
               name={presentation.icon}
               size={22}
               className={presentation.className}

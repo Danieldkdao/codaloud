@@ -30,8 +30,14 @@ export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
   const router = useRouter();
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
-  const { projectId, branch, branchSource, commitSearch, isBranchLoading, isCheckingOut } =
-    useProjectWorkspaceBranch();
+  const {
+    projectId,
+    branch,
+    branchSource,
+    commitSearch,
+    isBranchLoading,
+    isCheckingOut,
+  } = useProjectWorkspaceBranch();
   const query = useProjectCommitHistory(projectId, {
     branch: branch ?? undefined,
     source: branchSource ?? undefined,
@@ -45,7 +51,14 @@ export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
   );
 
   if (isCheckingOut) {
-    return <ProjectWorkspaceState isLoading icon="git-commit" title="Switching branches…" description="Updating your workspace before loading commit history." />;
+    return (
+      <ProjectWorkspaceState
+        isLoading
+        icon="git-commit"
+        title="Switching branches…"
+        description="Updating your workspace before loading commit history."
+      />
+    );
   }
 
   if (!branch || !branchSource) {
@@ -186,10 +199,12 @@ export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
       }
       renderItem={({ item, index }) => (
         <Pressable
-          onPress={() => router.push({
-            pathname: "/projects/[projectId]/git/workspace-diff",
-            params: { projectId, commitSha: item.hash, source: branchSource },
-          })}
+          onPress={() =>
+            router.push({
+              pathname: "/projects/[projectId]/git/workspace-diff",
+              params: { projectId, commitSha: item.hash, source: branchSource },
+            })
+          }
           accessibilityRole="button"
           accessibilityLabel={`${formatCommitSubject(item.message)}, ${item.author}, ${formatCommitDate(item.committedAt)}, ${formatCommitHash(item.hash)}`}
           className="flex-row gap-3 rounded-xl active:bg-secondary"
@@ -245,11 +260,8 @@ export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
                     {item.author}
                   </PText>
                 </View>
-                <Icon
-                  family="Octicons"
-                  name="dot-fill"
-                  size={6}
-                  className="text-muted-foreground"
+                <View
+                  className="size-1.5 rounded-full bg-muted-foreground"
                   accessible={false}
                 />
                 <PText>{formatCommitDate(item.committedAt)}</PText>

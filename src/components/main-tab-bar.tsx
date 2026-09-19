@@ -18,16 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 type TabButtonProps = TabTriggerSlotProps & {
   label: string;
   icon: IconProps;
-  selectedIcon: IconProps;
 };
 
-const TabButton = ({
-  isFocused,
-  label,
-  icon,
-  selectedIcon,
-  ...props
-}: TabButtonProps) => (
+const TabButton = ({ isFocused, label, icon, ...props }: TabButtonProps) => (
   <Pressable
     {...props}
     accessibilityRole="tab"
@@ -44,7 +37,7 @@ const TabButton = ({
     )}
   >
     <Icon
-      {...(isFocused ? selectedIcon : icon)}
+      {...icon}
       size={24}
       accessible={false}
       className={isFocused ? "text-secondary-foreground" : "text-foreground"}
@@ -95,22 +88,19 @@ export const MainTabBar = () => {
       <TabTrigger name="projects" asChild>
         <TabButton
           label="Projects"
-          icon={{ family: "Ionicons", name: "folder-outline" }}
-          selectedIcon={{ family: "Ionicons", name: "folder" }}
+          icon={{ family: "Feather", name: "folder" }}
         />
       </TabTrigger>
       <TabTrigger name="drafts" asChild>
         <TabButton
           label="Drafts"
-          icon={{ family: "Ionicons", name: "document-text-outline" }}
-          selectedIcon={{ family: "Ionicons", name: "document-text" }}
+          icon={{ family: "Feather", name: "file-text" }}
         />
       </TabTrigger>
       <TabTrigger name="account" asChild>
         <TabButton
           label="Settings"
-          icon={{ family: "Ionicons", name: "settings-outline" }}
-          selectedIcon={{ family: "Ionicons", name: "settings" }}
+          icon={{ family: "Feather", name: "settings" }}
         />
       </TabTrigger>
     </View>

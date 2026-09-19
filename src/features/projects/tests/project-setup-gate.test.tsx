@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   segments: ["projects", "[projectId]", "files"],
   commitParams: {} as { commitSha?: string | string[]; source?: string | string[] },
   dismissTo: vi.fn(),
+  navigate: vi.fn(),
   headerOptions: {} as { headerTitle?: string; headerBackVisible?: boolean; headerLeft?: () => ReactNode },
   readFiles: vi.fn(),
   query: {
@@ -26,7 +27,7 @@ vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: state.projectId }),
   useGlobalSearchParams: () => state.commitParams,
   useSegments: () => state.segments,
-  useRouter: () => ({ dismissTo: state.dismissTo }),
+  useRouter: () => ({ dismissTo: state.dismissTo, navigate: state.navigate }),
   Stack: { Screen: ({ options }: { options: typeof state.headerOptions }) => { state.headerOptions = options; return null; } },
 }));
 vi.mock("react-native", () => ({
@@ -84,6 +85,7 @@ beforeEach(() => {
   state.segments = ["projects", "[projectId]", "files"];
   state.commitParams = {};
   state.dismissTo.mockClear();
+  state.navigate.mockClear();
   state.readFiles.mockReset().mockResolvedValue([]);
   Object.assign(state.query, { data: undefined, isError: false, isFetching: false });
 });
@@ -96,6 +98,34 @@ it("provides an explicit home action while the workspace is loading", async () =
   expect(home?.querySelector('[data-icon="home"]')).not.toBeNull();
   act(() => home!.click());
   expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
+});
+
+it.each(["files", "git", "agent"])("returns from %s to the current project's Code screen", async (section) => {
+  state.query.data = { name: "Example", setupStatus: "ready" };
+  state.segments = ["projects", "[projectId]", section];
+  await render();
+  act(() => root.render(state.headerOptions.headerLeft?.()));
+  const back = container.querySelector<HTMLButtonElement>('[aria-label="Back to Code"]');
+  expect(back?.querySelector('[data-icon="chevron-left"]')).not.toBeNull();
+  act(() => back!.click());
+  expect(state.navigate).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
+  expect(state.dismissTo).not.toHaveBeenCalled();
+});
+
+it("keeps Home on Code and Back to Git on nested diffs", async () => {
+  state.query.data = { name: "Example", setupStatus: "ready" };
+  state.segments = ["projects", "[projectId]", "code"];
+  await render();
+  const home = state.headerOptions.headerLeft?.();
+  state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
+  await render();
+  const back = state.headerOptions.headerLeft?.();
+  act(() => root.render(home));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Home"]')!.click());
+  expect(state.dismissTo).toHaveBeenLastCalledWith("/(main)");
+  act(() => root.render(back));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Back to Git"]')!.click());
+  expect(state.dismissTo).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/git", params: { projectId: "project-one" } });
 });
 
 it.each(["local", "remote"])("uses the short SHA for a %s commit and restores the normal titles on navigation", async (source) => {

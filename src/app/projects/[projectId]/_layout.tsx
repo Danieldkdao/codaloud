@@ -12,7 +12,7 @@ import { ProjectFileSaveRegistryProvider } from "@/features/projects/hooks/use-p
 import { ProjectSetupGate } from "@/features/projects/components/project-setup-gate";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 
-export const unstable_settings = { initialRouteName: "files" };
+export const unstable_settings = { initialRouteName: "code" };
 
 const ProjectLayout = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -32,7 +32,7 @@ const ProjectLayout = () => {
                     <Tabs
                       key={projectId}
                       asChild
-                      options={{ backBehavior: "none" }}
+                      options={{ backBehavior: "initialRoute" }}
                     >
                       <View className="flex-1 bg-background">
                         <TabSlot style={{ flex: 1 }} detachInactiveScreens />

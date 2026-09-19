@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/ui/icon";
 import { GlassSurface } from "@/components/ui/glass-surface";
 
-import { ProjectWorkspaceTabSelect } from "@/features/projects/components/project-workspace-tab-select";
 import {
   ProjectActionButtonsLeft,
   ProjectActionButtonsRight,
@@ -27,9 +26,17 @@ export const ProjectWorkspaceDock = () => {
   // The workspace tab precedes any nested screens, such as files/preview.
   const routeName = pathname.split("/")[3];
   const activeTab =
-    routeName === "code" || routeName === "git" || routeName === "agent"
+    routeName === "files" || routeName === "git" || routeName === "agent"
       ? routeName
-      : "files";
+      : "code";
+  // Six 44-point targets plus the 56-point microphone fit even at 320 points.
+  const horizontalPadding =
+    activeTab === "code"
+      ? Math.min(
+          16,
+          Math.max(0, (width - insets.left - insets.right - 320) / 2),
+        )
+      : 16;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
   useEffect(() => {
@@ -50,8 +57,8 @@ export const ProjectWorkspaceDock = () => {
         left: 0,
         right: 0,
         pointerEvents: "box-none",
-        paddingLeft: 16 + insets.left,
-        paddingRight: 16 + insets.right,
+        paddingLeft: horizontalPadding + insets.left,
+        paddingRight: horizontalPadding + insets.right,
         paddingTop: 12,
         paddingBottom: Math.max(insets.bottom, 12),
       }}
@@ -124,7 +131,6 @@ export const ProjectWorkspaceDock = () => {
               </View>
             </GlassSurface>
           </View>
-          <ProjectWorkspaceTabSelect tab={activeTab} />
         </View>
       </View>
     </View>

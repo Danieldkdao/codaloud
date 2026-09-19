@@ -19,12 +19,16 @@ export const GitHubRepositorySelectItem = ({
     onPress={onPress}
     accessibilityRole="button"
     accessibilityLabel={`${repository.fullName}, ${repository.private ? "Private repository" : "Public repository"}`}
-    accessibilityHint={selected ? "Clear selection and show all repositories" : "Select this repository"}
+    accessibilityHint={
+      selected
+        ? "Clear selection and show all repositories"
+        : "Select this repository"
+    }
     accessibilityState={{ selected }}
     className="flex-row items-start gap-3 px-4 py-3 active:opacity-80"
   >
     <Icon
-      family="FontAwesome"
+      family="Feather"
       name="github"
       size={24}
       className="text-foreground"
@@ -46,14 +50,13 @@ export const GitHubRepositorySelectItem = ({
           className="text-muted-foreground"
           accessible
           accessibilityRole="image"
-          accessibilityLabel={repository.private ? "Private repository" : "Public repository"}
+          accessibilityLabel={
+            repository.private ? "Private repository" : "Public repository"
+          }
         />
       </View>
       {repository.description && (
-        <PText
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
+        <PText numberOfLines={1} ellipsizeMode="tail">
           {repository.description}
         </PText>
       )}

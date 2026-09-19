@@ -223,7 +223,7 @@ it("shows an empty search result and clears back to open files without hiding Op
 });
 
 it("opens and dismisses the tool groups without a header or enabling unfinished operations", () => {
-  act(() => root.render(createElement(ProjectCodeTools, { path: "src/hello.ts" })));
+  act(() => root.render(createElement(ProjectCodeTools)));
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Editor tools");
   const sheet = container.querySelector('[role="dialog"]')!;

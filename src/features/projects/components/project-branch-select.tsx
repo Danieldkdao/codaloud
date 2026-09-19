@@ -191,9 +191,9 @@ export const ProjectBranchSelect = ({
           <ActivityIndicator className="text-foreground" />
         ) : (
           <Icon
-            family="MaterialCommunityIcons"
-            name="source-branch"
-            size={26}
+            family="Feather"
+            name="git-branch"
+            size={22}
             className="text-foreground"
             accessible={false}
           />

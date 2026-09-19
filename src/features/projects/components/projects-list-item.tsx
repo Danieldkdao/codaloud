@@ -212,7 +212,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                 <View className="size-12 items-center justify-center rounded-xl bg-secondary">
                   {project.githubRepositoryId ? (
                     <Icon
-                      family="FontAwesome"
+                      family="Feather"
                       name="github"
                       size={24}
                       className="text-secondary-foreground"

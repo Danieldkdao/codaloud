@@ -169,14 +169,13 @@ const CodeScreen = () => {
           />
         </View>
         {!files.activeFilePath ? (
-          <View className="flex-1" style={{ paddingBottom: dockHeight }}>
-            <ProjectWorkspaceState
-              icon="code"
-              title="No file selected"
-              description="Choose a file from the Files tab to start editing."
-              action={<Button onPress={openFile}>Open file</Button>}
-            />
-          </View>
+          <ProjectWorkspaceState
+            centerInWindow
+            icon="code"
+            title="No file selected"
+            description="Open a file to start editing."
+            action={<Button onPress={openFile}>Open file</Button>}
+          />
         ) : !documents.activeKey && query.isError ? (
           <View
             className="flex-1 items-center justify-center gap-4 px-6"

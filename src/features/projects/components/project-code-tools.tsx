@@ -74,7 +74,7 @@ const toolGroups: { title: string; tools: EditorToolPreview[] }[] = [
   },
 ];
 
-export const ProjectCodeTools = ({ path }: { path: string | null }) => {
+export const ProjectCodeTools = () => {
   const [open, setOpen] = useState(false);
   const card = useThemeColor("card");
   const { height } = useWindowDimensions();
@@ -82,18 +82,17 @@ export const ProjectCodeTools = ({ path }: { path: string | null }) => {
   return (
     <>
       <Pressable
-        disabled={!path}
         accessibilityRole="button"
         accessibilityLabel="Editor tools"
         accessibilityHint="Opens a preview of upcoming editing commands and settings."
-        accessibilityState={{ expanded: open, disabled: !path }}
+        accessibilityState={{ expanded: open }}
         onPress={() => setOpen(true)}
-        className="size-12 items-center justify-center rounded-full active:bg-secondary"
+        className="h-12 w-11 shrink-0 items-center justify-center rounded-full active:bg-secondary"
       >
         <Icon
           family="Feather"
           name="sliders"
-          size={20}
+          size={22}
           className="text-foreground"
           accessible={false}
         />

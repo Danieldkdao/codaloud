@@ -148,9 +148,9 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
         style={{ width: 48, height: 48 }}
       >
         <Icon
-          family="MaterialCommunityIcons"
-          name="source-commit"
-          size={28}
+          family="Feather"
+          name="git-commit"
+          size={22}
           accessible={false}
           className="text-foreground"
         />

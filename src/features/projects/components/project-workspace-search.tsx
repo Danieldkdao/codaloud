@@ -30,7 +30,10 @@ import { scheduleOnRN } from "react-native-worklets";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { useThemeColor } from "@/hooks/use-theme";
-import { ProjectSearchOverlay, useProjectSearchOverlay } from "./project-search-overlay";
+import {
+  ProjectSearchOverlay,
+  useProjectSearchOverlay,
+} from "./project-search-overlay";
 
 const buttonSize = 56;
 
@@ -80,9 +83,11 @@ export const ProjectWorkspaceSearch = ({
     setQuery(value ?? "");
   }, [value, cancel]);
   const keyboardOffset = useSharedValue(0);
-  const [anchor, setAnchor] = useState<{ right: number; top: number; windowTop: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<{
+    right: number;
+    top: number;
+    windowTop: number;
+  } | null>(null);
   const progress = useSharedValue(0);
   const availableWidth = width - insets.left - insets.right - 32;
   const barWidth = Math.min(availableWidth, 440);
@@ -167,16 +172,21 @@ export const ProjectWorkspaceSearch = ({
     progress.value = withTiming(
       0,
       { duration: reducedMotion ? 0 : 260, easing: Easing.out(Easing.cubic) },
-      (finished) => { if (finished) scheduleOnRN(finishClosing); },
+      (finished) => {
+        if (finished) scheduleOnRN(finishClosing);
+      },
     );
   }, [progress, reducedMotion, finishClosing]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      close();
-      return true;
-    });
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        close();
+        return true;
+      },
+    );
     return () => subscription.remove();
   }, [isOpen, close]);
 
@@ -186,7 +196,9 @@ export const ProjectWorkspaceSearch = ({
     progress.value = withTiming(
       1,
       { duration: reducedMotion ? 0 : 340, easing: Easing.out(Easing.cubic) },
-      (finished) => { if (finished) scheduleOnRN(focusInput); },
+      (finished) => {
+        if (finished) scheduleOnRN(focusInput);
+      },
     );
   };
 
@@ -217,9 +229,9 @@ export const ProjectWorkspaceSearch = ({
           style={{ width: 48, height: 48 }}
         >
           <Icon
-            family="MaterialCommunityIcons"
-            name="magnify"
-            size={28}
+            family="Feather"
+            name="search"
+            size={22}
             accessible={false}
             className="text-foreground"
           />
@@ -228,7 +240,11 @@ export const ProjectWorkspaceSearch = ({
 
       {anchor ? (
         <ProjectSearchOverlay onOutsidePress={close} onShow={startOpening}>
-          <View style={{ flex: 1 }} pointerEvents="box-none" onAccessibilityEscape={close}>
+          <View
+            style={{ flex: 1 }}
+            pointerEvents="box-none"
+            onAccessibilityEscape={close}
+          >
             <Animated.View
               style={[
                 { position: "absolute", top: anchor.top, right: anchor.right },

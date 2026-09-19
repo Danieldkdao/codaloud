@@ -103,9 +103,9 @@ export const ProjectOtherOptions = () => {
           />
         ) : (
           <Icon
-            family="MaterialCommunityIcons"
-            name="tune-vertical"
-            size={28}
+            family="Feather"
+            name="sliders"
+            size={22}
             className="text-foreground"
             accessible={false}
           />

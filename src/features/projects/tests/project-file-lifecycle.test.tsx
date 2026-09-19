@@ -4,7 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import ProjectLayout from "@/app/projects/[projectId]/_layout";
+import ProjectLayout, { unstable_settings as projectSettings } from "@/app/projects/[projectId]/_layout";
+import ProjectScreen from "@/app/projects/[projectId]/index";
 import FilesScreen from "@/app/projects/[projectId]/files";
 import CodeScreen from "@/app/projects/[projectId]/code";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
@@ -24,10 +25,11 @@ vi.mock("react-native-reanimated", () => {
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 
 const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
+const redirect = vi.hoisted(() => vi.fn());
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
 vi.mock("@/features/projects/components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children) }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("expo-router", () => ({ useSegments: () => ["projects", "[projectId]", "files"], useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
+vi.mock("expo-router", () => ({ Redirect: ({ href }: { href: unknown }) => { redirect(href); return null; }, useSegments: () => ["projects", "[projectId]", "files"], useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {
   selection = useProjectWorkspaceCurrentFile();
@@ -113,6 +115,13 @@ it("retains native screen containment and default lazy navigation without readin
   expect(tabOptions?.screenOptions).toBeUndefined();
   expect(detachInactiveScreens).toBe(true);
   expect(mocks.readContent).not.toHaveBeenCalled();
+});
+
+it("opens projects in Code and makes it the system-back destination for supporting screens", () => {
+  expect(projectSettings.initialRouteName).toBe("code");
+  expect(tabOptions?.backBehavior).toBe("initialRoute");
+  act(() => root.render(createElement(ProjectScreen)));
+  expect(redirect).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId: mocks.projectId } });
 });
 
 it("waits for pending and subsequently queued edits before renaming", async () => {

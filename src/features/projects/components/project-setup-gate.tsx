@@ -43,7 +43,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
     enabled: setupReady,
     verifyOnMount: true,
   });
-  // A successful root read verifies the local project folder and warms the Files tab.
+  // A successful root read verifies the local project folder and warms the Files screen.
   // Background refreshes alone must not unmount the editor or other workspace tabs.
   const ready =
     setupReady &&
@@ -52,6 +52,8 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
     workspace.failureCount === 0;
   const workspaceError = setupReady && workspace.isError;
   const checking = workspaceError ? workspace.isFetching : isFetching;
+  const isSupportingScreen =
+    ready && ["files", "git", "agent"].includes(segments[2] ?? "");
   useEffect(() => {
     if (ready) setOpenedProjectId(projectId);
   }, [projectId, ready]);
@@ -79,11 +81,19 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerLeft: () => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={isWorkspaceDiff ? "Back to Git" : "Home"}
+              accessibilityLabel={
+                isWorkspaceDiff
+                  ? "Back to Git"
+                  : isSupportingScreen
+                    ? "Back to Code"
+                    : "Home"
+              }
               accessibilityHint={
                 isWorkspaceDiff
                   ? "Returns to your changes"
-                  : "Returns to your projects"
+                  : isSupportingScreen
+                    ? "Returns to your code editor"
+                    : "Returns to your projects"
               }
               onPress={() =>
                 isWorkspaceDiff
@@ -91,13 +101,22 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
                       pathname: "/projects/[projectId]/git",
                       params: { projectId },
                     })
-                  : router.dismissTo("/(main)")
+                  : isSupportingScreen
+                    ? router.navigate({
+                        pathname: "/projects/[projectId]/code",
+                        params: { projectId },
+                      })
+                    : router.dismissTo("/(main)")
               }
               className="size-11 items-center justify-center rounded-full active:bg-secondary"
             >
               <Icon
                 family="Feather"
-                name={isWorkspaceDiff ? "chevron-left" : "home"}
+                name={
+                  isWorkspaceDiff || isSupportingScreen
+                    ? "chevron-left"
+                    : "home"
+                }
                 size={22}
                 accessible={false}
                 className="text-foreground"

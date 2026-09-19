@@ -83,7 +83,8 @@ const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPending
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
-vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ activeFilePath: "app.ts", refreshFiles: workspaceFiles.refreshFiles }) }));
+const editorSelection = vi.hoisted(() => ({ activeFilePath: "app.ts" as string | null }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ ...editorSelection, refreshFiles: workspaceFiles.refreshFiles }) }));
 let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({
   query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
@@ -250,6 +251,7 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  editorSelection.activeFilePath = "app.ts";
   git.data.headSha = "a".repeat(40);
   git.data.hasRemote = undefined;
   changesQuery.gitInitialize.mutateAsync.mockReset().mockResolvedValue({ currentBranch: "main", headSha: null });
@@ -303,20 +305,21 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); });
 
-it("switches workspace sections through the menu and reflects the active route", () => {
-  for (const [name, label] of [["files", "Files"], ["code", "Code"], ["agent", "Agent"], ["git", "Git"]]) {
-    const option = container.querySelector<HTMLButtonElement>(`[data-branch="${label}"]`);
-    expect(option).not.toBeNull();
-    act(() => option!.click());
+it("opens each supporting screen directly from Code without the workspace menu", () => {
+  for (const [name, label] of [["files", "Files"], ["git", "Git"], ["agent", "Agent log"]]) {
+    activeTab = "code";
+    act(() => root.render(createElement(Workspace)));
+    expect(container.querySelector('[aria-label^="Workspace:"]')).toBeNull();
+    click(label);
     expect(switchTab).toHaveBeenLastCalledWith(name, { resetOnFocus: false });
     act(() => root.render(createElement(Workspace)));
     const dock = container.querySelector<HTMLElement>('[data-testid="project-workspace-dock"]');
     expect(dock).not.toBeNull();
     expect(Number(dock!.style.zIndex)).toBeGreaterThan(1);
     expect(dock!.querySelector('[aria-label="Microphone"]')).not.toBeNull();
-    expect(container.querySelector(`[aria-label="Workspace: ${label}"]`)).not.toBeNull();
-    expect(container.querySelector(`[data-branch="${label}"]`)?.getAttribute("aria-checked")).toBe("true");
-    expect(container.querySelectorAll('[data-branch][aria-checked="true"]')).toHaveLength(1);
+    expect(activeTab).toBe(name);
+    expect(container.querySelector('[aria-label="Editor tools"]')).toBeNull();
+    expect(container.querySelector('[aria-label^="Workspace:"]')).toBeNull();
   }
 });
 
@@ -476,7 +479,7 @@ it("shows only the active screen's controls in the lower bar", () => {
     expect(labels()).toContain("Microphone");
     expect(container.textContent).not.toContain("Current branch:");
     if (tab === "code") {
-      expect(labels()).toEqual(expect.arrayContaining(["Editor tools", "Git tools", "Undo", "Redo"]));
+      expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools", "Undo", "Redo"]));
       expect(labels()).not.toContain("Previous file");
       expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
@@ -489,20 +492,26 @@ it("shows only the active screen's controls in the lower bar", () => {
   }
 });
 
-it("opens editor options from the Code dock and leaves the Git placeholder inactive", () => {
+it.each(["app.ts", null])("opens editor settings from the right toolbar with active file %s", (activeFilePath) => {
+  editorSelection.activeFilePath = activeFilePath;
   activeTab = "code";
   act(() => root.render(createElement(Workspace)));
   const dock = container.querySelector('[data-testid="project-workspace-dock"]')!;
   expect(dock.querySelector('[aria-label="Editor tools"]')).not.toBeNull();
-  const gitButton = dock.querySelector<HTMLButtonElement>('[aria-label="Git tools"]')!;
-  expect(gitButton.disabled).toBe(true);
-  act(() => gitButton.click());
+  expect([...dock.querySelectorAll("button[aria-label]")].map((button) => button.getAttribute("aria-label"))).toEqual([
+    "Files", "Git", "Agent log", "Microphone", "Undo", "Redo", "Editor tools",
+  ]);
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Editor tools");
-  expect(container.querySelector('[role="dialog"]')?.textContent).not.toContain("app.ts");
-  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Format code");
+  const sheet = container.querySelector('[role="dialog"]');
+  expect(sheet).not.toBeNull();
+  expect(sheet?.textContent).not.toContain("app.ts");
+  expect(sheet?.textContent).toContain("Format code");
+  expect(sheet?.textContent).toContain("Font and size");
   click("Swipe down");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+  click("Editor tools");
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 });
 
 

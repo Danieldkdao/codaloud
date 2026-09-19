@@ -37,7 +37,7 @@ const failure = (error: unknown): ProjectFileContentErrorSchema => ({
 
 const mutateFile = async <I extends object, O>(
   projectId: string,
-  operation: string,
+  execute: (projectId: string, args: I) => Promise<unknown>,
   unsafeInput: I,
   input: z.ZodType<I>,
   output: z.ZodType<O>,
@@ -46,7 +46,7 @@ const mutateFile = async <I extends object, O>(
     const args = input.parse(unsafeInput);
     const project = await requireLocalProject(projectId);
     const data = output.parse(
-      await executeWorkspace(project.id, operation, args),
+      await execute(project.id, args),
     );
     return {
       error: false as const,
@@ -64,7 +64,7 @@ export const saveProjectFileContentAction = (
 ) =>
   mutateFile(
     projectId,
-    "save-file",
+    (id, args) => executeWorkspace(id, "save-file", args),
     input,
     saveProjectFileContentSchema,
     savedProjectFileContentSchema,
@@ -75,7 +75,7 @@ export const createProjectFileAction = (
 ) =>
   mutateFile(
     projectId,
-    "create-file",
+    (id, args) => executeWorkspace(id, "create-file", args),
     input,
     createProjectFileSchema,
     projectFileEntrySchema,
@@ -86,7 +86,7 @@ export const updateProjectFileAction = (
 ) =>
   mutateFile(
     projectId,
-    "rename-file",
+    (id, args) => executeWorkspace(id, "rename-file", args),
     input,
     updateProjectFileSchema,
     projectFileEntrySchema,
@@ -97,7 +97,7 @@ export const deleteProjectFileAction = (
 ) =>
   mutateFile(
     projectId,
-    "delete-file",
+    (id, args) => executeWorkspace(id, "delete-file", args),
     input,
     deleteProjectFileSchema,
     projectFileEntrySchema,

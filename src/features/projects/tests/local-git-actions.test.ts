@@ -34,3 +34,14 @@ it("continues a fixed history snapshot without dropping filtered commits", async
   expect(mocks.execute.mock.calls[1][2]).toMatchObject({ snapshotSha: sha, offset: 1 });
   expect(await readProjectCommitsAction(id, { source: "local", branch: "other", pageSize: 1, cursor: first!.nextCursor })).toBeNull();
 });
+
+// Compile-time checks: the project layer derives its payloads from the native contract.
+const checkProjectCommands = (execute: typeof import("../local/git").executeProjectGit) => {
+  // @ts-expect-error Unknown operations cannot reach the dispatcher.
+  void execute(id, { operation: "git/anything" });
+  // @ts-expect-error Checkout requires a branch name, not a commit payload.
+  void execute(id, { operation: "git/checkout", args: { message: "wrong" } });
+  // @ts-expect-error Credentials belong to project dispatch, not the caller.
+  void execute(id, { operation: "git/fetch", args: { accessToken: "injected" } });
+};
+void checkProjectCommands;

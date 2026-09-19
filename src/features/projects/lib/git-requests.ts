@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { executeProjectGit } from "../local/git";
 import { LocalWorkspaceError } from "@/services/local-workspace/execute";
 import type {
   ProjectGitMutationFailure,
@@ -11,35 +10,27 @@ export const readProjectGitRequest = async <
   I extends Record<string, string | number | boolean | null | undefined>,
   O,
 >({
-  projectId,
-  path,
+  execute,
   output,
   signal,
   input,
   params = {},
-  query,
   validate,
   onFailure,
 }: {
-  projectId: string;
-  // Relative to /api/projects/:projectId; dynamic paths use validated input.
-  path: string | ((input: I) => string);
+  execute: (input: I) => Promise<unknown>;
   output: z.ZodType<O>;
   signal?: AbortSignal;
   input: z.ZodType<I>;
   params?: unknown;
-  query?: (
-    input: I,
-  ) => Record<string, string | number | boolean | null | undefined>;
   validate?: (data: O, input: I) => boolean;
   onFailure?: ProjectGitReadFailureHandler;
 }): Promise<O | null> => {
   try {
     if (signal?.aborted) return null;
     const parsed = input.parse(params);
-    const endpoint = typeof path === "string" ? path : path(parsed);
     const data = output.parse(
-      await executeProjectGit(projectId, endpoint, parsed, false),
+      await execute(parsed),
     );
     if (signal?.aborted) return null;
     return !validate || validate(data, parsed) ? data : null;
@@ -57,16 +48,14 @@ export const readProjectGitRequest = async <
 };
 
 export const mutateProjectGitRequest = async <I, O>({
-  projectId,
-  path,
+  execute,
   input,
   unsafeInput,
   output,
   validate,
   errors = {},
 }: {
-  projectId: string;
-  path: string;
+  execute: (input: I) => Promise<unknown>;
   input: z.ZodType<I>;
   unsafeInput: unknown;
   output: z.ZodType<O>;
@@ -96,7 +85,7 @@ export const mutateProjectGitRequest = async <I, O>({
       );
     started = true;
     const data = output.parse(
-      await executeProjectGit(projectId, path, parsed.data as object, true),
+      await execute(parsed.data),
     );
     if (validate && !validate(data, parsed.data))
       throw new Error(

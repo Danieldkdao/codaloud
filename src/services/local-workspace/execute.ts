@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { WorkspaceCommand } from "./types";
 import LocalWorkspace from "../../../modules/local-workspace";
 
 export class LocalWorkspaceError extends Error {
@@ -17,14 +18,13 @@ const responseSchema = z.discriminatedUnion("ok", [
 
 export const executeWorkspace = async (
   projectId: string,
-  operation: string,
-  args: object = {},
+  ...[operation, args]: WorkspaceCommand
 ): Promise<unknown> => {
   const id = z.uuid().parse(projectId).toLowerCase();
   const response = responseSchema.parse(
     JSON.parse(
       await LocalWorkspace.execute(
-        JSON.stringify({ projectId: id, operation, args }),
+        JSON.stringify({ projectId: id, operation, args: args ?? {} }),
       ),
     ),
   );

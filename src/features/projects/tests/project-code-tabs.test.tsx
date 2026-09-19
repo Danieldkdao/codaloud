@@ -4,11 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectCodeTabs } from "../components/project-code-tabs";
 import { ProjectCodeStatus } from "../components/project-code-status";
+import { ProjectCodeTools } from "../components/project-code-tools";
 import { formatProjectEditorTab } from "../lib/formatters";
 
 const layoutEvents = new Map<string, (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void>();
 const scrollTo = vi.fn();
 const scrollToIndex = vi.fn();
+const pathQuery = vi.hoisted(() => ({ data: ["a.ts", "lib/b.ts", "src/Closed.ts"], isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn() }));
+vi.mock("../hooks/use-project-file-paths", () => ({ useProjectFilePaths: () => pathQuery }));
+vi.mock("@/components/ui/input", () => ({ Input: ({ value, onChangeText, accessibilityLabel }: { value: string; onChangeText: (value: string) => void; accessibilityLabel: string }) => createElement("input", { value, "aria-label": accessibilityLabel, onInput: (event) => onChangeText(event.currentTarget.value) }) }));
 
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 
@@ -23,6 +27,7 @@ vi.mock("react-native-reanimated", () => {
   };
 });
 vi.mock("react-native", () => ({
+  useWindowDimensions: () => ({ width: 390, height: 844 }),
   View: ({ children, testID, onLayout, className }: { children: ReactNode; testID?: string; onLayout?: (event: never) => void; className?: string }) => {
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
     return createElement("div", { "data-testid": testID, "data-class": className }, children);
@@ -35,7 +40,7 @@ vi.mock("react-native", () => ({
     useImperativeHandle(ref, () => ({ scrollToOffset: scrollTo, scrollToIndex }));
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
     return createElement("div", { "data-testid": testID }, ListHeaderComponent,
-      data.map((item) => createElement(CellRendererComponent, { item, key: item }, renderItem({ item }))));
+      data.map((item) => CellRendererComponent ? createElement(CellRendererComponent, { item, key: item }, renderItem({ item })) : createElement("div", { key: item }, renderItem({ item }))));
   },
   ScrollView: ({ children, ref, testID, onLayout }: { children: ReactNode; ref?: Ref<unknown>; testID?: string; onLayout?: (event: never) => void }) => {
     useImperativeHandle(ref, () => ({ scrollTo }));
@@ -48,8 +53,8 @@ vi.mock("react-native", () => ({
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", { "data-glass": true }, children) }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/icon", () => ({ Icon: ({ name }: { name: string }) => createElement("span", { "data-icon": name }) }));
-vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", { role: "dialog" }, children) : null }));
-vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children), HeadingText: ({ children }: { children: ReactNode }) => createElement("h2", null, children) }));
+vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children, onOpenChange }: { open: boolean; children: ReactNode; onOpenChange: (open: boolean) => void }) => open ? createElement("div", { role: "dialog" }, children, createElement("button", { "aria-label": "Dismiss sheet", onClick: () => onOpenChange(false) })) : null }));
+vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children), CodeText: ({ children }: { children: ReactNode }) => createElement("span", null, children), HeadingText: ({ children }: { children: ReactNode }) => createElement("h2", null, children) }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "theme-color" }));
 
 let root: Root;
@@ -69,7 +74,7 @@ it("formats the extension alongside the name and disambiguates identical filenam
 
 it("switches and closes tabs, opens Files, and selects a file from the count sheet", () => {
   const onSelect = vi.fn(); const onClose = vi.fn(); const onOpenFile = vi.fn();
-  act(() => root.render(createElement(ProjectCodeTabs, { paths: ["a.ts", "lib/b.ts"], activePath: "a.ts", onSelect, onClose, onOpenFile })));
+  act(() => root.render(createElement(ProjectCodeTabs, { projectId: "project-one", paths: ["a.ts", "lib/b.ts"], activePath: "a.ts", onSelect, onClose, onOpenFile })));
   click("lib/b.ts"); expect(onSelect).toHaveBeenCalledWith("lib/b.ts");
   click("Close a.ts"); expect(onClose).toHaveBeenCalledWith("a.ts");
   click("Open another file"); expect(onOpenFile).toHaveBeenCalledOnce();
@@ -81,13 +86,13 @@ it("switches and closes tabs, opens Files, and selects a file from the count she
 
 it("keeps new-file navigation available when the last tab is closed", () => {
   const onOpenFile = vi.fn();
-  act(() => root.render(createElement(ProjectCodeTabs, { paths: [], activePath: null, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile })));
+  act(() => root.render(createElement(ProjectCodeTabs, { projectId: "project-one", paths: [], activePath: null, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile })));
   click("Open another file"); expect(onOpenFile).toHaveBeenCalledOnce();
 });
 
 it("keeps the plus and file count outside the scrolling tab strip", () => {
   act(() => root.render(createElement(ProjectCodeTabs, {
-    paths: ["a.ts", "b.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+    projectId: "project-one",    paths: ["a.ts", "b.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
   })));
   const strip = container.querySelector('[data-testid="code-tab-scroll"]')!;
   expect(strip).not.toBeNull();
@@ -124,7 +129,7 @@ const measure = (id: string, x: number, width: number, height = 48) => act(() =>
 
 it("keeps glass inside the selected cell before measurement and after switching, removal, and resizing", () => {
   const renderTabs = (activePath: string | null, paths = ["a.ts", "b.ts"]) => act(() => root.render(createElement(ProjectCodeTabs, {
-    paths, activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+    projectId: "project-one",    paths, activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
   })));
   const expectGlass = (path: string) => {
     const indicators = container.querySelectorAll('[data-testid="code-tab-indicator"]');
@@ -152,7 +157,7 @@ it("keeps glass inside the selected cell before measurement and after switching,
 
 it("only scrolls the strip when the active tab is outside its visible area", () => {
   const renderTabs = (activePath: string) => act(() => root.render(createElement(ProjectCodeTabs, {
-    paths: ["a.ts", "b.ts"], activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+    projectId: "project-one",    paths: ["a.ts", "b.ts"], activePath, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
   })));
   scrollTo.mockClear();
   renderTabs("a.ts");
@@ -168,7 +173,7 @@ it("only scrolls the strip when the active tab is outside its visible area", () 
 
 it("uses glass for the fixed file-count control", () => {
   act(() => root.render(createElement(ProjectCodeTabs, {
-    paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+    projectId: "project-one",    paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
   })));
   const count = container.querySelector('[aria-label="1 file open. Show all files."]')!;
   expect(count).not.toBeNull();
@@ -177,11 +182,58 @@ it("uses glass for the fixed file-count control", () => {
 
 it("gives the count and add-file controls matching 48-point glass surfaces", () => {
   act(() => root.render(createElement(ProjectCodeTabs, {
-    paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+    projectId: "project-one",    paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
   })));
   for (const label of ["Open another file", "1 file open. Show all files."]) {
     const control = container.querySelector(`[aria-label="${label}"]`)!;
     expect(control.getAttribute("data-class")?.split(" ")).toContain("size-12");
     expect(control.closest('[data-glass]')).not.toBeNull();
   }
+});
+
+const searchPaths = (value: string) => act(() => {
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Search project paths"]')!;
+  expect(input).not.toBeNull();
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+it("instantly searches full local paths case-insensitively and opens files outside the tabs", () => {
+  const onSelect = vi.fn();
+  act(() => root.render(createElement(ProjectCodeTabs, { projectId: "project-one", paths: ["a.ts", "lib/b.ts"], activePath: "a.ts", onSelect, onClose: vi.fn(), onOpenFile: vi.fn() })));
+  click("2 files open. Show all files.");
+  expect(container.querySelector('[aria-label="Open src/Closed.ts"]')).toBeNull();
+  searchPaths("  SRC/CLO  ");
+  expect(container.querySelector('[role="dialog"] [aria-label="Switch to a.ts"]')).toBeNull();
+  expect(container.querySelector('[role="dialog"] [aria-label="Close src/Closed.ts"]')).toBeNull();
+  click("Open src/Closed.ts");
+  expect(onSelect).toHaveBeenCalledWith("src/Closed.ts");
+  click("2 files open. Show all files.");
+  expect(container.querySelector('[aria-label="Switch to a.ts"]')).not.toBeNull();
+});
+
+it("shows an empty search result and clears back to open files without hiding Open another file", () => {
+  act(() => root.render(createElement(ProjectCodeTabs, { projectId: "project-one", paths: ["a.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn() })));
+  click("1 file open. Show all files.");
+  searchPaths("missing");
+  expect(container.textContent).toContain("No matching paths");
+  expect(container.querySelector('[role="dialog"] [aria-label="Open another file"]')).not.toBeNull();
+  click("Clear file search");
+  expect(container.querySelector('[aria-label="Switch to a.ts"]')).not.toBeNull();
+});
+
+it("opens and dismisses the tool groups without a header or enabling unfinished operations", () => {
+  act(() => root.render(createElement(ProjectCodeTools, { path: "src/hello.ts" })));
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  click("Editor tools");
+  const sheet = container.querySelector('[role="dialog"]')!;
+  expect(sheet.textContent).not.toContain("Editor tools");
+  expect(sheet.textContent).not.toContain("Preview");
+  expect(sheet.textContent).not.toContain("src/hello.ts");
+  expect(sheet.textContent).not.toContain("These tools and settings are coming soon.");
+  for (const label of ["Find in file", "Replace in file", "Go to line", "Format code", "Organize imports", "Toggle comment", "Font and size", "Word wrap", "Line numbers"]) {
+    expect(sheet.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(true);
+  }
+  click("Dismiss sheet");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });

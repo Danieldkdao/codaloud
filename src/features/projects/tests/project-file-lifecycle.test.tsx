@@ -59,6 +59,7 @@ vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readPr
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, onSelect }: { paths: string[]; onSelect: (path: string) => void }) => createElement("div", null, paths.map((path) => createElement("button", { key: path, onClick: () => onSelect(path) }, path))) }));
+vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: () => null }));
 vi.mock("@/components/code-editor", () => ({ default: ({ initialValue, documentKey, onReady, onChange }: { documentKey: string; initialValue: string; onReady: (key?: string) => Promise<void>; onChange: (value: string) => Promise<void> }) => {
   mocks.change = onChange;
   useEffect(() => { void onReady(documentKey); }, [onReady, documentKey]);

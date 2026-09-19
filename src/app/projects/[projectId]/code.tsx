@@ -117,6 +117,8 @@ const CodeScreen = () => {
     <View className="flex-1 bg-background">
       {files.openFilePaths.size > 0 ? (
         <ProjectCodeTabs
+          key={projectId}
+          projectId={projectId}
           paths={[...files.openFilePaths]}
           activePath={files.activeFilePath}
           onSelect={files.openFile}
@@ -203,11 +205,11 @@ const CodeScreen = () => {
           className="absolute left-4 right-4 items-center"
           style={{ bottom: dockHeight + 8 }}
           pointerEvents="box-none"
+          onLayout={({ nativeEvent }) =>
+            setBadgeHeight(nativeEvent.layout.height)
+          }
         >
           <ProjectCodeStatus
-            onLayout={({ nativeEvent }) =>
-              setBadgeHeight(nativeEvent.layout.height)
-            }
             readError={!documents.activeKey && query.isError}
             status={
               !documents.activeKey && query.isError && !query.isFetching

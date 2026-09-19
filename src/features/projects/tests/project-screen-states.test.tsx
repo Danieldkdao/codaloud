@@ -33,6 +33,7 @@ vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }))
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn(), navigate }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths }: { paths: string[] }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" ")) }));
+vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: ({ path }: { path: string }) => createElement("button", { "aria-label": "Editor tools", "data-path": path }) }));
 vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
   useEffect(() => { state.editorMounts++; }, []);
   state.change = onChange;
@@ -215,6 +216,7 @@ it("shows a selection prompt immediately when there is no current file", () => {
 it("replaces the empty tab header with Open file and restores it only while files are open", () => {
   renderCode(null);
   expect(container.querySelector('[data-testid="code-tabs"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Editor tools"]')).toBeNull();
   const open = [...container.querySelectorAll("button")].find((button) => button.textContent === "Open file");
   expect(open).toBeDefined();
   act(() => open!.click());
@@ -222,6 +224,7 @@ it("replaces the empty tab header with Open file and restores it only while file
   finishLoading();
   renderCode();
   expect(container.querySelector('[data-testid="code-tabs"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Editor tools"]')).toBeNull();
   expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Open file")).toBe(false);
   renderCode(null);
   expect(container.querySelector('[data-testid="code-tabs"]')).toBeNull();

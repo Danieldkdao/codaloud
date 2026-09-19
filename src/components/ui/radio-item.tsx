@@ -50,9 +50,7 @@ export const RadioItem = <Value extends string>({
       onPress={() => onValueChange(value)}
       className={cn(
         "flex-row items-center gap-4 rounded-xl border-2 p-4 active:opacity-80",
-        selected
-          ? "border-primary bg-secondary"
-          : "border-border bg-background",
+        selected ? "border-primary bg-secondary" : "border-0! bg-background",
         isDisabled && "opacity-50",
         className,
       )}

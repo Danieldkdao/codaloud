@@ -83,7 +83,7 @@ const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPending
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
-vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFiles: workspaceFiles.refreshFiles }) }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ activeFilePath: "app.ts", refreshFiles: workspaceFiles.refreshFiles }) }));
 let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({
   query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
@@ -476,7 +476,9 @@ it("shows only the active screen's controls in the lower bar", () => {
     expect(labels()).toContain("Microphone");
     expect(container.textContent).not.toContain("Current branch:");
     if (tab === "code") {
-      expect(labels()).toEqual(expect.arrayContaining(["Previous file", "Next file", "Undo", "Redo"]));
+      expect(labels()).toEqual(expect.arrayContaining(["Editor tools", "Git tools", "Undo", "Redo"]));
+      expect(labels()).not.toContain("Previous file");
+      expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
     } else {
       expect(labels()).toContain(tab === "files" ? "Search files" : "Search activity");
@@ -485,6 +487,22 @@ it("shows only the active screen's controls in the lower bar", () => {
       expect(container.querySelector('[data-branch="Folder"]') !== null).toBe(tab === "files");
     }
   }
+});
+
+it("opens editor options from the Code dock and leaves the Git placeholder inactive", () => {
+  activeTab = "code";
+  act(() => root.render(createElement(Workspace)));
+  const dock = container.querySelector('[data-testid="project-workspace-dock"]')!;
+  expect(dock.querySelector('[aria-label="Editor tools"]')).not.toBeNull();
+  const gitButton = dock.querySelector<HTMLButtonElement>('[aria-label="Git tools"]')!;
+  expect(gitButton.disabled).toBe(true);
+  act(() => gitButton.click());
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  click("Editor tools");
+  expect(container.querySelector('[role="dialog"]')?.textContent).not.toContain("app.ts");
+  expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Format code");
+  click("Swipe down");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
 

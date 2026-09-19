@@ -9,7 +9,9 @@ import { ProjectWorkspaceSearch } from "@/features/projects/components/project-w
 import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
 import { ProjectCommitForm } from "@/features/projects/components/project-commit-form";
+import { ProjectCodeTools } from "@/features/projects/components/project-code-tools";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
+import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceChanges } from "@/features/projects/hooks/use-project-workspace-changes";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 import type { ProjectWorkspaceTab } from "@/features/projects/types";
@@ -22,6 +24,7 @@ type ProjectActionButtonsProps = {
 
 export const ProjectActionButtonsLeft = ({ tab, branchPickerOpen, onBranchPickerOpenChange }: ProjectActionButtonsProps) => {
   const { projectId } = useProjectWorkspaceBranch();
+  const { activeFilePath } = useProjectWorkspaceCurrentFile();
 
   switch (tab) {
     case "files":
@@ -29,13 +32,16 @@ export const ProjectActionButtonsLeft = ({ tab, branchPickerOpen, onBranchPicker
     case "code":
       return (
         <>
-          <Pressable accessibilityRole="button" accessibilityLabel="Previous file"
-            className="size-12 items-center justify-center rounded-full active:bg-secondary">
-            <Icon family="Feather" name="arrow-left" size={20} accessible={false} className="text-foreground" />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Next file"
-            className="size-12 items-center justify-center rounded-full active:bg-secondary">
-            <Icon family="Feather" name="arrow-right" size={20} accessible={false} className="text-foreground" />
+          <ProjectCodeTools key={projectId} path={activeFilePath} />
+          <Pressable
+            disabled
+            accessibilityRole="button"
+            accessibilityLabel="Git tools"
+            accessibilityHint="Coming soon."
+            accessibilityState={{ disabled: true }}
+            className="size-12 items-center justify-center rounded-full"
+          >
+            <Icon family="MaterialCommunityIcons" name="git" size={20} accessible={false} className="text-foreground" />
           </Pressable>
         </>
       );

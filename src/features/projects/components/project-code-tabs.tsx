@@ -1,15 +1,17 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentProps,
 } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
-  ScrollView,
   View,
+  useWindowDimensions,
   type FlatListProps,
   type LayoutRectangle,
 } from "react-native";
@@ -17,10 +19,12 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { ProjectIcon } from "@/components/project-icon";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Icon } from "@/components/ui/icon";
-import { HeadingText, PText } from "@/components/ui/text";
+import { PText } from "@/components/ui/text";
+import { Input } from "@/components/ui/input";
 import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { ProjectCodeTabIndicator } from "./project-code-tab-indicator";
+import { useProjectFilePaths } from "../hooks/use-project-file-paths";
 import {
   formatProjectChangeCount,
   formatProjectChangePath,
@@ -29,6 +33,7 @@ import {
 } from "../lib/formatters";
 
 type ProjectCodeTabsProps = {
+  projectId: string;
   paths: string[];
   activePath: string | null;
   onSelect: (path: string) => void;
@@ -39,6 +44,7 @@ type ProjectCodeTabsProps = {
 };
 
 export const ProjectCodeTabs = ({
+  projectId,
   paths,
   activePath,
   onSelect,
@@ -48,6 +54,23 @@ export const ProjectCodeTabs = ({
   closingPath,
 }: ProjectCodeTabsProps) => {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const { height } = useWindowDimensions();
+  const localPaths = useProjectFilePaths(projectId, open);
+  const needle = search.trim().toLowerCase();
+  const visiblePaths = useMemo(
+    () =>
+      needle
+        ? [...new Set([...paths, ...(localPaths.data ?? [])])].filter((path) =>
+            path.toLowerCase().includes(needle),
+          )
+        : paths,
+    [paths, localPaths.data, needle],
+  );
+  const changeOpen = (value: boolean) => {
+    setOpen(value);
+    if (!value) setSearch("");
+  };
   const strip = useRef<FlatList<string>>(null);
   const [layouts, setLayouts] = useState(new Map<string, LayoutRectangle>());
   const viewport = useRef({ width: 0, offset: 0 });
@@ -92,11 +115,11 @@ export const ProjectCodeTabs = ({
     );
   }, [paths]);
   const choose = (path: string) => {
-    setOpen(false);
+    changeOpen(false);
     onSelect(path);
   };
   const openFile = () => {
-    setOpen(false);
+    changeOpen(false);
     onOpenFile();
   };
   // Cell layout is relative to the scrolling content; an item's inner View
@@ -174,7 +197,10 @@ export const ProjectCodeTabs = ({
             const style = formatProjectEditorTabStyle(selected);
             const content = (
               <View
-                className={cn("flex-row items-center rounded-full", style.tabContainer)}
+                className={cn(
+                  "flex-row items-center rounded-full",
+                  style.tabContainer,
+                )}
               >
                 <Pressable
                   accessibilityRole="tab"
@@ -267,10 +293,20 @@ export const ProjectCodeTabs = ({
           </GlassSurface>
         </View>
       </View>
-      <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
+      <ContentSheet
+        open={open}
+        onOpenChange={changeOpen}
+        backgroundColor={card}
+      >
         <View className="gap-3 px-4 pb-8 pt-4">
-          <ScrollView style={{ maxHeight: 380 }}>
-            {paths.map((path) => {
+          <FlatList
+            style={{ maxHeight: height * 0.45 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            data={visiblePaths}
+            keyExtractor={(path) => path}
+            extraData={{ activePath, disabled, closingPath, paths }}
+            renderItem={({ item: path }) => {
               const label = formatProjectChangePath(path);
               return (
                 <View
@@ -282,7 +318,11 @@ export const ProjectCodeTabs = ({
                 >
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Switch to ${path}`}
+                    accessibilityLabel={
+                      paths.includes(path)
+                        ? `Switch to ${path}`
+                        : `Open ${path}`
+                    }
                     disabled={disabled}
                     onPress={() => choose(path)}
                     className="min-h-18 min-w-0 flex-1 flex-row items-center gap-3 px-3 py-2"
@@ -312,24 +352,100 @@ export const ProjectCodeTabs = ({
                       />
                     ) : null}
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Close ${path}`}
-                    disabled={disabled || Boolean(closingPath)}
-                    onPress={() => onClose(path)}
-                    className="size-11 items-center justify-center"
-                  >
-                    <Icon
-                      family="Feather"
-                      name="x"
-                      size={18}
-                      className="text-muted-foreground"
-                    />
-                  </Pressable>
+                  {paths.includes(path) ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Close ${path}`}
+                      disabled={disabled || Boolean(closingPath)}
+                      onPress={() => onClose(path)}
+                      className="size-11 items-center justify-center"
+                    >
+                      <Icon
+                        family="Feather"
+                        name="x"
+                        size={18}
+                        className="text-muted-foreground"
+                      />
+                    </Pressable>
+                  ) : null}
                 </View>
               );
-            })}
-          </ScrollView>
+            }}
+          />
+          {needle && localPaths.isFetching ? (
+            <View className="flex-row items-center gap-2">
+              <ActivityIndicator
+                size="small"
+                className="text-muted-foreground"
+              />
+              <PText className="text-base text-muted-foreground">
+                Reading local paths…
+              </PText>
+            </View>
+          ) : needle && localPaths.error ? (
+            <View className="gap-2">
+              <PText
+                accessibilityRole="alert"
+                className="text-base text-muted-foreground"
+              >
+                {localPaths.error.message}
+              </PText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry path search"
+                onPress={() => void localPaths.refetch()}
+                className="min-h-11 justify-center"
+              >
+                <PText className="text-base text-primary">
+                  Retry path search
+                </PText>
+              </Pressable>
+            </View>
+          ) : needle && visiblePaths.length === 0 ? (
+            <PText
+              accessibilityLiveRegion="polite"
+              className="py-3 text-center text-base text-muted-foreground"
+            >
+              No matching paths
+            </PText>
+          ) : null}
+          <View className="flex-row items-center gap-2 rounded-xl border border-input bg-background pl-3">
+            <Icon
+              family="Feather"
+              name="search"
+              size={20}
+              className="text-muted-foreground"
+              accessible={false}
+            />
+            <Input
+              type="search"
+              variant="ghost"
+              accessibilityLabel="Search project paths"
+              placeholder="Search project paths"
+              value={search}
+              onChangeText={setSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              containerClassName="min-w-0 flex-1"
+              className="border-0 bg-background focus:border-transparent focus:outline-0"
+            />
+            {search ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear file search"
+                onPress={() => setSearch("")}
+                className="size-12 items-center justify-center"
+              >
+                <Icon
+                  family="Feather"
+                  name="x"
+                  size={20}
+                  className="text-muted-foreground"
+                  accessible={false}
+                />
+              </Pressable>
+            ) : null}
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open another file"

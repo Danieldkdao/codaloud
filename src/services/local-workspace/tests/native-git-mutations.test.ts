@@ -34,6 +34,7 @@ it("stashes tracked and untracked files, applies without dropping, and verifies 
   expect(git("status", "--porcelain")).toBe("");
   const stashes = call("git/stashes").data;
   expect(stashes[0]).toMatchObject({ index: 0, sha: saved.data.stashSha });
+  expect(stashes[0].message).toContain("Offline work");
   const selection = { stashIndex: 0, stashSha: stashes[0].sha };
   expect(call("git/stash-apply", selection)).toMatchObject({ ok: true, data: { dropped: false } });
   expect(readFileSync(join(directory, "file.txt"), "utf8")).toBe("changed\n");

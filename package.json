@@ -103,7 +103,8 @@
     "postinstall": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs",
     "preios": "node scripts/build-local-typescript.mjs && node scripts/build-local-workspace-ios.mjs",
     "preandroid": "node scripts/build-local-typescript.mjs && node scripts/prepare-local-workspace.mjs",
-    "update:native": "node scripts/update-native-dependencies.mjs"
+    "update:native": "node scripts/update-native-dependencies.mjs",
+    "configure:native-editor": "node scripts/configure-native-editor.mjs"
   },
   "private": true,
   "packageManager": "pnpm@12.4.1"

@@ -1,15 +1,18 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { handleGitHubOAuthRequest, redirectGitHubOAuthCallback } from "../server/oauth";
+let handleGitHubOAuthRequest: typeof import("../server/oauth").handleGitHubOAuthRequest;
+let redirectGitHubOAuthCallback: typeof import("../server/oauth").redirectGitHubOAuthCallback;
 
 const request = (body: unknown) => new Request("https://codaloud.test/api/github/oauth", {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 const verifier = "v".repeat(64);
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
   vi.stubEnv("GITHUB_CLIENT_ID", "client-id");
   vi.stubEnv("GITHUB_CLIENT_SECRET", "server-secret");
   vi.stubEnv("BETTER_AUTH_URL", "https://codaloud.test");
+  ({ handleGitHubOAuthRequest, redirectGitHubOAuthCallback } = await import("../server/oauth"));
 });
 
 it("provides only public OAuth configuration without a Codaloud session", async () => {
@@ -53,4 +56,12 @@ it("redirects only local OAuth callbacks to the fixed native return address", ()
   const response = redirectGitHubOAuthCallback(new Request(`https://codaloud.test/api/auth/callback/github?state=${state}&code=code&redirect_uri=https://evil.test`));
   expect(response?.headers.get("Location")).toBe(`codaloud://github-connect?state=${state}&code=code`);
   expect(redirectGitHubOAuthCallback(new Request("https://codaloud.test/api/auth/callback/github?state=legacy"))).toBeNull();
+});
+
+it("rejects incomplete server configuration before handling OAuth requests", async () => {
+  vi.stubEnv("GITHUB_CLIENT_SECRET", "");
+  vi.resetModules();
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(import("../server/oauth")).rejects.toThrow();
+  log.mockRestore();
 });

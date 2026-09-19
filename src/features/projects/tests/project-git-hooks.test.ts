@@ -8,7 +8,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import { useProjectGit } from "../hooks/use-project-git";
+import { useProjectGitRemote } from "../hooks/use-project-git-remote";
 const { actions } = vi.hoisted(() => ({
   actions: {
     readProjectGitCountsAction: vi.fn(), fetchProjectGitAction: vi.fn(), pushProjectGitAction: vi.fn(), pullProjectGitAction: vi.fn(),
@@ -135,13 +135,13 @@ const verifyMutation = <V,>({ name, useResult, action, input, noInput = false, u
 
 describe("Git counts", () => {
   it("loads project counts and forwards cancellation", async () => {
-    const hook = await renderHook(() => useProjectGit(projectId));
+    const hook = await renderHook(() => useProjectGitRemote(projectId));
     expect(hook.current.data).toEqual(counts);
     expect(actions.readProjectGitCountsAction).toHaveBeenCalledWith(projectId, expect.any(AbortSignal), expect.any(Function));
     expect(client.getQueryData(["projects", "git-counts", projectId])).toEqual(counts);
   });
   it.each(["disabled", "invalid-project"])("does not automatically load counts when %s", async (state) => {
-    const hook = await renderHook(() => useProjectGit(state === "invalid-project" ? "invalid" : projectId, { enabled: state !== "disabled" }));
+    const hook = await renderHook(() => useProjectGitRemote(state === "invalid-project" ? "invalid" : projectId, { enabled: state !== "disabled" }));
     expect(actions.readProjectGitCountsAction).not.toHaveBeenCalled();
     if (state !== "disabled") {
       await run(async () => { await expect(hook.current.refetch({ throwOnError: true })).rejects.toThrow(); });
@@ -150,7 +150,7 @@ describe("Git counts", () => {
   });
   it("surfaces null responses without retrying unclassified failures", async () => {
     actions.readProjectGitCountsAction.mockResolvedValue(null);
-    const hook = await renderHook(() => useProjectGit(projectId));
+    const hook = await renderHook(() => useProjectGitRemote(projectId));
     expect(hook.current.error).toBeInstanceOf(Error);
     expect(actions.readProjectGitCountsAction).toHaveBeenCalledOnce();
   });
@@ -158,7 +158,7 @@ describe("Git counts", () => {
 
 verifyMutation({
   name: "fetch",
-  useResult: (id) => useProjectGit(id, { enabled: false }).gitFetch,
+  useResult: (id) => useProjectGitRemote(id, { enabled: false }).gitFetch,
   action: actions.fetchProjectGitAction,
   input: undefined,
   noInput: true,
@@ -166,14 +166,14 @@ verifyMutation({
 
 verifyMutation({
   name: "push",
-  useResult: (id) => useProjectGit(id, { enabled: false }).gitPush,
+  useResult: (id) => useProjectGitRemote(id, { enabled: false }).gitPush,
   action: actions.pushProjectGitAction,
   input: { force: true, expectedRemoteSha: "a".repeat(40) },
 });
 
 verifyMutation({
   name: "pull",
-  useResult: (id) => useProjectGit(id, { enabled: false }).gitPull,
+  useResult: (id) => useProjectGitRemote(id, { enabled: false }).gitPull,
   action: actions.pullProjectGitAction,
   input: { rebase: true },
 });
@@ -323,7 +323,7 @@ const verifyReadRetries = (name: string, useRead: () => { refetch: (options: { t
   });
 };
 
-verifyReadRetries("counts", () => useProjectGit(projectId, { enabled: false }), actions.readProjectGitCountsAction, "git-counts");
+verifyReadRetries("counts", () => useProjectGitRemote(projectId, { enabled: false }), actions.readProjectGitCountsAction, "git-counts");
 verifyReadRetries("discard preview", () => useProjectChanges(projectId, { enabled: false }).discardPreview, actions.readProjectDiscardPreviewAction, "discard-preview");
 verifyReadRetries("stash list", () => useProjectStashes(projectId, { enabled: false }), actions.readProjectStashesAction, "stashes");
 
@@ -348,7 +348,7 @@ it.each([false, true])("refreshes counts after creating a branch (temporary Git 
   const createdCounts = { ...counts, currentBranch: "feature/new" };
   const hook = await renderHook(() => ({
     branches: useProjectBranches(projectId, { enabled: false }),
-    git: useProjectGit(projectId),
+    git: useProjectGitRemote(projectId),
   }));
   expect(hook.current.git.data?.currentBranch).toBe("main");
   actions.createProjectBranchAction.mockResolvedValue({ error: false, message: "Created", data: { previousBranch: "main", currentBranch: "feature/new", headSha: counts.headSha } });

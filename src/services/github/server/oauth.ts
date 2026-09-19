@@ -1,29 +1,15 @@
-import { z } from "zod";
+import { serverEnv } from "@/data/env/server";
 import {
   gitHubOAuthRequestSchema,
   gitHubOAuthTokenSchema,
 } from "../authorization-schemas";
-
-const configurationSchema = z.object({
-  clientId: z.string().min(1),
-  clientSecret: z.string().min(1),
-  baseUrl: z.url(),
-});
-type ConfigurationSchema = z.infer<typeof configurationSchema>;
-
-const readConfiguration = (): ConfigurationSchema =>
-  configurationSchema.parse({
-    clientId: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    baseUrl: process.env.BETTER_AUTH_URL,
-  });
 
 const respond = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export const handleGitHubOAuthRequest = async (request: Request) => {
   try {
-    const { clientId, clientSecret, baseUrl } = readConfiguration();
+    const { GITHUB_CLIENT_ID: clientId, GITHUB_CLIENT_SECRET: clientSecret, BETTER_AUTH_URL: baseUrl } = serverEnv;
     const redirectUri = new URL(
       "/api/auth/callback/github",
       baseUrl,

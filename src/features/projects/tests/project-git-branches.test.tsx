@@ -26,7 +26,7 @@ const git = vi.hoisted(() => ({
   isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn(),
   gitFetch: { mutateAsync: vi.fn() }, gitPush: { mutateAsync: vi.fn() }, gitPull: { mutateAsync: vi.fn() },
 }));
-vi.mock("@/features/projects/hooks/use-project-git", () => ({ useProjectGit: () => git }));
+vi.mock("@/features/projects/hooks/use-project-git-remote", () => ({ useProjectGitRemote: () => git }));
 const changesQuery = vi.hoisted(() => ({
   discardPreview: { refetch: vi.fn() }, gitDiscardChanges: { mutateAsync: vi.fn() },
   query: vi.fn(), refetch: vi.fn(), isPending: false, isFetching: false,

@@ -20,7 +20,7 @@ import {
   requireLocalGitProject,
 } from "../lib/git-errors";
 
-export const useProjectGit = (
+export const useProjectGitRemote = (
   projectId: string | null | undefined,
   { enabled = true }: { enabled?: boolean } = {},
 ) => {

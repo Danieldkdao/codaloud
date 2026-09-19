@@ -6,7 +6,7 @@ import { Icon } from "@/components/ui/icon";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { CodeText } from "@/components/ui/text";
 import { useProjectGitOperation } from "../hooks/use-project-git-operation";
-import { useProjectGit } from "../hooks/use-project-git";
+import { useProjectGitRemote } from "../hooks/use-project-git-remote";
 import { useProject } from "../hooks/use-project";
 import {
   formatProjectGitCount,
@@ -50,7 +50,7 @@ export const ProjectBranchMenu = ({
     run,
     confirm,
   } = useProjectGitOperation();
-  const git = useProjectGit(projectId);
+  const git = useProjectGitRemote(projectId);
   const project = useProject(projectId);
   const connected = Boolean(project.data?.githubRepositoryId);
   const countsMatchBranch =

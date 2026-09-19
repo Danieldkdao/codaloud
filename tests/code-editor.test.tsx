@@ -234,6 +234,42 @@ it("ignores diagnostics for older edits and closed editors", async () => {
   expect(onAnalysis.mock.calls.some(([value]) => value.status === "ready")).toBe(false);
 });
 
+it("analyzes edits after a short pause without waiting for the former 600 ms debounce", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const request = vi.fn().mockResolvedValue({ diagnostics: [] });
+    await act(async () => root.render(createElement(CodeEditor, {
+      filename: "demo.ts", initialValue: "const answer = 42;", onRequestAnalysis: request,
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    expect(request).toHaveBeenCalledOnce();
+    act(() => editor().dispatch({ changes: { from: 0, insert: "// edit\n" } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(149); });
+    expect(request).toHaveBeenCalledOnce();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1][0].content).toContain("// edit");
+  } finally { vi.useRealTimers(); }
+});
+
+it("keeps the last diagnostic counts while the next analysis is pending", async () => {
+  const diagnostic = { from: 0, to: 1, severity: "error" as const, message: "Bad type", code: 2322 };
+  let finish!: (value: { diagnostics: typeof diagnostic[] }) => void;
+  const request = vi.fn().mockResolvedValueOnce({ diagnostics: [diagnostic] })
+    .mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const onAnalysis = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { filename: "demo.ts", initialValue: "old", onRequestAnalysis: request, onAnalysis })));
+  act(() => forceLinting(editor()));
+  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith({ status: "ready", diagnostics: [diagnostic] }));
+  onAnalysis.mockClear();
+  act(() => editor().dispatch({ changes: { from: 0, to: 3, insert: "new" } }));
+  act(() => forceLinting(editor()));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(onAnalysis).not.toHaveBeenCalled();
+  await act(async () => finish({ diagnostics: [] }));
+  expect(onAnalysis).toHaveBeenLastCalledWith({ status: "ready", diagnostics: [] });
+});
+
 it("keeps edits and undo history when the available space changes", async () => {
   await render();
   const view = editor();

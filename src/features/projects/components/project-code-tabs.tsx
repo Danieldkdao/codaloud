@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
+import {
+  FlatList,
   Pressable,
   ScrollView,
   View,
+  type FlatListProps,
   type LayoutRectangle,
 } from "react-native";
 import { GlassSurface } from "@/components/ui/glass-surface";
@@ -39,7 +47,7 @@ export const ProjectCodeTabs = ({
   closingPath,
 }: ProjectCodeTabsProps) => {
   const [open, setOpen] = useState(false);
-  const strip = useRef<ScrollView>(null);
+  const strip = useRef<FlatList<string>>(null);
   const [layouts, setLayouts] = useState(new Map<string, LayoutRectangle>());
   const viewport = useRef({ width: 0, offset: 0 });
   const activeFrame =
@@ -48,7 +56,13 @@ export const ProjectCodeTabs = ({
       : undefined;
   const card = useThemeColor("card");
   const revealActive = () => {
-    if (!activeFrame || !viewport.current.width) return;
+    if (!viewport.current.width || !activePath) return;
+    if (!activeFrame) {
+      const index = paths.indexOf(activePath);
+      if (index >= 0)
+        strip.current?.scrollToIndex({ index, viewPosition: 0.5 });
+      return;
+    }
     const { width, offset } = viewport.current;
     const target =
       activeFrame.x < offset
@@ -64,7 +78,7 @@ export const ProjectCodeTabs = ({
           : offset;
     if (target !== offset) {
       viewport.current.offset = target;
-      strip.current?.scrollTo({ x: target, animated: true });
+      strip.current?.scrollToOffset({ offset: target, animated: true });
     }
   };
   useEffect(revealActive, [activePath, layouts]);
@@ -84,16 +98,70 @@ export const ProjectCodeTabs = ({
     setOpen(false);
     onOpenFile();
   };
+  // Cell layout is relative to the scrolling content; an item's inner View
+  // starts at zero inside its cell and cannot position the shared indicator.
+  const TabCell = useCallback(
+    ({
+      item,
+      children,
+      onLayout,
+      onFocusCapture,
+      style,
+    }: ComponentProps<
+      NonNullable<FlatListProps<string>["CellRendererComponent"]>
+    >) => (
+      <View
+        testID={`code-tab-${item}`}
+        style={style}
+        {...{ onFocusCapture }}
+        onLayout={(event) => {
+          onLayout?.(event);
+          const frame = event.nativeEvent.layout;
+          setLayouts((current) => {
+            const previous = current.get(item);
+            if (
+              previous &&
+              previous.x === frame.x &&
+              previous.y === frame.y &&
+              previous.width === frame.width &&
+              previous.height === frame.height
+            )
+              return current;
+            return new Map(current).set(item, frame);
+          });
+        }}
+      >
+        {children}
+      </View>
+    ),
+    [],
+  );
 
   return (
     <>
       <View className="flex-row items-center border-b border-border bg-background">
-        <ScrollView
+        <FlatList
           testID="code-tab-scroll"
           ref={strip}
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 0 }}
+          contentContainerStyle={{ alignItems: "center", gap: 4, padding: 8 }}
+          data={paths}
+          keyExtractor={(path) => path}
+          extraData={{ activePath, disabled, closingPath }}
+          CellRendererComponent={TabCell}
+          removeClippedSubviews={false}
+          ListHeaderComponent={
+            activeFrame ? <ProjectCodeTabIndicator frame={activeFrame} /> : null
+          }
+          ListHeaderComponentStyle={{ position: "absolute", left: 0, top: 0 }}
+          onScrollToIndexFailed={({ index, averageItemLength }) => {
+            strip.current?.scrollToOffset({
+              offset: index * averageItemLength,
+              animated: false,
+            });
+          }}
           onContentSizeChange={revealActive}
           onLayout={({ nativeEvent }) => {
             viewport.current.width = nativeEvent.layout.width;
@@ -103,111 +171,90 @@ export const ProjectCodeTabs = ({
             viewport.current.offset = nativeEvent.contentOffset.x;
           }}
           scrollEventThrottle={16}
-        >
-          <View className="flex-row items-center gap-1 px-2 py-2">
-            {activeFrame ? (
-              <ProjectCodeTabIndicator frame={activeFrame} />
-            ) : null}
-            {paths.map((path) => {
-              const selected = activePath === path;
-              const label = formatProjectEditorTab(path, paths);
-              const style = formatProjectEditorTabStyle(selected);
-              return (
-                <View
-                  key={path}
-                  testID={`code-tab-${path}`}
-                  onLayout={({ nativeEvent }) => {
-                    const frame = nativeEvent.layout;
-                    setLayouts((current) => {
-                      const previous = current.get(path);
-                      if (
-                        previous &&
-                        previous.x === frame.x &&
-                        previous.y === frame.y &&
-                        previous.width === frame.width &&
-                        previous.height === frame.height
-                      )
-                        return current;
-                      return new Map(current).set(path, frame);
-                    });
-                  }}
-                  className={`flex-row items-center rounded-full ${style.tabContainer}`}
-                >
-                  <Pressable
-                    accessibilityRole="tab"
-                    accessibilityLabel={path}
-                    accessibilityState={{ selected }}
-                    disabled={disabled}
-                    onPress={() => onSelect(path)}
-                    className="min-h-12 flex-row items-center gap-2 rounded-full pl-3"
-                  >
-                    <ProjectIcon name={path} isDirectory={false} size={18} />
-                    <View
-                      className="flex-row items-center"
-                      style={{ maxWidth: 180 }}
-                    >
-                      <PText
-                        numberOfLines={1}
-                        ellipsizeMode="middle"
-                        className={`shrink text-base ${style.text}`}
-                      >
-                        {label.name}
-                      </PText>
-                      <PText className={`text-base ${style.text}`}>
-                        {label.extension}
-                      </PText>
-                    </View>
-                    {label.directory ? (
-                      <PText
-                        numberOfLines={1}
-                        ellipsizeMode="middle"
-                        className="max-w-28 text-base text-muted-foreground"
-                      >
-                        {label.directory}
-                      </PText>
-                    ) : null}
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Close ${path}`}
-                    accessibilityState={{ busy: closingPath === path }}
-                    disabled={disabled || Boolean(closingPath)}
-                    onPress={() => onClose(path)}
-                    className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
-                  >
-                    <Icon
-                      family="Feather"
-                      name="x"
-                      size={16}
-                      className="text-muted-foreground"
-                    />
-                  </Pressable>
-                </View>
-              );
-            })}
-            <GlassSurface borderRadius={24} shadow={false}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open another file"
-                disabled={disabled}
-                onPress={openFile}
-                className="size-12 items-center justify-center rounded-full active:bg-secondary"
+          renderItem={({ item: path }) => {
+            const selected = activePath === path;
+            const label = formatProjectEditorTab(path, paths);
+            const style = formatProjectEditorTabStyle(selected);
+            return (
+              <View
+                className={`flex-row items-center rounded-full ${style.tabContainer}`}
               >
-                <Icon
-                  family="Feather"
-                  name="plus"
-                  size={22}
-                  className="text-foreground"
-                />
-              </Pressable>
-            </GlassSurface>
-          </View>
-        </ScrollView>
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityLabel={path}
+                  accessibilityState={{ selected }}
+                  disabled={disabled}
+                  onPress={() => onSelect(path)}
+                  className="min-h-12 flex-row items-center gap-2 rounded-full pl-3"
+                >
+                  <ProjectIcon name={path} isDirectory={false} size={18} />
+                  <View
+                    className="flex-row items-center"
+                    style={{ maxWidth: 180 }}
+                  >
+                    <PText
+                      numberOfLines={1}
+                      ellipsizeMode="middle"
+                      className={`shrink text-base ${style.text}`}
+                    >
+                      {label.name}
+                    </PText>
+                    <PText className={`text-base ${style.text}`}>
+                      {label.extension}
+                    </PText>
+                  </View>
+                  {label.directory ? (
+                    <PText
+                      numberOfLines={1}
+                      ellipsizeMode="middle"
+                      className="max-w-28 text-base text-muted-foreground"
+                    >
+                      {label.directory}
+                    </PText>
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Close ${path}`}
+                  accessibilityState={{ busy: closingPath === path }}
+                  disabled={disabled || Boolean(closingPath)}
+                  onPress={() => onClose(path)}
+                  className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
+                >
+                  <Icon
+                    family="Feather"
+                    name="x"
+                    size={16}
+                    className="text-muted-foreground"
+                  />
+                </Pressable>
+              </View>
+            );
+          }}
+        />
+        <View className="shrink-0 pl-1">
+          <GlassSurface borderRadius={24} shadow={false}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open another file"
+              disabled={disabled}
+              onPress={openFile}
+              className="size-12 items-center justify-center rounded-full active:bg-secondary"
+            >
+              <Icon
+                family="Feather"
+                name="plus"
+                size={22}
+                className="text-foreground"
+              />
+            </Pressable>
+          </GlassSurface>
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${formatProjectChangeCount(paths.length)} open. Show all files.`}
           onPress={() => setOpen(true)}
-          className="size-14 items-center justify-center"
+          className="size-14 shrink-0 items-center justify-center"
         >
           <View className="size-9 items-center justify-center rounded-full bg-secondary">
             <PText className="text-base font-semibold text-secondary-foreground">

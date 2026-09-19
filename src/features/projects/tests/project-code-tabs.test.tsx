@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ReactNode, useImperativeHandle, type Ref } from "react";
+import { act, createElement, type ReactNode, useImperativeHandle, type Ref, type ComponentType } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectCodeTabs } from "../components/project-code-tabs";
@@ -8,11 +8,12 @@ import { formatProjectEditorTab } from "../lib/formatters";
 
 const layoutEvents = new Map<string, (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void>();
 const scrollTo = vi.fn();
+const scrollToIndex = vi.fn();
 
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition, springify: () => transition, dampingRatio: () => transition };
   return {
-    default: { View: ({ children, style, testID, pointerEvents }: { children?: ReactNode; style?: object; testID?: string; pointerEvents?: string }) => createElement("div", { style, "data-testid": testID, "data-pointer-events": pointerEvents }, children) },
+    default: { View: ({ children, style, testID, pointerEvents, layout }: { children?: ReactNode; style?: object; testID?: string; pointerEvents?: string; layout?: unknown }) => createElement("div", { style, "data-testid": testID, "data-pointer-events": pointerEvents, "data-layout-animation": Boolean(layout) }, children) },
     LinearTransition: transition,
     ReduceMotion: { System: "system" },
   };
@@ -22,10 +23,20 @@ vi.mock("react-native", () => ({
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
     return createElement("div", { "data-testid": testID }, children);
   },
+  FlatList: ({ data, renderItem, CellRendererComponent, ListHeaderComponent, ref, testID, onLayout }: {
+    data: string[]; renderItem: (info: { item: string }) => ReactNode;
+    CellRendererComponent: ComponentType<{ item: string; children?: ReactNode }>;
+    ListHeaderComponent?: ReactNode; ref?: Ref<unknown>; testID?: string; onLayout?: (event: never) => void;
+  }) => {
+    useImperativeHandle(ref, () => ({ scrollToOffset: scrollTo, scrollToIndex }));
+    if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
+    return createElement("div", { "data-testid": testID }, ListHeaderComponent,
+      data.map((item) => createElement(CellRendererComponent, { item, key: item }, renderItem({ item }))));
+  },
   ScrollView: ({ children, ref, testID, onLayout }: { children: ReactNode; ref?: Ref<unknown>; testID?: string; onLayout?: (event: never) => void }) => {
     useImperativeHandle(ref, () => ({ scrollTo }));
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
-    return createElement("div", null, children);
+    return createElement("div", { "data-testid": testID }, children);
   },
   Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, disabled }: { children: ReactNode; onPress: () => void; accessibilityLabel: string; accessibilityState?: { selected?: boolean }; disabled?: boolean }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-selected": accessibilityState?.selected, disabled }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
@@ -68,6 +79,25 @@ it("keeps new-file navigation available when the last tab is closed", () => {
   const onOpenFile = vi.fn();
   act(() => root.render(createElement(ProjectCodeTabs, { paths: [], activePath: null, onSelect: vi.fn(), onClose: vi.fn(), onOpenFile })));
   click("Open another file"); expect(onOpenFile).toHaveBeenCalledOnce();
+});
+
+it("keeps the plus and file count outside the scrolling tab strip", () => {
+  act(() => root.render(createElement(ProjectCodeTabs, {
+    paths: ["a.ts", "b.ts"], activePath: "a.ts", onSelect: vi.fn(), onClose: vi.fn(), onOpenFile: vi.fn(),
+  })));
+  const strip = container.querySelector('[data-testid="code-tab-scroll"]')!;
+  expect(strip).not.toBeNull();
+  expect(strip.querySelector('[aria-label="a.ts"]')).not.toBeNull();
+  expect(strip.querySelector('[aria-label="Open another file"]')).toBeNull();
+  expect(strip.querySelector('[aria-label="2 files open. Show all files."]')).toBeNull();
+});
+
+it("lays out analysis and save indicators without position or size transitions", () => {
+  act(() => root.render(createElement(ProjectCodeStatus, {
+    status: { status: "saved" }, onRetry: vi.fn(), onShowProblems: vi.fn(),
+    analysis: { status: "checking", diagnostics: [] },
+  })));
+  expect(container.querySelector('[data-layout-animation="true"]')).toBeNull();
 });
 
 it("shows real diagnostic counts and exposes Problems and save retry independently", () => {
@@ -126,5 +156,5 @@ it("only scrolls the strip when the active tab is outside its visible area", () 
   renderTabs("b.ts");
   expect(scrollTo).not.toHaveBeenCalled();
   measure("code-tab-b.ts", 320, 160);
-  expect(scrollTo).toHaveBeenLastCalledWith({ x: 192, animated: true });
+  expect(scrollTo).toHaveBeenLastCalledWith({ offset: 192, animated: true });
 });

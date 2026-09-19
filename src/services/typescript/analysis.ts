@@ -4,7 +4,13 @@ import type {
   CodeIntelligenceRequestSchema,
   CodeIntelligenceResultSchema,
 } from "@/features/projects/actions/code-intelligence-schemas";
-import type { DiagnosticCategory, ScriptElementKind } from "typescript";
+import type {
+  CompilerOptions,
+  DiagnosticCategory,
+  IScriptSnapshot,
+  LanguageService,
+  ScriptElementKind,
+} from "typescript";
 
 const formatSeverity = (category: DiagnosticCategory) => {
   switch (category) {
@@ -45,14 +51,52 @@ const normalize = (path: string) => {
   return `/${parts.join("/")}`;
 };
 
-export const analyzeTypeScript = async (
-  input: CodeIntelligenceRequestSchema,
+export const createTypeScriptAnalyzer = (
   readFile: (path: string) => Promise<string | null>,
-): Promise<CodeIntelligenceResultSchema> => {
-  const target = `/workspace/${input.path}`;
-  const files = new Map<string, string | null>([[target, input.content]]);
+) => {
+  const files = new Map<string, string | null>();
+  const versions = new Map<string, number>();
+  const snapshots = new Map<string, IScriptSnapshot>();
   const pending = new Set<string>();
-  let bytes = input.content.length;
+  let target = "";
+  let bytes = 0;
+  let revision = 0;
+  let invalidatedResolutions = false;
+  let options: CompilerOptions = {};
+  let service: LanguageService | undefined;
+  let queued = Promise.resolve();
+  let closed = false;
+  const reset = () => {
+    service?.dispose();
+    service = undefined;
+    files.clear();
+    versions.clear();
+    snapshots.clear();
+    pending.clear();
+    bytes = 0;
+    target = "";
+    invalidatedResolutions = false;
+  };
+  const update = (path: string, content: string | null) => {
+    if (files.has(path) && files.get(path) === content) return;
+    bytes += (content?.length ?? 0) - (files.get(path)?.length ?? 0);
+    if (bytes > 64 * 1024 * 1024)
+      throw new Error("This file exceeds the on-device analysis memory limit.");
+    if (!files.has(path) && files.size >= 4096)
+      throw new Error(
+        "This file needs more dependencies than the on-device analysis limit.",
+      );
+    // Newly available/deleted modules and changed package metadata invalidate
+    // TypeScript's resolution cache even when the importing text is unchanged.
+    if (
+      (files.get(path) != null) !== (content !== null) ||
+      path.endsWith(".json")
+    )
+      invalidatedResolutions = true;
+    files.set(path, content);
+    versions.set(path, ++revision);
+    snapshots.delete(path);
+  };
   const read = (path: string): string | undefined => {
     const key = normalize(path);
     if (key.startsWith("/lib/"))
@@ -62,65 +106,88 @@ export const analyzeTypeScript = async (
     if (!files.has(key)) pending.add(key);
     return files.get(key) ?? undefined;
   };
-  // TypeScript's synchronous host discovers missing imports/configuration. Load
-  // those files asynchronously through the native boundary, then retry the host.
-  // No project code, plugins, or package installation scripts are executed.
-  for (let pass = 0; pass < 32; pass++) {
-    pending.clear();
-    const hostFiles = {
-      useCaseSensitiveFileNames: true,
-      readFile: read,
-      fileExists: (path: string) => read(path) !== undefined,
-      readDirectory: () => [target],
-    };
-    const configPath =
-      ts.findConfigFile(
-        target.slice(0, target.lastIndexOf("/")),
-        hostFiles.fileExists,
-        "tsconfig.json",
-      ) ??
-      ts.findConfigFile("/workspace", hostFiles.fileExists, "jsconfig.json");
-    const config = configPath ? ts.readConfigFile(configPath, read) : null;
-    if (config?.error)
-      throw new Error("Unable to parse the local TypeScript configuration.");
-    const parsed = configPath
-      ? ts.parseJsonConfigFileContent(
-          config!.config,
-          hostFiles,
-          configPath.slice(0, configPath.lastIndexOf("/")),
-          undefined,
-          configPath,
-        )
-      : null;
-    const options = {
-      target: ts.ScriptTarget.ESNext,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      jsx: ts.JsxEmit.ReactJSX,
-      strict: true,
-      allowJs: true,
-      checkJs: true,
-      allowImportingTsExtensions: true,
-      ...parsed?.options,
-      noEmit: true,
-    };
-    const service = ts.createLanguageService({
-      ...hostFiles,
-      useCaseSensitiveFileNames: () => true,
-      getCompilationSettings: () => options,
-      getScriptFileNames: () => [target],
-      getScriptVersion: () => "0",
-      getCurrentDirectory: () => "/workspace",
-      getDefaultLibFileName: () => "/lib/lib.esnext.full.d.ts",
-      getScriptSnapshot: (path) => {
-        const content = read(path);
-        return content === undefined
-          ? undefined
-          : ts.ScriptSnapshot.fromString(content);
-      },
-    });
-    let result: CodeIntelligenceResultSchema;
-    try {
+  const hostFiles = {
+    useCaseSensitiveFileNames: true,
+    readFile: read,
+    fileExists: (path: string) => read(path) !== undefined,
+    readDirectory: () => [target],
+  };
+  const run = async (
+    input: CodeIntelligenceRequestSchema,
+  ): Promise<CodeIntelligenceResultSchema> => {
+    const nextTarget = normalize(`/workspace/${input.path}`);
+    // Keep only the current file's graph on mobile, rather than retaining a
+    // language service (and its standard libraries) for every tab ever opened.
+    if (target !== nextTarget) reset();
+    target = nextTarget;
+    update(target, input.content);
+    // The editor buffer wins over the saved copy. Revalidate dependencies and
+    // failed lookups so saves, Git operations, and new files cannot go stale.
+    for (const path of files.keys()) {
+      if (path !== target)
+        update(path, await readFile(path.slice("/workspace/".length)));
+    }
+    // The synchronous compiler discovers imports; load them through the native
+    // boundary and retry. Project code and package scripts are never executed.
+    for (let pass = 0; pass < 32; pass++) {
+      pending.clear();
+      const configPath =
+        ts.findConfigFile(
+          target.slice(0, target.lastIndexOf("/")),
+          hostFiles.fileExists,
+          "tsconfig.json",
+        ) ??
+        ts.findConfigFile("/workspace", hostFiles.fileExists, "jsconfig.json");
+      const config = configPath ? ts.readConfigFile(configPath, read) : null;
+      if (config?.error)
+        throw new Error("Unable to parse the local TypeScript configuration.");
+      const parsed = configPath
+        ? ts.parseJsonConfigFileContent(
+            config!.config,
+            hostFiles,
+            configPath.slice(0, configPath.lastIndexOf("/")),
+            undefined,
+            configPath,
+          )
+        : null;
+      options = {
+        target: ts.ScriptTarget.ESNext,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        jsx: ts.JsxEmit.ReactJSX,
+        strict: true,
+        allowJs: true,
+        checkJs: true,
+        allowImportingTsExtensions: true,
+        ...parsed?.options,
+        noEmit: true,
+      };
+      if (invalidatedResolutions) {
+        service?.cleanupSemanticCache();
+        invalidatedResolutions = false;
+      }
+      service ??= ts.createLanguageService({
+        ...hostFiles,
+        useCaseSensitiveFileNames: () => true,
+        getCompilationSettings: () => options,
+        getScriptFileNames: () => [target],
+        getProjectVersion: () => String(revision),
+        getScriptVersion: (path) => String(versions.get(normalize(path)) ?? 0),
+        getCurrentDirectory: () => "/workspace",
+        getDefaultLibFileName: () => "/lib/lib.esnext.full.d.ts",
+        getScriptSnapshot: (path) => {
+          const key = normalize(path);
+          const content = read(key);
+          if (content === undefined) return undefined;
+          let snapshot = snapshots.get(key);
+          if (!snapshot) {
+            snapshot = ts.ScriptSnapshot.fromString(content);
+            snapshots.set(key, snapshot);
+          }
+          return snapshot;
+        },
+      });
+      let result: CodeIntelligenceResultSchema;
       if (input.position !== undefined) {
         const completion = service.getCompletionsAtPosition(
           target,
@@ -167,25 +234,50 @@ export const analyzeTypeScript = async (
             })),
         };
       }
-    } finally {
-      service.dispose();
-    }
-    if (!pending.size) return result;
-    if (files.size + pending.size > 4096)
-      throw new Error(
-        "This file needs more dependencies than the on-device analysis limit.",
-      );
-    for (const path of pending) {
-      const content = await readFile(path.slice("/workspace/".length));
-      bytes += content?.length ?? 0;
-      if (bytes > 64 * 1024 * 1024)
+      if (!pending.size) return result;
+      if (files.size + pending.size > 4096)
         throw new Error(
-          "This file exceeds the on-device analysis memory limit.",
+          "This file needs more dependencies than the on-device analysis limit.",
         );
-      files.set(path, content);
+      for (const path of pending) {
+        update(path, await readFile(path.slice("/workspace/".length)));
+      }
     }
+    throw new Error(
+      "The local dependency graph could not be resolved within the analysis limit.",
+    );
+  };
+  return {
+    analyze: (input: CodeIntelligenceRequestSchema) => {
+      if (closed)
+        return Promise.reject(new Error("The analysis session is closed."));
+      const result = queued
+        .then(() => run(input))
+        .catch((error: unknown) => {
+          reset();
+          throw error;
+        });
+      queued = result.then(
+        () => {},
+        () => {},
+      );
+      return result;
+    },
+    dispose: () => {
+      closed = true;
+      return queued.then(reset);
+    },
+  };
+};
+
+export const analyzeTypeScript = async (
+  input: CodeIntelligenceRequestSchema,
+  readFile: (path: string) => Promise<string | null>,
+): Promise<CodeIntelligenceResultSchema> => {
+  const analyzer = createTypeScriptAnalyzer(readFile);
+  try {
+    return await analyzer.analyze(input);
+  } finally {
+    await analyzer.dispose();
   }
-  throw new Error(
-    "The local dependency graph could not be resolved within the analysis limit.",
-  );
 };

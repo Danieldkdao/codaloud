@@ -6,6 +6,16 @@ import {
 import { projectFileContentSchema } from "./file-schemas";
 import { requireLocalProject } from "../local/access";
 import { executeWorkspace } from "@/services/local-workspace/execute";
+import type { createTypeScriptAnalyzer } from "@/services/typescript/analysis";
+
+// Bound compiler memory to the active workspace. The analyzer itself retains
+// only the active file's graph and serializes requests against that graph.
+let session:
+  | {
+      projectId: string;
+      analyzer: ReturnType<typeof createTypeScriptAnalyzer>;
+    }
+  | undefined;
 
 export const readProjectCodeIntelligence = async (
   projectId: string,
@@ -14,17 +24,24 @@ export const readProjectCodeIntelligence = async (
   try {
     const input = codeIntelligenceRequestSchema.parse(unsafeInput);
     const project = await requireLocalProject(projectId);
-    const { analyzeTypeScript } =
+    const { createTypeScriptAnalyzer } =
       await import("@/services/typescript/analysis");
-    return await analyzeTypeScript(input, async (path) => {
-      try {
-        return projectFileContentSchema.parse(
-          await executeWorkspace(project.id, "read-file", { path }),
-        ).content;
-      } catch {
-        return null;
-      }
-    });
+    if (session?.projectId !== project.id) {
+      void session?.analyzer.dispose();
+      session = {
+        projectId: project.id,
+        analyzer: createTypeScriptAnalyzer(async (path) => {
+          try {
+            return projectFileContentSchema.parse(
+              await executeWorkspace(project.id, "read-file", { path }),
+            ).content;
+          } catch {
+            return null;
+          }
+        }),
+      };
+    }
+    return await session.analyzer.analyze(input);
   } catch {
     return null;
   }

@@ -4,10 +4,6 @@ import {
   View,
   type ViewProps,
 } from "react-native";
-import Animated, {
-  LinearTransition,
-  ReduceMotion,
-} from "react-native-reanimated";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
@@ -19,10 +15,6 @@ import {
   formatProjectFileSaveStatus,
 } from "@/features/projects/lib/formatters";
 import type { SaveSnapshot } from "../lib/project-file-save-document";
-
-const badgeTransition = LinearTransition.duration(240).reduceMotion(
-  ReduceMotion.System,
-);
 
 export const ProjectCodeStatus = ({
   status: save,
@@ -44,8 +36,7 @@ export const ProjectCodeStatus = ({
   const canRetry = status === "error";
   const IndicatorContainer = canRetry ? Pressable : View;
   return (
-    <Animated.View
-      layout={badgeTransition}
+    <View
       onLayout={onLayout}
       className="min-h-12 flex-row items-center gap-2 overflow-hidden rounded-full border border-border bg-secondary px-3"
     >
@@ -79,8 +70,7 @@ export const ProjectCodeStatus = ({
                 ? presentation.className
                 : "text-muted-foreground";
               return (
-                <Animated.View
-                  layout={badgeTransition}
+                <View
                   key={severity}
                   className="flex-row items-center gap-1"
                   accessible={false}
@@ -96,13 +86,13 @@ export const ProjectCodeStatus = ({
                       ? "·"
                       : formatCodeDiagnosticCount(count)}
                   </PText>
-                </Animated.View>
+                </View>
               );
             })
           )}
         </Pressable>
       ) : null}
-      <Animated.View layout={badgeTransition}>
+      <View>
         <IndicatorContainer
           accessible
           accessibilityRole={canRetry ? "button" : "image"}
@@ -126,7 +116,7 @@ export const ProjectCodeStatus = ({
             />
           )}
         </IndicatorContainer>
-      </Animated.View>
-    </Animated.View>
+      </View>
+    </View>
   );
 };

@@ -9,9 +9,9 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { Db } from "@/db/db";
+import { db } from "@/db/db";
 import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
-import { projectResponseSchema, updateProjectSchema } from "../actions/schemas";
+import { projectResponseSchema, updateProjectSchema, type UpdateProjectSchema } from "../actions/schemas";
 import {
   projectParamsSchema,
   readProjectCursor,
@@ -23,7 +23,7 @@ import type { ProjectPageData } from "../types";
 const { searchName: _searchName, ...projectColumns } =
   getTableColumns(ProjectTable);
 
-export const createLocalProjectStore = (db: Db) => ({
+export const localProjectStore = {
   read: (projectId: string) =>
     db
       .select(projectColumns)
@@ -91,13 +91,13 @@ export const createLocalProjectStore = (db: Db) => ({
     return insertedProject;
   },
 
-  rename: (projectId: string, name: string) => {
-    const input = updateProjectSchema.parse({ name });
+  update: (projectId: string, unsafeInput: UpdateProjectSchema) => {
+    const input = updateProjectSchema.parse(unsafeInput);
     const updatedProject = db
       .update(ProjectTable)
       .set({
         ...input,
-        searchName: input.name!.toLowerCase(),
+        ...(input.name !== undefined ? { searchName: input.name.toLowerCase() } : {}),
         updatedAt: new Date().toISOString(),
       })
       .where(eq(ProjectTable.id, projectId))
@@ -114,4 +114,4 @@ export const createLocalProjectStore = (db: Db) => ({
       .get();
     return deletedProject ?? null;
   },
-});
+};

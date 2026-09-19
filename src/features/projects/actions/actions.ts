@@ -110,7 +110,7 @@ export const updateProjectAction = async (
     const id = z.uuid().parse(projectId).toLowerCase();
     const input = updateProjectSchema.parse(unsafeData);
     const store = await getLocalProjects();
-    const updatedProject = store.rename(id, input.name!);
+    const updatedProject = store.update(id, input);
     if (!updatedProject) throw new Error("This project is not on this device.");
     return {
       error: false as const,

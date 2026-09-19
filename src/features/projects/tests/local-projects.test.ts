@@ -1,10 +1,13 @@
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { projectsMigration } from "@/db/migrations";
 import * as schema from "@/db/schema";
-import { createLocalProjectStore } from "../local/projects";
+import { localProjectStore } from "../local/projects";
+
+const database = vi.hoisted(() => ({ current: undefined as unknown as import("@/db/db").Db }));
+vi.mock("@/db/db", () => ({ get db() { return database.current; } }));
 
 const timestamp = "2026-09-18T12:00:00.000Z";
 const project = (id: number, name: string) => ({
@@ -16,7 +19,7 @@ const project = (id: number, name: string) => ({
 
 describe("local project storage", () => {
   let sqlite: DatabaseSync;
-  let store: ReturnType<typeof createLocalProjectStore>;
+  const store = localProjectStore;
 
   beforeEach(() => {
     sqlite = new DatabaseSync(":memory:");
@@ -40,7 +43,7 @@ describe("local project storage", () => {
         },
       }),
     } as unknown as SQLiteDatabase;
-    store = createLocalProjectStore(drizzle(client, { schema }));
+    database.current = drizzle(client, { schema });
   });
 
   afterEach(() => sqlite.close());
@@ -50,7 +53,7 @@ describe("local project storage", () => {
     store.insert(original);
     expect(store.read(original.id)).toEqual(original);
     expect(store.list().projects).toEqual([original]);
-    expect(store.rename(original.id, "Changed")?.name).toBe("Changed");
+    expect(store.update(original.id, { name: "Changed" })?.name).toBe("Changed");
     expect(store.remove(original.id)?.id).toBe(original.id);
     expect(store.read(original.id)).toBeNull();
     expect(store.list().projects).toEqual([]);
@@ -76,7 +79,7 @@ describe("local project storage", () => {
     const original = project(10, "ÉCOLE");
     store.insert(original);
     expect(store.list({ search: "école" }).projects).toHaveLength(1);
-    store.rename(original.id, "ÜBER");
+    store.update(original.id, { name: "ÜBER" });
     expect(store.list({ search: "über" }).projects).toHaveLength(1);
     expect(store.list({ search: "école" }).projects).toHaveLength(0);
   });
@@ -92,6 +95,6 @@ describe("local project storage", () => {
     for (const id of [10, 11]) store.insert(project(id, "Same"));
     const page = store.list({ pageSize: 1 });
     expect(() => store.list({ cursor: page.nextCursor, search: "different" })).toThrow();
-    expect(() => store.rename(project(10, "").id, "   ")).toThrow();
+    expect(() => store.update(project(10, "").id, { name: "   " })).toThrow();
   });
 });

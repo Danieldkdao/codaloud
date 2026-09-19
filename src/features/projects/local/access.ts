@@ -5,7 +5,7 @@ import {
   executeWorkspace,
   LocalWorkspaceError,
 } from "@/services/local-workspace/execute";
-import { createLocalProjectStore } from "./projects";
+import { localProjectStore } from "./projects";
 
 let recovery: Promise<void> | undefined;
 export const getLocalProjects = async () => {
@@ -24,7 +24,7 @@ export const getLocalProjects = async () => {
     throw error;
   });
   await recovery;
-  return createLocalProjectStore(db);
+  return localProjectStore;
 };
 
 export const requireLocalProject = async (projectId: string) => {

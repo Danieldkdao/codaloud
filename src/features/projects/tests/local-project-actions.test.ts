@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  read: vi.fn(), list: vi.fn(), insert: vi.fn(), rename: vi.fn(), remove: vi.fn(),
+  read: vi.fn(), list: vi.fn(), insert: vi.fn(), update: vi.fn(), remove: vi.fn(),
   execute: vi.fn(), token: vi.fn(), repository: vi.fn(),
 }));
 vi.mock("../local/access", () => ({ getLocalProjects: async () => mocks }));
@@ -53,9 +53,9 @@ it("rejects invalid identifiers before storage access", async () => {
   expect(mocks.read).not.toHaveBeenCalled();
 });
 it("renames only the local project by ID", async () => {
-  mocks.rename.mockReturnValue({ id });
+  mocks.update.mockReturnValue({ id });
   expect(await updateProjectAction(id, { name: "Renamed" })).toMatchObject({ error: false });
-  expect(mocks.rename).toHaveBeenCalledWith(id, "Renamed");
+  expect(mocks.update).toHaveBeenCalledWith(id, { name: "Renamed" });
 });
 it("clones the verified repository URL with ephemeral credentials", async () => {
   mocks.token.mockResolvedValue("ephemeral-token");

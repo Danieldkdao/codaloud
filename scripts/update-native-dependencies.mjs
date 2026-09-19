@@ -100,10 +100,7 @@ const update = async () => {
   }
   if (args.includes("--write")) {
     // Publish all updates together; a failed lookup/download leaves the lock intact.
-    const temporary = new URL(
-      "./native-dependencies.json.tmp",
-      import.meta.url,
-    );
+    const temporary = `${fileURLToPath(manifest)}.tmp`;
     await writeFile(temporary, `${JSON.stringify(updated, null, 2)}\n`);
     await rename(temporary, manifest);
     console.log(

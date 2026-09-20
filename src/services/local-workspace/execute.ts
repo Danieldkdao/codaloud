@@ -21,14 +21,26 @@ export const executeWorkspace = async (
   ...[operation, args]: WorkspaceCommand
 ): Promise<unknown> => {
   const id = z.uuid().parse(projectId).toLowerCase();
+  return executeNativeRequest(
+    JSON.stringify({ projectId: id, operation, args: args ?? {} }),
+  );
+};
+
+const executeNativeRequest = async (request: string): Promise<unknown> => {
   const response = responseSchema.parse(
-    JSON.parse(
-      await LocalWorkspace.execute(
-        JSON.stringify({ projectId: id, operation, args: args ?? {} }),
-      ),
-    ),
+    JSON.parse(await LocalWorkspace.execute(request)),
   );
   if (!response.ok)
     throw new LocalWorkspaceError(response.code, response.message);
   return response.data;
 };
+
+// Discovery is workspace-wide and must work even after the last project row is gone.
+export const listArchivedWorkspaceIds = async (): Promise<string[]> =>
+  z
+    .array(z.uuid())
+    .parse(
+      await executeNativeRequest(
+        JSON.stringify({ operation: "list-archived-projects" }),
+      ),
+    );

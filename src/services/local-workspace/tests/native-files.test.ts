@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -79,4 +79,20 @@ it("archives a project reversibly before metadata deletion and purges only the a
   expect(call("purge-project").ok).toBe(true);
   expect(call("restore-project").ok).toBe(true);
   expect(call("read-file", { path: "unsaved.txt" }).ok).toBe(false);
+});
+
+
+it("discovers archived projects after process exit without needing their SQLite rows", () => {
+  expect(call("archive-project").ok).toBe(true);
+  mkdirSync(join(root, "not-a-project.deleted"));
+  const linkedId = "00000000-0000-4000-8000-000000000002";
+  symlinkSync(root, join(root, `${linkedId}.deleted`));
+  const discover = () => JSON.parse(execFileSync(executable, [root], {
+    input: JSON.stringify({ operation: "list-archived-projects" }), encoding: "utf8",
+  }));
+  expect(discover()).toEqual({ ok: true, data: [projectId] });
+  expect(call("purge-project").ok).toBe(true);
+  expect(call("purge-project").ok).toBe(true);
+  expect(discover()).toEqual({ ok: true, data: [] });
+  expect(existsSync(join(root, "not-a-project.deleted"))).toBe(true);
 });

@@ -58,6 +58,22 @@ std::string execute(const std::string &base, const std::string &request) {
   try {
     checkGit(initialized);
     const auto input = Json::parse(request);
+    const auto operation = input.at("operation").get<std::string>();
+    if (operation == "list-archived-projects") {
+      Json archives = Json::array();
+      fs::create_directories(base);
+      const std::regex archivedId("([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-"
+                                  "9]{4}-[a-f0-9]{12})[.]deleted");
+      for (const auto &entry : fs::directory_iterator(base)) {
+        const auto status = entry.symlink_status();
+        std::smatch match;
+        const auto name = entry.path().filename().string();
+        if (fs::is_directory(status) &&
+            std::regex_match(name, match, archivedId))
+          archives.push_back(match[1].str());
+      }
+      return Json({{"ok", true}, {"data", archives}}).dump();
+    }
     const auto id = input.at("projectId").get<std::string>();
     if (!std::regex_match(id, std::regex("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-["
                                          "a-f0-9]{4}-[a-f0-9]{12}")))
@@ -82,7 +98,6 @@ std::string execute(const std::string &base, const std::string &request) {
     // Save and checkout share a per-project lock. Fetching one project must not
     // block local reads or saves in a different project.
     std::lock_guard<std::mutex> projectLock(*projectMutex);
-    const auto operation = input.at("operation").get<std::string>();
     const auto args = input.value("args", Json::object());
     const fs::path root = fs::path(base) / id;
     fs::create_directories(base);

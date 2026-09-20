@@ -99,7 +99,9 @@ export const editorAutocompletion = (
       : undefined,
     activateOnTypingDelay: 60,
     interactionDelay: 50,
-    maxRenderedOptions: 30,
+    // Native touch users need to scroll every result; a capped window otherwise
+    // requires keyboard selection or tapping CodeMirror's small paging marker.
+    maxRenderedOptions: Number.POSITIVE_INFINITY,
     aboveCursor: true,
     icons: false,
     addToOptions: [

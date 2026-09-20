@@ -48,6 +48,8 @@ static git_remote_callbacks callbacks(RemoteContext &context) {
     if (!context.force)
       return 0;
     for (size_t i = 0; i < count; i++) {
+      // libgit2 names the existing remote OID src and the proposed local OID
+      // dst.
       const bool matches = context.expected.is_null()
                                ? git_oid_is_zero(&updates[i]->src) != 0
                                : oidString(&updates[i]->src) ==
@@ -110,12 +112,18 @@ static void fetch(git_repository *repo, const Json &args) {
       "FETCH_FAILED");
 }
 
-static std::string trackingBranch(git_repository *repo) {
+static std::string trackingBranch(git_repository *repo,
+                                  bool allowUntracked = false) {
   const auto counts = gitCounts(repo);
   if (counts.at("currentBranch").is_null())
     throw WorkspaceError("DETACHED_HEAD", "Check out a branch first.");
-  if (counts.at("upstream").is_null())
-    return counts.at("currentBranch").get<std::string>();
+  if (counts.at("upstream").is_null()) {
+    if (allowUntracked)
+      return counts.at("currentBranch").get<std::string>();
+    throw WorkspaceError(
+        "GIT_UPSTREAM_REQUIRED",
+        "Push this branch to set its upstream before pulling.");
+  }
   const auto upstream = counts.at("upstream").get<std::string>();
   if (upstream.rfind("origin/", 0) != 0)
     throw WorkspaceError(
@@ -131,7 +139,7 @@ static Json push(git_repository *repo, const Json &args,
   if (counts.at("headSha").is_null())
     throw WorkspaceError("UNBORN_HEAD", "Create a commit before pushing.");
   const auto branch = counts.at("currentBranch").get<std::string>();
-  const auto remoteBranch = publishing ? branch : trackingBranch(repo);
+  const auto remoteBranch = publishing ? branch : trackingBranch(repo, true);
   Remote remote;
   origin(remote, repo);
   RemoteContext context{args.value("accessToken", ""),
@@ -289,9 +297,9 @@ static Json pull(git_repository *repo, const Json &args) {
     throw WorkspaceError(
         "UNBORN_HEAD",
         "Clone the remote repository before pulling its history.");
+  const auto remoteBranch = trackingBranch(repo);
   fetch(repo, args);
   const auto branch = previous.at("currentBranch").get<std::string>();
-  const auto remoteBranch = trackingBranch(repo);
   git_oid local, remote;
   checkGit(git_oid_fromstr(&local,
                            previous.at("headSha").get<std::string>().c_str()));

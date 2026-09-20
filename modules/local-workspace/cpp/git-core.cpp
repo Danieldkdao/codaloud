@@ -1,5 +1,4 @@
 #include "git.hpp"
-#include <algorithm>
 #include <set>
 
 namespace codaloud {
@@ -139,6 +138,13 @@ void checkoutAndUpdateHead(git_repository *repo, const git_oid *next,
 }
 
 void createSignature(Signature &signature, const Json &args) {
+  if (!args.contains("identity") || !args.at("identity").is_object() ||
+      !args.at("identity").contains("name") ||
+      !args.at("identity").at("name").is_string() ||
+      !args.at("identity").contains("email") ||
+      !args.at("identity").at("email").is_string())
+    throw WorkspaceError("GIT_IDENTITY_REQUIRED",
+                         "Set your Git name and email in Settings.");
   const auto identity = args.at("identity");
   const auto name = identity.at("name").get<std::string>();
   const auto email = identity.at("email").get<std::string>();

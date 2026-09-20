@@ -3,6 +3,7 @@ import { ProjectTable } from "@/db/schemas/project";
 import { migrateDatabase } from "@/db/migrate";
 import {
   executeWorkspace,
+  listArchivedWorkspaceIds,
   LocalWorkspaceError,
 } from "@/services/local-workspace/execute";
 import { localProjectStore } from "./projects";
@@ -19,6 +20,13 @@ export const getLocalProjects = async () => {
       .all();
     for (const project of existingProjects)
       await executeWorkspace(project.id, "restore-project");
+    const existingIds = new Set(existingProjects.map((project) => project.id));
+    for (const id of await listArchivedWorkspaceIds()) {
+      if (existingIds.has(id)) continue;
+      // A committed deletion has no SQLite row. The archive is its durable
+      // cleanup marker; a failed purge leaves it discoverable on next startup.
+      await executeWorkspace(id, "purge-project").catch(() => undefined);
+    }
   })().catch((error: unknown) => {
     recovery = undefined;
     throw error;

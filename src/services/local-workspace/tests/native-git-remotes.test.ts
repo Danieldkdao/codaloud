@@ -10,7 +10,7 @@ const secondId = "00000000-0000-4000-8000-000000000002";
 let root: string;
 let remote: string;
 const call = (projectId: string, operation: string, args: object = {}) => JSON.parse(execFileSync(executable, [root], {
-  input: JSON.stringify({ projectId, operation, args: { ...args, identity: { name: "Developer", email: "dev@example.test" } } }), encoding: "utf8",
+  input: JSON.stringify({ projectId, operation, args: { identity: { name: "Developer", email: "dev@example.test" }, ...args } }), encoding: "utf8",
 }));
 const git = (directory: string, ...args: string[]) => execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim();
 const commit = (projectId: string, path: string, content: string) => {
@@ -155,4 +155,49 @@ it("publishes a new local branch and records its upstream without changing other
   expect(git(remote, "rev-parse", "refs/heads/feature/new-work")).toBe(head);
   expect(git(remote, "rev-parse", "refs/heads/main")).toBe(main);
   expect(git(join(root, firstId), "rev-parse", "--abbrev-ref", "@{upstream}")).toBe("origin/feature/new-work");
+});
+
+it.each([false, true])("refuses an untracked pull before fetching a same-named branch, rebase=%s", (rebase) => {
+  expect(call(firstId, "git/push").ok).toBe(true);
+  expect(call(secondId, "clone", { url: `file://${remote}` }).ok).toBe(true);
+  const head = git(join(root, firstId), "rev-parse", "HEAD");
+  commit(secondId, "remote.txt", "remote\n");
+  expect(call(secondId, "git/push").ok).toBe(true);
+  git(join(root, firstId), "branch", "--unset-upstream");
+  expect(call(firstId, "git/pull", { rebase })).toMatchObject({ ok: false, code: "GIT_UPSTREAM_REQUIRED" });
+  expect(git(join(root, firstId), "rev-parse", "HEAD")).toBe(head);
+  expect(git(join(root, firstId), "rev-parse", "refs/remotes/origin/main")).toBe(head);
+  expect(call(firstId, "git/counts").data.upstream).toBeNull();
+});
+
+it("force pushes diverged history only when the lease matches the current remote commit", () => {
+  expect(call(firstId, "git/push").ok).toBe(true);
+  expect(call(secondId, "clone", { url: `file://${remote}` }).ok).toBe(true);
+  const observedRemote = commit(secondId, "remote.txt", "remote\n");
+  expect(call(secondId, "git/push").ok).toBe(true);
+  const local = commit(firstId, "local.txt", "local\n");
+  expect(call(firstId, "git/push", { force: true, expectedRemoteSha: observedRemote })).toMatchObject({ ok: true, data: { pushed: true } });
+  expect(git(remote, "rev-parse", "HEAD")).toBe(local);
+});
+
+
+it.each([false, true])("fast-forwards and no-ops without author identity, rebase=%s", (rebase) => {
+  expect(call(firstId, "git/push").ok).toBe(true);
+  expect(call(secondId, "clone", { url: `file://${remote}` }).ok).toBe(true);
+  const remoteHead = commit(secondId, "remote.txt", "remote\n");
+  expect(call(secondId, "git/push").ok).toBe(true);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    expect(call(firstId, "git/pull", { rebase, identity: undefined })).toMatchObject({ ok: true, data: { headSha: remoteHead } });
+  }
+});
+
+it.each([false, true])("requires identity for divergent history without changing local work, rebase=%s", (rebase) => {
+  expect(call(firstId, "git/push").ok).toBe(true);
+  expect(call(secondId, "clone", { url: `file://${remote}` }).ok).toBe(true);
+  const local = commit(firstId, "local.txt", "local\n");
+  commit(secondId, "remote.txt", "remote\n");
+  expect(call(secondId, "git/push").ok).toBe(true);
+  expect(call(firstId, "git/pull", { rebase, identity: undefined })).toMatchObject({ ok: false, code: "GIT_IDENTITY_REQUIRED" });
+  expect(git(join(root, firstId), "rev-parse", "HEAD")).toBe(local);
+  expect(git(join(root, firstId), "status", "--porcelain")).toBe("");
 });

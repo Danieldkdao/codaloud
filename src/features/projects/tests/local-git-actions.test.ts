@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ execute: vi.fn(), project: vi.fn(), identity: vi.fn(), token: vi.fn() }));
+const mocks = vi.hoisted(() => ({ execute: vi.fn(), project: vi.fn(), identity: vi.fn(), readIdentity: vi.fn(), token: vi.fn() }));
 vi.mock("@/services/local-workspace/execute", () => ({ executeWorkspace: mocks.execute, LocalWorkspaceError: class extends Error { constructor(readonly code: string, message: string) { super(message); } } }));
 vi.mock("../local/access", () => ({ requireLocalProject: mocks.project }));
-vi.mock("@/features/settings/git-identity", () => ({ requireGitIdentity: mocks.identity }));
+vi.mock("@/features/settings/git-identity", () => ({ requireGitIdentity: mocks.identity, readGitIdentity: mocks.readIdentity }));
 vi.mock("@/services/github/credentials", () => ({ getGitHubAccessToken: mocks.token }));
 import { deleteProjectBranchAction, initializeProjectGitAction, readProjectBranchesAction, createProjectCommitAction, fetchProjectGitAction, readProjectCommitsAction } from "../actions/git-actions";
 import { LocalWorkspaceError } from "@/services/local-workspace/execute";
@@ -83,4 +83,24 @@ it("forwards explicit force deletion to the native engine without requesting cre
   expect(await deleteProjectBranchAction(id, { branchName: "feature/done", force: true })).toMatchObject({ error: false });
   expect(mocks.execute).toHaveBeenCalledWith(id, "git/delete-branch", { branchName: "feature/done", force: true });
   expect(mocks.token).not.toHaveBeenCalled();
+});
+
+
+it("dispatches a pull without requiring saved author details", async () => {
+  const { executeProjectGit } = await import("../local/git");
+  mocks.readIdentity.mockResolvedValue(null);
+  mocks.identity.mockRejectedValue(new Error("Configure your identity"));
+  mocks.token.mockResolvedValue("test-token");
+  await executeProjectGit(id, { operation: "git/pull", args: { rebase: false } });
+  expect(mocks.identity).not.toHaveBeenCalled();
+  expect(mocks.execute).toHaveBeenCalledWith(id, "git/pull", { rebase: false, accessToken: "test-token" });
+});
+
+it("includes saved author details when pulling divergent history", async () => {
+  const { executeProjectGit } = await import("../local/git");
+  const identity = { name: "Me", email: "me@example.com" };
+  mocks.readIdentity.mockResolvedValue(identity);
+  mocks.token.mockResolvedValue("test-token");
+  await executeProjectGit(id, { operation: "git/pull", args: { rebase: true } });
+  expect(mocks.execute).toHaveBeenCalledWith(id, "git/pull", { rebase: true, identity, accessToken: "test-token" });
 });

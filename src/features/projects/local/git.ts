@@ -1,4 +1,7 @@
-import { requireGitIdentity } from "@/features/settings/git-identity";
+import {
+  readGitIdentity,
+  requireGitIdentity,
+} from "@/features/settings/git-identity";
 import { getGitHubAccessToken } from "@/services/github/credentials";
 import {
   executeWorkspace,
@@ -86,12 +89,14 @@ export const executeProjectGit = async (
         ...command.args,
         accessToken: await requireAccessToken(),
       });
-    case "git/pull":
+    case "git/pull": {
+      const identity = await readGitIdentity();
       return executeWorkspace(project.id, command.operation, {
         ...command.args,
-        identity: await requireGitIdentity(),
+        ...(identity ? { identity } : {}),
         accessToken: await requireAccessToken(),
       });
+    }
     default: {
       throw new Error(`Unsupported Git command: ${operation satisfies never}`);
     }

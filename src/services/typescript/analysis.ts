@@ -1,4 +1,5 @@
 import ts from "./generated/compiler";
+import { isolateModuleSpecifier } from "./module-completions";
 import libraries from "./generated/libraries.json";
 import type {
   CodeIntelligenceRequestSchema,
@@ -57,11 +58,12 @@ const normalize = (path: string) => {
   return `/${parts.join("/")}`;
 };
 
-export const createTypeScriptAnalyzer = (
+const createTypeScriptSession = (
   readFile: (path: string) => Promise<string | null>,
   listDirectory: (
     path: string,
   ) => Promise<{ path: string; isDir: boolean }[]> = async () => [],
+  modulePathsOnly = false,
 ) => {
   const directories = new Map<string, { path: string; isDir: boolean }[]>();
   const pendingDirectories = new Set<string>();
@@ -155,7 +157,7 @@ export const createTypeScriptAnalyzer = (
     getDirectories: (path: string) =>
       directoryEntries(path)
         .filter((entry) => entry.isDir)
-        .map((entry) => normalize(`/workspace/${entry.path}`)),
+        .map((entry) => entry.path.slice(entry.path.lastIndexOf("/") + 1)),
   };
   const run = async (
     input: CodeIntelligenceRequestSchema,
@@ -216,6 +218,7 @@ export const createTypeScriptAnalyzer = (
         allowImportingTsExtensions: true,
         ...parsed?.options,
         noEmit: true,
+        ...(modulePathsOnly ? { noLib: true, types: [] } : {}),
       };
       const host = {
         ...hostFiles,
@@ -287,6 +290,35 @@ export const createTypeScriptAnalyzer = (
         result = {
           completions: (completion?.entries ?? [])
             .filter((entry) => !entry.hasAction && !entry.isSnippet)
+            .filter((entry) => {
+              if (!modulePathsOnly) return true;
+              const span =
+                entry.replacementSpan ?? completion?.optionalReplacementSpan;
+              const moduleStart = input.content.search(/["']/) + 1;
+              const start =
+                span?.start ??
+                Math.max(
+                  moduleStart,
+                  input.content.lastIndexOf("/", input.position! - 1) + 1,
+                );
+              const specifier =
+                input.content.slice(moduleStart, start) +
+                (entry.insertText ?? entry.name);
+              // Probe only the active file: this catches aliases, relative paths
+              // and directory index imports without loading suggested modules.
+              const resolved = ts.resolveModuleName(
+                specifier,
+                target,
+                options,
+                {
+                  fileExists: (path) => normalize(path) === target,
+                  readFile: () => undefined,
+                },
+              ).resolvedModule;
+              return (
+                !resolved || normalize(resolved.resolvedFileName) !== target
+              );
+            })
             .map((entry) => {
               const span =
                 entry.replacementSpan ?? completion?.optionalReplacementSpan;
@@ -381,6 +413,41 @@ export const createTypeScriptAnalyzer = (
     dispose: () => {
       closed = true;
       return queued.then(reset);
+    },
+  };
+};
+
+export const createTypeScriptAnalyzer = (
+  readFile: Parameters<typeof createTypeScriptSession>[0],
+  listDirectory?: Parameters<typeof createTypeScriptSession>[1],
+) => {
+  const analysis = createTypeScriptSession(readFile, listDirectory);
+  const modulePaths = createTypeScriptSession(readFile, listDirectory, true);
+  let closed = false;
+  return {
+    analyze: async (
+      input: CodeIntelligenceRequestSchema,
+    ): Promise<CodeIntelligenceResultSchema> => {
+      if (closed) throw new Error("The analysis session is closed.");
+      const isolated = isolateModuleSpecifier(input);
+      if (!isolated) return analysis.analyze(input);
+      // A slow diagnostic request must not make path completion wait for its
+      // dependency reads. Each service owns its own graph and request queue.
+      const result = await modulePaths.analyze(isolated.input);
+      if (!("completions" in result)) return result;
+      return {
+        completions: result.completions.map((entry) => ({
+          ...entry,
+          ...(entry.from === undefined
+            ? {}
+            : { from: entry.from + isolated.offset }),
+          ...(entry.to === undefined ? {} : { to: entry.to + isolated.offset }),
+        })),
+      };
+    },
+    dispose: async () => {
+      closed = true;
+      await Promise.all([analysis.dispose(), modulePaths.dispose()]);
     },
   };
 };

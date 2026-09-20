@@ -71,7 +71,7 @@ export type WorkspaceArguments = {
   "git/fetch": WithAccessToken;
   "git/push": GitPushSchema & WithAccessToken;
   "git/publish": GitPublishSchema & WithAccessToken;
-  "git/pull": GitPullSchema & WithAccessToken & WithIdentity;
+  "git/pull": GitPullSchema & WithAccessToken & Partial<WithIdentity>;
 };
 export type WorkspaceOperation = keyof WorkspaceArguments;
 

@@ -173,3 +173,150 @@ it("completes relative module paths and named exports from that module", async (
     expect("completions" in exports && exports.completions.map((entry) => entry.label)).toEqual(expect.arrayContaining(["hello", "help"]));
   } finally { await analyzer.dispose(); }
 });
+
+const importFixture = () => {
+  const files: Record<string, string> = {
+    "tsconfig.json": JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }),
+    "package.json": JSON.stringify({ dependencies: { "@scope/first": "1", "@scope/second": "1", "plain-package": "1" }, devDependencies: { "@tools/dev": "1" } }),
+    "src/main.ts": "export const current = true;",
+    "src/components/button.ts": "export const button = true;",
+    "src/lib/helper.ts": "export const helper = true;",
+    "src/app/index.ts": "export {};",
+  };
+  const read = vi.fn(async (path: string) => files[path] ?? null);
+  const list = vi.fn(async (path: string) => {
+    const prefix = path ? `${path}/` : "";
+    const entries = new Map<string, { path: string; isDir: boolean }>();
+    for (const file of Object.keys(files)) {
+      if (!file.startsWith(prefix)) continue;
+      const remainder = file.slice(prefix.length);
+      const name = remainder.split("/")[0];
+      entries.set(name, { path: `${prefix}${name}`, isDir: remainder.includes("/") });
+    }
+    return [...entries.values()];
+  });
+  return { files, read, list, analyzer: createTypeScriptAnalyzer(read, list) };
+};
+
+it("offers clean alias child names on the first request and excludes the active file", async () => {
+  const { analyzer } = importFixture();
+  try {
+    const content = 'import x from "@/';
+    const result = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    expect("completions" in result).toBe(true);
+    if (!("completions" in result)) return;
+    expect(result.completions.map((entry) => entry.label).sort()).toEqual(["app", "components", "lib"]);
+    expect(result.completions.every((entry) => !entry.apply.includes("workspace") && !entry.apply.includes("src/"))).toBe(true);
+  } finally { await analyzer.dispose(); }
+});
+
+it("excludes the active file from relative imports", async () => {
+  const { analyzer } = importFixture();
+  try {
+    const content = 'import x from "./';
+    const result = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    expect("completions" in result && result.completions.some((entry) => entry.label === "main")).toBe(false);
+  } finally { await analyzer.dispose(); }
+});
+
+it("offers every declared scoped dependency even without installed node_modules", async () => {
+  const { analyzer } = importFixture();
+  try {
+    const content = 'import x from "@';
+    const result = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    expect("completions" in result && result.completions.map((entry) => entry.label)).toEqual(expect.arrayContaining(["@scope/first", "@scope/second", "@tools/dev"]));
+  } finally { await analyzer.dispose(); }
+});
+
+it("does not load imported source graphs just to suggest module paths", async () => {
+  const { analyzer, files, read } = importFixture();
+  files["src/slow.ts"] = 'import "./slower"; export const slow = true;';
+  files["src/slower.ts"] = 'export const slower = true;';
+  try {
+    const content = 'import { slow } from "./slow";\nimport x from "@/';
+    const result = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    expect(read.mock.calls.map(([path]) => path).filter((path) => /slow(er)?\.ts$/.test(path))).toEqual([]);
+    expect("completions" in result && result.completions.some((entry) => entry.label === "components")).toBe(true);
+  } finally { await analyzer.dispose(); }
+});
+
+it("completes module paths while diagnostics are waiting on dependency IO", async () => {
+  const { files, list } = importFixture();
+  let release!: () => void;
+  let started!: () => void;
+  const waiting = new Promise<void>((resolve) => { started = resolve; });
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const analyzer = createTypeScriptAnalyzer(async (path) => {
+    if (path === "src/slow.ts") { started(); await blocked; return "export {};"; }
+    return files[path] ?? null;
+  }, list);
+  const diagnostics = analyzer.analyze({ path: "src/main.ts", content: 'import "./slow";' });
+  try {
+    await waiting;
+    const content = 'import "@/';
+    const completed = vi.fn();
+    const completion = analyzer.analyze({ path: "src/main.ts", content, position: content.length }).then(completed);
+    await vi.waitFor(() => expect(completed).toHaveBeenCalled(), { timeout: 1000 });
+    await completion;
+    expect(completed.mock.calls[0][0].completions.map((entry: { label: string }) => entry.label)).toContain("components");
+  } finally { release(); await diagnostics; await analyzer.dispose(); }
+});
+
+it.each([
+  ['import x from "@/co";', '"@/co"'],
+  ['export { x } from "@/co";', '"@/co"'],
+  ['const x = import("@/co");', '"@/co"'],
+  ["const x = require('@/co');", "'@/co'"],
+  ['import x = require("@/co");', '"@/co"'],
+])("preserves the original replacement span for %s", async (content, quoted) => {
+  const { analyzer } = importFixture();
+  try {
+    const position = content.indexOf(quoted) + quoted.length - 1;
+    const result = await analyzer.analyze({ path: "src/main.ts", content, position });
+    const entry = "completions" in result && result.completions.find((entry) => entry.label === "components");
+    expect(entry).toBeTruthy();
+    if (!entry) return;
+    const inserted = content.slice(0, entry.from ?? position - 2) + entry.apply + content.slice(entry.to ?? position);
+    expect(inserted).toBe(content.replace("@/co", "@/components"));
+  } finally { await analyzer.dispose(); }
+});
+
+it("lists a large scoped dependency set and nested alias directories without leaking virtual paths", async () => {
+  const { analyzer, files } = importFixture();
+  const names = Array.from({ length: 120 }, (_, index) => `@scope/package-${index}`);
+  files["package.json"] = JSON.stringify({ dependencies: Object.fromEntries(names.map((name) => [name, "1"])) });
+  try {
+    const content = 'import x from "@';
+    const result = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    expect("completions" in result && result.completions.map((entry) => entry.label)).toEqual(expect.arrayContaining(names));
+    const nested = 'import x from "@/components/';
+    const next = await analyzer.analyze({ path: "src/main.ts", content: nested, position: nested.length });
+    expect("completions" in next && next.completions.map((entry) => entry.label)).toEqual(["button"]);
+  } finally { await analyzer.dispose(); }
+});
+
+it("excludes self imports through exact aliases and directory index resolution", async () => {
+  const { analyzer, files } = importFixture();
+  files["tsconfig.json"] = JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"], "@self": ["./src/app/index.ts"] } } });
+  try {
+    for (const specifier of ["@/", "@self"]) {
+      const content = `import x from "${specifier}`;
+      const result = await analyzer.analyze({ path: "src/app/index.ts", content, position: content.length });
+      expect("completions" in result && result.completions.some((entry) => entry.label === "app" || entry.label === "@self")).toBe(false);
+    }
+  } finally { await analyzer.dispose(); }
+});
+
+it("refreshes alias configuration and directory contents after the completion cache expires", async () => {
+  const { analyzer, files } = importFixture();
+  const now = vi.spyOn(Date, "now").mockReturnValue(1000);
+  try {
+    const content = 'import x from "@/';
+    await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    files["tsconfig.json"] = JSON.stringify({ compilerOptions: { paths: { "@/*": ["./lib/*"] } } });
+    files["lib/fresh.ts"] = "export {};";
+    now.mockReturnValue(2000);
+    const next = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
+    expect("completions" in next && next.completions.map((entry) => entry.label)).toEqual(["fresh"]);
+  } finally { now.mockRestore(); await analyzer.dispose(); }
+});

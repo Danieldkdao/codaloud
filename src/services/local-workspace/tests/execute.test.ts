@@ -32,3 +32,10 @@ const checkCommandTypes = () => {
   void executeWorkspace(id, "initialize", { force: true });
 };
 void checkCommandTypes;
+
+it("discovers archives without requiring a deleted project's ID", async () => {
+  const { listArchivedWorkspaceIds } = await import("../execute");
+  native.execute.mockResolvedValue(JSON.stringify({ ok: true, data: [id] }));
+  expect(await listArchivedWorkspaceIds()).toEqual([id]);
+  expect(JSON.parse(native.execute.mock.calls[0][0])).toEqual({ operation: "list-archived-projects" });
+});

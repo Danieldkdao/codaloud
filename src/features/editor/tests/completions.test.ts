@@ -67,3 +67,23 @@ it.each(['import {  } from "./helpers";', 'import { x } from "./";', 'const x = 
   await createEditorCompletionSource("main.ts", request)(new CompletionContext(EditorState.create({ doc }), pos, false));
   expect(request).toHaveBeenCalledOnce();
 });
+
+it("makes every scoped package reachable in the touch-scrollable suggestion list", async () => {
+  const { EditorView } = await import("@codemirror/view");
+  const { startCompletion } = await import("@codemirror/autocomplete");
+  const { editorAutocompletion } = await import("../completions");
+  const doc = 'import x from "@';
+  const names = Array.from({ length: 120 }, (_, index) => `@scope/package-${String(index).padStart(3, "0")}`);
+  const parent = document.body.appendChild(document.createElement("div"));
+  const view = new EditorView({ parent, state: EditorState.create({ doc, selection: { anchor: doc.length }, extensions: [
+    editorAutocompletion("main.ts", async () => ({ completions: names.map((name) => ({ label: name, apply: name, type: "namespace", from: doc.length - 1, to: doc.length })) })),
+  ] }) });
+  try {
+    view.focus();
+    startCompletion(view);
+    await vi.waitFor(() => expect(parent.querySelectorAll(".cm-tooltip-autocomplete li")).toHaveLength(names.length));
+    const last = parent.querySelectorAll(".cm-tooltip-autocomplete li")[119];
+    last.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(view.state.doc.toString()).toBe('import x from "@scope/package-119');
+  } finally { view.destroy(); parent.remove(); }
+});

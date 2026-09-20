@@ -74,7 +74,10 @@ export const ProjectBranchSection = ({
           className="text-muted-foreground"
           accessible={false}
         />
-        <PText accessibilityRole="header" className="text-base font-medium text-muted-foreground">
+        <PText
+          accessibilityRole="header"
+          className="text-base font-medium text-muted-foreground"
+        >
           {title}
         </PText>
       </View>

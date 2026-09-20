@@ -162,7 +162,7 @@ describe("project creation cache updates", () => {
     expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(repositoryKey)?.isInvalidated).toBe(false);
     expect(mocks.replace).toHaveBeenCalledWith({
-      pathname: "/projects/[projectId]",
+      pathname: "/projects/[projectId]/code",
       params: { projectId: "new-project" },
     });
   });

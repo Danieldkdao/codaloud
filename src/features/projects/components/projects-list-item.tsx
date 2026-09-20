@@ -173,7 +173,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
         >
           <Link
             href={{
-              pathname: "/projects/[projectId]",
+              pathname: "/projects/[projectId]/code",
               params: { projectId: project.id },
             }}
             onPress={(event) => {

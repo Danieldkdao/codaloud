@@ -162,7 +162,7 @@ it("closes the row and opens the selected project's update form", () => {
 
 it("still opens a project when its card is tapped", () => {
   act(() => container.querySelector<HTMLButtonElement>("[data-project-card]")!.click());
-  expect(mocks.push).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]", params: { projectId: project.id } });
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: project.id } });
 });
 
 it("closes the row on Delete and leaves the project intact if confirmation is dismissed", () => {

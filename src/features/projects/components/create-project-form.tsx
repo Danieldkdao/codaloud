@@ -66,7 +66,7 @@ export const CreateProjectForm = () => {
 
     void queryClient.invalidateQueries({ queryKey: ["projects"] });
     router.replace({
-      pathname: "/projects/[projectId]",
+      pathname: "/projects/[projectId]/code",
       params: { projectId: createdProject.projectId },
     });
     showSuccess("Project created");

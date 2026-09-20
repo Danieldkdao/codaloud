@@ -85,7 +85,7 @@ export const ProjectWorkspaceDock = ({
           <View className="min-w-0 flex-1">
             <GlassSurface borderRadius={36}>
               <View
-                className="flex-row items-center py-2"
+                className="min-h-18 flex-row items-center py-2"
                 style={{ paddingHorizontal: activeTab === "code" ? 0 : 8, gap: actionGap }}
               >
                 <View
@@ -104,19 +104,21 @@ export const ProjectWorkspaceDock = ({
                     onBranchPickerOpenChange={setBranchPickerOpen}
                   />
                 </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Microphone"
-                  className="size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90"
-                >
-                  <Icon
-                    family="Feather"
-                    name="mic"
-                    size={24}
-                    accessible={false}
-                    className="text-primary-foreground"
-                  />
-                </Pressable>
+                {!isGit && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Microphone"
+                    className="size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90"
+                  >
+                    <Icon
+                      family="Feather"
+                      name="mic"
+                      size={24}
+                      accessible={false}
+                      className="text-primary-foreground"
+                    />
+                  </Pressable>
+                )}
                 <View
                   style={{
                     flex: 1,

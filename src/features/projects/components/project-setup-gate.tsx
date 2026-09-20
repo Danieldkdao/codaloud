@@ -1,6 +1,5 @@
 import {
   Stack,
-  useGlobalSearchParams,
   useLocalSearchParams,
   useRouter,
   useSegments,
@@ -16,20 +15,11 @@ import { PText } from "@/components/ui/text";
 import { useProject } from "@/features/projects/hooks/use-project";
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useThemeColor } from "@/hooks/use-theme";
-import { getProjectCommitDiffParams } from "../lib/commit-params";
-import { formatCommitHash } from "../lib/formatters";
 
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const { commitSha, source } = useGlobalSearchParams();
   const router = useRouter();
   const segments = useSegments();
-  const isWorkspaceDiff =
-    segments[2] === "git" && segments[3] === "workspace-diff";
-  const commit = getProjectCommitDiffParams(commitSha, source);
-  const diffTitle = commit
-    ? formatCommitHash(commit.commitSha)
-    : "Workspace diff";
   const insets = useSafeAreaInsets();
   const verticalPadding = Math.max(insets.top, insets.bottom) + 24;
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
@@ -52,8 +42,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
     workspace.failureCount === 0;
   const workspaceError = setupReady && workspace.isError;
   const checking = workspaceError ? workspace.isFetching : isFetching;
-  const isSupportingScreen =
-    ready && ["git", "agent"].includes(segments[2] ?? "");
+  const isSupportingScreen = ready && segments[2] === "agent";
   useEffect(() => {
     if (ready) setOpenedProjectId(projectId);
   }, [projectId, ready]);
@@ -68,11 +57,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerShadowVisible: false,
           headerShown: true,
           headerTransparent: !ready,
-          headerTitle: ready
-            ? isWorkspaceDiff
-              ? diffTitle
-              : project?.name
-            : "",
+          headerTitle: ready ? project?.name : "",
           headerTitleStyle: {
             fontSize: 22,
             fontFamily: "Fraunces_500Medium",
@@ -81,42 +66,25 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerLeft: () => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={
-                isWorkspaceDiff
-                  ? "Back to Git"
-                  : isSupportingScreen
-                    ? "Back to Code"
-                    : "Home"
-              }
+              accessibilityLabel={isSupportingScreen ? "Back to Code" : "Home"}
               accessibilityHint={
-                isWorkspaceDiff
-                  ? "Returns to your changes"
-                  : isSupportingScreen
-                    ? "Returns to your code editor"
-                    : "Returns to your projects"
+                isSupportingScreen
+                  ? "Returns to your code editor"
+                  : "Returns to your projects"
               }
               onPress={() =>
-                isWorkspaceDiff
+                isSupportingScreen
                   ? router.dismissTo({
-                      pathname: "/projects/[projectId]/git",
+                      pathname: "/projects/[projectId]/code",
                       params: { projectId },
                     })
-                  : isSupportingScreen
-                    ? router.dismissTo({
-                        pathname: "/projects/[projectId]/code",
-                        params: { projectId },
-                      })
-                    : router.dismissTo("/(main)")
+                  : router.dismissTo("/(main)")
               }
               className="size-11 items-center justify-center rounded-full active:bg-secondary"
             >
               <Icon
                 family="Feather"
-                name={
-                  isWorkspaceDiff || isSupportingScreen
-                    ? "chevron-left"
-                    : "home"
-                }
+                name={isSupportingScreen ? "chevron-left" : "home"}
                 size={22}
                 accessible={false}
                 className="text-foreground"

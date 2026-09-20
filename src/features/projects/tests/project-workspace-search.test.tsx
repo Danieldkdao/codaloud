@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, createElement, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { Keyboard, type View } from "react-native";
+import { Keyboard, Platform, type View } from "react-native";
 import { withTiming } from "react-native-reanimated";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -12,7 +12,7 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { ProjectSearchOverlayProvider } from "@/features/projects/components/project-search-overlay";
 
 const workspace = vi.hoisted(() => ({ projectId: "project-one", commitSearch: "", setCommitSearch: vi.fn(), setGitTab: vi.fn() }));
-const touches = vi.hoisted(() => ({ claimed: 0, rootTop: 0, back: new Set<() => boolean>() }));
+const touches = vi.hoisted(() => ({ claimed: 0, rootTop: 0, rootHeight: 844, back: new Set<() => boolean>() }));
 const transparency = vi.hoisted(() => ({ read: vi.fn(), onChange: undefined as ((enabled: boolean) => void) | undefined }));
 const switchCommands = vi.hoisted(() => ({ setValue: vi.fn() }));
 const keyboardFrame = vi.hoisted(() => ({ current: undefined as { screenY: number; screenX: number; width: number; height: number } | undefined }));
@@ -58,7 +58,7 @@ vi.mock("react-native", () => ({
     onStartShouldSetResponderCapture?: () => boolean; pointerEvents?: string;
   }) => {
     useImperativeHandle(ref, () => ({ measureInWindow: (callback: (...values: number[]) => void) =>
-      testID === "project-search-root" ? callback(0, touches.rootTop, 390, 844) : callback(320, 600, 56, 56) }));
+      testID === "project-search-root" ? callback(0, touches.rootTop, 390, touches.rootHeight) : callback(320, 600, 56, 56) }));
     useEffect(() => { onLayout?.(); }, []);
     return createElement("div", { className, "data-testid": testID, "data-pointer-events": pointerEvents,
       onMouseDownCapture: () => { if (onStartShouldSetResponderCapture?.()) touches.claimed++; } }, children);
@@ -134,6 +134,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "queueMicrotask"] });
   touches.claimed = 0;
   touches.rootTop = 0;
+  touches.rootHeight = 844;
+  Platform.OS = "ios";
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
@@ -560,4 +562,27 @@ it("keeps file search visible without an overlay and clears the current results"
   click("Clear file search");
   expect(container.querySelector("input")?.value).toBe("");
   expect(container.querySelector("[data-files-screen]")?.textContent).toBe("Original directory");
+});
+
+it("accounts for the native modal offset when placing search above an existing keyboard", () => {
+  // Fabric reports modal-local coordinates; the bottom-aligned modal starts 62pt below the window.
+  touches.rootHeight = 782;
+  keyboardFrame.current = { screenY: 480, screenX: 0, width: 390, height: 364 };
+  act(() => root.render(<ProjectSearchOverlayProvider bottomAligned><ProjectWorkspaceSearch /></ProjectSearchOverlayProvider>));
+  vi.mocked(withTiming).mockClear();
+  click("Search files");
+  expect(withTiming).toHaveBeenCalledWith(190, expect.any(Object));
+  expect(container.querySelector('[data-search-top="540"]')).not.toBeNull();
+});
+
+it("uses Android's measured window coordinates rather than the iOS modal offset", () => {
+  Platform.OS = "android";
+  touches.rootTop = 24;
+  touches.rootHeight = 780;
+  keyboardFrame.current = { screenY: 480, screenX: 0, width: 390, height: 364 };
+  act(() => root.render(<ProjectSearchOverlayProvider bottomAligned><ProjectWorkspaceSearch /></ProjectSearchOverlayProvider>));
+  vi.mocked(withTiming).mockClear();
+  click("Search files");
+  expect(withTiming).toHaveBeenCalledWith(128, expect.any(Object));
+  expect(container.querySelector('[data-search-top="516"]')).not.toBeNull();
 });

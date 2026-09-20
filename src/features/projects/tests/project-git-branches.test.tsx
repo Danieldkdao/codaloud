@@ -315,7 +315,7 @@ it("opens each supporting screen directly from Code without the workspace menu",
     }
     expect(dock).not.toBeNull();
     expect(Number(dock!.style.zIndex)).toBeGreaterThan(1);
-    expect(dock!.querySelector('[aria-label="Microphone"]')).not.toBeNull();
+    expect(dock!.querySelector('[aria-label="Microphone"]') !== null).toBe(name !== "git");
     expect(activeTab).toBe(name);
     expect(container.querySelector('[aria-label="Editor tools"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Workspace:"]')).toBeNull();
@@ -469,7 +469,7 @@ it("distinguishes an unfinished empty search from exhausted history and offline 
 it("shows only the active screen's controls in the lower bar", () => {
   const labels = () => [...container.querySelectorAll("button[aria-label]")]
     .map((button) => button.getAttribute("aria-label"));
-  expect(labels()).toContain("Microphone");
+  expect(labels()).not.toContain("Microphone");
   expect(labels()).toContain("Search Git");
   expect(labels()).not.toContain("Undo");
   for (const tab of ["agent", "code"]) {

@@ -100,7 +100,7 @@ it("provides an explicit home action while the workspace is loading", async () =
   expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
 });
 
-it.each(["git", "agent"])("returns from %s to the current project's Code screen", async (section) => {
+it.each(["agent"])("returns from %s to the current project's Code screen", async (section) => {
   state.query.data = { name: "Example", setupStatus: "ready" };
   state.segments = ["projects", "[projectId]", section];
   await render();
@@ -112,50 +112,20 @@ it.each(["git", "agent"])("returns from %s to the current project's Code screen"
   expect(state.navigate).not.toHaveBeenCalled();
 });
 
-it.each(["code", "files"])("keeps the editor Home action behind %s and Back to Git on nested diffs", async (section) => {
+it.each(["code", "files", "git"])("keeps the editor header stable behind %s and nested modal diffs", async (section) => {
   state.query.data = { name: "Example", setupStatus: "ready" };
   state.segments = ["projects", "[projectId]", section];
   await render();
-  const home = state.headerOptions.headerLeft?.();
+  expect(state.headerOptions.headerTitle).toBe("Example");
   state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
-  await render();
-  const back = state.headerOptions.headerLeft?.();
-  act(() => root.render(home));
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Home"]')!.click());
-  expect(state.dismissTo).toHaveBeenLastCalledWith("/(main)");
-  act(() => root.render(back));
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Back to Git"]')!.click());
-  expect(state.dismissTo).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/git", params: { projectId: "project-one" } });
-});
-
-it.each(["local", "remote"])("uses the short SHA for a %s commit and restores the normal titles on navigation", async (source) => {
-  state.query.data = { name: "Example", setupStatus: "ready" };
-  state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
-  state.commitParams = { commitSha: "40d01ac" + "a".repeat(33), source };
-  await render();
-  expect(state.headerOptions.headerTitle).toBe("40d01ac");
-  state.commitParams = { commitSha: "b".repeat(40), source };
-  await render();
-  expect(state.headerOptions.headerTitle).toBe("bbbbbbb");
-  state.commitParams = {};
-  await render();
-  expect(state.headerOptions.headerTitle).toBe("Workspace diff");
-  state.segments = ["projects", "[projectId]", "git"];
+  state.commitParams = { commitSha: "a".repeat(40), source: "local" };
   await render();
   expect(state.headerOptions.headerTitle).toBe("Example");
+  act(() => root.render(state.headerOptions.headerLeft?.()));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Home"]')!.click());
+  expect(state.dismissTo).toHaveBeenLastCalledWith("/(main)");
 });
 
-it.each([
-  { commitSha: "a".repeat(40) }, { source: "local" },
-  { commitSha: ["a".repeat(40)], source: "local" },
-  { commitSha: "a".repeat(40), source: "invalid" },
-])("keeps the workspace title for incomplete commit parameters: %j", async (params) => {
-  state.query.data = { name: "Example", setupStatus: "ready" };
-  state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
-  state.commitParams = params;
-  await render();
-  expect(state.headerOptions.headerTitle).toBe("Workspace diff");
-});
 afterEach(() => {
   act(() => root.unmount());
   client.clear();

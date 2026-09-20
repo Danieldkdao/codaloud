@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, usePathname } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { useThemeColor } from "@/hooks/use-theme";
 import { View } from "react-native";
@@ -22,10 +22,7 @@ const WorkspaceScreen = ({
   name: string;
   children: ReactNode;
 }) => {
-  const pathname = usePathname();
-  const showDock =
-    (name === "code" || name === "git" || name === "agent") &&
-    !(name === "git" && pathname.endsWith("/workspace-diff"));
+  const showDock = name === "code" || name === "agent";
   return (
     <ProjectWorkspaceDockHeightProvider>
       <View className="flex-1 bg-background">
@@ -64,7 +61,7 @@ const ProjectLayout = () => {
                   >
                     <Stack.Screen name="index" />
                     <Stack.Screen name="code" />
-                    <Stack.Screen name="git" />
+                    <Stack.Screen name="git" options={{ presentation: "modal" }} />
                     <Stack.Screen name="agent" />
                     <Stack.Screen
                       name="files"

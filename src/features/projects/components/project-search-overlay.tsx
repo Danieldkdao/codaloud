@@ -1,5 +1,5 @@
 import { createContext, use, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 
 type SearchLayer = {
   id: string;
@@ -11,12 +11,13 @@ type SearchLayer = {
 type SearchOverlayHost = {
   present: (layer: SearchLayer) => void;
   remove: (id: string) => void;
-  measureRoot: (callback: (x: number, y: number) => void) => void;
+  measureRoot: (callback: (x: number, y: number, windowY: number) => void) => void;
 };
 
 const SearchOverlayContext = createContext<SearchOverlayHost | null>(null);
 
-export const ProjectSearchOverlayProvider = ({ children }: { children: ReactNode }) => {
+export const ProjectSearchOverlayProvider = ({ children, bottomAligned = false }: { children: ReactNode; bottomAligned?: boolean }) => {
+  const { height: windowHeight } = useWindowDimensions();
   const rootRef = useRef<View>(null);
   const activeLayer = useRef<SearchLayer | null>(null);
   const outsideTouch = useRef<object | null>(null);
@@ -31,8 +32,12 @@ export const ProjectSearchOverlayProvider = ({ children }: { children: ReactNode
       activeLayer.current = null;
       setLayer(null);
     },
-    measureRoot: (callback) => rootRef.current?.measureInWindow(callback),
-  }), []);
+    measureRoot: (callback) => rootRef.current?.measureInWindow((x, y, _width, height) => {
+      // Fabric can report modal-local y coordinates. A full-height modal still
+      // meets the window bottom, which gives its actual keyboard-space origin.
+      callback(x, y, bottomAligned && Platform.OS === "ios" ? windowHeight - height : y);
+    }),
+  }), [bottomAligned, windowHeight]);
 
   return (
     <SearchOverlayContext value={host}>

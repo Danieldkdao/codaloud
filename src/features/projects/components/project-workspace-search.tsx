@@ -154,16 +154,17 @@ export const ProjectWorkspaceSearch = ({
   const open = () => {
     const target = anchorRef?.current ?? buttonRef.current;
     target?.measureInWindow((_x, y) => {
-      overlay.measureRoot((_rootX, rootY) => {
+      overlay.measureRoot((_rootX, rootY, rootWindowY) => {
         closing.current = false;
         openingStarted.current = false;
         progress.value = 0;
         keyboardOffset.value = 0;
-        const windowTop = Math.max(
+        const measuredTop = Math.max(
           insets.top + 8,
           anchorPlacement === "replace" ? y : y - buttonSize - 4,
         );
-        setAnchor({ right: rightInset, top: windowTop - rootY, windowTop });
+        const top = measuredTop - rootY;
+        setAnchor({ right: rightInset, top, windowTop: top + rootWindowY });
       });
     });
   };

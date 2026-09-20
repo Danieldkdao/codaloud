@@ -109,10 +109,10 @@ beforeEach(async () => {
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); });
 
-it("presents only Files as a modal without reading an unselected file", () => {
+it("presents Files and Git as modals without reading an unselected file", () => {
   expect(stackOptions).toMatchObject({ headerShown: false });
   expect(screenOptions.get("files")?.presentation).toBe("modal");
-  expect(screenOptions.get("git")?.presentation).not.toBe("modal");
+  expect(screenOptions.get("git")?.presentation).toBe("modal");
   expect(screenOptions.get("agent")?.presentation).not.toBe("modal");
   expect(mocks.readContent).not.toHaveBeenCalled();
 });

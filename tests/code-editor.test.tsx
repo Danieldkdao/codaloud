@@ -547,9 +547,9 @@ it("reports focus and selection to native without editing the document", async (
     documentKey: "one", filename: "notes.txt", initialValue: "hello", onInteractionChange, onChange,
   })));
   act(() => { editor().focus(); editor().dispatch({ selection: { anchor: 0, head: 3 } }); });
-  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: true }, "one");
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: true }), "one");
   act(() => editor().dispatch({ selection: { anchor: 3 } }));
-  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: false }, "one");
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: false }), "one");
   expect(onChange).not.toHaveBeenCalled();
 });
 
@@ -562,9 +562,9 @@ it("restores selection UI for the new document and reserves space above the keyb
   await showDocument("one");
   act(() => { editor().focus(); editor().dispatch({ selection: { anchor: 0, head: 3 } }); });
   await showDocument("two");
-  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: false }, "two");
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: false }), "two");
   await showDocument("one");
-  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: true }, "one");
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: true }), "one");
   expect((container.querySelector(".code-editor-shell") as HTMLElement).style.getPropertyValue("--editor-bottom-inset")).toBe("108px");
 });
 

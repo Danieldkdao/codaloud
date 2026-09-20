@@ -12,6 +12,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import {
   HighlightStyle,
+  codeFolding,
   bracketMatching,
   defaultHighlightStyle,
   LanguageDescription,
@@ -46,6 +47,8 @@ import {
   type CodeEditorMatchState,
 } from "./code-editor-matches";
 
+import { getEditorCommandState, runEditorCommand } from "@/features/editor/commands";
+import type { EditorCommand, EditorCommandState } from "@/features/editor/types";
 import { editorConfiguration } from "@/features/editor/configuration";
 import { defaultEditorPreferences } from "@/features/settings/constants";
 import type { EditorPreferences } from "@/features/settings/types";
@@ -55,7 +58,8 @@ import { clsx } from "clsx";
 import "@/global.css";
 import "@/styles/code-editor.css";
 
-export interface CodeEditorRef extends DOMImperativeFactory {
+export interface CodeEditorRef {
+  command(command: EditorCommand, text: string, documentKey: string): void;
   flushChanges: () => Promise<void>;
   nextMatch: () => void;
   previousMatch: () => void;
@@ -65,9 +69,13 @@ export interface CodeEditorRef extends DOMImperativeFactory {
 export type CodeEditorInteraction = {
   focused: boolean;
   hasSelection: boolean;
+  commands?: EditorCommandState;
 };
 
 type CodeEditorProps = {
+  onCommandError?: (message: string) => Promise<void>;
+  onReadClipboard?: () => Promise<string>;
+  onWriteClipboard?: (text: string) => Promise<void>;
   preferences?: EditorPreferences;
   ref?: Ref<CodeEditorRef>;
   /** Literal, case-insensitive search terms. Matching runs against the live document. */
@@ -158,6 +166,9 @@ const formatEditorThemeClassName = (
 
 const CodeEditor = ({
   preferences = defaultEditorPreferences,
+  onCommandError,
+  onReadClipboard,
+  onWriteClipboard,
   ref,
   matches,
   onMatchesChange,
@@ -175,6 +186,10 @@ const CodeEditor = ({
   onRequestAnalysis,
   onAnalysis,
 }: CodeEditorProps) => {
+  const clipboard = useRef({ onReadClipboard, onWriteClipboard, onCommandError });
+  clipboard.current = { onReadClipboard, onWriteClipboard, onCommandError };
+  const activeDocument = useRef(documentKey);
+  activeDocument.current = documentKey;
   const host = useRef<HTMLDivElement>(null);
   const interactionCallback = useRef(onInteractionChange);
   interactionCallback.current = onInteractionChange;
@@ -236,8 +251,28 @@ const CodeEditor = ({
   inset.current = effectiveInset;
 
   useDOMImperativeHandle(
-    ref ?? null,
+    // Expo’s bridge index signature accepts arbitrary JSON, while callers use
+    // the narrower serializable command contract above.
+    (ref ?? null) as Ref<DOMImperativeFactory>,
     () => ({
+      command: (command: EditorCommand, text: string, key: string) => {
+        const editor = view.current;
+        if (!editor || (key !== undefined && key !== activeDocument.current)) return;
+        void runEditorCommand(editor, command, {
+          read: async () => {
+            if (!clipboard.current.onReadClipboard) throw new Error("Clipboard unavailable.");
+            return clipboard.current.onReadClipboard();
+          },
+          write: async (value) => {
+            if (!clipboard.current.onWriteClipboard) throw new Error("Clipboard unavailable.");
+            await clipboard.current.onWriteClipboard(value);
+          },
+        }, text).then(() => {
+          if (editor === view.current) reportInteraction(editor, activeDocument.current);
+        }).catch((error: unknown) => {
+          void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Try again.").catch(() => {});
+        });
+      },
       flushChanges: async () => {
         while (pendingChanges.current.size)
           await Promise.all([...pendingChanges.current]);
@@ -253,12 +288,13 @@ const CodeEditor = ({
       previousMatch: () => {
         if (view.current) moveCodeEditorMatch(view.current, -1);
       },
-    }),
+    }) as unknown as DOMImperativeFactory,
     [],
   );
 
   const reportInteraction = (editor: EditorView, key?: string) => {
     const state = {
+      commands: getEditorCommandState(editor),
       focused: editor.hasFocus,
       hasSelection: !editor.state.selection.main.empty,
     };
@@ -266,6 +302,7 @@ const CodeEditor = ({
     if (
       previous &&
       previous.key === key &&
+      JSON.stringify(previous.commands) === JSON.stringify(state.commands) &&
       previous.focused === state.focused &&
       previous.hasSelection === state.hasSelection
     )
@@ -312,6 +349,7 @@ const CodeEditor = ({
       configuration.of(editorConfiguration(preferencesRef.current)),
       highlightSpecialChars(),
       history(),
+      codeFolding(),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
@@ -328,7 +366,7 @@ const CodeEditor = ({
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
-        if (update.focusChanged || update.selectionSet || update.docChanged) {
+        if (update.focusChanged || update.selectionSet || update.docChanged || update.transactions.some((transaction) => transaction.effects.length)) {
           reportInteraction(update.view, documentKey);
         }
         if (

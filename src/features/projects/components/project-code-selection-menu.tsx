@@ -6,7 +6,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useThemeColor } from "@/hooks/use-theme";
 
 const clipboardActions = ["cut", "copy", "paste", "select-all"] as const;
-const codeActions = ["explain", "comment", "uncomment", "fold", "unfold"] as const;
+const codeActions = ["explain", "comment", "fold"] as const;
 type SelectionAction = (typeof clipboardActions)[number] | (typeof codeActions)[number];
 
 const formatSelectionAction = (action: SelectionAction): {
@@ -19,14 +19,17 @@ const formatSelectionAction = (action: SelectionAction): {
     case "paste": return { label: "Paste", icon: "content-paste" };
     case "select-all": return { label: "Select all", icon: "select-all" };
     case "explain": return { label: "Explain to me with AI", icon: "creation-outline" };
-    case "comment": return { label: "Comment selection", icon: "comment-plus-outline" };
-    case "uncomment": return { label: "Uncomment selection", icon: "comment-minus-outline" };
+    case "comment": return { label: "Toggle comment", icon: "comment-plus-outline" };
     case "fold": return { label: "Fold selection", icon: "unfold-less-horizontal" };
-    case "unfold": return { label: "Unfold selection", icon: "unfold-more-horizontal" };
   }
 };
 
-export const ProjectCodeSelectionMenu = () => {
+import type { EditorCommand, EditorCommandState } from "@/features/editor/types";
+
+export const ProjectCodeSelectionMenu = ({ onCommand, commands }: {
+  onCommand?: (command: EditorCommand) => void;
+  commands?: EditorCommandState;
+} = {}) => {
   const foreground = useThemeColor("foreground");
   const [images, setImages] = useState<{ action: SelectionAction; image: ImageSourcePropType }[]>([]);
   useEffect(() => {
@@ -44,11 +47,10 @@ export const ProjectCodeSelectionMenu = () => {
 
   const option = (action: SelectionAction) => ({
     value: action,
-    label: formatSelectionAction(action).label,
+    label: action === "fold" && commands?.fold === "unfold" ? "Unfold selection" : formatSelectionAction(action).label,
+    disabled: action === "explain" || (action === "fold" && (!commands || commands.fold === "unavailable")) || (action === "comment" && !commands?.canComment),
     image: images.find((source) => source.action === action)?.image,
-    // This is a menu preview, including its clipboard entries. OS clipboard
-    // actions in the WebView's own text-selection menu remain functional.
-    onSelect: () => {},
+    onSelect: () => { if (action !== "explain") onCommand?.(action); },
   });
 
   return (

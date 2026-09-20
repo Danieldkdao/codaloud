@@ -96,7 +96,7 @@ it("offers all symbol and line-action placeholders without emitting edits", () =
 it("offers native selection menu placeholders with familiar clipboard and code actions", async () => {
   await act(async () => root.render(createElement(ProjectCodeSelectionMenu)));
   const labels = [...container.querySelectorAll("button")].map((button) => button.textContent);
-  expect(labels).toEqual(["Cut", "Copy", "Paste", "Select all", "Explain to me with AI", "Comment selection", "Uncomment selection", "Fold selection", "Unfold selection"]);
+  expect(labels).toEqual(["Cut", "Copy", "Paste", "Select all", "Explain to me with AI", "Toggle comment", "Fold selection"]);
   act(() => container.querySelectorAll("button").forEach((button) => button.click()));
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(labels);
 });
@@ -134,4 +134,13 @@ it("offers a working keyboard-close command at the end of the action row", () =>
   expect(button.querySelector('[data-icon="keyboard-close-outline"]')).not.toBeNull();
   act(() => button.click());
   expect(state.dismissKeyboard).toHaveBeenCalledOnce();
+});
+
+it("routes keyboard symbols and line actions to the live editor", async () => {
+  const onCommand = vi.fn();
+  await act(async () => root.render(createElement(ProjectCodeKeyboardAccessory, { onCommand, onDismissKeyboard: state.dismissKeyboard, frame: { screenX: 0, screenY: 500, height: 344, width: 390 } })));
+  act(() => (container.querySelector('[aria-label="Insert {"]') as HTMLButtonElement).click());
+  expect(onCommand).toHaveBeenLastCalledWith("insert", "{");
+  act(() => (container.querySelector('[aria-label="Delete current line"]') as HTMLButtonElement).click());
+  expect(onCommand).toHaveBeenLastCalledWith("delete-line");
 });

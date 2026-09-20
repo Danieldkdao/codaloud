@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Clipboard from "expo-clipboard";
+import type { EditorCommand } from "@/features/editor/types";
 import { Alert, View } from "react-native";
 import CodeEditor, {
   type CodeEditorRef,
@@ -67,6 +69,10 @@ const CodeScreen = () => {
     },
     [],
   );
+  const runCommand = (command: EditorCommand, text?: string) => {
+    if (!documents.activeKey || isWorkspaceBusy || closing.current) return;
+    editor.current?.command(command, text ?? "", documents.activeKey);
+  };
   const [badgeHeight, setBadgeHeight] = useState(48);
   useEditorDevelopmentShortcuts();
 
@@ -173,6 +179,9 @@ const CodeScreen = () => {
           <CodeEditor
             ref={editor}
             preferences={preferences}
+            onCommandError={async (message) => { Alert.alert("Couldn’t complete editor action", message); }}
+            onReadClipboard={Clipboard.getStringAsync}
+            onWriteClipboard={async (text) => { await Clipboard.setStringAsync(text); }}
             documentKey={documents.editor?.key ?? `prewarm/${projectId}`}
             openDocumentKeys={documents.openDocumentKeys}
             filename={documents.editor?.path ?? ""}
@@ -263,14 +272,16 @@ const CodeScreen = () => {
       {showKeyboardAccessory ? (
         <ProjectCodeKeyboardAccessory
           frame={keyboardFrame}
+          onCommand={runCommand}
+          canComment={interaction?.commands?.canComment}
           onDismissKeyboard={() => editor.current?.dismissKeyboard()}
         >
-          {showSelectionMenu ? <ProjectCodeSelectionMenu /> : null}
+          {showSelectionMenu ? <ProjectCodeSelectionMenu onCommand={runCommand} commands={interaction?.commands} /> : null}
         </ProjectCodeKeyboardAccessory>
       ) : showSelectionMenu && !keyboardFrame ? (
         <View className="absolute right-4 top-16">
           <GlassSurface borderRadius={24}>
-            <ProjectCodeSelectionMenu />
+            <ProjectCodeSelectionMenu onCommand={runCommand} commands={interaction?.commands} />
           </GlassSurface>
         </View>
       ) : null}

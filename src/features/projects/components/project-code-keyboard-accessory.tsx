@@ -17,6 +17,8 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { CodeText } from "@/components/ui/text";
 
+import type { EditorCommand } from "@/features/editor/types";
+
 const symbols = [
   "(",
   ")",
@@ -47,6 +49,8 @@ const formatSymbolLabel = (symbol: string) => {
 };
 
 type ProjectCodeKeyboardAccessoryProps = {
+  onCommand?: (command: EditorCommand, text?: string) => void;
+  canComment?: boolean;
   frame?: KeyboardMetrics;
   children?: ReactNode;
   onDismissKeyboard: () => void;
@@ -54,6 +58,8 @@ type ProjectCodeKeyboardAccessoryProps = {
 
 export const ProjectCodeKeyboardAccessory = ({
   frame,
+  onCommand,
+  canComment = true,
   children,
   onDismissKeyboard,
 }: ProjectCodeKeyboardAccessoryProps) => {
@@ -99,6 +105,7 @@ export const ProjectCodeKeyboardAccessory = ({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Copy current line"
+                onPress={() => onCommand?.("copy-line")}
                 className="h-12 w-11 items-center justify-center active:opacity-50"
               >
                 <Icon
@@ -112,6 +119,7 @@ export const ProjectCodeKeyboardAccessory = ({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Delete current line"
+                onPress={() => onCommand?.("delete-line")}
                 className="h-12 w-11 items-center justify-center active:opacity-50"
               >
                 <Icon
@@ -125,6 +133,9 @@ export const ProjectCodeKeyboardAccessory = ({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Toggle comment"
+                onPress={() => onCommand?.("comment")}
+                disabled={!canComment}
+                accessibilityState={{ disabled: !canComment }}
                 className="h-12 w-11 items-center justify-center active:opacity-50"
               >
                 <Icon
@@ -164,12 +175,12 @@ export const ProjectCodeKeyboardAccessory = ({
                 paddingRight: insets.right,
               }}
             >
-              {/* Editing handlers are deliberately absent in this UI preview. */}
               {symbols.map((symbol) => (
                 <Pressable
                   key={symbol}
                   accessibilityRole="button"
                   accessibilityLabel={formatSymbolLabel(symbol)}
+                  onPress={() => onCommand?.("insert", symbol)}
                   className="h-12 w-11 items-center justify-center active:opacity-50"
                 >
                   <CodeText className="text-xl text-foreground">

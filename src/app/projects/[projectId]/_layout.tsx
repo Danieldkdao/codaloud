@@ -1,3 +1,4 @@
+import { EditorControlsProvider } from "@/features/editor/use-editor-controls";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -25,12 +26,14 @@ const WorkspaceScreen = ({
 }) => {
   const showDock = name === "code";
   return (
+    <EditorControlsProvider>
     <ProjectWorkspaceDockHeightProvider>
       <View className="flex-1 bg-background">
         {children}
         {showDock ? <ProjectWorkspaceDock tab={name} /> : null}
       </View>
     </ProjectWorkspaceDockHeightProvider>
+    </EditorControlsProvider>
   );
 };
 

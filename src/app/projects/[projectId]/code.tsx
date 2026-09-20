@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useEditorControls } from "@/features/editor/use-editor-controls";
 import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
 import type { EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
@@ -78,10 +79,10 @@ const CodeScreen = () => {
     },
     [],
   );
-  const runCommand = (command: EditorCommand, text?: string) => {
+  const runCommand = useCallback((command: EditorCommand, text?: string) => {
     if (!documents.activeKey || isWorkspaceBusy || closing.current) return;
     editor.current?.command(command, text ?? "", documents.activeKey);
-  };
+  }, [documents.activeKey, isWorkspaceBusy]);
   const [badgeHeight, setBadgeHeight] = useState(48);
   useEditorDevelopmentShortcuts();
 
@@ -99,6 +100,11 @@ const CodeScreen = () => {
   const showSelectionMenu = Boolean(
     canShowEditorControls && interaction?.hasSelection,
   );
+  const setControls = useEditorControls()?.setState;
+  useEffect(() => {
+    setControls?.({ canUndo: Boolean(canShowEditorControls && interaction?.commands?.canUndo), canRedo: Boolean(canShowEditorControls && interaction?.commands?.canRedo), run: runCommand });
+    return () => setControls?.(null);
+  }, [setControls, canShowEditorControls, interaction?.commands, runCommand]);
   const bottomInset = dockHeight + badgeHeight + 20;
   const activeAnalysis =
     analysis?.key === documents.activeKey

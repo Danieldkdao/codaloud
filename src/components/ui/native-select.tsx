@@ -15,6 +15,7 @@ export type NativeSelectProps = {
     options: readonly {
       value: string;
       label: string;
+      disabled?: boolean;
       image?: MenuAction["image"];
       onSelect: () => void;
     }[];
@@ -38,6 +39,7 @@ export const NativeSelect = ({
           id: `${sectionIndex}:${option.value}`,
           title: option.label,
           image: option.image,
+          attributes: { disabled: option.disabled },
           state:
             section.kind === "actions"
               ? undefined
@@ -51,7 +53,7 @@ export const NativeSelect = ({
           const option = section.options.find(
             (option) => `${sectionIndex}:${option.value}` === nativeEvent.event,
           );
-          if (option) {
+          if (option && !option.disabled) {
             option.onSelect();
             return;
           }

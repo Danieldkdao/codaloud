@@ -10,6 +10,7 @@ import {
 } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
+  disabled,
   frame,
   resizable,
   tint,
@@ -68,14 +69,14 @@ export const NativeSelect = (props: NativeSelectProps) => {
                 <Button
                   key={option.value}
                   onPress={option.onSelect}
-                  modifiers={[tint(foreground)]}
+                  modifiers={[tint(foreground), disabled(Boolean(option.disabled))]}
                 >
                   {label}
                 </Button>
               ) : (
                 <Toggle
                   key={option.value}
-                  modifiers={[tint(foreground)]}
+                  modifiers={[tint(foreground), disabled(Boolean(option.disabled))]}
                   isOn={option.value === section.value}
                   onIsOnChange={option.onSelect}
                 >

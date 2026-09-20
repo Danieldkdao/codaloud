@@ -26,6 +26,34 @@ beforeEach(() => {
 });
 afterEach(() => { rmSync(root, { recursive: true, force: true }); });
 
+it("deletes a merged local branch without changing HEAD, files, or remote refs", () => {
+  const head = git("rev-parse", "HEAD");
+  git("branch", "feature/done");
+  git("update-ref", "refs/remotes/origin/feature/done", head);
+  writeFileSync(join(directory, "file.txt"), "unsaved working tree\n");
+  expect(call("git/delete-branch", { branchName: "feature/done" })).toMatchObject({ ok: true, data: { branchName: "feature/done", deleted: true } });
+  expect(git("branch", "--list", "feature/done")).toBe("");
+  expect(git("rev-parse", "HEAD")).toBe(head);
+  expect(git("rev-parse", "refs/remotes/origin/feature/done")).toBe(head);
+  expect(readFileSync(join(directory, "file.txt"), "utf8")).toBe("unsaved working tree\n");
+});
+it("refuses deleting the current branch, missing branches, and remote ref names", () => {
+  expect(call("git/delete-branch", { branchName: "main" })).toMatchObject({ ok: false, code: "BRANCH_CHECKED_OUT" });
+  expect(call("git/delete-branch", { branchName: "missing" })).toMatchObject({ ok: false, code: "BRANCH_NOT_FOUND" });
+  expect(call("git/delete-branch", { branchName: "refs/remotes/origin/main" })).toMatchObject({ ok: false, code: "INVALID_BRANCH" });
+});
+it("preserves branches with unmerged commits", () => {
+  expect(call("git/create-branch", { branchName: "feature/unfinished" }).ok).toBe(true);
+  const tip = commit("unfinished\n");
+  expect(call("git/checkout", { branchName: "main" }).ok).toBe(true);
+  expect(call("git/delete-branch", { branchName: "feature/unfinished" })).toMatchObject({ ok: false, code: "UNMERGED_BRANCH" });
+  expect(git("rev-parse", "feature/unfinished")).toBe(tip);
+});
+it("refuses a branch checked out in another worktree", () => {
+  git("worktree", "add", "-b", "other", join(root, "other-tree"));
+  expect(call("git/delete-branch", { branchName: "other" })).toMatchObject({ ok: false, code: "BRANCH_CHECKED_OUT" });
+});
+
 it("stashes tracked and untracked files, applies without dropping, and verifies drop identity", () => {
   writeFileSync(join(directory, "file.txt"), "changed\n");
   writeFileSync(join(directory, "untracked.txt"), "new\n");

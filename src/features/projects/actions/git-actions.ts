@@ -21,6 +21,8 @@ import {
 import {
   gitCreateBranchSchema,
   gitCreatedBranchSchema,
+  gitDeleteBranchSchema,
+  gitDeletedBranchSchema,
 } from "../server/git-branch-schemas";
 import { gitPullSchema, gitPulledSchema } from "../server/git-pull-schemas";
 import { gitPushSchema, gitPushedSchema } from "../server/git-push-schemas";
@@ -314,6 +316,17 @@ export const createProjectBranchAction = async (
     input: gitCreateBranchSchema,
     unsafeInput,
   });
+
+export const deleteProjectBranchAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitDeleteBranchSchema>,
+) => mutateProjectGitRequest({
+  execute: (input) => executeProjectGit(projectId, { operation: "git/delete-branch", args: input }),
+  output: gitDeletedBranchSchema,
+  input: gitDeleteBranchSchema,
+  unsafeInput,
+  validate: (data, input) => data.branchName === input.branchName,
+});
 
 export const readProjectStashesAction = async (
   projectId: string,

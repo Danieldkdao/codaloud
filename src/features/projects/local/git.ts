@@ -47,6 +47,7 @@ export const executeProjectGit = async (
     case "git/checkout":
       return executeWorkspace(project.id, command.operation, command.args);
     case "git/create-branch":
+    case "git/delete-branch":
       return executeWorkspace(project.id, command.operation, command.args);
     case "git/stash-apply":
       return executeWorkspace(project.id, command.operation, command.args);

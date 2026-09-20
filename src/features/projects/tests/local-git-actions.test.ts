@@ -4,7 +4,7 @@ vi.mock("@/services/local-workspace/execute", () => ({ executeWorkspace: mocks.e
 vi.mock("../local/access", () => ({ requireLocalProject: mocks.project }));
 vi.mock("@/features/settings/git-identity", () => ({ requireGitIdentity: mocks.identity }));
 vi.mock("@/services/github/credentials", () => ({ getGitHubAccessToken: mocks.token }));
-import { initializeProjectGitAction, readProjectBranchesAction, createProjectCommitAction, fetchProjectGitAction, readProjectCommitsAction } from "../actions/git-actions";
+import { deleteProjectBranchAction, initializeProjectGitAction, readProjectBranchesAction, createProjectCommitAction, fetchProjectGitAction, readProjectCommitsAction } from "../actions/git-actions";
 import { LocalWorkspaceError } from "@/services/local-workspace/execute";
 const id = "00000000-0000-4000-8000-000000000001";
 const sha = "a".repeat(40);
@@ -65,3 +65,16 @@ const checkProjectCommands = (execute: typeof import("../local/git").executeProj
   void execute(id, { operation: "git/fetch", args: { accessToken: "injected" } });
 };
 void checkProjectCommands;
+
+it("deletes a local branch offline and validates the native acknowledgement", async () => {
+  mocks.execute.mockResolvedValueOnce({ branchName: "feature/done", deleted: true });
+  expect(await deleteProjectBranchAction(id, { branchName: "feature/done" })).toMatchObject({ error: false });
+  expect(mocks.execute).toHaveBeenCalledWith(id, "git/delete-branch", { branchName: "feature/done" });
+  expect(mocks.token).not.toHaveBeenCalled(); expect(mocks.identity).not.toHaveBeenCalled();
+  mocks.execute.mockResolvedValueOnce({ branchName: "other", deleted: true });
+  expect(await deleteProjectBranchAction(id, { branchName: "feature/done" })).toMatchObject({ error: true });
+});
+it("preserves native branch deletion errors", async () => {
+  mocks.execute.mockRejectedValueOnce(new LocalWorkspaceError("UNMERGED_BRANCH", "Merge this branch first."));
+  expect(await deleteProjectBranchAction(id, { branchName: "feature/done" })).toMatchObject({ error: true, code: "UNMERGED_BRANCH" });
+});

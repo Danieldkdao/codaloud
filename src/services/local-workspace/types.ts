@@ -10,7 +10,7 @@ import type {
   DeleteProjectFileSchema,
   SaveProjectFileContentSchema,
 } from "@/features/projects/actions/file-schemas";
-import type { GitCreateBranchSchema } from "@/features/projects/server/git-branch-schemas";
+import type { GitCreateBranchSchema, GitDeleteBranchSchema } from "@/features/projects/server/git-branch-schemas";
 import type { GitDiscardSchema } from "@/features/projects/server/git-discard-schemas";
 import type { GitPullSchema } from "@/features/projects/server/git-pull-schemas";
 import type { GitPushSchema } from "@/features/projects/server/git-push-schemas";
@@ -57,6 +57,7 @@ export type WorkspaceArguments = {
   "git/discard-preview": undefined;
   "git/checkout": CheckoutProjectBranchSchema;
   "git/create-branch": GitCreateBranchSchema;
+  "git/delete-branch": GitDeleteBranchSchema;
   "git/commit": CreateProjectCommitSchema & WithIdentity;
   "git/stash-save": GitStashPushSchema & WithIdentity;
   "git/stash-apply": GitStashPopSchema;

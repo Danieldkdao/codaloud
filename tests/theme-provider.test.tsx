@@ -108,3 +108,19 @@ it("uses named editor theme appearance throughout the app", async () => {
   expect(theme.isDarkMode).toBe(false);
   expect(mocks.appearance).toHaveBeenLastCalledWith("light");
 });
+
+it("returns to live system appearance when selecting Codaloud after a fixed theme", async () => {
+  mocks.editorTheme = "Dracula";
+  await render();
+  expect(theme.isDarkMode).toBe(true);
+  mocks.editorTheme = "Codaloud";
+  await render();
+  expect(mocks.appearance).toHaveBeenLastCalledWith("unspecified");
+  expect(theme.isDarkMode).toBe(false);
+  for (const scheme of ["dark", "light", "dark"]) {
+    mocks.scheme = scheme;
+    await render();
+    expect(theme.isDarkMode).toBe(scheme === "dark");
+  }
+  expect(mocks.write).not.toHaveBeenCalled();
+});

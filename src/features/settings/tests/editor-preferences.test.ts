@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEditorPreferences } from "../editor-preferences";
+import { editorThemes } from "../constants";
+import { formatEditorAppearance, formatEditorThemeClass } from "@/features/editor/lib/formatters";
 
 const storage = () => ({
   getItem: vi.fn().mockResolvedValue(null),
@@ -90,12 +92,28 @@ describe("workspace editor preferences", () => {
   });
 });
 
-it.each(["Codaloud White", "Codaloud Dark", "GitHub Dark"])("persists explicit theme %s", async (theme) => {
+it.each(editorThemes.filter((theme) => !theme.startsWith("Codaloud")))("restores named theme %s", async (theme) => {
   const disk = storage();
   disk.getItem.mockResolvedValue(JSON.stringify({ theme }));
   const state = createEditorPreferences(disk);
   await state.load();
   expect(state.getSnapshot().preferences.theme).toBe(theme);
+});
+it("offers one adaptive Codaloud theme alongside four light and four dark themes", () => {
+  expect(editorThemes.filter((theme) => theme.startsWith("Codaloud"))).toEqual(["Codaloud"]);
+  expect(editorThemes.filter((theme) => formatEditorAppearance(theme) === "light")).toHaveLength(4);
+  expect(editorThemes.filter((theme) => formatEditorAppearance(theme) === "dark")).toHaveLength(4);
+  expect(formatEditorAppearance("Codaloud")).toBeNull();
+  expect(formatEditorThemeClass("Codaloud")).toBe("");
+});
+it.each(["Codaloud White", "Codaloud Dark"])("restores retired %s as adaptive Codaloud without losing other preferences", async (theme) => {
+  const disk = storage();
+  disk.getItem.mockResolvedValue(JSON.stringify({ theme, fontSize: 20, font: "Fira Code", minimap: true }));
+  const state = createEditorPreferences(disk);
+  await state.load();
+  expect(state.getSnapshot().preferences).toMatchObject({ theme: "Codaloud", fontSize: 20, font: "Fira Code", minimap: true });
+  await state.update({ tabSize: 4 });
+  expect(JSON.parse(disk.setItem.mock.calls.at(-1)![1])).toMatchObject({ theme: "Codaloud", fontSize: 20, font: "Fira Code", minimap: true, tabSize: 4 });
 });
 it("migrates the retired Nord theme to GitHub Dark", async () => {
   const disk = storage();

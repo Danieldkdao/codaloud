@@ -6,13 +6,11 @@ export const formatEditorAppearance = (
   switch (theme) {
     case "Codaloud":
       return null;
-    case "Codaloud White":
     case "GitHub Light":
     case "Solarized Light":
     case "Rose Pine Dawn":
     case "Quiet Light":
       return "light";
-    case "Codaloud Dark":
     case "One Dark":
     case "Dracula":
     case "GitHub Dark":
@@ -23,8 +21,6 @@ export const formatEditorAppearance = (
 export const formatEditorThemeClass = (theme: EditorTheme) => {
   switch (theme) {
     case "Codaloud":
-    case "Codaloud White":
-    case "Codaloud Dark":
       return "";
     case "GitHub Light":
       return "editor-github-light";

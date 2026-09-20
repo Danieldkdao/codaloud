@@ -10,7 +10,10 @@ type ProjectAgentSearchProps = {
   onQueryChange: (query: string) => void;
 };
 
-export const ProjectAgentSearch = ({ query, onQueryChange }: ProjectAgentSearchProps) => {
+export const ProjectAgentSearch = ({
+  query,
+  onQueryChange,
+}: ProjectAgentSearchProps) => {
   const insets = useSafeAreaInsets();
   const presentation = formatWorkspaceSearch("agent");
 
@@ -26,7 +29,13 @@ export const ProjectAgentSearch = ({ query, onQueryChange }: ProjectAgentSearchP
     >
       <GlassSurface>
         <View className="min-h-14 flex-row items-center pl-4 pr-1">
-          <Icon family="Feather" name="search" size={20} className="text-muted-foreground" accessible={false} />
+          <Icon
+            family="Feather"
+            name="search"
+            size={20}
+            className="text-muted-foreground"
+            accessible={false}
+          />
           <Input
             type="search"
             variant="ghost"
@@ -48,7 +57,13 @@ export const ProjectAgentSearch = ({ query, onQueryChange }: ProjectAgentSearchP
               onPress={() => onQueryChange("")}
               className="size-11 items-center justify-center rounded-full active:bg-secondary"
             >
-              <Icon family="Feather" name="x" size={20} className="text-muted-foreground" accessible={false} />
+              <Icon
+                family="Feather"
+                name="x"
+                size={20}
+                className="text-muted-foreground"
+                accessible={false}
+              />
             </Pressable>
           )}
         </View>

@@ -41,7 +41,7 @@ export const ProjectGitTabs = ({ tab, onTabChange }: ProjectGitTabsProps) => {
   return (
     <View
       accessibilityRole="tablist"
-      className="rounded-full bg-secondary p-1"
+      className="rounded-full bg-secondary/50 p-1"
       onLayout={(event) => setLayout(event.nativeEvent.layout)}
     >
       {layout.width > 0 ? (

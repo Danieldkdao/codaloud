@@ -34,9 +34,10 @@ export const ProjectWorkspaceDock = ({
     activeTab === "code"
       ? Math.min(12, Math.max(0, (safeWidth - 320) / 2))
       : 16;
-  const actionGap = activeTab === "code"
-    ? Math.min(4, Math.max(0, (safeWidth - horizontalPadding * 2 - 320) / 12))
-    : 4;
+  const actionGap =
+    activeTab === "code"
+      ? Math.min(4, Math.max(0, (safeWidth - horizontalPadding * 2 - 320) / 12))
+      : 0;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
   useEffect(() => {
@@ -83,7 +84,10 @@ export const ProjectWorkspaceDock = ({
             <GlassSurface borderRadius={36}>
               <View
                 className="min-h-18 flex-row items-center py-2"
-                style={{ paddingHorizontal: activeTab === "code" ? 0 : 8, gap: actionGap }}
+                style={{
+                  paddingHorizontal: activeTab === "code" ? 0 : 8,
+                  gap: actionGap,
+                }}
               >
                 <View
                   style={{

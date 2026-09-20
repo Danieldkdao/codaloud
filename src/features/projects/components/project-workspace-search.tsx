@@ -125,7 +125,10 @@ export const ProjectWorkspaceSearch = ({
     const show = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow",
       (event) => {
-        updateKeyboardOffset(event.endCoordinates.screenY, event.duration || 250);
+        updateKeyboardOffset(
+          event.endCoordinates.screenY,
+          event.duration || 250,
+        );
       },
     );
     const hide = Keyboard.addListener(

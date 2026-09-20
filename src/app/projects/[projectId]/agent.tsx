@@ -11,7 +11,11 @@ const AgentScreen = () => {
   const [query, setQuery] = useState("");
 
   return (
-    <KeyboardAwareView testID="project-agent-viewport" className="flex-1 bg-background" style={{ flex: 1 }}>
+    <KeyboardAwareView
+      testID="project-agent-viewport"
+      className="flex-1 bg-background"
+      style={{ flex: 1 }}
+    >
       {isLoading ? (
         <ProjectWorkspaceState
           isLoading
@@ -20,7 +24,10 @@ const AgentScreen = () => {
           description="Getting your requests and results ready."
         />
       ) : (
-        <ProjectAgentActivityList activities={demoAgentActivity} search={query} />
+        <ProjectAgentActivityList
+          activities={demoAgentActivity}
+          search={query}
+        />
       )}
       <ProjectAgentSearch query={query} onQueryChange={setQuery} />
     </KeyboardAwareView>

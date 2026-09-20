@@ -80,7 +80,13 @@ export const RadioItem = <Value extends string>({
         aria-hidden
       >
         {selected && (
-          <View className="size-2 rounded-full bg-primary-foreground" />
+          <Icon
+            family="Octicons"
+            name="dot-fill"
+            size={12}
+            className="text-primary-foreground"
+            accessible={false}
+          />
         )}
       </View>
     </Pressable>

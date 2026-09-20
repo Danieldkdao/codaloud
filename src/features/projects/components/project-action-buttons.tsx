@@ -1,5 +1,5 @@
 import { type RefObject } from "react";
-import { Pressable, type View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { Icon } from "@/components/ui/icon";
@@ -60,12 +60,16 @@ export const ProjectActionButtonsLeft = ({
     case "git":
       return (
         <>
-          <ProjectBranchSelect
-            key={projectId}
-            open={branchPickerOpen}
-            onOpenChange={onBranchPickerOpenChange}
-          />
-          <ProjectOtherOptions key={`other-${projectId}`} />
+          <View className="min-w-0 flex-1 items-center">
+            <ProjectBranchSelect
+              key={projectId}
+              open={branchPickerOpen}
+              onOpenChange={onBranchPickerOpenChange}
+            />
+          </View>
+          <View className="min-w-0 flex-1 items-center">
+            <ProjectOtherOptions key={`other-${projectId}`} />
+          </View>
         </>
       );
     default:
@@ -121,14 +125,18 @@ export const ProjectActionButtonsRight = ({
     case "git":
       return (
         <>
-          <ProjectWorkspaceGitSearch
-            branchIndicatorRef={branchIndicatorRef}
-            onOpenChange={onGitSearchOpenChange}
-          />
-          <ProjectCommitForm
-            key={commitSelection.scope}
-            enabled={gitTab === "changes" && commitSelection.totalCount > 0}
-          />
+          <View className="min-w-0 flex-1 items-center">
+            <ProjectWorkspaceGitSearch
+              branchIndicatorRef={branchIndicatorRef}
+              onOpenChange={onGitSearchOpenChange}
+            />
+          </View>
+          <View className="min-w-0 flex-1 items-center">
+            <ProjectCommitForm
+              key={commitSelection.scope}
+              enabled={gitTab === "changes" && commitSelection.totalCount > 0}
+            />
+          </View>
         </>
       );
     default:

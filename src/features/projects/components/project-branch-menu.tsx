@@ -7,6 +7,7 @@ import Animated, {
 
 import { ProjectGitError } from "../lib/git-errors";
 import { Icon } from "@/components/ui/icon";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { CodeText } from "@/components/ui/text";
 import { useProjectGitOperation } from "../hooks/use-project-git-operation";
@@ -30,7 +31,6 @@ const syncActions = [
   "fetch",
 ] as const;
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const badgeTransition = LinearTransition.duration(240).reduceMotion(
   ReduceMotion.System,
 );
@@ -135,108 +135,118 @@ export const ProjectBranchMenu = ({
 
   return (
     <>
-      <AnimatedPressable
-        layout={badgeTransition}
-        style={{ maxWidth }}
-        className="min-h-12 flex-row items-center gap-2 overflow-hidden rounded-full border border-border bg-secondary px-3"
-        accessibilityRole="button"
-        accessibilityLabel={
-          showPublish
-            ? `Branch actions: ${notInitialized ? "Publish" : `${label}, Publish`}`
-            : `Branch actions: ${label}, ${formatProjectGitCount(outgoing)} to push, ${formatProjectGitCount(incoming)} to pull`
-        }
-        accessibilityState={{ expanded: open, busy: isWorkspaceBusy }}
-        accessibilityHint="Opens branch and sync actions"
-        onPress={() => {
-          setOpen(true);
-        }}
-      >
-        {!notInitialized && (
-          <>
-            <Icon
-              family="Feather"
-              name={formatProjectBranchSource(branchSource ?? "local").icon}
-              size={20}
-              className="text-secondary-foreground"
-              accessible={false}
-            />
-            <Animated.View
-              layout={badgeTransition}
-              testID="branch-indicator"
-              accessibilityLiveRegion="polite"
-              style={{
-                maxWidth: Math.max(40, maxWidth - (showPublish ? 170 : 190)),
-              }}
-              className="min-w-0 shrink"
-            >
-              {loadingBranch ? (
-                <ActivityIndicator
-                  className="text-primary"
-                  accessibilityLabel={label}
-                />
-              ) : (
-                <CodeText
-                  className="text-lg font-medium text-secondary-foreground"
-                  numberOfLines={1}
-                  ellipsizeMode="middle"
-                >
-                  {label}
-                </CodeText>
-              )}
-            </Animated.View>
-          </>
-        )}
-        {!loadingBranch && (isWorkspaceBusy || git.isFetching) && (
-          <ActivityIndicator
-            className="text-primary"
-            accessibilityLabel={workspaceOperation ?? "Refreshing Git counts"}
-          />
-        )}
-        <Animated.View
-          layout={badgeTransition}
-          className="shrink-0 flex-row items-center gap-2"
-        >
-          {!notInitialized && (
-            <View
-              className="size-1 shrink-0 rounded-full bg-secondary-foreground"
-              accessible={false}
-            />
-          )}
-          <View className="shrink-0 flex-row items-center gap-1">
-            <Icon
-              family="Feather"
-              name="arrow-up"
-              size={20}
-              className="text-secondary-foreground"
-              accessible={false}
-            />
-            <CodeText className="text-lg font-medium text-secondary-foreground">
-              {showPublish ? "Publish" : formatProjectGitCount(outgoing)}
-            </CodeText>
-            {!showPublish && (
+      <Animated.View layout={badgeTransition} style={{ maxWidth }}>
+        <GlassSurface>
+          <Pressable
+            className="min-h-12 flex-row items-center gap-2 rounded-full px-3"
+            accessibilityRole="button"
+            accessibilityLabel={
+              showPublish
+                ? `Branch actions: ${notInitialized ? "Publish" : `${label}, Publish`}`
+                : `Branch actions: ${label}, ${formatProjectGitCount(outgoing)} to push, ${formatProjectGitCount(incoming)} to pull`
+            }
+            accessibilityState={{ expanded: open, busy: isWorkspaceBusy }}
+            accessibilityHint="Opens branch and sync actions"
+            onPress={() => {
+              setOpen(true);
+            }}
+          >
+            {!notInitialized && (
               <>
                 <Icon
                   family="Feather"
-                  name="arrow-down"
+                  name={formatProjectBranchSource(branchSource ?? "local").icon}
                   size={20}
-                  className="text-secondary-foreground"
+                  className="text-foreground"
                   accessible={false}
                 />
-                <CodeText className="text-lg font-medium text-secondary-foreground">
-                  {formatProjectGitCount(incoming)}
-                </CodeText>
+                <Animated.View
+                  layout={badgeTransition}
+                  testID="branch-indicator"
+                  accessibilityLiveRegion="polite"
+                  style={{
+                    maxWidth: Math.max(
+                      40,
+                      maxWidth - (showPublish ? 170 : 190),
+                    ),
+                  }}
+                  className="min-w-0 shrink"
+                >
+                  {loadingBranch ? (
+                    <ActivityIndicator
+                      className="text-primary"
+                      accessibilityLabel={label}
+                    />
+                  ) : (
+                    <CodeText
+                      className="text-lg font-medium text-foreground"
+                      numberOfLines={1}
+                      ellipsizeMode="middle"
+                    >
+                      {label}
+                    </CodeText>
+                  )}
+                </Animated.View>
               </>
             )}
-            <Icon
-              family="Feather"
-              name="chevron-down"
-              size={20}
-              className="text-secondary-foreground"
-              accessible={false}
-            />
-          </View>
-        </Animated.View>
-      </AnimatedPressable>
+            {!loadingBranch && (isWorkspaceBusy || git.isFetching) && (
+              <ActivityIndicator
+                className="text-primary"
+                accessibilityLabel={
+                  workspaceOperation ?? "Refreshing Git counts"
+                }
+              />
+            )}
+            <Animated.View
+              layout={badgeTransition}
+              className="shrink-0 flex-row items-center gap-2"
+            >
+              {!notInitialized && (
+                <Icon
+                  family="Octicons"
+                  name="dot-fill"
+                  size={8}
+                  className="shrink-0 text-muted-foreground"
+                  accessible={false}
+                />
+              )}
+              <View className="shrink-0 flex-row items-center gap-1">
+                <Icon
+                  family="Feather"
+                  name="arrow-up"
+                  size={20}
+                  className="text-foreground"
+                  accessible={false}
+                />
+                <CodeText className="text-lg font-medium text-foreground">
+                  {showPublish ? "Publish" : formatProjectGitCount(outgoing)}
+                </CodeText>
+                {!showPublish && (
+                  <>
+                    <Icon
+                      family="Feather"
+                      name="arrow-down"
+                      size={20}
+                      className="text-foreground"
+                      accessible={false}
+                    />
+                    <CodeText className="text-lg font-medium text-foreground">
+                      {formatProjectGitCount(incoming)}
+                    </CodeText>
+                  </>
+                )}
+                <Icon
+                  family="Feather"
+                  name="chevron-down"
+                  size={20}
+                  className="text-foreground"
+                  accessible={false}
+                />
+              </View>
+            </Animated.View>
+          </Pressable>
+        </GlassSurface>
+      </Animated.View>
       <ActionSheet
         open={open}
         onOpenChange={setOpen}

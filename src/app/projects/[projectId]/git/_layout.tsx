@@ -1,4 +1,10 @@
-import { Stack, useGlobalSearchParams, useLocalSearchParams, usePathname, useRouter } from "expo-router";
+import {
+  Stack,
+  useGlobalSearchParams,
+  useLocalSearchParams,
+  usePathname,
+  useRouter,
+} from "expo-router";
 import { Keyboard, Pressable } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -22,38 +28,62 @@ const GitLayout = () => {
 
   return (
     <ProjectSearchOverlayProvider bottomAligned>
-      <Stack screenOptions={{
-        headerBackVisible: false,
-        headerStyle: { backgroundColor: background },
-        headerTintColor: foreground,
-        headerShadowVisible: false,
-        headerTitleStyle: { fontFamily: "Fraunces_500Medium", fontSize: 22 },
-        contentStyle: { backgroundColor: background },
-        headerRight: () => (
-          <Button variant="ghost" onPress={() => {
-            Keyboard.dismiss();
-            router.dismissTo({ pathname: "/projects/[projectId]/code", params: { projectId } });
-          }}>Done</Button>
-        ),
-      }}>
-        <Stack.Screen name="index" options={{ title: "Git" }} />
-        <Stack.Screen name="workspace-diff" options={{
-          title: commit ? formatCommitHash(commit.commitSha) : "Workspace diff",
-          headerLeft: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to Git"
-              accessibilityHint="Returns to your changes"
-              className="size-11 items-center justify-center rounded-full active:bg-secondary"
+      <Stack
+        screenOptions={{
+          headerBackVisible: false,
+          headerStyle: { backgroundColor: background },
+          headerTintColor: foreground,
+          headerShadowVisible: false,
+          headerTitleStyle: { fontFamily: "Fraunces_500Medium", fontSize: 22 },
+          contentStyle: { backgroundColor: background },
+          headerRight: () => (
+            <Button
+              variant="ghost"
               onPress={() => {
                 Keyboard.dismiss();
-                router.dismissTo({ pathname: "/projects/[projectId]/git", params: { projectId } });
+                router.dismissTo({
+                  pathname: "/projects/[projectId]/code",
+                  params: { projectId },
+                });
               }}
             >
-              <Icon family="Feather" name="chevron-left" size={22} accessible={false} className="text-foreground" />
-            </Pressable>
+              Done
+            </Button>
           ),
-        }} />
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: "Git" }} />
+        <Stack.Screen
+          name="workspace-diff"
+          options={{
+            title: commit
+              ? formatCommitHash(commit.commitSha)
+              : "Workspace diff",
+            headerLeft: () => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Git"
+                accessibilityHint="Returns to your changes"
+                className="size-11 items-center justify-center rounded-full active:bg-secondary"
+                onPress={() => {
+                  Keyboard.dismiss();
+                  router.dismissTo({
+                    pathname: "/projects/[projectId]/git",
+                    params: { projectId },
+                  });
+                }}
+              >
+                <Icon
+                  family="Feather"
+                  name="chevron-left"
+                  size={22}
+                  accessible={false}
+                  className="text-foreground"
+                />
+              </Pressable>
+            ),
+          }}
+        />
       </Stack>
       {!isDiff && <ProjectWorkspaceDock tab="git" />}
     </ProjectSearchOverlayProvider>

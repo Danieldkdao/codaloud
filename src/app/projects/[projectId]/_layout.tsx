@@ -64,7 +64,10 @@ const ProjectLayout = () => {
                   >
                     <Stack.Screen name="index" />
                     <Stack.Screen name="code" />
-                    <Stack.Screen name="git" options={{ presentation: "modal" }} />
+                    <Stack.Screen
+                      name="git"
+                      options={{ presentation: "modal" }}
+                    />
                     <Stack.Screen
                       name="agent"
                       options={{

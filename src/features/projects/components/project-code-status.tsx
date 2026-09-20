@@ -82,11 +82,19 @@ export const ProjectCodeStatus = ({
                     size={16}
                     className={className}
                   />
-                  <PText className={cn("text-base", className)}>
-                    {analysis.status === "checking"
-                      ? "·"
-                      : formatCodeDiagnosticCount(count)}
-                  </PText>
+                  {analysis.status === "checking" ? (
+                    <Icon
+                      family="Octicons"
+                      name="dot-fill"
+                      size={8}
+                      className="text-muted-foreground/50"
+                      accessible={false}
+                    />
+                  ) : (
+                    <PText className={cn("text-base", className)}>
+                      {formatCodeDiagnosticCount(count)}
+                    </PText>
+                  )}
                 </View>
               );
             })

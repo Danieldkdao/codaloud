@@ -260,8 +260,11 @@ export const ProjectCommitList = ({ active }: ProjectCommitListProps) => {
                     {item.author}
                   </PText>
                 </View>
-                <View
-                  className="size-1.5 rounded-full bg-muted-foreground"
+                <Icon
+                  family="Octicons"
+                  name="dot-fill"
+                  size={8}
+                  className="text-muted-foreground/50"
                   accessible={false}
                 />
                 <PText>{formatCommitDate(item.committedAt)}</PText>

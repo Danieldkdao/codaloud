@@ -47,6 +47,8 @@ import {
   type CodeEditorMatchState,
 } from "./code-editor-matches";
 
+import { transformEditor } from "@/features/editor/transforms";
+import type { CodeIntelligenceOperation } from "@/features/projects/actions/code-intelligence-schemas";
 import { editorSearch, updateEditorSearch, runSearchCommand, getEditorSearchSummary } from "@/features/editor/search";
 import type { EditorSearchCommand, EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
 import { getEditorCommandState, runEditorCommand } from "@/features/editor/commands";
@@ -61,6 +63,7 @@ import "@/global.css";
 import "@/styles/code-editor.css";
 
 export interface CodeEditorRef {
+  transform(operation: CodeIntelligenceOperation, documentKey: string): void;
   searchCommand(command: EditorSearchCommand, query: EditorSearchQuery, documentKey: string): void;
   command(command: EditorCommand, text: string, documentKey: string): void;
   flushChanges: () => Promise<void>;
@@ -198,6 +201,9 @@ const CodeEditor = ({
   const searchQueryKey = JSON.stringify(searchQuery ?? { search: "" });
   const clipboard = useRef({ onReadClipboard, onWriteClipboard, onCommandError });
   clipboard.current = { onReadClipboard, onWriteClipboard, onCommandError };
+  const activeFilename = useRef(filename);
+  activeFilename.current = filename;
+  const transformPending = useRef(false);
   const activeDocument = useRef(documentKey);
   activeDocument.current = documentKey;
   const host = useRef<HTMLDivElement>(null);
@@ -265,6 +271,17 @@ const CodeEditor = ({
     // the narrower serializable command contract above.
     (ref ?? null) as Ref<DOMImperativeFactory>,
     () => ({
+      transform: (operation: CodeIntelligenceOperation, key: string) => {
+        const editor = view.current;
+        if (!editor || key !== activeDocument.current || transformPending.current) return;
+        transformPending.current = true;
+        void transformEditor(editor, activeFilename.current, operation, preferencesRef.current,
+          async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, key) ?? null,
+          () => view.current === editor && activeDocument.current === key,
+        ).catch((error: unknown) => {
+          void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Try again.").catch(() => {});
+        }).finally(() => { transformPending.current = false; });
+      },
       searchCommand: (command: EditorSearchCommand, query: EditorSearchQuery, key: string) => {
         if (!view.current || key !== activeDocument.current) return;
         updateEditorSearch(view.current, query);

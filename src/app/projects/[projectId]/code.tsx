@@ -261,6 +261,8 @@ const CodeScreen = () => {
         >
           <ProjectCodeToolbar
             disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
+            onFormat={() => { if (documents.activeKey) editor.current?.transform("format", documents.activeKey); }}
+            onOrganize={() => { if (documents.activeKey) editor.current?.transform("organize-imports", documents.activeKey); }}
             onFind={() => { setReplaceOpen(false); setSearchOpen(true); }}
             onReplace={() => { setReplaceOpen(true); setSearchOpen(true); }}
             readError={!documents.activeKey && query.isError}

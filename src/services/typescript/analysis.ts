@@ -197,7 +197,22 @@ export const createTypeScriptAnalyzer = (
       } satisfies LanguageServiceHost & Pick<CompilerHost, "hasInvalidatedResolutions">;
       service ??= ts.createLanguageService(host);
       let result: CodeIntelligenceResultSchema;
-      if (input.position !== undefined) {
+      if (input.operation) {
+        const formatOptions = {
+          indentSize: input.tabSize ?? 2, tabSize: input.tabSize ?? 2,
+          convertTabsToSpaces: !input.useTabs,
+          newLineCharacter: input.content.includes("\r\n") ? "\r\n" : "\n",
+          insertSpaceAfterCommaDelimiter: true,
+          insertSpaceBeforeAndAfterBinaryOperators: true,
+          insertSpaceAfterKeywordsInControlFlowStatements: true,
+          insertSpaceBeforeFunctionParenthesis: false,
+          insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces: true,
+        };
+        const edits = input.operation === "format"
+          ? service.getFormattingEditsForDocument(target, formatOptions)
+          : service.organizeImports({ type: "file", fileName: target }, formatOptions, {}).filter((file) => file.fileName === target).flatMap((file) => file.textChanges);
+        result = { edits: edits.map((edit) => ({ from: edit.span.start, to: edit.span.start + edit.span.length, insert: edit.newText })) };
+      } else if (input.position !== undefined) {
         const completion = service.getCompletionsAtPosition(
           target,
           input.position,

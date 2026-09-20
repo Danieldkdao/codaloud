@@ -7,6 +7,9 @@ import {
 
 export const diagnosticSeverities = ["error", "warning", "info"] as const;
 export type DiagnosticSeverity = (typeof diagnosticSeverities)[number];
+export const codeIntelligenceOperations = ["format", "organize-imports"] as const;
+export type CodeIntelligenceOperation = (typeof codeIntelligenceOperations)[number];
+
 export const codeIntelligenceRequestSchema = z
   .object({
     path: projectFilePathSchema.refine((path) =>
@@ -20,6 +23,9 @@ export const codeIntelligenceRequestSchema = z
           new TextEncoder().encode(content).length <=
           MAX_PROJECT_FILE_SIZE_BYTES,
       ),
+    operation: z.enum(codeIntelligenceOperations).optional(),
+    tabSize: z.number().int().min(1).max(8).optional(),
+    useTabs: z.boolean().optional(),
     position: z.number().int().nonnegative().optional(),
   })
   .refine(
@@ -50,7 +56,11 @@ export const codeCompletionSchema = z.object({
 });
 export type CodeCompletionSchema = z.infer<typeof codeCompletionSchema>;
 
+export const codeTextEditSchema = z.object({ from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), insert: z.string() });
+export type CodeTextEditSchema = z.infer<typeof codeTextEditSchema>;
+
 export const codeIntelligenceResultSchema = z.union([
+  z.object({ edits: z.array(codeTextEditSchema) }),
   z.object({ diagnostics: z.array(codeDiagnosticSchema) }),
   z.object({ completions: z.array(codeCompletionSchema) }),
 ]);

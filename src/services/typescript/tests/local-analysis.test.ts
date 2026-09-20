@@ -115,3 +115,21 @@ it("keeps the compiler warm across tab switches while replacing the active graph
     expect(createService).toHaveBeenCalledOnce();
   } finally { await analyzer.dispose(); }
 });
+
+it("formats a live unsaved buffer using the requested indentation and newline convention", async () => {
+  const result = await analyzeTypeScript({ path: "main.ts", content: "function x(){\r\nreturn {a:1,b:2}\r\n}", operation: "format", tabSize: 4, useTabs: true }, async () => null);
+  expect("edits" in result).toBe(true);
+  if (!("edits" in result)) return;
+  let content = "function x(){\r\nreturn {a:1,b:2}\r\n}";
+  for (const edit of [...result.edits].sort((a, b) => b.from - a.from)) content = content.slice(0, edit.from) + edit.insert + content.slice(edit.to);
+  expect(content).toContain("\r\n\treturn"); expect(content).toContain("a: 1");
+});
+it("organizes imports semantically while preserving side-effect and used type imports", async () => {
+  const input = 'import "./side-effect";\nimport { unused, used } from "./values";\nimport type { Item } from "./types";\nexport const x: Item = used;';
+  const files: Record<string, string> = { "values.ts": "export const unused=1, used={id:1};", "types.ts": "export type Item = {id:number};", "side-effect.ts": "export {};" };
+  const result = await analyzeTypeScript({ path: "main.ts", content: input, operation: "organize-imports" }, async (path) => files[path] ?? null);
+  expect("edits" in result).toBe(true); if (!("edits" in result)) return;
+  let content = input;
+  for (const edit of [...result.edits].sort((a, b) => b.from - a.from)) content = content.slice(0, edit.from) + edit.insert + content.slice(edit.to);
+  expect(content).not.toContain("unused"); expect(content).toContain('import "./side-effect"'); expect(content).toContain("import type { Item }"); expect(content).toContain("used");
+});

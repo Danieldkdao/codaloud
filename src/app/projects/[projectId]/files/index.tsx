@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
-import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
+import { ProjectFileCreateSheet } from "@/features/projects/components/project-file-create-sheet";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
@@ -173,7 +173,7 @@ const FilesScreen = () => {
   return (
     <View className="flex-1 bg-background">
       {fileCreation.kind && !deletion.isPending && renamingPath === null && (
-        <ProjectFileCreateRow
+        <ProjectFileCreateSheet
           key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
           disabled={workspace.isWorkspaceBusy}
           kind={fileCreation.kind}

@@ -25,7 +25,7 @@ vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorksp
 vi.mock("../hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }) }));
 vi.mock("../hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 80 }) }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
-vi.mock("../components/project-file-create-row", () => ({ ProjectFileCreateRow: () => null }));
+vi.mock("../components/project-file-create-sheet", () => ({ ProjectFileCreateSheet: () => null }));
 vi.mock("../components/project-files-list", () => ({ ProjectFilesList: ({ onDirectoryPress }: { onDirectoryPress: (path: string) => void }) =>
   <><button onClick={() => onDirectoryPress("src")}>Original directory</button>
     <button onClick={() => onDirectoryPress("src/components")}>Nested directory</button>

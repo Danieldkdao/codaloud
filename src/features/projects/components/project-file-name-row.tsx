@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,7 +21,12 @@ import {
   formatProjectFileNameAction,
 } from "@/features/projects/lib/formatters";
 
+export type ProjectFileNameRowHandle = { submit: () => void; cancel: () => void };
+
 type ProjectFileNameRowProps = {
+  ref?: Ref<ProjectFileNameRowHandle>;
+  submitOnBlur?: boolean;
+  presentation?: "row" | "sheet";
   kind: ProjectFileKind;
   disabled?: boolean;
   mode: "create" | "update";
@@ -32,6 +38,9 @@ type ProjectFileNameRowProps = {
 };
 
 export const ProjectFileNameRow = ({
+  ref,
+  submitOnBlur = true,
+  presentation: surface = "row",
   kind,
   disabled = false,
   mode,
@@ -107,9 +116,18 @@ export const ProjectFileNameRow = ({
     }
   };
 
+  useImperativeHandle(ref, () => ({
+    submit: () => { void submit("submit"); },
+    cancel: () => {
+      if (disabled || submitting.current) return;
+      cancelling.current = true;
+      onCancel();
+    },
+  }));
+
   return (
     <View
-      className="gap-2 border-b border-border bg-card px-4 py-3"
+      className={cn("gap-2 px-4 py-3", surface === "row" && "border-b border-border bg-card")}
       accessibilityState={{ busy: pending }}
     >
       <View className="flex-row items-center gap-3">
@@ -140,7 +158,7 @@ export const ProjectFileNameRow = ({
           disabled={disabled || pending}
           invalid={visibleError !== null}
           onSubmitEditing={() => void submit("submit")}
-          onBlur={() => void submit("blur")}
+          onBlur={() => { if (submitOnBlur) void submit("blur"); }}
           onKeyPress={({ nativeEvent }) => {
             if (
               nativeEvent.key === "Escape" &&

@@ -14,7 +14,7 @@ import CodeScreen from "@/app/projects/[projectId]/code";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
-import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
+import type { ProjectFileCreateSheet } from "@/features/projects/components/project-file-create-sheet";
 import type { Stack } from "expo-router";
 
 vi.mock("react-native-reanimated", () => {
@@ -47,7 +47,7 @@ const screenOptions = new Map<string, { presentation?: string; headerShown?: boo
 vi.mock("@/features/projects/components/project-setup-gate", () => ({ ProjectSetupGate: (props: { children?: ReactNode }) => createElement(Children, props) }));
 vi.mock("@/features/projects/components/project-workspace-dock", () => ({ ProjectWorkspaceDock: () => null }));
 vi.mock("@/features/projects/components/project-files-list", () => ({ ProjectFilesList: (props: ComponentProps<typeof ProjectFilesList>) => { fileList = props; return null; } }));
-vi.mock("@/features/projects/components/project-file-create-row", () => ({ ProjectFileCreateRow: (props: ComponentProps<typeof ProjectFileCreateRow>) => { createRow = props; return null; } }));
+vi.mock("@/features/projects/components/project-file-create-sheet", () => ({ ProjectFileCreateSheet: (props: ComponentProps<typeof ProjectFileCreateSheet>) => { createRow = props; return null; } }));
 vi.mock("@/features/projects/components/project-workspace-state", () => ({ ProjectWorkspaceState: ({ title }: { title: string }) => createElement("span", null, title) }));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFilesAction: async () => [], readProjectFileContentAction: mocks.readContent,
@@ -83,7 +83,7 @@ vi.mock("react-native", () => ({
 let selection: ReturnType<typeof useProjectWorkspaceCurrentFile>;
 let creation: ReturnType<typeof useProjectWorkspaceFileCreation>;
 let fileList: ComponentProps<typeof ProjectFilesList>;
-let createRow: ComponentProps<typeof ProjectFileCreateRow>;
+let createRow: ComponentProps<typeof ProjectFileCreateSheet>;
 let client: QueryClient;
 let container: HTMLDivElement;
 let root: Root;

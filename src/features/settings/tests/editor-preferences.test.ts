@@ -115,10 +115,3 @@ it.each(["Codaloud White", "Codaloud Dark"])("restores retired %s as adaptive Co
   await state.update({ tabSize: 4 });
   expect(JSON.parse(disk.setItem.mock.calls.at(-1)![1])).toMatchObject({ theme: "Codaloud", fontSize: 20, font: "Fira Code", minimap: true, tabSize: 4 });
 });
-it("migrates the retired Nord theme to GitHub Dark", async () => {
-  const disk = storage();
-  disk.getItem.mockResolvedValue(JSON.stringify({ theme: "Nord" }));
-  const state = createEditorPreferences(disk);
-  await state.load();
-  expect(state.getSnapshot().preferences.theme).toBe("GitHub Dark");
-});

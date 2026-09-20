@@ -49,6 +49,63 @@ it("preserves branches with unmerged commits", () => {
   expect(call("git/delete-branch", { branchName: "feature/unfinished" })).toMatchObject({ ok: false, code: "UNMERGED_BRANCH" });
   expect(git("rev-parse", "feature/unfinished")).toBe(tip);
 });
+it("can explicitly delete a clean published branch after its remote branch was deleted", () => {
+  const remote = join(root, "remote.git");
+  execFileSync("git", ["init", "--bare", remote], { stdio: "ignore" });
+  git("remote", "add", "origin", remote);
+  expect(call("git/create-branch", { branchName: "feature/finished" }).ok).toBe(true);
+  commit("finished\n");
+  git("push", "-u", "origin", "feature/finished");
+  execFileSync("git", ["--git-dir", remote, "update-ref", "-d", "refs/heads/feature/finished"]);
+  expect(call("git/checkout", { branchName: "main" }).ok).toBe(true);
+  // Remote tracking still exists here; pruning it must not decide whether local
+  // commits are safe to remove.
+  expect(call("git/delete-branch", { branchName: "feature/finished" })).toMatchObject({ ok: false, code: "UNMERGED_BRANCH" });
+  git("fetch", "--prune", "origin");
+  expect(git("status", "--porcelain")).toBe("");
+  expect(call("git/delete-branch", { branchName: "feature/finished" })).toMatchObject({ ok: false, code: "UNMERGED_BRANCH" });
+  expect(call("git/delete-branch", { branchName: "feature/finished", force: true })).toMatchObject({ ok: true });
+  expect(git("branch", "--list", "feature/finished")).toBe("");
+  expect(git("branch", "--show-current")).toBe("main");
+  expect(readFileSync(join(directory, "file.txt"), "utf8")).toBe("base\n");
+});
+it.each([false, true])("distinguishes merged history from identical files with squash=%s", (squash) => {
+  expect(call("git/create-branch", { branchName: "feature/merged" }).ok).toBe(true);
+  commit("merged content\n");
+  expect(call("git/checkout", { branchName: "main" }).ok).toBe(true);
+  if (squash) {
+    // Same final files, different ancestry (as with a squash merge on GitHub).
+    commit("intermediate\n");
+    commit("merged content\n");
+  } else {
+    git("merge", "--ff-only", "feature/merged");
+  }
+  expect(git("diff", "main", "feature/merged")).toBe("");
+  const result = call("git/delete-branch", { branchName: "feature/merged" });
+  expect(result).toMatchObject(squash ? { ok: false, code: "UNMERGED_BRANCH" } : { ok: true });
+});
+it("explicit deletion preserves current files, staged changes, HEAD, and remote refs", () => {
+  expect(call("git/create-branch", { branchName: "feature/discard" }).ok).toBe(true);
+  const tip = commit("discarded\n");
+  expect(call("git/checkout", { branchName: "main" }).ok).toBe(true);
+  const head = git("rev-parse", "HEAD");
+  git("update-ref", "refs/remotes/origin/feature/discard", tip);
+  writeFileSync(join(directory, "file.txt"), "staged\n");
+  git("add", "file.txt");
+  writeFileSync(join(directory, "file.txt"), "unstaged\n");
+  const staged = git("diff", "--cached");
+  expect(call("git/delete-branch", { branchName: "feature/discard", force: true })).toMatchObject({ ok: true });
+  expect(git("rev-parse", "HEAD")).toBe(head);
+  expect(git("rev-parse", "refs/remotes/origin/feature/discard")).toBe(tip);
+  expect(git("diff", "--cached")).toBe(staged);
+  expect(readFileSync(join(directory, "file.txt"), "utf8")).toBe("unstaged\n");
+});
+it("explicit deletion still rejects current, missing, invalid, and other-worktree branches", () => {
+  git("worktree", "add", "-b", "occupied", join(root, "occupied-tree"));
+  for (const [branchName, code] of [["main", "BRANCH_CHECKED_OUT"], ["occupied", "BRANCH_CHECKED_OUT"], ["missing", "BRANCH_NOT_FOUND"], ["refs/remotes/origin/main", "INVALID_BRANCH"]]) {
+    expect(call("git/delete-branch", { branchName, force: true })).toMatchObject({ ok: false, code });
+  }
+});
 it("refuses a branch checked out in another worktree", () => {
   git("worktree", "add", "-b", "other", join(root, "other-tree"));
   expect(call("git/delete-branch", { branchName: "other" })).toMatchObject({ ok: false, code: "BRANCH_CHECKED_OUT" });

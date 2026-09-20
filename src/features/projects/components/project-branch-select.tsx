@@ -32,6 +32,7 @@ import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
 import { projectCommitParamsSchema } from "../lib/commit-params";
 import { useProjectGitOperation } from "../hooks/use-project-git-operation";
+import { ProjectGitError } from "../lib/git-errors";
 
 const getBranches = (page: ProjectBranchPageSchema) => page.branches;
 const getBranchKey = (branch: string) => branch;
@@ -169,14 +170,37 @@ export const ProjectBranchSelect = ({
         if (
           !(await confirm(
             "Delete local branch?",
-            `Delete “${name}” from this device? Its GitHub branch will remain. Unmerged commits prevent deletion.`,
+            `Delete “${name}” from this device? This does not delete a branch on GitHub. If it has unmerged commits, you’ll be asked before continuing.`,
             "Delete branch",
             true,
           ))
         )
           return false;
         assertCurrent();
-        await query.gitDeleteBranch.mutateAsync({ branchName: name });
+        try {
+          await query.gitDeleteBranch.mutateAsync({ branchName: name });
+        } catch (error) {
+          if (
+            !(error instanceof ProjectGitError) ||
+            error.code !== "UNMERGED_BRANCH"
+          )
+            throw error;
+          assertCurrent();
+          if (
+            !(await confirm(
+              "Delete branch anyway?",
+              `“${name}” has commits that are not in the current local branch. This can happen after a squash merge or before pulling merged changes. Deleting it may lose commits unique to this branch. Your current files and GitHub will not change.`,
+              "Delete anyway",
+              true,
+            ))
+          )
+            return false;
+          assertCurrent();
+          await query.gitDeleteBranch.mutateAsync({
+            branchName: name,
+            force: true,
+          });
+        }
         return true;
       },
       { success: (deleted) => (deleted ? "Local branch deleted." : null) },

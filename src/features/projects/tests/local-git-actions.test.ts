@@ -78,3 +78,9 @@ it("preserves native branch deletion errors", async () => {
   mocks.execute.mockRejectedValueOnce(new LocalWorkspaceError("UNMERGED_BRANCH", "Merge this branch first."));
   expect(await deleteProjectBranchAction(id, { branchName: "feature/done" })).toMatchObject({ error: true, code: "UNMERGED_BRANCH" });
 });
+it("forwards explicit force deletion to the native engine without requesting credentials", async () => {
+  mocks.execute.mockResolvedValueOnce({ branchName: "feature/done", deleted: true });
+  expect(await deleteProjectBranchAction(id, { branchName: "feature/done", force: true })).toMatchObject({ error: false });
+  expect(mocks.execute).toHaveBeenCalledWith(id, "git/delete-branch", { branchName: "feature/done", force: true });
+  expect(mocks.token).not.toHaveBeenCalled();
+});

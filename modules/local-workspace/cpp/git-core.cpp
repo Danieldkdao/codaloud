@@ -179,16 +179,17 @@ static Json deleteBranch(git_repository *repo, const Json &args) {
   if (!tip)
     throw WorkspaceError("INVALID_BRANCH",
                          "This branch has no commit to delete.");
-  // libgit2 deletes refs without Git CLI's merged-branch safety check. Preserve
-  // commits that are not reachable from the checked-out branch explicitly.
-  if (!git_oid_equal(&head, tip)) {
+  // A clean worktree (or a deleted remote) does not imply merged history.
+  // Only an explicit second confirmation may bypass the ancestry check;
+  // checked-out/worktree protections above still apply when forcing deletion.
+  if (!args.value("force", false) && !git_oid_equal(&head, tip)) {
     const auto merged = git_graph_descendant_of(repo, &head, tip);
     checkGit(merged);
     if (!merged)
       throw WorkspaceError(
           "UNMERGED_BRANCH",
-          "This branch has commits that are not merged into the current "
-          "branch. Merge them before deleting it.");
+          "This branch has commits that are not in the current local branch. "
+          "Merge or pull the changes first, or explicitly confirm deletion.");
   }
   checkGit(git_branch_delete(branch.get()));
   return {{"branchName", name}, {"deleted", true}};

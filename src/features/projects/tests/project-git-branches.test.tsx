@@ -1516,3 +1516,31 @@ it("does not delete after the confirmation's project has changed", async () => {
   await act(async () => buttons.find((button: { text: string }) => button.text === "Delete branch").onPress());
   expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
 });
+it.each(["Cancel", "Delete anyway"])("offers explicit deletion for unmerged history and handles %s", async (choice) => {
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Delete branch");
+  expect(workspaceFiles.alert.mock.calls.at(-1)![0]).toBe("Delete branch anyway?");
+  expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("commits");
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
+  await confirmAlert(choice);
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(choice === "Cancel" ? 1 : 2);
+  if (choice === "Delete anyway") {
+    expect(live.gitDeleteBranch.mutateAsync).toHaveBeenLastCalledWith({ branchName: "feature/live", force: true });
+  }
+});
+it("does not force-delete if the project changes while the second confirmation is open", async () => {
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Delete branch");
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  expect(buttons?.some((button: { text: string }) => button.text === "Delete anyway")).toBe(true);
+  live.projectId = "33333333-3333-4333-8333-333333333333";
+  act(() => root.render(<Workspace />));
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Delete anyway").onPress());
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
+});

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
 import { Icon } from "@/components/ui/icon";
 import { useThemeColor } from "@/hooks/use-theme";
+import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { cn } from "@/lib/utils";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 import {
@@ -41,6 +42,13 @@ export const EditorProblemsSheet = ({
 }) => {
   const background = useThemeColor("background");
   const { height } = useWindowDimensions();
+  const keyboard = useKeyboardFrame();
+  // A screen-sized detent plus the keyboard forces iOS into its opaque,
+  // full-height sheet appearance. Keep the same fraction of the usable area.
+  const availableHeight =
+    Platform.OS === "ios" && keyboard
+      ? Math.max(0, Math.min(height, keyboard.screenY))
+      : height;
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [severity, setSeverity] = useState<DiagnosticSeverity | "all">("all");
@@ -60,8 +68,10 @@ export const EditorProblemsSheet = ({
       backgroundColor={background}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ height: height * 0.7 }}
+        // SwiftUI moves the iOS sheet above the keyboard; extra RN padding would
+        // subtract its height a second time and hide the search controls.
+        behavior={Platform.OS === "android" ? "height" : undefined}
+        style={{ height: availableHeight * 0.7 }}
         className="gap-3 px-4 pb-4"
         accessibilityViewIsModal
         onAccessibilityEscape={() => onOpenChange(false)}

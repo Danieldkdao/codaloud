@@ -5,9 +5,23 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EditorSearchBar } from "../components/editor-search-bar";
 import { EditorProblemsSheet } from "../components/editor-problems-sheet";
 import type { EditorSearchQuery } from "../types";
+const keyboard = vi.hoisted(() => ({
+  frame: undefined as { screenY: number } | undefined,
+}));
+vi.mock("@/hooks/use-keyboard-frame", () => ({
+  useKeyboardFrame: () => keyboard.frame,
+}));
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
-  KeyboardAvoidingView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+  KeyboardAvoidingView: ({ children, style, behavior }: {
+    children?: ReactNode;
+    style: object;
+    behavior?: string;
+  }) => createElement("div", {
+    "data-problems-layout": true,
+    "data-keyboard-behavior": behavior,
+    style,
+  }, children),
   View: ({ children }: { children?: ReactNode }) =>
     createElement("div", null, children),
   ScrollView: ({ children }: { children?: ReactNode }) =>
@@ -91,6 +105,7 @@ let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  keyboard.frame = undefined;
   container = document.createElement("div");
   root = createRoot(container);
 });
@@ -226,4 +241,30 @@ vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: {
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition };
   return { default: { View: ({ children }: { children: ReactNode }) => createElement("div", null, children) }, LinearTransition: transition, FadeIn: transition, FadeOut: transition, ReduceMotion: { System: "system" } };
+});
+
+it("keeps Problems at a compact glass detent when its search keyboard opens and closes", () => {
+  const render = () => act(() => root.render(
+    createElement(EditorProblemsSheet, {
+      open: true,
+      onOpenChange: vi.fn(),
+      onSelect: vi.fn(),
+    }),
+  ));
+  const panel = () =>
+    container.querySelector<HTMLElement>("[data-problems-layout]")!;
+  render();
+  const originalHeight = parseFloat(panel().style.height);
+  keyboard.frame = { screenY: 460 };
+  render();
+  // Leave room above the sheet, rather than forcing iOS to a full-height opaque sheet.
+  expect(parseFloat(panel().style.height)).toBeLessThan(460 * 0.8);
+  expect(panel().getAttribute("data-keyboard-behavior")).toBeNull();
+  expect(container.querySelector('[aria-label="Search problems"]')).not.toBeNull();
+  keyboard.frame = { screenY: 410 }; // predictive text / symbol accessory changes
+  render();
+  expect(parseFloat(panel().style.height)).toBeLessThan(410 * 0.8);
+  keyboard.frame = undefined;
+  render();
+  expect(parseFloat(panel().style.height)).toBe(originalHeight);
 });

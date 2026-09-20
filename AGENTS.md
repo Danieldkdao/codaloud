@@ -13,6 +13,12 @@
 - Preserve filenames required by tools or frameworks, such as `AGENTS.md`, `CLAUDE.md`, Expo Router's `_layout.tsx`, and route parameter syntax. Preserve tool-generated filenames. These exceptions do not apply to ordinary component files.
 - Before reporting completion, inspect every added or renamed file, including untracked files. Correct any filename that violates this rule, update imports and references, and verify that no stale paths remain. Filename verification is part of completing every file-changing task.
 
+## Commit messages
+
+- Every commit subject must use `type: description` or `type(scope): description`. Choose a lowercase prefix that describes the change, such as `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `build`, `ci`, `perf`, or `chore`.
+- Prefer lowercase descriptions and scopes. Capitals are allowed when useful for proper names, acronyms, or case-sensitive code identifiers.
+- Use an optional scope only when it clarifies the affected area, for example `feat(editor): add keyboard actions`. Check the subject format before committing.
+
 ## Working process
 
 - Work like a practical, efficient senior engineer. Think through each task in steps and choose the simplest implementation that meets the requirements.

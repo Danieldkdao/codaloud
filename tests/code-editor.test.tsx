@@ -538,3 +538,50 @@ it("switches open tabs in the existing editor without waiting for highlighting",
   expect(editor()).toBe(first);
   expect(onReady.mock.lastCall).toEqual(["a"]);
 });
+
+it("reports focus and selection to native without editing the document", async () => {
+  const onInteractionChange = vi.fn().mockResolvedValue(undefined);
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    documentKey: "one", filename: "notes.txt", initialValue: "hello", onInteractionChange, onChange,
+  })));
+  act(() => { editor().focus(); editor().dispatch({ selection: { anchor: 0, head: 3 } }); });
+  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: true }, "one");
+  act(() => editor().dispatch({ selection: { anchor: 3 } }));
+  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: false }, "one");
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+it("restores selection UI for the new document and reserves space above the keyboard strip", async () => {
+  const onInteractionChange = vi.fn().mockResolvedValue(undefined);
+  const showDocument = (documentKey: string) => act(async () => root.render(createElement(CodeEditor, {
+    documentKey, filename: "notes.txt", initialValue: "hello", openDocumentKeys: ["one", "two"],
+    onInteractionChange, keyboardAccessoryHeight: 96, bottomInset: 180,
+  })));
+  await showDocument("one");
+  act(() => { editor().focus(); editor().dispatch({ selection: { anchor: 0, head: 3 } }); });
+  await showDocument("two");
+  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: false }, "two");
+  await showDocument("one");
+  expect(onInteractionChange).toHaveBeenLastCalledWith({ focused: true, hasSelection: true }, "one");
+  expect((container.querySelector(".code-editor-shell") as HTMLElement).style.getPropertyValue("--editor-bottom-inset")).toBe("108px");
+});
+
+
+it("dismisses the WebView keyboard by blurring the editor without losing its selection or edits", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "notes.txt", initialValue: "hello", onChange,
+  })));
+  act(() => editor().dispatch({ selection: { anchor: 1, head: 4 } }));
+  act(() => editor().focus());
+  expect(document.activeElement).toBe(editor().contentDOM);
+  act(() => ref.current!.dismissKeyboard());
+  expect(document.activeElement).not.toBe(editor().contentDOM);
+  expect(editor().state.selection.main).toMatchObject({ from: 1, to: 4 });
+  expect(editor().state.doc.toString()).toBe("hello");
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => editor().focus());
+  expect(document.activeElement).toBe(editor().contentDOM);
+});

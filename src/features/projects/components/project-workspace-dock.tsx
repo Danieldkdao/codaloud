@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { usePathname } from "expo-router";
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +18,7 @@ import { ProjectBranchMenu } from "./project-branch-menu";
 export const ProjectWorkspaceDock = ({
   tab,
 }: { tab?: "code" | "git" } = {}) => {
+  const keyboardFrame = useKeyboardFrame();
   const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -48,9 +50,15 @@ export const ProjectWorkspaceDock = ({
     <View
       testID="project-workspace-dock"
       collapsable={false}
-      onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
+      onLayout={(event) => {
+        const height = event.nativeEvent.layout.height;
+        if (height > 0) setDockHeight(height);
+      }}
       style={{
         position: "absolute",
+        // Android resizes the screen above its keyboard; hide the voice dock
+        // there so the editor accessory is the only row touching the keyboard.
+        display: activeTab === "code" && keyboardFrame ? "none" : "flex",
         // Keep the controls above the native tab screen and its editor WebView.
         zIndex: 10,
         bottom: 0,

@@ -57,7 +57,13 @@ export interface CodeEditorRef extends DOMImperativeFactory {
   flushChanges: () => Promise<void>;
   nextMatch: () => void;
   previousMatch: () => void;
+  dismissKeyboard: () => void;
 }
+
+export type CodeEditorInteraction = {
+  focused: boolean;
+  hasSelection: boolean;
+};
 
 type CodeEditorProps = {
   ref?: Ref<CodeEditorRef>;
@@ -72,6 +78,11 @@ type CodeEditorProps = {
   /** Disables user edits while preserving selection, copying, and navigation. */
   readOnly?: boolean;
   bottomInset?: number;
+  keyboardAccessoryHeight?: number;
+  onInteractionChange?: (
+    state: CodeEditorInteraction,
+    documentKey?: string,
+  ) => Promise<void>;
   /** DOM components have a separate React tree, so appearance crosses as a prop. */
   colorScheme?: "light" | "dark";
   /** Signals that CodeMirror has finished its initial layout. */
@@ -152,6 +163,8 @@ const CodeEditor = ({
   initialValue,
   readOnly = false,
   bottomInset = 0,
+  keyboardAccessoryHeight = 0,
+  onInteractionChange,
   colorScheme,
   onReady,
   onChange,
@@ -159,6 +172,11 @@ const CodeEditor = ({
   onAnalysis,
 }: CodeEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
+  const interactionCallback = useRef(onInteractionChange);
+  interactionCallback.current = onInteractionChange;
+  const reportedInteraction = useRef<
+    (CodeEditorInteraction & { key?: string }) | null
+  >(null);
   const buffers = useRef(
     new Map<string, { state: EditorState; top: number; left: number }>(),
   );
@@ -202,7 +220,12 @@ const CodeEditor = ({
     EditorUI: Outfit_400Regular,
   });
   fontsReady.current = Boolean(fontsLoaded || fontError);
-  const effectiveInset = keyboardVisible ? 12 : bottomInset + 16;
+  const effectiveInset =
+    keyboardAccessoryHeight > 0
+      ? keyboardAccessoryHeight + 12
+      : keyboardVisible
+        ? 12
+        : bottomInset + 16;
   inset.current = effectiveInset;
 
   useDOMImperativeHandle(
@@ -211,6 +234,11 @@ const CodeEditor = ({
       flushChanges: async () => {
         while (pendingChanges.current.size)
           await Promise.all([...pendingChanges.current]);
+      },
+      dismissKeyboard: () => {
+        // Native Keyboard.dismiss only blurs registered React Native inputs.
+        // Release the WebView's contenteditable focus to close its keyboard.
+        view.current?.contentDOM.blur();
       },
       nextMatch: () => {
         if (view.current) moveCodeEditorMatch(view.current, 1);
@@ -221,6 +249,23 @@ const CodeEditor = ({
     }),
     [],
   );
+
+  const reportInteraction = (editor: EditorView, key?: string) => {
+    const state = {
+      focused: editor.hasFocus,
+      hasSelection: !editor.state.selection.main.empty,
+    };
+    const previous = reportedInteraction.current;
+    if (
+      previous &&
+      previous.key === key &&
+      previous.focused === state.focused &&
+      previous.hasSelection === state.hasSelection
+    )
+      return;
+    reportedInteraction.current = { ...state, key };
+    void interactionCallback.current?.(state, key).catch(() => {});
+  };
 
   const reportMatches = (editor: EditorView) => {
     const summary = getCodeEditorMatchState(editor);
@@ -280,6 +325,9 @@ const CodeEditor = ({
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
+        if (update.focusChanged || update.selectionSet || update.docChanged) {
+          reportInteraction(update.view, documentKey);
+        }
         if (
           update.startState.field(codeEditorMatches) !==
           update.state.field(codeEditorMatches)
@@ -331,6 +379,8 @@ const CodeEditor = ({
     editor.scrollDOM.scrollTop = buffer?.top ?? 0;
     editor.scrollDOM.scrollLeft = buffer?.left ?? 0;
     view.current = editor;
+    // setState restores a tab without a selection transaction or focus event.
+    reportInteraction(editor, documentKey);
     reportedMatches.current = null;
     if (!hasAnalysis)
       void analysisCallbacks.current

@@ -1,7 +1,10 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
-import CodeEditor, { type CodeEditorRef } from "@/components/code-editor";
+import CodeEditor, {
+  type CodeEditorRef,
+  type CodeEditorInteraction,
+} from "@/components/code-editor";
 import { CodeEditorLoading } from "@/components/code-editor-loading";
 import type {
   CodeEditorAnalysis,
@@ -10,6 +13,10 @@ import type {
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import { ProjectCodeTabs } from "@/features/projects/components/project-code-tabs";
+import { GlassSurface } from "@/components/ui/glass-surface";
+import { ProjectCodeSelectionMenu } from "@/features/projects/components/project-code-selection-menu";
+import { ProjectCodeKeyboardAccessory } from "@/features/projects/components/project-code-keyboard-accessory";
+import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { ProjectCodeToolbar } from "@/features/projects/components/project-code-toolbar";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { readProjectCodeIntelligence } from "@/features/projects/actions/code-intelligence-actions";
@@ -47,11 +54,33 @@ const CodeScreen = () => {
     key?: string;
     value: CodeEditorAnalysis;
   }>();
+  const keyboardFrame = useKeyboardFrame();
+  const [interaction, setInteraction] = useState<
+    CodeEditorInteraction & { key?: string }
+  >();
+  const onInteractionChange = useCallback(
+    async (state: CodeEditorInteraction, key?: string) => {
+      if (key === current.current.documents.activeKey)
+        setInteraction({ ...state, key });
+    },
+    [],
+  );
   const [badgeHeight, setBadgeHeight] = useState(48);
   useEditorDevelopmentShortcuts();
 
   const isReady = Boolean(
     documents.activeKey && readyKey === documents.activeKey,
+  );
+  const canShowEditorControls =
+    isReady &&
+    !isWorkspaceBusy &&
+    !closingPath &&
+    interaction?.key === documents.activeKey;
+  const showKeyboardAccessory = Boolean(
+    canShowEditorControls && keyboardFrame && interaction?.focused,
+  );
+  const showSelectionMenu = Boolean(
+    canShowEditorControls && interaction?.hasSelection,
   );
   const bottomInset = dockHeight + badgeHeight + 20;
   const activeAnalysis =
@@ -154,6 +183,8 @@ const CodeScreen = () => {
             onRequestAnalysis={requestAnalysis}
             onAnalysis={onAnalysis}
             bottomInset={bottomInset}
+            keyboardAccessoryHeight={showKeyboardAccessory ? 96 : 0}
+            onInteractionChange={onInteractionChange}
             dom={{
               onLoadStart: () => setReadyKey(undefined),
               style: { flex: 1 },
@@ -162,7 +193,7 @@ const CodeScreen = () => {
               bounces: false,
               contentInsetAdjustmentBehavior: "never",
               automaticallyAdjustContentInsets: false,
-              hideKeyboardAccessoryView: false,
+              hideKeyboardAccessoryView: true,
             }}
           />
         </View>
@@ -197,7 +228,7 @@ const CodeScreen = () => {
           <CodeEditorLoading bottomInset={bottomInset} />
         ) : null}
       </View>
-      {files.activeFilePath ? (
+      {files.activeFilePath && !keyboardFrame ? (
         <View
           className="absolute left-4 right-4 items-center"
           style={{ bottom: dockHeight + 8 }}
@@ -224,6 +255,20 @@ const CodeScreen = () => {
                   }
             }
           />
+        </View>
+      ) : null}
+      {showKeyboardAccessory ? (
+        <ProjectCodeKeyboardAccessory
+          frame={keyboardFrame}
+          onDismissKeyboard={() => editor.current?.dismissKeyboard()}
+        >
+          {showSelectionMenu ? <ProjectCodeSelectionMenu /> : null}
+        </ProjectCodeKeyboardAccessory>
+      ) : showSelectionMenu && !keyboardFrame ? (
+        <View className="absolute right-4 top-16">
+          <GlassSurface borderRadius={24}>
+            <ProjectCodeSelectionMenu />
+          </GlassSurface>
         </View>
       ) : null}
     </View>

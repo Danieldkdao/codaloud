@@ -244,7 +244,7 @@ it("tracks mock preferences across sheet dismissal without showing command or sa
     act(() => { select.value = nextValue; select.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(select.value).toBe(nextValue);
   }
-  for (const [label, initial] of [["Word wrap", false], ["Show line numbers", true], ["Use tabs for indentation", false], ["Keep indentation", true], ["Close brackets", true]] as const) {
+  for (const [label, initial] of [["Word wrap", false], ["Show line numbers", true], ["Show minimap", false], ["Use tabs for indentation", false], ["Keep indentation", true], ["Close brackets", true]] as const) {
     expect(sheet.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-checked")).toBe(String(initial));
     click(label);
     expect(sheet.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-checked")).toBe(String(!initial));
@@ -262,6 +262,9 @@ it("tracks mock preferences across sheet dismissal without showing command or sa
   expect(container.textContent).toContain("3 columns");
   expect([...container.querySelectorAll("select")].map((select) => select.value)).toEqual(values);
   expect(container.querySelector('[aria-label="Word wrap"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(container.querySelector('[aria-label="Show minimap"]')?.getAttribute("aria-checked")).toBe("true");
+  click("Show minimap");
+  expect(container.querySelector('[aria-label="Show minimap"]')?.getAttribute("aria-checked")).toBe("false");
 });
 
 it("keeps font and tab steppers within their supported mock ranges", () => {

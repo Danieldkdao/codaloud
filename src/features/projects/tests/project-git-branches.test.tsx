@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { act, createElement, useImperativeHandle, useState, useRef, type ReactNode, type Ref } from "react";

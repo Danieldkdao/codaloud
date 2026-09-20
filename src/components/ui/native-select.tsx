@@ -11,6 +11,7 @@ export type NativeSelectProps = {
   sections: readonly {
     label: string;
     value: string;
+    kind?: "actions";
     options: readonly {
       value: string;
       label: string;
@@ -20,7 +21,12 @@ export type NativeSelectProps = {
   }[];
 };
 
-export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectProps) => {
+export const NativeSelect = ({
+  label,
+  icon,
+  trigger,
+  sections,
+}: NativeSelectProps) => {
   return (
     <MenuView
       shouldOpenOnLongPress={false}
@@ -32,13 +38,18 @@ export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectPro
           id: `${sectionIndex}:${option.value}`,
           title: option.label,
           image: option.image,
-          state: option.value === section.value ? "on" : "off",
+          state:
+            section.kind === "actions"
+              ? undefined
+              : option.value === section.value
+                ? "on"
+                : "off",
         })),
       }))}
       onPressAction={({ nativeEvent }) => {
         for (const [sectionIndex, section] of sections.entries()) {
-          const option = section.options.find((option) =>
-            `${sectionIndex}:${option.value}` === nativeEvent.event,
+          const option = section.options.find(
+            (option) => `${sectionIndex}:${option.value}` === nativeEvent.event,
           );
           if (option) {
             option.onSelect();
@@ -47,7 +58,12 @@ export const NativeSelect = ({ label, icon, trigger, sections }: NativeSelectPro
         }
       }}
     >
-      <NativeSelectTrigger label={label} icon={icon} trigger={trigger} sections={sections} />
+      <NativeSelectTrigger
+        label={label}
+        icon={icon}
+        trigger={trigger}
+        sections={sections}
+      />
     </MenuView>
   );
 };

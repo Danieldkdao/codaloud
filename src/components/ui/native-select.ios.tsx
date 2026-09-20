@@ -1,4 +1,5 @@
 import {
+  Button,
   Host,
   Image,
   Label,
@@ -51,32 +52,34 @@ export const NativeSelect = (props: NativeSelectProps) => {
                   ? NativeImage.resolveAssetSource(option.image)
                   : undefined;
 
-              return (
+              const label = (
+                <Label
+                  title={option.label}
+                  systemImage={typeof option.image === "string" ? option.image : undefined}
+                  icon={source?.uri ? (
+                    <Image
+                      uiImage={source.uri}
+                      modifiers={[resizable(), frame({ width: 20, height: 20 })]}
+                    />
+                  ) : undefined}
+                />
+              );
+              return section.kind === "actions" ? (
+                <Button
+                  key={option.value}
+                  onPress={option.onSelect}
+                  modifiers={[tint(foreground)]}
+                >
+                  {label}
+                </Button>
+              ) : (
                 <Toggle
                   key={option.value}
                   modifiers={[tint(foreground)]}
                   isOn={option.value === section.value}
                   onIsOnChange={option.onSelect}
                 >
-                  <Label
-                    title={option.label}
-                    systemImage={
-                      typeof option.image === "string"
-                        ? option.image
-                        : undefined
-                    }
-                    icon={
-                      source?.uri ? (
-                        <Image
-                          uiImage={source.uri}
-                          modifiers={[
-                            resizable(),
-                            frame({ width: 20, height: 20 }),
-                          ]}
-                        />
-                      ) : undefined
-                    }
-                  />
+                  {label}
                 </Toggle>
               );
             })}

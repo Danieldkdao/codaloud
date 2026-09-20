@@ -206,6 +206,7 @@ export const ProjectCodeTools = () => {
   const [tabSize, setTabSize] = useState(2);
   const [wordWrap, setWordWrap] = useState(false);
   const [lineNumbers, setLineNumbers] = useState(true);
+  const [minimap, setMinimap] = useState(false);
   const [useTabs, setUseTabs] = useState(false);
   const [keepIndentation, setKeepIndentation] = useState(true);
   const [closeBrackets, setCloseBrackets] = useState(true);
@@ -303,6 +304,12 @@ export const ProjectCodeTools = () => {
                 label="Show line numbers"
                 value={lineNumbers}
                 onValueChange={setLineNumbers}
+              />
+              <EditorSettingSwitch
+                label="Show minimap"
+                value={minimap}
+                onValueChange={setMinimap}
+                description="Show a compact overview of the file beside the editor."
               />
             </EditorSettingsSection>
             <EditorSettingsSection title="Editing">

@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: () => null }));
+vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
+vi.mock("@/features/projects/components/project-code-keyboard-accessory", () => ({ ProjectCodeKeyboardAccessory: () => null }));
 import { act, createElement, Fragment, useEffect, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

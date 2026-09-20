@@ -90,7 +90,7 @@ it("offers all symbol and line-action placeholders without emitting edits", () =
     expect(button).not.toBeNull();
     act(() => button.click());
   }
-  expect(container.querySelectorAll("button")).toHaveLength(21);
+  expect(container.querySelectorAll("button")).toHaveLength(26);
 });
 
 it("offers native selection menu placeholders with familiar clipboard and code actions", async () => {
@@ -117,7 +117,7 @@ it("keeps line and selection actions above a full-width, scrollable symbol row",
     expect(symbols.querySelector(`[aria-label="${label}"]`)).toBeNull();
   }
   expect(actions.compareDocumentPosition(symbols) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(symbols.querySelectorAll("button")).toHaveLength(16);
+  expect(symbols.querySelectorAll("button")).toHaveLength(21);
   expect(state.scrollProps.horizontal).toBe(true);
   expect(container.querySelector('[data-icon="chevron-left"]')).toBeNull();
   expect(container.querySelector('[data-icon="chevron-right"]')).toBeNull();
@@ -152,4 +152,13 @@ it("offers cursor folding above symbols without requiring a selection", async ()
   expect(button.disabled).toBe(false);
   act(() => button.click());
   expect(onCommand).toHaveBeenCalledWith("fold");
+});
+
+it.each(["/", "\\", "|", "+", "-"])("inserts the extra %s symbol into the editor", async (symbol) => {
+  const onCommand = vi.fn();
+  await act(async () => root.render(createElement(ProjectCodeKeyboardAccessory, { onCommand, onDismissKeyboard: state.dismissKeyboard, frame: { screenX: 0, screenY: 500, height: 344, width: 390 } })));
+  const button = [...container.querySelectorAll("button")].find((item) => item.textContent === symbol)!;
+  expect(button).toBeDefined();
+  act(() => button.click());
+  expect(onCommand).toHaveBeenCalledWith("insert", symbol);
 });

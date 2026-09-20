@@ -7,7 +7,6 @@ import {
 } from "react";
 import {
   Pressable,
-  ScrollView,
   View,
   useWindowDimensions,
   type KeyboardMetrics,
@@ -15,41 +14,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
-import { CodeText } from "@/components/ui/text";
+import { KeyboardSymbols } from "@/components/keyboard-symbols";
 
 import type {
   EditorCommand,
   EditorCommandState,
 } from "@/features/editor/types";
-
-const symbols = [
-  "(",
-  ")",
-  "{",
-  "}",
-  "[",
-  "]",
-  "<",
-  ">",
-  ".",
-  ":",
-  ";",
-  "'",
-  '"',
-  "=",
-  "#",
-  "_",
-] as const;
-const formatSymbolLabel = (symbol: string) => {
-  switch (symbol) {
-    case "'":
-      return "Apostrophe";
-    case '"':
-      return "Double quote";
-    default:
-      return `Insert ${symbol}`;
-  }
-};
 
 type ProjectCodeKeyboardAccessoryProps = {
   onCommand?: (command: EditorCommand, text?: string) => void;
@@ -198,34 +168,10 @@ export const ProjectCodeKeyboardAccessory = ({
                 />
               </Pressable>
             </View>
-            <ScrollView
+            <KeyboardSymbols
               testID="editor-keyboard-symbols"
-              horizontal
-              accessibilityLabel="Code symbols"
-              accessibilityHint="Swipe horizontally for more symbols"
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="always"
-              style={{ height: 48, flexGrow: 0 }}
-              contentContainerStyle={{
-                alignItems: "center",
-                paddingLeft: insets.left,
-                paddingRight: insets.right,
-              }}
-            >
-              {symbols.map((symbol) => (
-                <Pressable
-                  key={symbol}
-                  accessibilityRole="button"
-                  accessibilityLabel={formatSymbolLabel(symbol)}
-                  onPress={() => onCommand?.("insert", symbol)}
-                  className="h-12 w-11 items-center justify-center active:opacity-50"
-                >
-                  <CodeText className="text-xl text-foreground">
-                    {symbol}
-                  </CodeText>
-                </Pressable>
-              ))}
-            </ScrollView>
+              onInsert={(symbol) => onCommand?.("insert", symbol)}
+            />
           </GlassSurface>
         </View>
       ) : null}

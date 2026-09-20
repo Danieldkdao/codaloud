@@ -38,8 +38,26 @@ vi.mock("react-native-reanimated", () => {
   };
   return {
     default: {
-      View: ({ children, style }: { children: ReactNode; style: object }) =>
-        createElement("div", { style, "data-bar": true }, children),
+      View: ({
+        children,
+        style,
+        entering,
+        exiting,
+      }: {
+        children: ReactNode;
+        style: object;
+        entering?: unknown;
+        exiting?: unknown;
+      }) =>
+        createElement(
+          "div",
+          {
+            style,
+            "data-bar": true,
+            "data-fades": Boolean(entering || exiting),
+          },
+          children,
+        ),
     },
     LinearTransition: animation,
     FadeIn: animation,
@@ -92,4 +110,11 @@ it("ignores a measurement that arrives after the keyboard has closed", () => {
   render(false);
   act(() => layout.measurements.forEach((report) => report()));
   expect(bottom()).toBe("80px");
+});
+
+it("never fades a glass ancestor through zero opacity", () => {
+  render();
+  expect(
+    container.querySelector("[data-bar]")?.getAttribute("data-fades"),
+  ).toBe("false");
 });

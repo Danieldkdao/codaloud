@@ -60,3 +60,9 @@ it.each([false, true])(
     expect(focused.outlineColor).toEqual(focused.borderColor);
   },
 );
+
+it("keeps ghost search inputs free of focus outlines and borders", () => {
+  const markup = renderToStaticMarkup(createElement(Input, { variant: "ghost" }));
+  expect(markup).not.toContain("focus:outline-2");
+  expect(markup).not.toContain("focus:border-ring");
+});

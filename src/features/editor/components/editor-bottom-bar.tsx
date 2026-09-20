@@ -7,8 +7,6 @@ import {
 } from "react";
 import { View, useWindowDimensions, type KeyboardMetrics } from "react-native";
 import Animated, {
-  FadeIn,
-  FadeOut,
   LinearTransition,
   ReduceMotion,
 } from "react-native-reanimated";
@@ -48,13 +46,12 @@ export const EditorBottomBar = ({
       onLayout={measure}
       style={{ position: "absolute", inset: 0 }}
     >
+      {/* Never animate ancestor opacity: UIKit can permanently drop its glass effect. */}
       <Animated.View
         testID="editor-bottom-bar"
         layout={LinearTransition.duration(220).reduceMotion(
           ReduceMotion.System,
         )}
-        entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)}
-        exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}
         className="absolute left-4 right-4"
         style={{ bottom: (frame ? keyboardInset : dockHeight) + 8 }}
         onLayout={({ nativeEvent }) => onHeight(nativeEvent.layout.height)}

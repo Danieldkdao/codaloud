@@ -1,7 +1,5 @@
 import { GlassSurface } from "@/components/ui/glass-surface";
 import Animated, {
-  FadeIn,
-  FadeOut,
   LinearTransition,
   ReduceMotion,
 } from "react-native-reanimated";
@@ -41,10 +39,7 @@ export const EditorSearchBar = ({
       className="gap-2"
     >
       {replace ? (
-        <Animated.View
-          entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)}
-          exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}
-        >
+        <Animated.View>
           <GlassSurface>
             <View className="flex-row items-center gap-1 px-2">
               <Input

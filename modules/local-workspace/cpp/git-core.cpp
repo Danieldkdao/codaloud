@@ -160,26 +160,35 @@ static Json deleteBranch(git_repository *repo, const Json &args) {
   const auto name = args.at("branchName").get<std::string>();
   validateBranch(name);
   Reference branch;
-  const auto found = git_branch_lookup(branch.out(), repo, name.c_str(), GIT_BRANCH_LOCAL);
+  const auto found =
+      git_branch_lookup(branch.out(), repo, name.c_str(), GIT_BRANCH_LOCAL);
   if (found == GIT_ENOTFOUND)
-    throw WorkspaceError("BRANCH_NOT_FOUND", "This local branch no longer exists. Refresh the branch list.");
+    throw WorkspaceError(
+        "BRANCH_NOT_FOUND",
+        "This local branch no longer exists. Refresh the branch list.");
   checkGit(found);
   const auto checkedOut = git_branch_is_checked_out(branch.get());
   checkGit(checkedOut);
   if (checkedOut)
-    throw WorkspaceError("BRANCH_CHECKED_OUT", "Switch to another branch before deleting this branch. It may be checked out in another worktree.");
+    throw WorkspaceError("BRANCH_CHECKED_OUT",
+                         "Switch to another branch before deleting this "
+                         "branch. It may be checked out in another worktree.");
   git_oid head;
   checkGit(git_reference_name_to_id(&head, repo, "HEAD"));
   const auto tip = git_reference_target(branch.get());
   if (!tip)
-    throw WorkspaceError("INVALID_BRANCH", "This branch has no commit to delete.");
+    throw WorkspaceError("INVALID_BRANCH",
+                         "This branch has no commit to delete.");
   // libgit2 deletes refs without Git CLI's merged-branch safety check. Preserve
   // commits that are not reachable from the checked-out branch explicitly.
   if (!git_oid_equal(&head, tip)) {
     const auto merged = git_graph_descendant_of(repo, &head, tip);
     checkGit(merged);
     if (!merged)
-      throw WorkspaceError("UNMERGED_BRANCH", "This branch has commits that are not merged into the current branch. Merge them before deleting it.");
+      throw WorkspaceError(
+          "UNMERGED_BRANCH",
+          "This branch has commits that are not merged into the current "
+          "branch. Merge them before deleting it.");
   }
   checkGit(git_branch_delete(branch.get()));
   return {{"branchName", name}, {"deleted", true}};

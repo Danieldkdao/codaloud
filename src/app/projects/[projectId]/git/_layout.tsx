@@ -36,7 +36,10 @@ const GitLayout = () => {
             headerStyle: { backgroundColor: background },
             headerTintColor: foreground,
             headerShadowVisible: false,
-            headerTitleStyle: { fontFamily: "Fraunces_500Medium", fontSize: 22 },
+            headerTitleStyle: {
+              fontFamily: "Fraunces_500Medium",
+              fontSize: 22,
+            },
             contentStyle: { backgroundColor: background },
             headerRight: () => (
               <Button

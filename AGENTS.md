@@ -17,7 +17,6 @@
 
 - Every commit subject must use `type: description` or `type(scope): description`. Choose a lowercase prefix that describes the change, such as `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `build`, `ci`, `perf`, or `chore`.
 - Prefer lowercase descriptions and scopes. Capitals are allowed when useful for proper names, acronyms, or case-sensitive code identifiers.
-- Use an optional scope only when it clarifies the affected area, for example `feat(editor): add keyboard actions`. Check the subject format before committing.
 
 ## Working process
 

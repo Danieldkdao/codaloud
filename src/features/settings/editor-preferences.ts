@@ -13,7 +13,6 @@ const restorePreferences = (raw: string | null): EditorPreferences => {
     /* Recover malformed device data. */
   }
   const preferences = { ...defaultEditorPreferences };
-  if ((saved.theme as string) === "Nord") saved.theme = "GitHub Dark";
   if (editorThemes.includes(saved.theme!)) preferences.theme = saved.theme!;
   if (editorFonts.includes(saved.font!)) preferences.font = saved.font!;
   if (

@@ -2,6 +2,7 @@ import type {
   CodeDiagnosticSchema,
   DiagnosticSeverity,
 } from "@/features/projects/actions/code-intelligence-schemas";
+
 export const filterEditorProblems = <T extends CodeDiagnosticSchema>(
   diagnostics: T[],
   search: string,

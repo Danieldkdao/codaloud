@@ -55,7 +55,9 @@ export const EditorBottomBar = ({
           ReduceMotion.System,
         )}
         className="absolute left-4 right-4"
-        style={{ bottom: (frame ? keyboardInset + symbolInset : dockHeight) + 8 }}
+        style={{
+          bottom: (frame ? keyboardInset + symbolInset : dockHeight) + 8,
+        }}
         onLayout={({ nativeEvent }) => onHeight(nativeEvent.layout.height)}
       >
         {children}

@@ -23,8 +23,12 @@ const NewProjectScreen = () => {
       <Stack.Screen
         options={{
           title: "New project",
-          contentStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : background },
-          headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : background },
+          contentStyle: {
+            backgroundColor: Platform.OS === "ios" ? "transparent" : background,
+          },
+          headerStyle: {
+            backgroundColor: Platform.OS === "ios" ? "transparent" : background,
+          },
           headerTintColor: foreground,
           headerShadowVisible: false,
           headerRight: () => (

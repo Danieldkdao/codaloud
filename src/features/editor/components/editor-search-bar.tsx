@@ -111,7 +111,7 @@ export const EditorSearchBar = ({
           horizontal
           keyboardShouldPersistTaps="always"
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ alignItems: "center" }}
+          contentContainerStyle={{ alignItems: "center", padding: 4 }}
         >
           <Pressable
             accessibilityRole="button"

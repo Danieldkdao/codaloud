@@ -1,6 +1,11 @@
 import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { KeyboardAvoidingView, Platform, useWindowDimensions, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +13,9 @@ import { EditProjectContent } from "@/features/projects/components/edit-project-
 import { useThemeColor } from "@/hooks/use-theme";
 
 const EditProjectScreen = () => {
-  const { projectId } = useLocalSearchParams<{ projectId?: string | string[] }>();
+  const { projectId } = useLocalSearchParams<{
+    projectId?: string | string[];
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -29,7 +36,11 @@ const EditProjectScreen = () => {
           headerTintColor: foreground,
           headerShadowVisible: false,
           headerRight: () => (
-            <Button variant="ghost" onPress={() => router.back()} accessibilityLabel="Close edit project">
+            <Button
+              variant="ghost"
+              onPress={() => router.back()}
+              accessibilityLabel="Close edit project"
+            >
               Done
             </Button>
           ),

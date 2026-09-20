@@ -320,13 +320,18 @@ export const createProjectBranchAction = async (
 export const deleteProjectBranchAction = async (
   projectId: string,
   unsafeInput: z.input<typeof gitDeleteBranchSchema>,
-) => mutateProjectGitRequest({
-  execute: (input) => executeProjectGit(projectId, { operation: "git/delete-branch", args: input }),
-  output: gitDeletedBranchSchema,
-  input: gitDeleteBranchSchema,
-  unsafeInput,
-  validate: (data, input) => data.branchName === input.branchName,
-});
+) =>
+  mutateProjectGitRequest({
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/delete-branch",
+        args: input,
+      }),
+    output: gitDeletedBranchSchema,
+    input: gitDeleteBranchSchema,
+    unsafeInput,
+    validate: (data, input) => data.branchName === input.branchName,
+  });
 
 export const readProjectStashesAction = async (
   projectId: string,

@@ -11,7 +11,13 @@ export type ContentSheetProps = {
   children: ReactNode;
 };
 
-export const ContentSheet = ({ open, onOpenChange, onDismiss, backgroundColor, children }: ContentSheetProps) => {
+export const ContentSheet = ({
+  open,
+  onOpenChange,
+  onDismiss,
+  backgroundColor,
+  children,
+}: ContentSheetProps) => {
   const ref = useRef<BottomSheet>(null);
   useEffect(() => {
     if (open) ref.current?.present();
@@ -19,9 +25,18 @@ export const ContentSheet = ({ open, onOpenChange, onDismiss, backgroundColor, c
   }, [open]);
 
   return (
-    <BottomSheet ref={ref} index={-1} enableDynamicSizing enablePanDownToClose
-      backgroundStyle={{ backgroundColor }} onChange={(index) => onOpenChange(index >= 0)}
-      onClose={() => { onOpenChange(false); onDismiss?.(); }}>
+    <BottomSheet
+      ref={ref}
+      index={-1}
+      enableDynamicSizing
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor }}
+      onChange={(index) => onOpenChange(index >= 0)}
+      onClose={() => {
+        onOpenChange(false);
+        onDismiss?.();
+      }}
+    >
       <KeyboardSymbolsProvider local>{children}</KeyboardSymbolsProvider>
     </BottomSheet>
   );

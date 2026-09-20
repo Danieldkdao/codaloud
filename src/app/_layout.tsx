@@ -76,7 +76,10 @@ const RootNavigator = () => {
                 }}
               >
                 <Stack.Protected guard={hasCompletedOnboarding}>
-                  <Stack.Screen name="(main)" options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name="(main)"
+                    options={{ headerShown: false }}
+                  />
                   <Stack.Screen
                     name="projects/[projectId]"
                     options={{ title: "Project" }}
@@ -105,7 +108,10 @@ const RootNavigator = () => {
                   />
                 </Stack.Protected>
                 <Stack.Protected guard={!hasCompletedOnboarding}>
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name="(auth)"
+                    options={{ headerShown: false }}
+                  />
                 </Stack.Protected>
                 <Stack.Screen
                   name="github-connect"

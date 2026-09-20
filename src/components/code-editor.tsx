@@ -25,7 +25,7 @@ import {
 } from "./code-editor-intelligence";
 import { CODE_INTELLIGENCE_FILE_PATTERN } from "@/features/projects/constants";
 import { tags } from "@lezer/highlight";
-import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400Regular";
+import { editorFontAssets } from "@/features/editor/fonts";
 import { Outfit_400Regular } from "@expo-google-fonts/outfit/400Regular";
 import { useFonts } from "expo-font";
 import {
@@ -49,7 +49,7 @@ import {
 import { editorConfiguration } from "@/features/editor/configuration";
 import { defaultEditorPreferences } from "@/features/settings/constants";
 import type { EditorPreferences } from "@/features/settings/types";
-import { formatEditorThemeClass } from "@/features/editor/lib/formatters";
+import { formatEditorThemeClass, formatEditorFontFamily } from "@/features/editor/lib/formatters";
 // The shared cn module imports native Alert and cannot load inside Expo DOM.
 import { clsx } from "clsx";
 import "@/global.css";
@@ -106,7 +106,7 @@ const highlightStyle = HighlightStyle.define([
   {
     tag: [tags.keyword, tags.modifier, tags.meta],
     color: "var(--syntax-keyword)",
-    fontWeight: "600",
+    fontFamily: "var(--editor-font-semibold)",
   },
   {
     tag: [tags.string, tags.regexp, tags.inserted],
@@ -123,7 +123,7 @@ const highlightStyle = HighlightStyle.define([
   {
     tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
     color: "var(--syntax-function)",
-    fontWeight: "600",
+    fontFamily: "var(--editor-font-semibold)",
   },
   {
     tag: [tags.propertyName, tags.attributeName],
@@ -131,7 +131,7 @@ const highlightStyle = HighlightStyle.define([
   },
   { tag: tags.operator, color: "var(--syntax-operator)" },
   { tag: [tags.tagName, tags.deleted], color: "var(--syntax-tag)" },
-  { tag: tags.comment, color: "var(--syntax-comment)", fontStyle: "italic" },
+  { tag: tags.comment, color: "var(--syntax-comment)", fontFamily: "var(--editor-font-italic)" },
   {
     tag: [tags.heading, tags.link],
     color: "var(--syntax-function)",
@@ -223,7 +223,7 @@ const CodeEditor = ({
   const [viewportHeight, setViewportHeight] = useState<number>();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
-    EditorMono: JetBrainsMono_400Regular,
+    ...editorFontAssets,
     EditorUI: Outfit_400Regular,
   });
   fontsReady.current = Boolean(fontsLoaded || fontError);
@@ -527,6 +527,9 @@ const CodeEditor = ({
         {
           height: viewportHeight ?? "100%",
           colorScheme,
+          "--editor-font-regular": `${formatEditorFontFamily(preferences.font)}_400Regular`,
+          "--editor-font-semibold": `${formatEditorFontFamily(preferences.font)}_600SemiBold`,
+          "--editor-font-italic": `${formatEditorFontFamily(preferences.font)}_400Regular${preferences.font === "Fira Code" ? "" : "_Italic"}`,
           "--editor-font-size": `${preferences.fontSize}px`,
           "--editor-bottom-inset": `${effectiveInset}px`,
         } as CSSProperties

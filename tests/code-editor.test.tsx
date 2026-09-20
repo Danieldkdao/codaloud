@@ -14,6 +14,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { codeEditorMatches } from "@/components/code-editor-matches";
 import CodeEditor, { type CodeEditorRef } from "@/components/code-editor";
 
+vi.mock("@/features/editor/fonts", () => ({ editorFontAssets: {} }));
 vi.mock("expo/dom", async () => ({ useDOMImperativeHandle: (await import("react")).useImperativeHandle }));
 
 const fontState = vi.hoisted(() => ({ loaded: true, error: null as Error | null }));
@@ -595,7 +596,7 @@ it("reconfigures editing preferences without losing text, selection or undo", as
   await act(async () => root.render(createElement(CodeEditor, { ...props, preferences: { ...defaultEditorPreferences, fontSize: 24, tabSize: 8, lineNumbers: false, wordWrap: true, useTabs: true, keepIndentation: false } })));
   expect(editor()).toBe(view);
   expect(view.state.tabSize).toBe(8);
-  expect(view.lineWrapping).toBe(true);
+  expect(view.contentDOM.classList.contains("cm-lineWrapping")).toBe(true);
   expect(container.querySelector(".cm-lineNumbers")).toBeNull();
   expect(view.state.selection.main.head).toBe(3);
   act(() => undo(view));

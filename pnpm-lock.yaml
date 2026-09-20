@@ -196,7 +196,13 @@ importers:
       '@daytona/sdk':
         specifier: ^0.210.0
         version: 0.210.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      '@expo-google-fonts/fira-code':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@expo-google-fonts/fraunces':
+        specifier: ^0.4.1
+        version: 0.4.1
+      '@expo-google-fonts/ibm-plex-mono':
         specifier: ^0.4.1
         version: 0.4.1
       '@expo-google-fonts/jetbrains-mono':
@@ -205,6 +211,9 @@ importers:
       '@expo-google-fonts/outfit':
         specifier: ^0.4.3
         version: 0.4.3
+      '@expo-google-fonts/source-code-pro':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@expo/ui':
         specifier: ~57.0.18
         version: 57.0.18(@babel/core@7.29.7(supports-color@8.1.1))(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(expo@57.0.23)(react-dom@19.2.3(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
@@ -1289,8 +1298,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@expo-google-fonts/fira-code@0.4.1':
+    resolution: {integrity: sha512-b0fx07WCnZoM1epBJUfZQX36zs2W3ASfVneIsn1hNGc8xNHMBRDnI0vUdNJsb8ix0wkcilwJknyYhCoX5a3lMA==}
+
   '@expo-google-fonts/fraunces@0.4.1':
     resolution: {integrity: sha512-gYc9P92ObyWvz1rWPOeWSvVKyBFIuA8hgOdhvo4DSiPBaWLbFA6v8uLIEIBwW+0oWTlXbBzjeBReHQI2H7UNjQ==}
+
+  '@expo-google-fonts/ibm-plex-mono@0.4.1':
+    resolution: {integrity: sha512-/yYz1mPZq8Nd4tSiH0SBDPEdJUqiOGBwVgSrQvLuw7SPh6C7ezBzmi6eFyHY4QaQwjHDmOLSBKsxzq8ZDFXVAg==}
 
   '@expo-google-fonts/jetbrains-mono@0.4.1':
     resolution: {integrity: sha512-CslACrtMOcRwoWXCO7OMEI+9w3fukWSoBtvNz46OqPoogEuuoY0tkDY1O8sFumk8t0pC6Cx0Xr95O0TOQhpkug==}
@@ -1300,6 +1315,9 @@ packages:
 
   '@expo-google-fonts/outfit@0.4.3':
     resolution: {integrity: sha512-2uQmDVJencWLllxds6SG92E+SjxyZfvg7eZKZ5XLHggmm5AuUyQK7lzMAFOUzT6kheq2kJ7BAiubMdjKT32fJg==}
+
+  '@expo-google-fonts/source-code-pro@0.4.1':
+    resolution: {integrity: sha512-pTKy5BpNeBOSWtZpXXtTxR5NiXmKLQcP2x8TVDNiWvG6dHTkaHNzzDy0z+GzHp+nx1gt7imfzSjWGLd9d4JGsQ==}
 
   '@expo/cli@57.0.25':
     resolution: {integrity: sha512-G2FJfwClIPNPhH2sJlIFAkhQLYaKNGzSarIQUl6sVA8oGdrmBnhRvbtTzxDzjS6WzO2aDX8DY7y1aNbCFILodg==}
@@ -6313,13 +6331,19 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
+  '@expo-google-fonts/fira-code@0.4.1': {}
+
   '@expo-google-fonts/fraunces@0.4.1': {}
+
+  '@expo-google-fonts/ibm-plex-mono@0.4.1': {}
 
   '@expo-google-fonts/jetbrains-mono@0.4.1': {}
 
   '@expo-google-fonts/material-symbols@0.4.45': {}
 
   '@expo-google-fonts/outfit@0.4.3': {}
+
+  '@expo-google-fonts/source-code-pro@0.4.1': {}
 
   '@expo/cli@57.0.25(@expo/dom-webview@57.0.1)(@expo/metro-runtime@57.0.15)(expo-constants@57.0.18)(expo-font@57.0.4)(expo-router@57.0.21)(expo@57.0.23)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1)(typescript@6.0.3)':
     dependencies:

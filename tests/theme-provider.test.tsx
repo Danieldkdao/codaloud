@@ -5,8 +5,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
 
 const mocks = vi.hoisted(() => ({
-  read: vi.fn(), write: vi.fn(), appearance: vi.fn(), scheme: "light",
+  read: vi.fn(), write: vi.fn(), appearance: vi.fn(), scheme: "light", editorTheme: "Codaloud",
 }));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({ useEditorPreferences: () => ({ ready: true, preferences: { theme: mocks.editorTheme }, update: vi.fn() }) }));
 vi.mock("expo-secure-store", () => ({ getItemAsync: mocks.read, setItemAsync: mocks.write }));
 vi.mock("nativewind", () => ({ useUnstableNativeVariable: () => "theme-color" }));
 vi.mock("react-native", () => ({
@@ -29,6 +30,7 @@ const render = async () => {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.scheme = "light";
+  mocks.editorTheme = "Codaloud";
   mocks.read.mockReset().mockResolvedValue(null);
   mocks.write.mockReset().mockResolvedValue(undefined);
   container = document.createElement("div");
@@ -94,4 +96,15 @@ it("serializes rapid native writes so the last selection wins on restart", async
   expect(mocks.write).toHaveBeenCalledTimes(1);
   await act(async () => finishWrite());
   expect(mocks.write.mock.calls.map((call) => call[1])).toEqual(["dark", "light"]);
+});
+
+it("uses named editor theme appearance throughout the app", async () => {
+  mocks.editorTheme = "Dracula";
+  await render();
+  expect(theme.isDarkMode).toBe(true);
+  expect(mocks.appearance).toHaveBeenLastCalledWith("dark");
+  mocks.editorTheme = "GitHub Light";
+  await render();
+  expect(theme.isDarkMode).toBe(false);
+  expect(mocks.appearance).toHaveBeenLastCalledWith("light");
 });

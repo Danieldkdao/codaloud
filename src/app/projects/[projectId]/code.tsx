@@ -26,6 +26,7 @@ import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project
 import { useProjectFile } from "@/features/projects/hooks/use-project-file";
 import { useProjectEditorDocuments } from "@/features/projects/hooks/use-project-editor-documents";
 import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-shortcuts";
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { useTheme } from "@/hooks/use-theme";
 
 const CodeScreen = () => {
@@ -37,6 +38,7 @@ const CodeScreen = () => {
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const { isWorkspaceBusy } = useProjectWorkspaceBranch();
   const { isDarkMode } = useTheme();
+  const { preferences } = useEditorPreferences();
   const editor = useRef<CodeEditorRef>(null);
   const current = useRef({ files, documents });
   current.current = { files, documents };
@@ -170,6 +172,7 @@ const CodeScreen = () => {
         >
           <CodeEditor
             ref={editor}
+            preferences={preferences}
             documentKey={documents.editor?.key ?? `prewarm/${projectId}`}
             openDocumentKeys={documents.openDocumentKeys}
             filename={documents.editor?.path ?? ""}

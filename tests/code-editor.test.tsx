@@ -585,3 +585,19 @@ it("dismisses the WebView keyboard by blurring the editor without losing its sel
   act(() => editor().focus());
   expect(document.activeElement).toBe(editor().contentDOM);
 });
+
+it("reconfigures editing preferences without losing text, selection or undo", async () => {
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  const props = { filename: "notes.txt", initialValue: "first\nsecond", preferences: defaultEditorPreferences };
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  const view = editor();
+  act(() => view.dispatch({ changes: { from: 0, insert: "edit " }, selection: { anchor: 3 } }));
+  await act(async () => root.render(createElement(CodeEditor, { ...props, preferences: { ...defaultEditorPreferences, fontSize: 24, tabSize: 8, lineNumbers: false, wordWrap: true, useTabs: true, keepIndentation: false } })));
+  expect(editor()).toBe(view);
+  expect(view.state.tabSize).toBe(8);
+  expect(view.lineWrapping).toBe(true);
+  expect(container.querySelector(".cm-lineNumbers")).toBeNull();
+  expect(view.state.selection.main.head).toBe(3);
+  act(() => undo(view));
+  expect(view.state.doc.toString()).toBe(props.initialValue);
+});

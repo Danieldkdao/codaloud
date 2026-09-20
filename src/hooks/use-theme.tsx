@@ -5,6 +5,8 @@ import type { AppThemeState, ThemePreference } from "@/lib/types";
 import { themePreferences } from "@/lib/constants";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import * as SecureStore from "expo-secure-store";
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
+import { formatEditorAppearance } from "@/features/editor/lib/formatters";
 import { StatusBar } from "expo-status-bar";
 
 type ThemeColor =
@@ -42,8 +44,11 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const writes = useRef(Promise.resolve());
   const active = useRef(false);
+  const editor = useEditorPreferences();
+  const editorAppearance = formatEditorAppearance(editor.preferences.theme);
+  const effectivePreference = editorAppearance ?? preference;
   const systemScheme = useColorScheme();
-  const isDarkMode = preference === "dark" || (preference === "system" && systemScheme === "dark");
+  const isDarkMode = effectivePreference === "dark" || (effectivePreference === "system" && systemScheme === "dark");
   const background = useThemeColor("background");
   const card = useThemeColor("card");
   const text = useThemeColor("foreground");
@@ -71,8 +76,13 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
     return () => { cancelled = true; active.current = false; };
   }, []);
 
+  useEffect(() => {
+    if (isReady && editor.ready) applyPreference(effectivePreference);
+  }, [isReady, editor.ready, effectivePreference]);
+
   const setPreference = (next: ThemePreference) => {
     if (!isReady) return;
+    if (editorAppearance) void editor.update({ theme: "Codaloud" });
     applyPreference(next);
     setStoredPreference(next);
     setError(null);
@@ -96,7 +106,7 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AppThemeContext value={{ preference, isDarkMode, isReady, error, setPreference }}>
+    <AppThemeContext value={{ preference, isDarkMode, isReady: isReady && editor.ready, error, setPreference }}>
       <ThemeProvider value={navigationTheme}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
         {children}

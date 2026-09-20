@@ -5,19 +5,15 @@ import {
   drawSelection,
   dropCursor,
   highlightActiveLine,
-  highlightActiveLineGutter,
   highlightSpecialChars,
   keymap,
-  lineNumbers,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import {
   HighlightStyle,
   bracketMatching,
   defaultHighlightStyle,
-  indentOnInput,
   LanguageDescription,
   syntaxHighlighting,
 } from "@codemirror/language";
@@ -50,6 +46,12 @@ import {
   type CodeEditorMatchState,
 } from "./code-editor-matches";
 
+import { editorConfiguration } from "@/features/editor/configuration";
+import { defaultEditorPreferences } from "@/features/settings/constants";
+import type { EditorPreferences } from "@/features/settings/types";
+import { formatEditorThemeClass } from "@/features/editor/lib/formatters";
+// The shared cn module imports native Alert and cannot load inside Expo DOM.
+import { clsx } from "clsx";
 import "@/global.css";
 import "@/styles/code-editor.css";
 
@@ -66,6 +68,7 @@ export type CodeEditorInteraction = {
 };
 
 type CodeEditorProps = {
+  preferences?: EditorPreferences;
   ref?: Ref<CodeEditorRef>;
   /** Literal, case-insensitive search terms. Matching runs against the live document. */
   matches?: string[];
@@ -154,6 +157,7 @@ const formatEditorThemeClassName = (
 };
 
 const CodeEditor = ({
+  preferences = defaultEditorPreferences,
   ref,
   matches,
   onMatchesChange,
@@ -194,6 +198,9 @@ const CodeEditor = ({
   matchesCallback.current = onMatchesChange;
   const reportedMatches = useRef<CodeEditorMatchState | null>(null);
   const view = useRef<EditorView | null>(null);
+  const [configuration] = useState(() => new Compartment());
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
   const [editability] = useState(() => new Compartment());
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
@@ -302,26 +309,22 @@ const CodeEditor = ({
     const extensions = [
       // Keep editing primitives explicit: basicSetup also installs desktop panels,
       // completion popups, folding controls, and shortcuts that need native UI.
-      lineNumbers(),
-      highlightActiveLineGutter(),
+      configuration.of(editorConfiguration(preferencesRef.current)),
       highlightSpecialChars(),
       history(),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
-      indentOnInput(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
-      closeBrackets(),
       highlightActiveLine(),
-      keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
+      keymap.of([...defaultKeymap, ...historyKeymap]),
       codeEditorMatches,
       editability.of([
         EditorState.readOnly.of(readOnlyRef.current),
         EditorView.editable.of(!readOnlyRef.current),
       ]),
       intelligence?.extensions ?? [],
-      EditorState.tabSize.of(2),
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
@@ -443,6 +446,10 @@ const CodeEditor = ({
   }, [matchesKey, filename, initialValue, hasAnalysis, documentKey]);
 
   useEffect(() => {
+    view.current?.dispatch({ effects: configuration.reconfigure(editorConfiguration(preferences)) });
+  }, [preferences, configuration]);
+
+  useEffect(() => {
     // Reconfigure in place so switching modes preserves document and undo state.
     view.current?.dispatch({
       effects: editability.reconfigure([
@@ -513,13 +520,14 @@ const CodeEditor = ({
 
   return (
     <section
-      className={formatEditorThemeClassName(colorScheme)}
+      className={clsx(formatEditorThemeClassName(colorScheme), formatEditorThemeClass(preferences.theme))}
       data-theme={colorScheme}
       aria-label="Code panel"
       style={
         {
           height: viewportHeight ?? "100%",
           colorScheme,
+          "--editor-font-size": `${preferences.fontSize}px`,
           "--editor-bottom-inset": `${effectiveInset}px`,
         } as CSSProperties
       }

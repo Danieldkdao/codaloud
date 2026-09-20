@@ -692,14 +692,32 @@ const CodeEditor = ({
     // Coalesce stepper taps, and cancel before touching a different document.
     let cancelled = false;
     const timer = setTimeout(() => {
-      void transformEditor(editor, filename, "format", preferencesRef.current,
-        async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, key) ?? null,
-        () => !cancelled && view.current === editor && activeDocument.current === key,
+      void transformEditor(
+        editor,
+        filename,
+        "format",
+        preferencesRef.current,
+        async (input) =>
+          analysisCallbacks.current.onRequestAnalysis?.(input, key) ?? null,
+        () =>
+          !cancelled &&
+          view.current === editor &&
+          activeDocument.current === key,
       ).catch((error: unknown) => {
-        if (!cancelled) void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Couldn’t format this file.").catch(() => {});
+        if (!cancelled)
+          void clipboard.current
+            .onCommandError?.(
+              error instanceof Error
+                ? error.message
+                : "Couldn’t format this file.",
+            )
+            .catch(() => {});
       });
     }, 150);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [indentation, documentKey, filename, readOnly]);
 
   useEffect(() => {

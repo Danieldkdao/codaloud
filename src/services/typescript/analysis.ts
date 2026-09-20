@@ -26,8 +26,10 @@ const formatSeverity = (category: DiagnosticCategory) => {
 };
 const formatCompletionKind = (kind: ScriptElementKind) => {
   switch (kind) {
-    case ts.ScriptElementKind.scriptElement: return "file";
-    case ts.ScriptElementKind.directory: return "namespace";
+    case ts.ScriptElementKind.scriptElement:
+      return "file";
+    case ts.ScriptElementKind.directory:
+      return "namespace";
     case ts.ScriptElementKind.functionElement:
     case ts.ScriptElementKind.memberFunctionElement:
       return "function";
@@ -57,7 +59,9 @@ const normalize = (path: string) => {
 
 export const createTypeScriptAnalyzer = (
   readFile: (path: string) => Promise<string | null>,
-  listDirectory: (path: string) => Promise<{ path: string; isDir: boolean }[]> = async () => [],
+  listDirectory: (
+    path: string,
+  ) => Promise<{ path: string; isDir: boolean }[]> = async () => [],
 ) => {
   const directories = new Map<string, { path: string; isDir: boolean }[]>();
   const pendingDirectories = new Set<string>();
@@ -127,7 +131,11 @@ export const createTypeScriptAnalyzer = (
   };
   const directoryEntries = (path: string) => {
     const key = normalize(path);
-    if ((key !== "/workspace" && !key.startsWith("/workspace/")) || key.split("/").includes(".git")) return [];
+    if (
+      (key !== "/workspace" && !key.startsWith("/workspace/")) ||
+      key.split("/").includes(".git")
+    )
+      return [];
     if (!directories.has(key)) pendingDirectories.add(key);
     return directories.get(key) ?? [];
   };
@@ -135,10 +143,19 @@ export const createTypeScriptAnalyzer = (
     useCaseSensitiveFileNames: true,
     readFile: read,
     fileExists: (path: string) => read(path) !== undefined,
-    readDirectory: (path: string, extensions?: readonly string[]) => directoryEntries(path)
-      .filter((entry) => !entry.isDir && (!extensions || extensions.some((extension) => entry.path.endsWith(extension))))
-      .map((entry) => normalize(`/workspace/${entry.path}`)),
-    getDirectories: (path: string) => directoryEntries(path).filter((entry) => entry.isDir).map((entry) => normalize(`/workspace/${entry.path}`)),
+    readDirectory: (path: string, extensions?: readonly string[]) =>
+      directoryEntries(path)
+        .filter(
+          (entry) =>
+            !entry.isDir &&
+            (!extensions ||
+              extensions.some((extension) => entry.path.endsWith(extension))),
+        )
+        .map((entry) => normalize(`/workspace/${entry.path}`)),
+    getDirectories: (path: string) =>
+      directoryEntries(path)
+        .filter((entry) => entry.isDir)
+        .map((entry) => normalize(`/workspace/${entry.path}`)),
   };
   const run = async (
     input: CodeIntelligenceRequestSchema,
@@ -313,8 +330,16 @@ export const createTypeScriptAnalyzer = (
           "This file needs more dependencies than the on-device analysis limit.",
         );
       for (const path of pendingDirectories) {
-        if (directories.size >= 512) throw new Error("This file needs too many directories for local completion.");
-        directories.set(path, await listDirectory(path.slice("/workspace".length).replace(/^\//, "")));
+        if (directories.size >= 512)
+          throw new Error(
+            "This file needs too many directories for local completion.",
+          );
+        directories.set(
+          path,
+          await listDirectory(
+            path.slice("/workspace".length).replace(/^\//, ""),
+          ),
+        );
         revision++;
         invalidatedResolutions = true;
       }

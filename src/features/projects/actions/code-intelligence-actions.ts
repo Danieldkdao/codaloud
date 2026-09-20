@@ -4,7 +4,10 @@ import {
   type CodeIntelligenceResultSchema,
 } from "./code-intelligence-schemas";
 import { z } from "zod";
-import { projectFileContentSchema, projectFileEntrySchema } from "./file-schemas";
+import {
+  projectFileContentSchema,
+  projectFileEntrySchema,
+} from "./file-schemas";
 import { requireLocalProject } from "../local/access";
 import { executeWorkspace } from "@/services/local-workspace/execute";
 import type { createTypeScriptAnalyzer } from "@/services/typescript/analysis";
@@ -31,19 +34,28 @@ export const readProjectCodeIntelligence = async (
       void session?.analyzer.dispose();
       session = {
         projectId: project.id,
-        analyzer: createTypeScriptAnalyzer(async (path) => {
-          try {
-            return projectFileContentSchema.parse(
-              await executeWorkspace(project.id, "read-file", { path }),
-            ).content;
-          } catch {
-            return null;
-          }
-        }, async (path) => {
-          try {
-            return z.array(projectFileEntrySchema).parse(await executeWorkspace(project.id, "list-files", { path }));
-          } catch { return []; }
-        }),
+        analyzer: createTypeScriptAnalyzer(
+          async (path) => {
+            try {
+              return projectFileContentSchema.parse(
+                await executeWorkspace(project.id, "read-file", { path }),
+              ).content;
+            } catch {
+              return null;
+            }
+          },
+          async (path) => {
+            try {
+              return z
+                .array(projectFileEntrySchema)
+                .parse(
+                  await executeWorkspace(project.id, "list-files", { path }),
+                );
+            } catch {
+              return [];
+            }
+          },
+        ),
       };
     }
     return await session.analyzer.analyze(input);

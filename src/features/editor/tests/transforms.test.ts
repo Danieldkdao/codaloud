@@ -28,7 +28,7 @@ it("applies one undoable transaction", async () => {
   undo(view);
   expect(view.state.doc.toString()).toBe("const x=1;");
 });
-it("rejects formatting that arrives after typing or a tab switch", async () => {
+it("rejects import edits that arrive after typing or a tab switch", async () => {
   for (const edit of [true, false]) {
     const view = make();
     let resolve!: (value: {
@@ -57,6 +57,16 @@ it("rejects formatting that arrives after typing or a tab switch", async () => {
     await expect(action).rejects.toThrow(/changed/);
     expect(view.state.doc.toString()).not.toContain("BAD");
   }
+});
+it.each(["typing", "tab switch"])("rejects Prettier output after %s without overwriting the buffer", async (change) => {
+  const view = make();
+  let active = true;
+  const action = transformEditor(view, "main.ts", "format", defaultEditorPreferences, async () => null, () => active);
+  if (change === "typing") view.dispatch({ changes: { from: 0, insert: "//new\n" } });
+  else active = false;
+  const current = view.state.sliceDoc();
+  await expect(action).rejects.toThrow(/changed/);
+  expect(view.state.sliceDoc()).toBe(current);
 });
 it.each(
   [

@@ -229,6 +229,10 @@ body {
   fill: currentColor;
   pointer-events: none;
 }
+.code-editor-host .cm-minimap-content {
+  position: relative;
+  max-height: 100%;
+}
 .code-editor-host .cm-minimap-viewport {
   position: absolute;
   left: 0;
@@ -256,4 +260,6 @@ body {
   white-space: pre;
   fill: currentColor;
 }
-.code-editor-host .cm-minimap tspan { fill: currentColor; }
+.code-editor-host .cm-minimap tspan {
+  fill: currentColor;
+}

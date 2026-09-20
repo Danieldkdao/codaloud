@@ -7,11 +7,13 @@ export const editorMinimap = [
   ViewPlugin.fromClass(
     class {
       dom = document.createElement("div");
+      content = document.createElement("div");
       svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       slider = document.createElement("input");
       viewport = document.createElement("div");
       constructor(readonly view: EditorView) {
         this.dom.className = "cm-minimap";
+        this.content.className = "cm-minimap-content";
         this.viewport.className = "cm-minimap-viewport";
         this.svg.setAttribute("viewBox", "0 0 180 3600");
         this.svg.setAttribute("preserveAspectRatio", "none");
@@ -23,7 +25,8 @@ export const editorMinimap = [
         this.slider.setAttribute("aria-label", "File minimap position");
         this.slider.setAttribute("aria-orientation", "vertical");
         this.slider.addEventListener("input", this.navigate);
-        this.dom.append(this.svg, this.viewport, this.slider);
+        this.content.append(this.svg, this.viewport, this.slider);
+        this.dom.append(this.content);
         view.dom.append(this.dom);
         this.draw();
         this.position();
@@ -50,8 +53,13 @@ export const editorMinimap = [
         const count = Math.min(600, doc.lines);
         const nodes = [];
         for (let row = 0; row < count; row++) {
-          const line = doc.line(Math.floor((row * doc.lines) / count) + 1);
-          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          const line = doc.line(
+            Math.round((row * (doc.lines - 1)) / Math.max(1, count - 1)) + 1,
+          );
+          const text = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "text",
+          );
           text.setAttribute("x", "2");
           text.setAttribute("y", String(row * 6 + 5));
           text.setAttribute("xml:space", "preserve");
@@ -59,20 +67,34 @@ export const editorMinimap = [
           let position = line.from;
           const append = (from: number, to: number, className?: string) => {
             if (from >= to) return;
-            const span = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+            const span = document.createElementNS(
+              "http://www.w3.org/2000/svg",
+              "tspan",
+            );
             if (className) span.setAttribute("class", className);
-            span.textContent = doc.sliceString(from, to).replace(/\t/g, " ".repeat(this.view.state.tabSize));
+            span.textContent = doc
+              .sliceString(from, to)
+              .replace(/\t/g, " ".repeat(this.view.state.tabSize));
             text.append(span);
           };
-          highlightTree(syntaxTree(this.view.state), { style: (tags) => highlightingFor(this.view.state, tags) }, (from, to, classes) => {
-            append(position, from);
-            append(from, to, classes);
-            position = to;
-          }, line.from, end);
+          highlightTree(
+            syntaxTree(this.view.state),
+            { style: (tags) => highlightingFor(this.view.state, tags) },
+            (from, to, classes) => {
+              append(position, from);
+              append(from, to, classes);
+              position = to;
+            },
+            line.from,
+            end,
+          );
           append(position, end);
           nodes.push(text);
         }
-        this.svg.setAttribute("viewBox", `0 0 180 ${Math.max(600, count * 6)}`);
+        // Keep short files compact, with one shared surface for glyphs, the
+        // viewport highlight, and touch navigation so their positions agree.
+        this.content.style.height = `${count * 2}px`;
+        this.svg.setAttribute("viewBox", `0 0 180 ${count * 6}`);
         this.svg.replaceChildren(...nodes);
       };
       position = () => {
@@ -84,7 +106,12 @@ export const editorMinimap = [
         this.slider.value = String((first / Math.max(1, doc.lines - 1)) * 100);
       };
       update(update: ViewUpdate) {
-        if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state) || update.startState.tabSize !== update.state.tabSize) this.draw();
+        if (
+          update.docChanged ||
+          syntaxTree(update.startState) !== syntaxTree(update.state) ||
+          update.startState.tabSize !== update.state.tabSize
+        )
+          this.draw();
         if (update.docChanged || update.viewportChanged) this.position();
       }
       destroy() {

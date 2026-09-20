@@ -38,3 +38,13 @@ it("renders actual code glyphs with syntax highlighting instead of solid bars", 
     expect(view.dom.querySelectorAll(".cm-minimap tspan[class]").length).toBeGreaterThan(1);
   } finally { view.destroy(); }
 });
+
+it("keeps short files compact and includes the final line when sampling long files", () => {
+  const view = new EditorView({ state: EditorState.create({ doc: "first\nlast", extensions: [editorMinimap] }) });
+  try {
+    expect(view.dom.querySelector(".cm-minimap-content")?.getAttribute("style")).toContain("height: 4px");
+    expect(view.dom.querySelector(".cm-minimap svg")?.getAttribute("viewBox")).toBe("0 0 180 12");
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "line\n".repeat(20000) + "finalLine" } });
+    expect(view.dom.querySelector(".cm-minimap text:last-child")?.textContent).toBe("finalLine");
+  } finally { view.destroy(); }
+});

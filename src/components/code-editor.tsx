@@ -82,7 +82,7 @@ import { clsx } from "clsx";
 import "@/global.css";
 import "@/styles/code-editor.css";
 
-export interface CodeEditorRef {
+export type CodeEditorRef = {
   revealDiagnostic(
     from: number,
     to: number,
@@ -100,7 +100,7 @@ export interface CodeEditorRef {
   nextMatch: () => void;
   previousMatch: () => void;
   dismissKeyboard: () => void;
-}
+};
 
 export type CodeEditorInteraction = {
   focused: boolean;

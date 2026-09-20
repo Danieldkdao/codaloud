@@ -1,4 +1,4 @@
-import { useEditorControls } from "@/features/editor/use-editor-controls";
+import { UndoRedoButtons } from "@/features/editor/components/undo-redo-buttons";
 import { type RefObject } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -90,43 +90,11 @@ export const ProjectActionButtonsRight = ({
 }: ProjectActionButtonsRightProps) => {
   const { projectId, gitTab } = useProjectWorkspaceBranch();
   const { commitSelection } = useProjectWorkspaceChanges();
-  const editorControls = useEditorControls()?.state;
   switch (tab) {
     case "code":
       return (
         <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Undo"
-            disabled={!editorControls?.canUndo}
-            accessibilityState={{ disabled: !editorControls?.canUndo }}
-            onPress={() => editorControls?.run("undo")}
-            className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
-          >
-            <Icon
-              family="Feather"
-              name="corner-up-left"
-              size={22}
-              accessible={false}
-              className="text-foreground"
-            />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Redo"
-            disabled={!editorControls?.canRedo}
-            accessibilityState={{ disabled: !editorControls?.canRedo }}
-            onPress={() => editorControls?.run("redo")}
-            className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
-          >
-            <Icon
-              family="Feather"
-              name="corner-up-right"
-              size={22}
-              accessible={false}
-              className="text-foreground"
-            />
-          </Pressable>
+          <UndoRedoButtons />
           <ProjectCodeTools key={projectId} />
         </>
       );

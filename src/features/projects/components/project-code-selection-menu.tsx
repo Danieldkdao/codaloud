@@ -6,7 +6,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useThemeColor } from "@/hooks/use-theme";
 
 const clipboardActions = ["cut", "copy", "paste", "select-all"] as const;
-const codeActions = ["explain", "comment", "fold"] as const;
+const codeActions = ["explain", "comment"] as const;
 type SelectionAction =
   (typeof clipboardActions)[number] | (typeof codeActions)[number];
 
@@ -29,8 +29,6 @@ const formatSelectionAction = (
       return { label: "Explain to me with AI", icon: "creation-outline" };
     case "comment":
       return { label: "Toggle comment", icon: "comment-plus-outline" };
-    case "fold":
-      return { label: "Fold selection", icon: "unfold-less-horizontal" };
   }
 };
 
@@ -80,14 +78,8 @@ export const ProjectCodeSelectionMenu = ({
 
   const option = (action: SelectionAction) => ({
     value: action,
-    label:
-      action === "fold" && commands?.fold === "unfold"
-        ? "Unfold selection"
-        : formatSelectionAction(action).label,
-    disabled:
-      action === "explain" ||
-      (action === "fold" && (!commands || commands.fold === "unavailable")) ||
-      (action === "comment" && !commands?.canComment),
+    label: formatSelectionAction(action).label,
+    disabled: action === "explain" || (action === "comment" && !commands?.canComment),
     image: images.find((source) => source.action === action)?.image,
     onSelect: () => {
       if (action !== "explain") onCommand?.(action);

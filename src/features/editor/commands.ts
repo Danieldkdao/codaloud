@@ -21,10 +21,11 @@ import type {
   EditorCommandState,
 } from "./types";
 
-const selectionFold = (view: EditorView) => {
+const cursorFold = (view: EditorView) => {
   const { state } = view;
   const selection = state.selection.main;
-  const line = state.doc.lineAt(selection.from);
+  // Match CodeMirror’s gutter: ask for the visible line block under the cursor.
+  const line = view.lineBlockAt(selection.head);
   let folded: { from: number; to: number } | undefined;
   foldedRanges(state).between(line.from, line.to, (from, to) => {
     folded ??= { from, to };
@@ -32,7 +33,7 @@ const selectionFold = (view: EditorView) => {
   return { folded, range: folded ?? foldable(state, line.from, line.to) };
 };
 export const getEditorCommandState = (view: EditorView): EditorCommandState => {
-  const { folded, range } = selectionFold(view);
+  const { folded, range } = cursorFold(view);
   return {
     fold: range ? (folded ? "unfold" : "fold") : "unavailable",
     canUndo: !view.state.readOnly && undoDepth(view.state) > 0,
@@ -123,7 +124,7 @@ export const runEditorCommand = async (
       redo(view);
       break;
     case "fold": {
-      const { range, folded } = selectionFold(view);
+      const { range, folded } = cursorFold(view);
       if (range)
         view.dispatch({
           effects: (folded ? unfoldEffect : foldEffect).of(range),

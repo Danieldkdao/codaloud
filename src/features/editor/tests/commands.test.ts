@@ -135,3 +135,15 @@ it("does not reject clipboard operations because a non-editing editor effect ran
   await action;
   expect(view.state.doc.toString()).toBe("newhello");
 });
+
+it("uses the cursor line, including backward selections, just like the fold gutter", async () => {
+  const view = await make("function hello() {\n  return 1;\n}\nconst x = 2;");
+  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
+  view.dispatch({ selection: { anchor: 25, head: 4 } });
+  expect(getEditorCommandState(view).fold).toBe("fold");
+  view.dispatch({ selection: { anchor: 4, head: 25 } });
+  expect(getEditorCommandState(view).fold).toBe("unavailable");
+  view.dispatch({ selection: { anchor: 7 } });
+  await runEditorCommand(view, "fold", clipboard());
+  expect(getEditorCommandState(view).fold).toBe("unfold");
+});

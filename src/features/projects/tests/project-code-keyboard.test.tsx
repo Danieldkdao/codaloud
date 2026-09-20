@@ -90,13 +90,13 @@ it("offers all symbol and line-action placeholders without emitting edits", () =
     expect(button).not.toBeNull();
     act(() => button.click());
   }
-  expect(container.querySelectorAll("button")).toHaveLength(20);
+  expect(container.querySelectorAll("button")).toHaveLength(21);
 });
 
 it("offers native selection menu placeholders with familiar clipboard and code actions", async () => {
   await act(async () => root.render(createElement(ProjectCodeSelectionMenu)));
   const labels = [...container.querySelectorAll("button")].map((button) => button.textContent);
-  expect(labels).toEqual(["Cut", "Copy", "Paste", "Select all", "Explain to me with AI", "Toggle comment", "Fold selection"]);
+  expect(labels).toEqual(["Cut", "Copy", "Paste", "Select all", "Explain to me with AI", "Toggle comment"]);
   act(() => container.querySelectorAll("button").forEach((button) => button.click()));
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual(labels);
 });
@@ -130,7 +130,7 @@ it("offers a working keyboard-close command at the end of the action row", () =>
   const actions = container.querySelector('[data-testid="editor-keyboard-actions"]')!;
   const button = actions.querySelector('[aria-label="Hide keyboard"]') as HTMLButtonElement;
   expect(button).not.toBeNull();
-  expect(actions.querySelectorAll("button")[3]).toBe(button);
+  expect(actions.querySelectorAll("button")[4]).toBe(button);
   expect(button.querySelector('[data-icon="keyboard-close-outline"]')).not.toBeNull();
   act(() => button.click());
   expect(state.dismissKeyboard).toHaveBeenCalledOnce();
@@ -143,4 +143,13 @@ it("routes keyboard symbols and line actions to the live editor", async () => {
   expect(onCommand).toHaveBeenLastCalledWith("insert", "{");
   act(() => (container.querySelector('[aria-label="Delete current line"]') as HTMLButtonElement).click());
   expect(onCommand).toHaveBeenLastCalledWith("delete-line");
+});
+
+it("offers cursor folding above symbols without requiring a selection", async () => {
+  const onCommand = vi.fn();
+  await act(async () => root.render(createElement(ProjectCodeKeyboardAccessory, { onCommand, fold: "fold", onDismissKeyboard: state.dismissKeyboard, frame: { screenX: 0, screenY: 500, height: 344, width: 390 } })));
+  const button = container.querySelector<HTMLButtonElement>('[aria-label="Fold current line"]')!;
+  expect(button.disabled).toBe(false);
+  act(() => button.click());
+  expect(onCommand).toHaveBeenCalledWith("fold");
 });

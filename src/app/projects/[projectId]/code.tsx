@@ -384,6 +384,7 @@ const CodeScreen = () => {
           frame={keyboardFrame}
           onCommand={runCommand}
           canComment={interaction?.commands?.canComment}
+          fold={interaction?.commands?.fold}
           onDismissKeyboard={() => editor.current?.dismissKeyboard()}
         >
           {showSelectionMenu ? (

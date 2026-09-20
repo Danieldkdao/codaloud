@@ -63,13 +63,16 @@ vi.mock("@/components/ui/input", () => ({
     value,
     onChangeText,
     accessibilityLabel,
+    containerClassName,
   }: {
     value: string;
+    containerClassName?: string;
     onChangeText: (value: string) => void;
     accessibilityLabel: string;
   }) =>
     createElement("input", {
       value,
+      "data-container-class": containerClassName,
       "aria-label": accessibilityLabel,
       onInput: (event) => onChangeText(event.currentTarget.value),
     }),
@@ -124,6 +127,7 @@ it("toggles replacement and search options without dropping either input", () =>
   };
   act(() => root.render(createElement(Probe)));
   click("Toggle replace");
+  expect(container.querySelector('[aria-label="Find in file"]')?.getAttribute("data-container-class")).toContain("flex-1");
   expect(
     container.querySelector<HTMLInputElement>('[aria-label="Replace with"]')
       ?.value,
@@ -215,4 +219,10 @@ it("debounces problem search, combines severity filters, and selects the exact d
   click("Warnings");
   click("warning: Unused name, Line 2, column 1 · TS2");
   expect(select).toHaveBeenCalledWith(diagnostics[1]);
+});
+
+vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => children }));
+vi.mock("react-native-reanimated", () => {
+  const transition = { duration: () => transition, reduceMotion: () => transition };
+  return { default: { View: ({ children }: { children: ReactNode }) => createElement("div", null, children) }, LinearTransition: transition, FadeIn: transition, FadeOut: transition, ReduceMotion: { System: "system" } };
 });

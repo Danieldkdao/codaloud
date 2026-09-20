@@ -21,7 +21,7 @@ vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition };
   return {
     default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
-    LinearTransition: transition,
+    LinearTransition: transition, FadeIn: transition, FadeOut: transition,
     ReduceMotion: { System: "system" },
   };
 });
@@ -74,7 +74,8 @@ vi.mock("@/components/ui/text", () => {
 });
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => createElement("button", { onClick: onPress }, children) }));
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: (props: { children?: ReactNode }) => createElement(Children, props) }));
-vi.mock("react-native", () => ({ ScrollView: (props: { children?: ReactNode }) => createElement(Children, props), Keyboard: { dismiss: mocks.dismissKeyboard }, AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
+vi.mock("react-native", () => ({
+  useWindowDimensions: () => ({ width: 390, height: 844 }), ScrollView: (props: { children?: ReactNode }) => createElement(Children, props), Keyboard: { dismiss: mocks.dismissKeyboard }, AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
   lifecycle.listeners.add(listener);
   return { remove: () => lifecycle.listeners.delete(listener) };
 } }, View: (props: { children?: ReactNode }) => createElement(Children, props), Pressable: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));

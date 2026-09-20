@@ -18,7 +18,7 @@ vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition };
   return {
     default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
-    LinearTransition: transition,
+    LinearTransition: transition, FadeIn: transition, FadeOut: transition,
     ReduceMotion: { System: "system" },
   };
 });

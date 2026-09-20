@@ -1,3 +1,5 @@
+import { GlassSurface } from "@/components/ui/glass-surface";
+import Animated, { FadeIn, FadeOut, LinearTransition, ReduceMotion } from "react-native-reanimated";
 import { Pressable, ScrollView, View } from "react-native";
 import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
@@ -29,11 +31,13 @@ export const EditorSearchBar = ({
 }) => {
   const disabled = !summary?.total || Boolean(summary.error);
   return (
-    <View className="gap-1 rounded-2xl border border-border bg-card p-2">
+    <Animated.View layout={LinearTransition.duration(220).reduceMotion(ReduceMotion.System)} className="gap-2">
       {replace ? (
-        <View className="flex-row items-center gap-1">
+        <Animated.View entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}><GlassSurface><View className="flex-row items-center gap-1 px-2">
           <Input
-            className="min-w-0 flex-1 text-base"
+            variant="ghost"
+            containerClassName="min-w-0 flex-1"
+            className="text-base"
             accessibilityLabel="Replace with"
             placeholder="Replace with"
             value={query.replace ?? ""}
@@ -59,12 +63,14 @@ export const EditorSearchBar = ({
           >
             <PText>All</PText>
           </Pressable>
-        </View>
+        </View></GlassSurface></Animated.View>
       ) : null}
-      <View className="flex-row items-center gap-1">
+      <GlassSurface><View className="flex-row items-center gap-1 px-2">
         <Input
           autoFocus
-          className="min-w-0 flex-1 text-base"
+          variant="ghost"
+            containerClassName="min-w-0 flex-1"
+            className="text-base"
           accessibilityLabel="Find in file"
           placeholder="Find in file"
           value={query.search}
@@ -87,8 +93,8 @@ export const EditorSearchBar = ({
             className="text-foreground"
           />
         </Pressable>
-      </View>
-      <ScrollView
+      </View></GlassSurface>
+      <GlassSurface><ScrollView
         horizontal
         keyboardShouldPersistTaps="always"
         showsHorizontalScrollIndicator={false}
@@ -180,7 +186,7 @@ export const EditorSearchBar = ({
             className="text-foreground"
           />
         </Pressable>
-      </ScrollView>
-    </View>
+      </ScrollView></GlassSurface>
+    </Animated.View>
   );
 };

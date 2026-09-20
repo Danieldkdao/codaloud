@@ -1,3 +1,4 @@
+import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createEditorFlush } from "@/features/editor/flush";
@@ -10,7 +11,7 @@ import type {
 } from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
 import type { EditorCommand } from "@/features/editor/types";
-import { Alert, View } from "react-native";
+import { Alert, Keyboard, View } from "react-native";
 import CodeEditor, {
   type CodeEditorRef,
   type CodeEditorInteraction,
@@ -114,7 +115,7 @@ const CodeScreen = () => {
     !closingPath &&
     interaction?.key === documents.activeKey;
   const showKeyboardAccessory = Boolean(
-    canShowEditorControls && keyboardFrame && interaction?.focused,
+    canShowEditorControls && !searchOpen && keyboardFrame && interaction?.focused,
   );
   const showSelectionMenu = Boolean(
     canShowEditorControls && interaction?.hasSelection,
@@ -219,26 +220,6 @@ const CodeScreen = () => {
           closingPath={closingPath}
         />
       ) : null}
-      {searchOpen ? (
-        <View className="px-3 py-2">
-          <EditorSearchBar
-            query={searchQuery}
-            summary={searchSummary}
-            replace={replaceOpen}
-            onReplaceChange={setReplaceOpen}
-            onChange={setSearchQuery}
-            onClose={() => setSearchOpen(false)}
-            onCommand={(command) => {
-              if (documents.activeKey && !isWorkspaceBusy)
-                editor.current?.searchCommand(
-                  command,
-                  searchQuery,
-                  documents.activeKey,
-                );
-            }}
-          />
-        </View>
-      ) : null}
       <View className="flex-1">
         {/* Warm the WebView before the first file read, then reuse it for every
             document. The empty editor stays hidden, read-only, and unfocused. */}
@@ -329,15 +310,27 @@ const CodeScreen = () => {
           <CodeEditorLoading bottomInset={bottomInset} />
         ) : null}
       </View>
-      {files.activeFilePath && !keyboardFrame && !searchOpen ? (
-        <View
-          className="absolute left-4 right-4 items-center"
-          style={{ bottom: dockHeight + 8 }}
-          pointerEvents="box-none"
-          onLayout={({ nativeEvent }) =>
-            setBadgeHeight(nativeEvent.layout.height)
-          }
-        >
+      {files.activeFilePath && (searchOpen || !keyboardFrame) ? (
+        <EditorBottomBar frame={searchOpen ? keyboardFrame : undefined} dockHeight={dockHeight} onHeight={setBadgeHeight}>
+          {searchOpen ? (
+
+          <EditorSearchBar
+            query={searchQuery}
+            summary={searchSummary}
+            replace={replaceOpen}
+            onReplaceChange={setReplaceOpen}
+            onChange={setSearchQuery}
+            onClose={() => { setSearchOpen(false); Keyboard.dismiss(); }}
+            onCommand={(command) => {
+              if (documents.activeKey && !isWorkspaceBusy)
+                editor.current?.searchCommand(
+                  command,
+                  searchQuery,
+                  documents.activeKey,
+                );
+            }}
+          />
+          ) : (
           <ProjectCodeToolbar
             onProblems={() => setProblemsOpen(true)}
             disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
@@ -376,8 +369,8 @@ const CodeScreen = () => {
                     void query.refetch();
                   }
             }
-          />
-        </View>
+          />          )}
+        </EditorBottomBar>
       ) : null}
       {showKeyboardAccessory ? (
         <ProjectCodeKeyboardAccessory

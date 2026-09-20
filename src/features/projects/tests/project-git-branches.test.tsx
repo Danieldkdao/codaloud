@@ -96,13 +96,8 @@ vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => ({ d
 vi.mock("../hooks/use-project-remote-branches", () => ({ useProjectRemoteBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
 vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false)) live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-const switchTab = vi.fn((name: string) => { activeTab = name; });
+const navigation = vi.hoisted(() => ({ push: vi.fn(), navigate: vi.fn() }));
 vi.mock("expo-router", () => ({ useRouter: () => navigation, usePathname: () => `/projects/${live.projectId}/${activeTab}`, useLocalSearchParams: () => ({ projectId: live.projectId }) }));
-vi.mock("expo-router/ui", () => ({
-  TabTrigger: ({ children }: { children: ReactNode }) => children,
-  useTabTrigger: () => ({ switchTab }),
-}));
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition };
   return {
@@ -128,7 +123,7 @@ const Workspace = () => (
       <ProjectWorkspaceChangesProvider>
         <GitScreen />
         <ProjectWorkspaceFileCreationProvider projectId="demo">
-          <ProjectWorkspaceDock />
+          {activeTab !== "files" ? <ProjectWorkspaceDock /> : null}
         </ProjectWorkspaceFileCreationProvider>
       </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
@@ -297,7 +292,7 @@ beforeEach(() => {
   live.query.mockClear();
   live.loadMore.mockClear(); live.retry.mockClear();
   Object.assign(live, { isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
-  switchTab.mockClear();
+  navigation.navigate.mockReset().mockImplementation(({ pathname }: { pathname: string }) => { activeTab = pathname.split("/").at(-1)!; });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
@@ -311,9 +306,13 @@ it("opens each supporting screen directly from Code without the workspace menu",
     act(() => root.render(createElement(Workspace)));
     expect(container.querySelector('[aria-label^="Workspace:"]')).toBeNull();
     click(label);
-    expect(switchTab).toHaveBeenLastCalledWith(name, { resetOnFocus: false });
+    expect(navigation.navigate).toHaveBeenLastCalledWith({ pathname: `/projects/[projectId]/${name}`, params: { projectId: live.projectId } });
     act(() => root.render(createElement(Workspace)));
     const dock = container.querySelector<HTMLElement>('[data-testid="project-workspace-dock"]');
+    if (name === "files") {
+      expect(dock).toBeNull();
+      continue;
+    }
     expect(dock).not.toBeNull();
     expect(Number(dock!.style.zIndex)).toBeGreaterThan(1);
     expect(dock!.querySelector('[aria-label="Microphone"]')).not.toBeNull();
@@ -473,7 +472,7 @@ it("shows only the active screen's controls in the lower bar", () => {
   expect(labels()).toContain("Microphone");
   expect(labels()).toContain("Search Git");
   expect(labels()).not.toContain("Undo");
-  for (const tab of ["files", "agent", "code"]) {
+  for (const tab of ["agent", "code"]) {
     activeTab = tab;
     act(() => root.render(createElement(Workspace)));
     expect(labels()).toContain("Microphone");
@@ -484,10 +483,10 @@ it("shows only the active screen's controls in the lower bar", () => {
       expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
     } else {
-      expect(labels()).toContain(tab === "files" ? "Search files" : "Search activity");
+      expect(labels()).toContain("Search activity");
       expect(labels()).not.toContain("Previous file");
       expect(labels()).not.toContain("Undo");
-      expect(container.querySelector('[data-branch="Folder"]') !== null).toBe(tab === "files");
+      expect(container.querySelector('[data-branch="Folder"]')).toBeNull();
     }
   }
 });

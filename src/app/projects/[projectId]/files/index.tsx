@@ -25,7 +25,7 @@ const FilesScreen = () => {
   const fileSearch = useProjectWorkspaceFileSearch();
   const workspace = useProjectWorkspaceBranch();
   const saves = useProjectFileSaveRegistry();
-  const [currentDirectory, setCurrentDirectory] = useState("");
+  const { currentDirectory, setCurrentDirectory } = fileSearch;
   const { query, creation, update, deletion } = useProjectFiles(
     projectId,
     currentDirectory,
@@ -52,7 +52,7 @@ const FilesScreen = () => {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const openFile = (path: string) => {
     currentFile.openFile(path);
-    router.navigate({
+    router.dismissTo({
       pathname: "/projects/[projectId]/code",
       params: { projectId },
     });

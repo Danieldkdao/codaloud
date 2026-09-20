@@ -14,7 +14,9 @@ import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-pro
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectBranchMenu } from "./project-branch-menu";
 
-export const ProjectWorkspaceDock = () => {
+export const ProjectWorkspaceDock = ({
+  tab,
+}: { tab?: "code" | "git" | "agent" } = {}) => {
   const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -23,20 +25,20 @@ export const ProjectWorkspaceDock = () => {
   const [isGitSearchOpen, setIsGitSearchOpen] = useState(false);
   const [branchPickerOpen, setBranchPickerOpen] = useState(false);
   const pathname = usePathname();
-  // The workspace tab precedes any nested screens, such as files/preview.
-  const routeName = pathname.split("/")[3];
+  // Keep this screen's controls stable while the Files modal covers it.
+  const routeName = tab ?? pathname.split("/")[3];
   const activeTab =
-    routeName === "files" || routeName === "git" || routeName === "agent"
-      ? routeName
-      : "code";
-  // Six 44-point targets plus the 56-point microphone fit even at 320 points.
+    routeName === "git" || routeName === "agent" ? routeName : "code";
+  // Preserve six 44-point targets plus the 56-point microphone on small phones.
+  // Wider phones share the extra room between larger targets and real gaps.
+  const safeWidth = width - insets.left - insets.right;
   const horizontalPadding =
     activeTab === "code"
-      ? Math.min(
-          16,
-          Math.max(0, (width - insets.left - insets.right - 320) / 2),
-        )
+      ? Math.min(12, Math.max(0, (safeWidth - 320) / 2))
       : 16;
+  const actionGap = activeTab === "code"
+    ? Math.min(4, Math.max(0, (safeWidth - horizontalPadding * 2 - 320) / 12))
+    : 4;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
   useEffect(() => {
@@ -84,14 +86,16 @@ export const ProjectWorkspaceDock = () => {
             <GlassSurface borderRadius={36}>
               <View
                 className="flex-row items-center py-2"
-                style={{ paddingHorizontal: activeTab === "code" ? 0 : 8 }}
+                style={{ paddingHorizontal: activeTab === "code" ? 0 : 8, gap: actionGap }}
               >
                 <View
                   style={{
                     flex: 1,
                     minWidth: 0,
                     flexDirection: "row",
+                    alignItems: "center",
                     justifyContent: "center",
+                    gap: actionGap,
                   }}
                 >
                   <ProjectActionButtonsLeft
@@ -103,7 +107,7 @@ export const ProjectWorkspaceDock = () => {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Microphone"
-                  className="size-14 items-center justify-center rounded-full bg-primary active:bg-primary/90"
+                  className="size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90"
                 >
                   <Icon
                     family="Feather"
@@ -118,7 +122,9 @@ export const ProjectWorkspaceDock = () => {
                     flex: 1,
                     minWidth: 0,
                     flexDirection: "row",
+                    alignItems: "center",
                     justifyContent: "center",
+                    gap: actionGap,
                   }}
                 >
                   <ProjectActionButtonsRight

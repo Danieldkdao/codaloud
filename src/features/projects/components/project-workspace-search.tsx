@@ -116,16 +116,16 @@ export const ProjectWorkspaceSearch = ({
 
   useEffect(() => {
     if (!anchor) return;
+    const updateKeyboardOffset = (screenY: number, duration: number) => {
+      keyboardOffset.value = withTiming(
+        Math.max(0, anchor.windowTop + buttonSize + 12 - screenY),
+        { duration: reducedMotion ? 0 : duration },
+      );
+    };
     const show = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow",
       (event) => {
-        keyboardOffset.value = withTiming(
-          Math.max(
-            0,
-            anchor.windowTop + buttonSize + 12 - event.endCoordinates.screenY,
-          ),
-          { duration: reducedMotion ? 0 : event.duration || 250 },
-        );
+        updateKeyboardOffset(event.endCoordinates.screenY, event.duration || 250);
       },
     );
     const hide = Keyboard.addListener(
@@ -136,6 +136,10 @@ export const ProjectWorkspaceSearch = ({
         });
       },
     );
+    // Moving focus from the editor may leave the keyboard open, with no new
+    // show event. Position search above its existing frame before focusing it.
+    const metrics = Keyboard.metrics();
+    if (metrics) updateKeyboardOffset(metrics.screenY, 0);
     return () => {
       show.remove();
       hide.remove();

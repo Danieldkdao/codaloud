@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { Keyboard, type View } from "react-native";
+import { withTiming } from "react-native-reanimated";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
@@ -14,6 +15,7 @@ const workspace = vi.hoisted(() => ({ projectId: "project-one", commitSearch: ""
 const touches = vi.hoisted(() => ({ claimed: 0, rootTop: 0, back: new Set<() => boolean>() }));
 const transparency = vi.hoisted(() => ({ read: vi.fn(), onChange: undefined as ((enabled: boolean) => void) | undefined }));
 const switchCommands = vi.hoisted(() => ({ setValue: vi.fn() }));
+const keyboardFrame = vi.hoisted(() => ({ current: undefined as { screenY: number; screenX: number; width: number; height: number } | undefined }));
 vi.mock("expo-glass-effect", () => ({
   isGlassEffectAPIAvailable: () => true,
   isLiquidGlassAvailable: () => true,
@@ -68,7 +70,7 @@ vi.mock("react-native", () => ({
     return createElement("div", { role: "dialog" }, children,
       createElement("button", { onClick: onRequestClose, "aria-label": "System back" }));
   },
-  Keyboard: { dismiss: vi.fn(), addListener: () => ({ remove: () => {} }) },
+  Keyboard: { dismiss: vi.fn(), metrics: () => keyboardFrame.current, addListener: () => ({ remove: () => {} }) },
   Platform: { OS: "ios" },
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   StyleSheet: { absoluteFill: {} },
@@ -79,7 +81,7 @@ vi.mock("react-native-reanimated", () => ({
   useSharedValue: (value: number) => useRef({ value }).current,
   useAnimatedStyle: () => ({}),
   useReducedMotion: () => true,
-  withTiming: (value: number, _config: unknown, complete?: (finished: boolean) => void) => { complete?.(true); return value; },
+  withTiming: vi.fn((value: number, _config: unknown, complete?: (finished: boolean) => void) => { complete?.(true); return value; }),
   cancelAnimation: () => {},
   Easing: { out: (easing: unknown) => easing, cubic: () => {} },
 }));
@@ -91,7 +93,7 @@ vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Bool
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children) }));
-vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", null, children) : null }));
+vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children, onOpenChange }: { open: boolean; children: ReactNode; onOpenChange: (open: boolean) => void }) => open ? createElement("div", null, children, createElement("button", { "aria-label": "Dismiss filters", onClick: () => onOpenChange(false) })) : null }));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ ref, value, onChangeText, placeholder, variant }: { ref?: Ref<unknown>; value: string; onChangeText: (text: string) => void; placeholder: string; variant: string }) => {
     useImperativeHandle(ref, () => ({ focus: () => {} }));
@@ -110,7 +112,7 @@ const FileSearchScreen = ({ showSearch = true }: { showSearch?: boolean }) => {
       : <span>Original directory</span>}</div>
     <span data-query>{search.query}</span><span data-applied>{search.debouncedQuery}</span><span data-scope>{search.scope}</span>
     <span data-folder-scoped>{String(search.isCurrentFolderScoped)}</span>
-    {showSearch && <ProjectWorkspaceFileSearch anchorRef={{ current: null }} />}
+    {showSearch && <ProjectWorkspaceFileSearch />}
   </>;
 };
 const FileSearchWorkspace = () => <ProjectWorkspaceFileSearchProvider><FileSearchScreen /></ProjectWorkspaceFileSearchProvider>;
@@ -142,8 +144,16 @@ beforeEach(() => {
   act(() => root.render(createElement(ProjectWorkspaceSearch)));
 });
 afterEach(() => {
+  keyboardFrame.current = undefined;
   act(() => root.unmount());
   vi.useRealTimers();
+});
+
+it("opens floating search above an already-visible keyboard without waiting for another show event", () => {
+  keyboardFrame.current = { screenY: 480, screenX: 0, width: 390, height: 364 };
+  click("Search files");
+  // Anchor top 540 + field height 56 + gap 12 - keyboard top 480.
+  expect(withTiming).toHaveBeenCalledWith(128, expect.any(Object));
 });
 
 it("opens an editable ghost search bar and dismisses through the outside-tap surface", () => {
@@ -194,7 +204,6 @@ it("supports system dismissal without an explicit close control", () => {
 
 it("applies file filters immediately and retains selections when search reopens", () => {
   act(() => root.render(createElement(FileSearchWorkspace)));
-  click("Search files");
   typeSearch("project");
   expect(container.querySelector("[data-files-screen]")?.textContent).toBe("Search results");
   expect(container.querySelector("[data-applied]")?.textContent).toBe("");
@@ -210,8 +219,7 @@ it("applies file filters immediately and retains selections when search reopens"
   expect(container.querySelector("[data-scope]")?.textContent).toBe("all");
   click("File title");
   expect(container.querySelector("[data-scope]")?.textContent).toBe("content");
-  click("Dismiss search");
-  click("Search files");
+  click("Dismiss filters");
   expect(container.querySelector("input")?.value).toBe("project");
   click("Search filters");
   expect(titleSwitch()?.getAttribute("aria-checked")).toBe("false");
@@ -222,7 +230,6 @@ it("applies file filters immediately and retains selections when search reopens"
 
 it("does not send a stale value back to either native switch during its first toggle", () => {
   act(() => root.render(<FileSearchWorkspace />));
-  click("Search files");
   click("Search filters");
   click("File title");
   expect(switchCommands.setValue).not.toHaveBeenCalled();
@@ -234,8 +241,7 @@ it("does not send a stale value back to either native switch during its first to
   expect(container.querySelector("[data-scope]")?.textContent).toBe("all");
   expect(container.querySelector('[aria-label="File title"]')?.getAttribute("aria-checked")).toBe("false");
   expect(container.querySelector('[aria-label="File content"]')?.getAttribute("aria-checked")).toBe("false");
-  click("Dismiss search");
-  click("Search files");
+  click("Dismiss filters");
   click("Search filters");
   click("File title");
   expect(switchCommands.setValue).not.toHaveBeenCalled();
@@ -244,7 +250,6 @@ it("does not send a stale value back to either native switch during its first to
 
 it("toggles current-folder scoping immediately and retains the selection when search reopens", () => {
   act(() => root.render(<FileSearchWorkspace />));
-  click("Search files");
   click("Search filters");
   const folderSwitch = () => container.querySelector('[aria-label="Current folder"]');
   expect(folderSwitch()?.getAttribute("aria-checked")).toBe("false");
@@ -255,8 +260,7 @@ it("toggles current-folder scoping immediately and retains the selection when se
   expect(folderSwitch()?.getAttribute("aria-checked")).toBe("true");
   expect(container.querySelector("[data-folder-scoped]")?.textContent).toBe("true");
   expect(switchCommands.setValue).not.toHaveBeenCalled();
-  click("Dismiss search");
-  click("Search files");
+  click("Dismiss filters");
   click("Search filters");
   expect(folderSwitch()?.getAttribute("aria-checked")).toBe("true");
   click("Current folder");
@@ -272,7 +276,6 @@ it("synchronizes external filter changes while the sheet stays open", () => {
     return <FileSearchScreen />;
   };
   act(() => root.render(<ProjectWorkspaceFileSearchProvider><ExternalFilterControl /></ProjectWorkspaceFileSearchProvider>));
-  click("Search files");
   click("Search filters");
   click("File title");
   act(() => updateTitle(false));
@@ -284,7 +287,6 @@ it("synchronizes external filter changes while the sheet stays open", () => {
 
 it("tracks the draft immediately, applies only the final query, and clears results immediately", () => {
   act(() => root.render(createElement(FileSearchWorkspace)));
-  click("Search files");
   typeSearch("pro");
   act(() => vi.advanceTimersByTime(500));
   typeSearch("project");
@@ -301,13 +303,11 @@ it("tracks the draft immediately, applies only the final query, and clears resul
 
 it("finishes pending file searches when the input unmounts and restores the draft on return", () => {
   act(() => root.render(<ProjectWorkspaceFileSearchProvider><FileSearchScreen /></ProjectWorkspaceFileSearchProvider>));
-  click("Search files");
   typeSearch("pending");
   act(() => root.render(<ProjectWorkspaceFileSearchProvider><FileSearchScreen showSearch={false} /></ProjectWorkspaceFileSearchProvider>));
   act(() => vi.advanceTimersByTime(1000));
   expect(container.querySelector("[data-applied]")?.textContent).toBe("pending");
   act(() => root.render(<ProjectWorkspaceFileSearchProvider><FileSearchScreen /></ProjectWorkspaceFileSearchProvider>));
-  click("Search files");
   expect(container.querySelector("input")?.value).toBe("pending");
 });
 
@@ -418,7 +418,6 @@ it("preserves the live file search and filters across glass preference changes",
   await act(async () => root.render(
     <ProjectWorkspaceFileSearchProvider><GlassSurface><FileSearchScreen /></GlassSurface></ProjectWorkspaceFileSearchProvider>,
   ));
-  click("Search files");
   const input = typeSearch("project");
   click("Search filters");
   click("File content");
@@ -430,8 +429,8 @@ it("preserves the live file search and filters across glass preference changes",
   }
   act(() => vi.advanceTimersByTime(1000));
   expect(container.querySelector("[data-applied]")?.textContent).toBe("project");
-  expect(container.querySelector('[data-testid="project-search-overlay"]')).not.toBeNull();
-  click("Dismiss search");
+  expect(container.querySelector('[data-testid="project-search-overlay"]')).toBeNull();
+  click("Dismiss filters");
   expect(container.querySelector('[data-testid="project-search-overlay"]')).toBeNull();
 });
 
@@ -533,7 +532,6 @@ it("dismisses search and activates an outside control with the same touch", () =
 
 it("leaves input and filter touches alone and removes its layer on unmount", () => {
   act(() => root.render(<FileSearchWorkspace />));
-  click("Search files");
   const input = container.querySelector("input")!;
   act(() => { input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); vi.runAllTicks(); });
   expect(container.querySelector("input")).toBe(input);
@@ -551,4 +549,15 @@ it("positions the non-modal search relative to the app root", () => {
   touches.rootTop = 24;
   click("Search files");
   expect(container.querySelector("[data-search-top]")?.getAttribute("data-search-top")).toBe("516");
+});
+
+
+it("keeps file search visible without an overlay and clears the current results", () => {
+  act(() => root.render(<FileSearchWorkspace />));
+  expect(container.querySelector("input")).not.toBeNull();
+  expect(container.querySelector('[data-testid="project-search-overlay"]')).toBeNull();
+  typeSearch("project");
+  click("Clear file search");
+  expect(container.querySelector("input")?.value).toBe("");
+  expect(container.querySelector("[data-files-screen]")?.textContent).toBe("Original directory");
 });

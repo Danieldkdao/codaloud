@@ -12,7 +12,7 @@ import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-p
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
 import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
-import type { Tabs, TabSlot } from "expo-router/ui";
+import type { Stack } from "expo-router";
 
 vi.mock("react-native-reanimated", () => {
   const transition = { duration: () => transition, reduceMotion: () => transition };
@@ -24,26 +24,23 @@ vi.mock("react-native-reanimated", () => {
 });
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 
-const mocks = vi.hoisted(() => ({ projectId: "project-one", readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
+const mocks = vi.hoisted(() => ({ projectId: "project-one", filesVisible: true, readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
 const redirect = vi.hoisted(() => vi.fn());
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
 vi.mock("@/features/projects/components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children) }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("expo-router", () => ({ Redirect: ({ href }: { href: unknown }) => { redirect(href); return null; }, useSegments: () => ["projects", "[projectId]", "files"], useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn() }) }));
+vi.mock("expo-router", () => ({ Redirect: ({ href }: { href: unknown }) => { redirect(href); return null; }, usePathname: () => `/projects/${mocks.projectId}/code`, useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn(), dismissTo: vi.fn() }), Stack: Object.assign((props: ComponentProps<typeof Stack>) => { stackOptions = props.screenOptions; const renderScreen = (name: string, Screen: typeof FilesScreen) => props.screenLayout!({
+  route: { key: name, name }, children: createElement(Screen),
+} as Parameters<NonNullable<ComponentProps<typeof Stack>["screenLayout"]>>[0]);
+return createElement(Fragment, null, props.children, createElement(SelectionProbe), mocks.filesVisible ? renderScreen("files", FilesScreen) : null, renderScreen("code", CodeScreen)); }, { Screen: ({ name, options }: { name: string; options?: { presentation?: string } }) => { screenOptions.set(name, options); return null; } }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {
   selection = useProjectWorkspaceCurrentFile();
   creation = useProjectWorkspaceFileCreation();
   return null;
 };
-let tabOptions: ComponentProps<typeof Tabs>["options"];
-let detachInactiveScreens: ComponentProps<typeof TabSlot>["detachInactiveScreens"];
-vi.mock("expo-router/ui", () => ({
-  Tabs: (props: ComponentProps<typeof Tabs>) => { tabOptions = props.options; return createElement(Children, props); },
-  TabList: () => null,
-  TabTrigger: () => null,
-  TabSlot: (props: ComponentProps<typeof TabSlot>) => { detachInactiveScreens = props.detachInactiveScreens; return createElement(Fragment, null, createElement(SelectionProbe), createElement(FilesScreen), createElement(CodeScreen)); },
-}));
+let stackOptions: ComponentProps<typeof Stack>["screenOptions"];
+const screenOptions = new Map<string, { presentation?: string } | undefined>();
 vi.mock("@/features/projects/components/project-setup-gate", () => ({ ProjectSetupGate: (props: { children?: ReactNode }) => createElement(Children, props) }));
 vi.mock("@/features/projects/components/project-workspace-dock", () => ({ ProjectWorkspaceDock: () => null }));
 vi.mock("@/features/projects/components/project-files-list", () => ({ ProjectFilesList: (props: ComponentProps<typeof ProjectFilesList>) => { fileList = props; return null; } }));
@@ -58,7 +55,7 @@ vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
-vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }) }));
+vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: false }), useThemeColor: () => "transparent" }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, onSelect }: { paths: string[]; onSelect: (path: string) => void }) => createElement("div", null, paths.map((path) => createElement("button", { key: path, onClick: () => onSelect(path) }, path))) }));
 vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: () => null }));
@@ -101,6 +98,7 @@ const result = (path: string, isDir = false) => ({ error: false, message: "Done.
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.projectId = "project-one";
+  mocks.filesVisible = true;
   mocks.readContent.mockReset().mockImplementation(async (_project: string, path: string) => ({ path, content: "server contents", size: 15 }));
   mocks.update.mockReset(); mocks.delete.mockReset(); mocks.create.mockReset();
   mocks.save.mockReset().mockImplementation(async (_project, input) => ({ error: false, message: "Saved.", data: { path: input.path, size: Buffer.byteLength(input.content), contentHash: createHash("sha256").update(input.content).digest("hex") } }));
@@ -111,15 +109,17 @@ beforeEach(async () => {
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); });
 
-it("retains native screen containment and default lazy navigation without reading an unselected file", () => {
-  expect(tabOptions?.screenOptions).toBeUndefined();
-  expect(detachInactiveScreens).toBe(true);
+it("presents only Files as a modal without reading an unselected file", () => {
+  expect(stackOptions).toMatchObject({ headerShown: false });
+  expect(screenOptions.get("files")?.presentation).toBe("modal");
+  expect(screenOptions.get("git")?.presentation).not.toBe("modal");
+  expect(screenOptions.get("agent")?.presentation).not.toBe("modal");
   expect(mocks.readContent).not.toHaveBeenCalled();
 });
 
 it("opens projects in Code and makes it the system-back destination for supporting screens", () => {
   expect(projectSettings.initialRouteName).toBe("code");
-  expect(tabOptions?.backBehavior).toBe("initialRoute");
+  expect(projectSettings.anchor).toBe("code");
   act(() => root.render(createElement(ProjectScreen)));
   expect(redirect).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId: mocks.projectId } });
 });
@@ -412,4 +412,16 @@ it("drains edits before deletion and ignores late edits after confirmed deletion
   expect([...selection.openFilePaths]).toEqual([]);
   await act(async () => lateChange("late"));
   expect(mocks.save).toHaveBeenCalledOnce();
+});
+
+
+it("retains the browsed folder when Files is dismissed and reopened", async () => {
+  act(() => fileList.onDirectoryPress("src"));
+  await flush();
+  expect(fileList.parentDirectory).toBe("");
+  mocks.filesVisible = false;
+  await render();
+  mocks.filesVisible = true;
+  await render();
+  expect(fileList.parentDirectory).toBe("");
 });

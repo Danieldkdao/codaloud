@@ -110,8 +110,7 @@ export const ProjectCodeStatus = ({
             <ActivityIndicator size="small" className="text-muted-foreground" />
           ) : (
             <Icon
-              family="Feather"
-              name={presentation.icon}
+              {...presentation.icon}
               size={22}
               className={presentation.className}
             />

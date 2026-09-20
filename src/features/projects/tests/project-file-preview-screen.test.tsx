@@ -143,7 +143,7 @@ it("opens the previewed file in Code only when the floating action is pressed", 
   expect(editorProps().bottomInset).toBeGreaterThan(80);
   act(() => button!.click());
   expect(mocks.selectFile).toHaveBeenCalledExactlyOnceWith("src/My File [id].tsx");
-  expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
+  expect(mocks.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
 });
 
 it("shows loading while fetching and opens an empty file successfully", async () => {

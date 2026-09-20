@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ReactNode, type Ref } from "react";
+import { act, createElement, useState, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FilesScreen from "@/app/projects/[projectId]/files";
@@ -16,7 +16,10 @@ vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({ usePr
 
 const fileCreation = vi.hoisted(() => ({ kind: null as ProjectFileKind | null, begin: vi.fn(), finish: vi.fn() }));
 const fileSearch = vi.hoisted(() => ({ query: "", debouncedQuery: "", scope: "all", isSearching: false }));
-vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => fileSearch }));
+vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({ useProjectWorkspaceFileSearch: () => {
+  const [currentDirectory, setCurrentDirectory] = useState("");
+  return { ...fileSearch, currentDirectory, setCurrentDirectory };
+} }));
 vi.mock("@/features/projects/hooks/use-project-file-search", () => ({ useProjectFileSearch: () => ({
   data: { pages: [{ files: [{ path: "docs/guide.md", titleMatches: false, contentMatchCount: 1, contentSearched: true }], totalCount: 1 }] },
   isPending: false, isFetching: false, isFetchingNextPage: false, fetchStatus: "idle", error: null,
@@ -28,7 +31,7 @@ vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFi
 }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => fileCreation }));
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), selectFile: vi.fn(), confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
+const mocks = vi.hoisted(() => ({ dismissTo: vi.fn(), selectFile: vi.fn(), confirm: vi.fn(), delete: vi.fn(), deletePending: false, deleteVariables: { parentPath: "", name: "app", kind: "folder" }, update: vi.fn(), create: vi.fn(), success: vi.fn(), alert: vi.fn(), updatePending: false }));
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: null, version: 0, openFile: mocks.selectFile, refreshFile: vi.fn(), renameFiles: vi.fn(), removeFiles: vi.fn() }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
@@ -66,7 +69,7 @@ const files = [
   { name: "dashboard", path: "app/dashboard", isDir: true, size: 0 },
   { name: "page.tsx", path: "app/dashboard/page.tsx", isDir: false, size: 0 },
 ];
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ navigate: mocks.navigate }) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ dismissTo: mocks.dismissTo }) }));
 vi.mock("@/features/projects/hooks/use-project-files", () => ({ useProjectFiles: (_id: string, path: string) => ({
   query: { data: getDirectoryFiles(files, path), isPending: false, isError: false, isFetching: false, refetch: vi.fn() },
   update: { mutateAsync: async (input: { parentPath: string; name: string }) => { await mocks.update(input); return { path: [input.parentPath, input.name].filter(Boolean).join("/") }; }, isPending: mocks.updatePending, variables: { parentPath: "", previousName: "app" } },
@@ -164,15 +167,15 @@ it("replaces the current directory and supports drilling into nested folders", (
   expect(container.textContent).toBe("..page.tsx");
 });
 
-it("selects the full file path and opens the Code tab from any folder", () => {
+it("selects the full file path and dismisses Files to the existing editor from any folder", () => {
   click("package.json, file");
   expect(mocks.selectFile).toHaveBeenLastCalledWith("package.json");
-  expect(mocks.navigate).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
+  expect(mocks.dismissTo).toHaveBeenLastCalledWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
   click("app, folder");
-  expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  expect(mocks.dismissTo).toHaveBeenCalledTimes(1);
   click("page.tsx, file");
   expect(mocks.selectFile).toHaveBeenLastCalledWith("app/page.tsx");
-  expect(mocks.navigate).toHaveBeenCalledTimes(2);
+  expect(mocks.dismissTo).toHaveBeenCalledTimes(2);
 });
 
 

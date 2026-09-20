@@ -10,6 +10,8 @@ import { getProjectFileSearchScope } from "@/features/projects/lib/file-search";
 import type { ProjectFileSearchScope } from "@/features/projects/types";
 
 type ProjectWorkspaceFileSearchState = {
+  currentDirectory: string;
+  setCurrentDirectory: (path: string) => void;
   query: string;
   setQuery: (query: string) => void;
   debouncedQuery: string;
@@ -33,6 +35,8 @@ export const ProjectWorkspaceFileSearchProvider = ({
 }: {
   children: ReactNode;
 }) => {
+  // Keep the folder with its search scope when the Files modal is dismissed.
+  const [currentDirectory, setCurrentDirectory] = useState("");
   const [query, setDraftQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   // Keep the pending search with the workspace when its floating input unmounts.
@@ -61,6 +65,8 @@ export const ProjectWorkspaceFileSearchProvider = ({
   return (
     <ProjectWorkspaceFileSearchContext
       value={{
+        currentDirectory,
+        setCurrentDirectory,
         query,
         setQuery,
         debouncedQuery,

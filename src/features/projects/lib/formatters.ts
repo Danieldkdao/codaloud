@@ -43,35 +43,35 @@ export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
       return {
         label: "Loading file…",
         busy: true,
-        icon: "refresh-cw" as const,
+        icon: { family: "Feather" as const, name: "refresh-cw" as const },
         className: "text-muted-foreground",
       };
     case "pending":
       return {
         label: "Changes waiting to save…",
         busy: true,
-        icon: "refresh-cw" as const,
+        icon: { family: "Feather" as const, name: "refresh-cw" as const },
         className: "text-muted-foreground",
       };
     case "saving":
       return {
         label: "Saving file…",
         busy: true,
-        icon: "refresh-cw" as const,
+        icon: { family: "Feather" as const, name: "refresh-cw" as const },
         className: "text-muted-foreground",
       };
     case "saved":
       return {
         label: "File saved",
         busy: false,
-        icon: "check-circle" as const,
+        icon: { family: "MaterialCommunityIcons" as const, name: "cloud-check-outline" as const },
         className: "text-success-foreground",
       };
     case "error":
       return {
         label: "Couldn't save file. Tap to retry.",
         busy: false,
-        icon: "alert-circle" as const,
+        icon: { family: "Feather" as const, name: "alert-circle" as const },
         className: "text-destructive",
       };
   }

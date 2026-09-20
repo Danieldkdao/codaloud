@@ -1,4 +1,4 @@
-import { useCallback, useState, type RefObject } from "react";
+import { useState } from "react";
 import {
   Keyboard,
   Pressable,
@@ -15,7 +15,7 @@ import { PText } from "@/components/ui/text";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
-import { ProjectWorkspaceSearch } from "./project-workspace-search";
+import { Input } from "@/components/ui/input";
 import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-project-workspace-file-search";
 
 type SearchFilterRowProps = {
@@ -38,7 +38,7 @@ const SearchFilterRow = ({
   const [switchValue, setSwitchValue] = useState(value);
   const [previousValue, setPreviousValue] = useState(value);
 
-  // Overlay props arrive in a later commit. A native switch must receive its
+  // Sheet props can arrive in a later commit. A native switch must receive its
   // new value immediately or RN sends a command that reverses the gesture.
   // Reconcile external changes before the native switch renders.
   if (previousValue !== value) {
@@ -71,41 +71,77 @@ const SearchFilterRow = ({
           ios_backgroundColor={border}
         />
       </View>
-      <PText className="text-base text-muted-foreground">
-        {description}
-      </PText>
+      <PText className="text-base text-muted-foreground">{description}</PText>
     </View>
   );
 };
 
-export const ProjectWorkspaceFileSearch = ({
-  anchorRef,
-}: {
-  anchorRef: RefObject<View | null>;
-}) => {
+export const ProjectWorkspaceFileSearch = () => {
   const [open, setOpen] = useState(false);
-  const { query, setQuery, title, setTitle, content, setContent, currentFolder, setCurrentFolder } = useProjectWorkspaceFileSearch();
+  const {
+    query,
+    setQuery,
+    title,
+    setTitle,
+    content,
+    setContent,
+    currentFolder,
+    setCurrentFolder,
+  } = useProjectWorkspaceFileSearch();
   const card = useThemeColor("card");
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const close = () => setOpen(false);
-  const onSearchOpenChange = useCallback((isOpen: boolean) => {
-    if (!isOpen) setOpen(false);
-  }, []);
+  const presentation = formatWorkspaceSearch("files");
 
   return (
-    <ProjectWorkspaceSearch
-      anchorRef={anchorRef}
-      onOpenChange={onSearchOpenChange}
-      value={query}
-      onDraftChange={setQuery}
-      {...formatWorkspaceSearch("files")}
-      accessory={
+    <>
+      <View className="min-h-14 flex-row items-center pl-4 pr-1">
+        <Icon
+          family="Feather"
+          name="search"
+          size={20}
+          className="text-muted-foreground"
+          accessible={false}
+        />
+        <Input
+          type="search"
+          variant="ghost"
+          value={query}
+          onChangeText={setQuery}
+          placeholder={presentation.placeholder}
+          accessibilityLabel={presentation.accessibilityLabel}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          onSubmitEditing={Keyboard.dismiss}
+          containerClassName="min-w-0 flex-1"
+          className="h-14 border-0 bg-transparent px-2 focus:border-transparent focus:outline-0"
+        />
+        {query.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear file search"
+            onPress={() => setQuery("")}
+            className="size-11 items-center justify-center rounded-full active:bg-secondary"
+          >
+            <Icon
+              family="Feather"
+              name="x"
+              size={20}
+              className="text-muted-foreground"
+              accessible={false}
+            />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search filters"
           accessibilityHint="Choose file title, file content, or current folder"
-          accessibilityState={{ expanded: open, selected: title || content || currentFolder }}
+          accessibilityState={{
+            expanded: open,
+            selected: title || content || currentFolder,
+          }}
           onPress={() => {
             Keyboard.dismiss();
             setOpen(true);
@@ -123,11 +159,10 @@ export const ProjectWorkspaceFileSearch = ({
             accessible={false}
           />
         </Pressable>
-      }
-    >
+      </View>
       <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
         <ScrollView
-          style={{ width, maxHeight: Math.max(160, height - insets.top - 80) }}
+          style={{ maxHeight: Math.max(160, height - insets.top - 80) }}
           contentInsetAdjustmentBehavior="never"
           contentContainerStyle={{
             paddingLeft: 20 + insets.left,
@@ -164,6 +199,6 @@ export const ProjectWorkspaceFileSearch = ({
           </View>
         </ScrollView>
       </ContentSheet>
-    </ProjectWorkspaceSearch>
+    </>
   );
 };

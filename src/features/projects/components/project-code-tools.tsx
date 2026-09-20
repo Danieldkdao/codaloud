@@ -87,7 +87,7 @@ export const ProjectCodeTools = () => {
         accessibilityHint="Opens a preview of upcoming editing commands and settings."
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen(true)}
-        className="h-12 w-11 shrink-0 items-center justify-center rounded-full active:bg-secondary"
+        className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
       >
         <Icon
           family="Feather"

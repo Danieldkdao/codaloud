@@ -130,7 +130,7 @@ const FilePreviewScreen = () => {
             dockHeight={dockHeight}
             onOpen={() => {
               currentFile.openFile(filePath);
-              router.navigate({
+              router.dismissTo({
                 pathname: "/projects/[projectId]/code",
                 params: { projectId },
               });

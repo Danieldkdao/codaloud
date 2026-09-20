@@ -100,7 +100,7 @@ it("provides an explicit home action while the workspace is loading", async () =
   expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
 });
 
-it.each(["files", "git", "agent"])("returns from %s to the current project's Code screen", async (section) => {
+it.each(["git", "agent"])("returns from %s to the current project's Code screen", async (section) => {
   state.query.data = { name: "Example", setupStatus: "ready" };
   state.segments = ["projects", "[projectId]", section];
   await render();
@@ -108,13 +108,13 @@ it.each(["files", "git", "agent"])("returns from %s to the current project's Cod
   const back = container.querySelector<HTMLButtonElement>('[aria-label="Back to Code"]');
   expect(back?.querySelector('[data-icon="chevron-left"]')).not.toBeNull();
   act(() => back!.click());
-  expect(state.navigate).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
-  expect(state.dismissTo).not.toHaveBeenCalled();
+  expect(state.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
+  expect(state.navigate).not.toHaveBeenCalled();
 });
 
-it("keeps Home on Code and Back to Git on nested diffs", async () => {
+it.each(["code", "files"])("keeps the editor Home action behind %s and Back to Git on nested diffs", async (section) => {
   state.query.data = { name: "Example", setupStatus: "ready" };
-  state.segments = ["projects", "[projectId]", "code"];
+  state.segments = ["projects", "[projectId]", section];
   await render();
   const home = state.headerOptions.headerLeft?.();
   state.segments = ["projects", "[projectId]", "git", "workspace-diff"];

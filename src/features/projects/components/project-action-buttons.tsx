@@ -1,13 +1,11 @@
 import { type RefObject } from "react";
 import { Pressable, type View } from "react-native";
-import { useTabTrigger } from "expo-router/ui";
+import { useRouter } from "expo-router";
 
 import { Icon } from "@/components/ui/icon";
 import { ProjectBranchSelect } from "@/features/projects/components/project-branch-select";
 import { ProjectOtherOptions } from "@/features/projects/components/project-other-options";
-import { ProjectFilesAdd } from "@/features/projects/components/project-files-add";
 import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
-import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
 import { ProjectCommitForm } from "@/features/projects/components/project-commit-form";
 import { ProjectCodeTools } from "@/features/projects/components/project-code-tools";
@@ -20,7 +18,7 @@ import {
 import type { ProjectWorkspaceTab } from "@/features/projects/types";
 
 type ProjectActionButtonsProps = {
-  tab: ProjectWorkspaceTab;
+  tab: Exclude<ProjectWorkspaceTab, "files">;
   branchPickerOpen?: boolean;
   onBranchPickerOpenChange?: (open: boolean) => void;
 };
@@ -31,11 +29,9 @@ export const ProjectActionButtonsLeft = ({
   onBranchPickerOpenChange,
 }: ProjectActionButtonsProps) => {
   const { projectId } = useProjectWorkspaceBranch();
-  const { switchTab } = useTabTrigger({ name: tab });
+  const router = useRouter();
 
   switch (tab) {
-    case "files":
-      return <ProjectFilesAdd />;
     case "code":
       return (
         <>
@@ -46,8 +42,13 @@ export const ProjectActionButtonsLeft = ({
                 key={destination}
                 accessibilityRole="button"
                 accessibilityLabel={presentation.label}
-                onPress={() => switchTab(destination, { resetOnFocus: false })}
-                className="h-12 w-11 shrink-0 items-center justify-center rounded-full active:bg-secondary"
+                onPress={() =>
+                  router.navigate({
+                    pathname: `/projects/[projectId]/${destination}`,
+                    params: { projectId },
+                  })
+                }
+                className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
               >
                 <Icon
                   {...presentation.icon}
@@ -99,7 +100,7 @@ export const ProjectActionButtonsRight = ({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Undo"
-            className="h-12 w-11 shrink-0 items-center justify-center rounded-full active:bg-secondary"
+            className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
           >
             <Icon
               family="Feather"
@@ -112,7 +113,7 @@ export const ProjectActionButtonsRight = ({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Redo"
-            className="h-12 w-11 shrink-0 items-center justify-center rounded-full active:bg-secondary"
+            className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
           >
             <Icon
               family="Feather"
@@ -138,8 +139,6 @@ export const ProjectActionButtonsRight = ({
           />
         </>
       );
-    case "files":
-      return <ProjectWorkspaceFileSearch key={projectId} anchorRef={dockRef} />;
     case "agent":
       return (
         <ProjectWorkspaceSearch

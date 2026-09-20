@@ -53,7 +53,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const workspaceError = setupReady && workspace.isError;
   const checking = workspaceError ? workspace.isFetching : isFetching;
   const isSupportingScreen =
-    ready && ["files", "git", "agent"].includes(segments[2] ?? "");
+    ready && ["git", "agent"].includes(segments[2] ?? "");
   useEffect(() => {
     if (ready) setOpenedProjectId(projectId);
   }, [projectId, ready]);
@@ -102,7 +102,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
                       params: { projectId },
                     })
                   : isSupportingScreen
-                    ? router.navigate({
+                    ? router.dismissTo({
                         pathname: "/projects/[projectId]/code",
                         params: { projectId },
                       })

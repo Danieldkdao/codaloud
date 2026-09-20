@@ -51,23 +51,50 @@ import { editorAutocompletion } from "@/features/editor/completions";
 import { inlineDiagnostics } from "@/features/editor/diagnostics";
 import { transformEditor } from "@/features/editor/transforms";
 import type { CodeIntelligenceOperation } from "@/features/projects/actions/code-intelligence-schemas";
-import { editorSearch, updateEditorSearch, runSearchCommand, getEditorSearchSummary } from "@/features/editor/search";
-import type { EditorSearchCommand, EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
-import { getEditorCommandState, runEditorCommand } from "@/features/editor/commands";
-import type { EditorCommand, EditorCommandState } from "@/features/editor/types";
+import {
+  editorSearch,
+  updateEditorSearch,
+  runSearchCommand,
+  getEditorSearchSummary,
+} from "@/features/editor/search";
+import type {
+  EditorSearchCommand,
+  EditorSearchQuery,
+  EditorSearchSummary,
+} from "@/features/editor/types";
+import {
+  getEditorCommandState,
+  runEditorCommand,
+} from "@/features/editor/commands";
+import type {
+  EditorCommand,
+  EditorCommandState,
+} from "@/features/editor/types";
 import { editorConfiguration } from "@/features/editor/configuration";
 import { defaultEditorPreferences } from "@/features/settings/constants";
 import type { EditorPreferences } from "@/features/settings/types";
-import { formatEditorThemeClass, formatEditorFontFamily } from "@/features/editor/lib/formatters";
+import {
+  formatEditorThemeClass,
+  formatEditorFontFamily,
+} from "@/features/editor/lib/formatters";
 // The shared cn module imports native Alert and cannot load inside Expo DOM.
 import { clsx } from "clsx";
 import "@/global.css";
 import "@/styles/code-editor.css";
 
 export interface CodeEditorRef {
-  revealDiagnostic(from: number, to: number, revision: number, documentKey: string): void;
+  revealDiagnostic(
+    from: number,
+    to: number,
+    revision: number,
+    documentKey: string,
+  ): void;
   transform(operation: CodeIntelligenceOperation, documentKey: string): void;
-  searchCommand(command: EditorSearchCommand, query: EditorSearchQuery, documentKey: string): void;
+  searchCommand(
+    command: EditorSearchCommand,
+    query: EditorSearchQuery,
+    documentKey: string,
+  ): void;
   command(command: EditorCommand, text: string, documentKey: string): void;
   flushChanges(requestId?: string): Promise<void>;
   nextMatch: () => void;
@@ -83,7 +110,10 @@ export type CodeEditorInteraction = {
 
 type CodeEditorProps = {
   searchQuery?: EditorSearchQuery;
-  onSearchSummary?: (summary: EditorSearchSummary, documentKey?: string) => Promise<void>;
+  onSearchSummary?: (
+    summary: EditorSearchSummary,
+    documentKey?: string,
+  ) => Promise<void>;
   onFlushed?: (requestId: string, error: string | null) => Promise<void>;
   onCommandError?: (message: string) => Promise<void>;
   onReadClipboard?: () => Promise<string>;
@@ -151,7 +181,11 @@ const highlightStyle = HighlightStyle.define([
   },
   { tag: tags.operator, color: "var(--syntax-operator)" },
   { tag: [tags.tagName, tags.deleted], color: "var(--syntax-tag)" },
-  { tag: tags.comment, color: "var(--syntax-comment)", fontFamily: "var(--editor-font-italic)" },
+  {
+    tag: tags.comment,
+    color: "var(--syntax-comment)",
+    fontFamily: "var(--editor-font-italic)",
+  },
   {
     tag: [tags.heading, tags.link],
     color: "var(--syntax-function)",
@@ -207,7 +241,11 @@ const CodeEditor = ({
   const searchQueryKey = JSON.stringify(searchQuery ?? { search: "" });
   const flushCallback = useRef(onFlushed);
   flushCallback.current = onFlushed;
-  const clipboard = useRef({ onReadClipboard, onWriteClipboard, onCommandError });
+  const clipboard = useRef({
+    onReadClipboard,
+    onWriteClipboard,
+    onCommandError,
+  });
   clipboard.current = { onReadClipboard, onWriteClipboard, onCommandError };
   const activeFilename = useRef(filename);
   activeFilename.current = filename;
@@ -279,71 +317,133 @@ const CodeEditor = ({
     // Expo’s bridge index signature accepts arbitrary JSON, while callers use
     // the narrower serializable command contract above.
     (ref ?? null) as Ref<DOMImperativeFactory>,
-    () => ({
-      revealDiagnostic: (from: number, to: number, expectedRevision: number, key: string) => {
-        const editor = view.current;
-        if (!editor || key !== activeDocument.current) return;
-        if (expectedRevision !== revision.current || from < 0 || to > editor.state.doc.length) {
-          void clipboard.current.onCommandError?.("This problem changed. Wait for analysis and select it again.").catch(() => {});
-          return;
-        }
-        editor.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: "center" }) });
-      },
-      transform: (operation: CodeIntelligenceOperation, key: string) => {
-        const editor = view.current;
-        if (!editor || key !== activeDocument.current || transformPending.current) return;
-        transformPending.current = true;
-        void transformEditor(editor, activeFilename.current, operation, preferencesRef.current,
-          async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, key) ?? null,
-          () => view.current === editor && activeDocument.current === key,
-        ).catch((error: unknown) => {
-          void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Try again.").catch(() => {});
-        }).finally(() => { transformPending.current = false; });
-      },
-      searchCommand: (command: EditorSearchCommand, query: EditorSearchQuery, key: string) => {
-        if (!view.current || key !== activeDocument.current) return;
-        updateEditorSearch(view.current, query);
-        runSearchCommand(view.current, command);
-      },
-      command: (command: EditorCommand, text: string, key: string) => {
-        const editor = view.current;
-        if (!editor || (key !== undefined && key !== activeDocument.current)) return;
-        void runEditorCommand(editor, command, {
-          read: async () => {
-            if (!clipboard.current.onReadClipboard) throw new Error("Clipboard unavailable.");
-            return clipboard.current.onReadClipboard();
-          },
-          write: async (value) => {
-            if (!clipboard.current.onWriteClipboard) throw new Error("Clipboard unavailable.");
-            await clipboard.current.onWriteClipboard(value);
-          },
-        }, text, () => view.current === editor && activeDocument.current === key).then(() => {
-          if (editor === view.current) reportInteraction(editor, activeDocument.current);
-        }).catch((error: unknown) => {
-          void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Try again.").catch(() => {});
-        });
-      },
-      flushChanges: async (requestId?: string) => {
-        try {
-          while (pendingChanges.current.size) await Promise.all([...pendingChanges.current]);
-          if (requestId) await flushCallback.current?.(requestId, null);
-        } catch (error) {
-          if (requestId) await flushCallback.current?.(requestId, error instanceof Error ? error.message : "Changes could not be delivered.");
-          else throw error;
-        }
-      },
-      dismissKeyboard: () => {
-        // Native Keyboard.dismiss only blurs registered React Native inputs.
-        // Release the WebView's contenteditable focus to close its keyboard.
-        view.current?.contentDOM.blur();
-      },
-      nextMatch: () => {
-        if (view.current) moveCodeEditorMatch(view.current, 1);
-      },
-      previousMatch: () => {
-        if (view.current) moveCodeEditorMatch(view.current, -1);
-      },
-    }) as unknown as DOMImperativeFactory,
+    () =>
+      ({
+        revealDiagnostic: (
+          from: number,
+          to: number,
+          expectedRevision: number,
+          key: string,
+        ) => {
+          const editor = view.current;
+          if (!editor || key !== activeDocument.current) return;
+          if (
+            expectedRevision !== revision.current ||
+            from < 0 ||
+            to > editor.state.doc.length
+          ) {
+            void clipboard.current
+              .onCommandError?.(
+                "This problem changed. Wait for analysis and select it again.",
+              )
+              .catch(() => {});
+            return;
+          }
+          editor.dispatch({
+            selection: { anchor: from, head: to },
+            effects: EditorView.scrollIntoView(from, { y: "center" }),
+          });
+        },
+        transform: (operation: CodeIntelligenceOperation, key: string) => {
+          const editor = view.current;
+          if (
+            !editor ||
+            key !== activeDocument.current ||
+            transformPending.current
+          )
+            return;
+          transformPending.current = true;
+          void transformEditor(
+            editor,
+            activeFilename.current,
+            operation,
+            preferencesRef.current,
+            async (input) =>
+              analysisCallbacks.current.onRequestAnalysis?.(input, key) ?? null,
+            () => view.current === editor && activeDocument.current === key,
+          )
+            .catch((error: unknown) => {
+              void clipboard.current
+                .onCommandError?.(
+                  error instanceof Error ? error.message : "Try again.",
+                )
+                .catch(() => {});
+            })
+            .finally(() => {
+              transformPending.current = false;
+            });
+        },
+        searchCommand: (
+          command: EditorSearchCommand,
+          query: EditorSearchQuery,
+          key: string,
+        ) => {
+          if (!view.current || key !== activeDocument.current) return;
+          updateEditorSearch(view.current, query);
+          runSearchCommand(view.current, command);
+        },
+        command: (command: EditorCommand, text: string, key: string) => {
+          const editor = view.current;
+          if (!editor || (key !== undefined && key !== activeDocument.current))
+            return;
+          void runEditorCommand(
+            editor,
+            command,
+            {
+              read: async () => {
+                if (!clipboard.current.onReadClipboard)
+                  throw new Error("Clipboard unavailable.");
+                return clipboard.current.onReadClipboard();
+              },
+              write: async (value) => {
+                if (!clipboard.current.onWriteClipboard)
+                  throw new Error("Clipboard unavailable.");
+                await clipboard.current.onWriteClipboard(value);
+              },
+            },
+            text,
+            () => view.current === editor && activeDocument.current === key,
+          )
+            .then(() => {
+              if (editor === view.current)
+                reportInteraction(editor, activeDocument.current);
+            })
+            .catch((error: unknown) => {
+              void clipboard.current
+                .onCommandError?.(
+                  error instanceof Error ? error.message : "Try again.",
+                )
+                .catch(() => {});
+            });
+        },
+        flushChanges: async (requestId?: string) => {
+          try {
+            while (pendingChanges.current.size)
+              await Promise.all([...pendingChanges.current]);
+            if (requestId) await flushCallback.current?.(requestId, null);
+          } catch (error) {
+            if (requestId)
+              await flushCallback.current?.(
+                requestId,
+                error instanceof Error
+                  ? error.message
+                  : "Changes could not be delivered.",
+              );
+            else throw error;
+          }
+        },
+        dismissKeyboard: () => {
+          // Native Keyboard.dismiss only blurs registered React Native inputs.
+          // Release the WebView's contenteditable focus to close its keyboard.
+          view.current?.contentDOM.blur();
+        },
+        nextMatch: () => {
+          if (view.current) moveCodeEditorMatch(view.current, 1);
+        },
+        previousMatch: () => {
+          if (view.current) moveCodeEditorMatch(view.current, -1);
+        },
+      }) as unknown as DOMImperativeFactory,
     [],
   );
 
@@ -421,7 +521,16 @@ const CodeEditor = ({
       ]),
       intelligence?.extensions ?? [],
       inlineDiagnostics,
-      editorAutocompletion(filename, hasAnalysis ? async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, documentKey) ?? null : undefined),
+      editorAutocompletion(
+        filename,
+        hasAnalysis
+          ? async (input) =>
+              analysisCallbacks.current.onRequestAnalysis?.(
+                input,
+                documentKey,
+              ) ?? null
+          : undefined,
+      ),
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
@@ -429,9 +538,16 @@ const CodeEditor = ({
         const searchSignature = JSON.stringify([documentKey, searchSummary]);
         if (lastSearchSummary.current !== searchSignature) {
           lastSearchSummary.current = searchSignature;
-          void searchCallback.current?.(searchSummary, documentKey).catch(() => {});
+          void searchCallback
+            .current?.(searchSummary, documentKey)
+            .catch(() => {});
         }
-        if (update.focusChanged || update.selectionSet || update.docChanged || update.transactions.some((transaction) => transaction.effects.length)) {
+        if (
+          update.focusChanged ||
+          update.selectionSet ||
+          update.docChanged ||
+          update.transactions.some((transaction) => transaction.effects.length)
+        ) {
           reportInteraction(update.view, documentKey);
         }
         if (
@@ -472,6 +588,11 @@ const CodeEditor = ({
       ? buffer.state.update({
           effects: [
             StateEffect.reconfigure.of(extensions),
+            // Saved states retain compartment overrides. Refresh global settings
+            // when restoring a tab, even if the preference prop hasn't changed.
+            configuration.reconfigure(
+              editorConfiguration(preferencesRef.current),
+            ),
             editability.reconfigure([
               EditorState.readOnly.of(readOnlyRef.current),
               EditorView.editable.of(!readOnlyRef.current),
@@ -540,7 +661,8 @@ const CodeEditor = ({
   );
 
   useEffect(() => {
-    if (view.current) updateEditorSearch(view.current, JSON.parse(searchQueryKey));
+    if (view.current)
+      updateEditorSearch(view.current, JSON.parse(searchQueryKey));
   }, [searchQueryKey, documentKey, filename, initialValue]);
 
   useEffect(() => {
@@ -554,7 +676,9 @@ const CodeEditor = ({
   }, [matchesKey, filename, initialValue, hasAnalysis, documentKey]);
 
   useEffect(() => {
-    view.current?.dispatch({ effects: configuration.reconfigure(editorConfiguration(preferences)) });
+    view.current?.dispatch({
+      effects: configuration.reconfigure(editorConfiguration(preferences)),
+    });
   }, [preferences, configuration]);
 
   useEffect(() => {
@@ -628,7 +752,10 @@ const CodeEditor = ({
 
   return (
     <section
-      className={clsx(formatEditorThemeClassName(colorScheme), formatEditorThemeClass(preferences.theme))}
+      className={clsx(
+        formatEditorThemeClassName(colorScheme),
+        formatEditorThemeClass(preferences.theme),
+      )}
       data-theme={colorScheme}
       aria-label="Code panel"
       style={

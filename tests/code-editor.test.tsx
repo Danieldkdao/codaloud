@@ -611,3 +611,23 @@ it("routes native search commands to the active document and rejects stale tab c
   expect(editor().state.doc.toString()).toBe("y y");
   expect(onSearchSummary).toHaveBeenLastCalledWith(expect.objectContaining({ total: 0 }), "active");
 });
+
+it("applies global preferences to restored tabs without replacing their edits or undo history", async () => {
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  const changed = { ...defaultEditorPreferences, tabSize: 8, lineNumbers: false, wordWrap: true };
+  const show = (key: string, preferences: typeof defaultEditorPreferences) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.txt`, initialValue: "original", documentKey: key, openDocumentKeys: ["a", "b"], preferences,
+  })));
+  await show("a", defaultEditorPreferences);
+  act(() => editor().dispatch({ changes: { from: 0, insert: "edit " }, selection: { anchor: 2 } }));
+  await show("b", defaultEditorPreferences);
+  await show("b", changed);
+  await show("a", changed);
+  expect(editor().state.tabSize).toBe(8);
+  expect(editor().contentDOM.classList.contains("cm-lineWrapping")).toBe(true);
+  expect(container.querySelector(".cm-lineNumbers")).toBeNull();
+  expect(editor().state.sliceDoc()).toBe("edit original");
+  expect(editor().state.selection.main.anchor).toBe(2);
+  act(() => undo(editor()));
+  expect(editor().state.sliceDoc()).toBe("original");
+});

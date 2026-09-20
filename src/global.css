@@ -26,34 +26,34 @@
   --card-foreground: oklch(0.2836 0.0144 157.9253);
   --popover: oklch(0.9967 0.0054 95.0974);
   --popover-foreground: oklch(0.2836 0.0144 157.9253);
-  --primary: oklch(0.4314 0.0674 167.9810);
+  --primary: oklch(0.4314 0.0674 167.981);
   --primary-foreground: oklch(0.9967 0.0054 95.0974);
   --secondary: oklch(0.9188 0.0221 138.9773);
-  --secondary-foreground: oklch(0.4314 0.0674 167.9810);
+  --secondary-foreground: oklch(0.4314 0.0674 167.981);
   --muted: oklch(0.9643 0.0111 89.7224);
-  --muted-foreground: oklch(0.4372 0.0190 153.9631);
+  --muted-foreground: oklch(0.4372 0.019 153.9631);
   --accent: oklch(0.6202 0.1013 39.3859);
   --accent-foreground: oklch(0.9967 0.0054 95.0974);
-  --destructive: #D93030;
+  --destructive: #d93030;
   --warning: #916000;
   --info: #2566b8;
   --destructive-foreground: oklch(0.9967 0.0054 95.0974);
   --border: oklch(0.9188 0.0221 138.9773);
   --input: oklch(0.9188 0.0221 138.9773);
-  --ring: oklch(0.4314 0.0674 167.9810);
-  --chart-1: oklch(0.4314 0.0674 167.9810);
+  --ring: oklch(0.4314 0.0674 167.981);
+  --chart-1: oklch(0.4314 0.0674 167.981);
   --chart-2: oklch(0.6202 0.1013 39.3859);
   --chart-3: oklch(0.9188 0.0221 138.9773);
   --chart-4: oklch(0.9643 0.0111 89.7224);
   --chart-5: oklch(0.2836 0.0144 157.9253);
   --sidebar: oklch(0.9643 0.0111 89.7224);
   --sidebar-foreground: oklch(0.2836 0.0144 157.9253);
-  --sidebar-primary: oklch(0.4314 0.0674 167.9810);
+  --sidebar-primary: oklch(0.4314 0.0674 167.981);
   --sidebar-primary-foreground: oklch(0.9967 0.0054 95.0974);
   --sidebar-accent: oklch(0.9188 0.0221 138.9773);
-  --sidebar-accent-foreground: oklch(0.4314 0.0674 167.9810);
+  --sidebar-accent-foreground: oklch(0.4314 0.0674 167.981);
   --sidebar-border: oklch(0.9188 0.0221 138.9773);
-  --sidebar-ring: oklch(0.4314 0.0674 167.9810);
+  --sidebar-ring: oklch(0.4314 0.0674 167.981);
 }
 
 @utility theme-dark {
@@ -77,34 +77,34 @@
   --card-foreground: oklch(0.9643 0.0111 89.7224);
   --popover: oklch(0.3163 0.0193 157.1933);
   --popover-foreground: oklch(0.9643 0.0111 89.7224);
-  --primary: oklch(0.4314 0.0674 167.9810);
+  --primary: oklch(0.4314 0.0674 167.981);
   --primary-foreground: oklch(0.9967 0.0054 95.0974);
-  --secondary: oklch(0.3590 0.0249 158.5332);
+  --secondary: oklch(0.359 0.0249 158.5332);
   --secondary-foreground: oklch(0.9188 0.0221 138.9773);
-  --muted: oklch(0.3590 0.0249 158.5332);
+  --muted: oklch(0.359 0.0249 158.5332);
   --muted-foreground: oklch(0.7234 0.0124 153.5825);
   --accent: oklch(0.6202 0.1013 39.3859);
   --accent-foreground: oklch(0.9967 0.0054 95.0974);
-  --destructive: #EF4444;
+  --destructive: #ef4444;
   --warning: #e8bd62;
   --info: #80baff;
   --destructive-foreground: oklch(0.9967 0.0054 95.0974);
-  --border: oklch(0.3590 0.0249 158.5332);
-  --input: oklch(0.3590 0.0249 158.5332);
-  --ring: oklch(0.4314 0.0674 167.9810);
-  --chart-1: oklch(0.4314 0.0674 167.9810);
+  --border: oklch(0.359 0.0249 158.5332);
+  --input: oklch(0.359 0.0249 158.5332);
+  --ring: oklch(0.4314 0.0674 167.981);
+  --chart-1: oklch(0.4314 0.0674 167.981);
   --chart-2: oklch(0.6202 0.1013 39.3859);
   --chart-3: oklch(0.9188 0.0221 138.9773);
   --chart-4: oklch(0.9643 0.0111 89.7224);
   --chart-5: oklch(0.9967 0.0054 95.0974);
-  --sidebar: oklch(0.2560 0.0125 160.3536);
+  --sidebar: oklch(0.256 0.0125 160.3536);
   --sidebar-foreground: oklch(0.9643 0.0111 89.7224);
-  --sidebar-primary: oklch(0.4314 0.0674 167.9810);
+  --sidebar-primary: oklch(0.4314 0.0674 167.981);
   --sidebar-primary-foreground: oklch(0.9967 0.0054 95.0974);
-  --sidebar-accent: oklch(0.3590 0.0249 158.5332);
+  --sidebar-accent: oklch(0.359 0.0249 158.5332);
   --sidebar-accent-foreground: oklch(0.9188 0.0221 138.9773);
-  --sidebar-border: oklch(0.3590 0.0249 158.5332);
-  --sidebar-ring: oklch(0.4314 0.0674 167.9810);
+  --sidebar-border: oklch(0.359 0.0249 158.5332);
+  --sidebar-ring: oklch(0.4314 0.0674 167.981);
 }
 
 :root {
@@ -163,7 +163,10 @@
  */
 @theme inline {
   --font-heading: var(--codaloud-heading-face, "Fraunces_400Regular");
-  --font-mono: var(--codaloud-mono-face, var(--editor-mono-400, "JetBrainsMono_400Regular"));
+  --font-mono: var(
+    --codaloud-mono-face,
+    var(--editor-mono-400, "JetBrainsMono_400Regular")
+  );
   --font-sans: var(--codaloud-sans-face, "Outfit_400Regular");
 }
 
@@ -237,7 +240,7 @@
   --codaloud-heading-face: "Fraunces_900Black";
   --codaloud-sans-face: "Outfit_900Black";
   /* JetBrains Mono stops at 800, so use its heaviest available face. */
-  --codaloud-mono-face: var(--editor-mono-800, "JetBrainsMono_800ExtraBold");
+  --codaloud-mono-face: var(--editor-mono-900, "JetBrainsMono_800ExtraBold");
 }
 
 /* Editor palettes are centralized theme tokens used inside the native DOM editor. */

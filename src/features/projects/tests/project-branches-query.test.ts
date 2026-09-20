@@ -3,12 +3,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { checkoutProjectBranchAction, readProjectBranchesAction } from "../actions/git-actions";
+import { deleteProjectBranchAction, checkoutProjectBranchAction, readProjectBranchesAction } from "../actions/git-actions";
 import { useProjectBranches } from "../hooks/use-project-branches";
 import type { ProjectBranchPageSchema } from "../actions/branch-schemas";
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("../actions/git-actions", () => ({ readProjectBranchesAction: vi.fn(), checkoutProjectBranchAction: vi.fn() }));
+vi.mock("../actions/git-actions", () => ({ readProjectBranchesAction: vi.fn(), checkoutProjectBranchAction: vi.fn(), deleteProjectBranchAction: vi.fn() }));
 
 const read = vi.mocked(readProjectBranchesAction);
 const checkout = vi.mocked(checkoutProjectBranchAction);
@@ -355,4 +355,13 @@ it("replaces an unfinished changes read started before checkout", async () => {
     expect(readChanges).toHaveBeenCalledTimes(2);
     expect(client.getQueryData(queryKey)).toEqual({ currentBranch: "feature/checkout" });
   } finally { unsubscribe(); }
+});
+
+it("deletes locally without queuing a retry and refreshes the branch query", async () => {
+  await render();
+  vi.mocked(deleteProjectBranchAction).mockResolvedValue({ error: false, message: "Deleted", data: { branchName: "feature/done", deleted: true } });
+  const initialReads = read.mock.calls.length;
+  await run(() => current.gitDeleteBranch.mutateAsync({ branchName: "feature/done" }));
+  expect(deleteProjectBranchAction).toHaveBeenCalledWith(projectId, { branchName: "feature/done" });
+  expect(read.mock.calls.length).toBeGreaterThan(initialReads);
 });

@@ -1,5 +1,9 @@
 import { isValidIds } from "@/lib/utils";
-import type { GitCreatedBranchSchema } from "../server/git-branch-schemas";
+import type {
+  GitCreatedBranchSchema,
+  GitDeletedBranchSchema,
+  GitDeleteBranchSchema,
+} from "../server/git-branch-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitCreateBranchSchema } from "../server/git-branch-schemas";
 import type { z } from "zod";
@@ -7,6 +11,7 @@ import { ProjectGitError, requireLocalGitProject } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   createProjectBranchAction,
+  deleteProjectBranchAction,
   checkoutProjectBranchAction,
   readProjectBranchesAction,
 } from "../actions/git-actions";
@@ -210,7 +215,30 @@ export const useProjectBranches = (
       refreshProjectGitQueries(queryClient, context),
   });
 
+  const gitDeleteBranch = useMutation<
+    GitDeletedBranchSchema,
+    ProjectGitError,
+    GitDeleteBranchSchema,
+    ProjectGitMutationContext
+  >({
+    mutationKey: ["projects", "git", "deleteBranch", projectId],
+    retry: false,
+    networkMode: "always",
+    onMutate: () => ({ projectId }),
+    mutationFn: async (input) => {
+      const result = await deleteProjectBranchAction(
+        requireLocalGitProject(projectId),
+        input,
+      );
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
   return {
+    gitDeleteBranch,
     gitCreateBranch,
     ...query,
     loadMore,

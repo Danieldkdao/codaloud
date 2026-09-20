@@ -31,6 +31,7 @@ import { formatProjectBranchLabel } from "../lib/formatters";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
 import { projectCommitParamsSchema } from "../lib/commit-params";
+import { useProjectGitOperation } from "../hooks/use-project-git-operation";
 
 const getBranches = (page: ProjectBranchPageSchema) => page.branches;
 const getBranchKey = (branch: string) => branch;
@@ -67,6 +68,7 @@ export const ProjectBranchSelect = ({
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
   const query = useProjectBranches(projectId, { search });
+  const { run, confirm } = useProjectGitOperation();
   const remoteQuery = useProjectRemoteBranches(projectId, {
     search,
     enabled: Boolean(repositoryId),
@@ -159,6 +161,28 @@ export const ProjectBranchSelect = ({
     );
   };
 
+  const deleteBranch = (name: string) => {
+    if (isWorkspaceBusy) return;
+    void run(
+      "Deleting branch…",
+      async (assertCurrent) => {
+        if (
+          !(await confirm(
+            "Delete local branch?",
+            `Delete “${name}” from this device? Its GitHub branch will remain. Unmerged commits prevent deletion.`,
+            "Delete branch",
+            true,
+          ))
+        )
+          return false;
+        assertCurrent();
+        await query.gitDeleteBranch.mutateAsync({ branchName: name });
+        return true;
+      },
+      { success: (deleted) => (deleted ? "Local branch deleted." : null) },
+    );
+  };
+
   return (
     <>
       <Pressable
@@ -202,7 +226,9 @@ export const ProjectBranchSelect = ({
       <ContentSheet
         open={
           open &&
-          (!isWorkspaceBusy || workspaceOperation === "Creating branch…")
+          (!isWorkspaceBusy ||
+            workspaceOperation === "Creating branch…" ||
+            workspaceOperation === "Deleting branch…")
         }
         onOpenChange={(value) => {
           if (!value || !isWorkspaceBusy) setOpen(value);
@@ -257,6 +283,8 @@ export const ProjectBranchSelect = ({
                 query={query}
                 disabled={isWorkspaceBusy}
                 onSelect={selectBranch}
+                onDelete={deleteBranch}
+                currentBranch={currentBranch ?? branch}
               />
               <View className="h-px shrink-0 bg-border" />
               {repositoryId ? (

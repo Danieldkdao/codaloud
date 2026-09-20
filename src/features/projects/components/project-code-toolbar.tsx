@@ -4,22 +4,44 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon, type IconProps } from "@/components/ui/icon";
 import { ProjectCodeStatus } from "./project-code-status";
 
-const actions: { label: string; icon: IconProps<"MaterialCommunityIcons">["name"] }[] = [
+const actions: {
+  label: string;
+  icon: IconProps<"MaterialCommunityIcons">["name"];
+}[] = [
   { label: "Format code", icon: "format-align-left" },
   { label: "Organize imports", icon: "sort-alphabetical-ascending" },
   { label: "Find in file", icon: "magnify" },
   { label: "Replace in file", icon: "find-replace" },
 ];
 
-export const ProjectCodeToolbar = ({ onFind, onReplace, onFormat, onOrganize, disabled = false, ...props }: ComponentProps<typeof ProjectCodeStatus> & {
-  onFind?: () => void; onReplace?: () => void; onFormat?: () => void; onOrganize?: () => void; disabled?: boolean;
+export const ProjectCodeToolbar = ({
+  onFind,
+  onReplace,
+  onFormat,
+  onOrganize,
+  disabled = false,
+  ...props
+}: ComponentProps<typeof ProjectCodeStatus> & {
+  onFind?: () => void;
+  onReplace?: () => void;
+  onFormat?: () => void;
+  onOrganize?: () => void;
+  disabled?: boolean;
 }) => {
   const run = (label: string) => {
     switch (label) {
-      case "Find in file": onFind?.(); break;
-      case "Replace in file": onReplace?.(); break;
-      case "Format code": onFormat?.(); break;
-      case "Organize imports": onOrganize?.(); break;
+      case "Find in file":
+        onFind?.();
+        break;
+      case "Replace in file":
+        onReplace?.();
+        break;
+      case "Format code":
+        onFormat?.();
+        break;
+      case "Organize imports":
+        onOrganize?.();
+        break;
     }
   };
   const [badgeHeight, setBadgeHeight] = useState(48);
@@ -30,11 +52,18 @@ export const ProjectCodeToolbar = ({ onFind, onReplace, onFormat, onOrganize, di
       showsHorizontalScrollIndicator={false}
       className="w-full"
       style={{ flexGrow: 0 }}
-      contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", gap: 8 }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 8,
+      }}
     >
       <View
         testID="editor-status-measure"
-        onLayout={({ nativeEvent }) => setBadgeHeight(nativeEvent.layout.height)}
+        onLayout={({ nativeEvent }) =>
+          setBadgeHeight(nativeEvent.layout.height)
+        }
       >
         <ProjectCodeStatus {...props} />
       </View>

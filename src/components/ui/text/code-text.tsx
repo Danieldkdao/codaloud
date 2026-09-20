@@ -10,5 +10,15 @@ export const CodeText = ({
   ...props
 }: ComponentPropsWithRef<typeof Text>) => {
   const { preferences } = useEditorPreferences();
-  return <Text {...props} className={cn("text-base font-mono", formatNativeEditorFontClass(preferences.font), className)} style={style} />;
+  return (
+    <Text
+      {...props}
+      className={cn(
+        "text-base font-mono",
+        formatNativeEditorFontClass(preferences.font),
+        className,
+      )}
+      style={style}
+    />
+  );
 };

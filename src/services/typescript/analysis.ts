@@ -137,9 +137,13 @@ export const createTypeScriptAnalyzer = (
     // failed lookups so saves, Git operations, and new files cannot go stale.
     // Typing can reuse a graph validated within the last 250 ms. Diagnostics
     // and code transformations always refresh it, including failed lookups.
-    if (input.position === undefined || Date.now() - dependencyValidationTime >= 250) {
+    if (
+      input.position === undefined ||
+      Date.now() - dependencyValidationTime >= 250
+    ) {
       for (const path of files.keys()) {
-        if (path !== target) update(path, await readFile(path.slice("/workspace/".length)));
+        if (path !== target)
+          update(path, await readFile(path.slice("/workspace/".length)));
       }
       dependencyValidationTime = Date.now();
     }
@@ -201,12 +205,14 @@ export const createTypeScriptAnalyzer = (
           }
           return snapshot;
         },
-      } satisfies LanguageServiceHost & Pick<CompilerHost, "hasInvalidatedResolutions">;
+      } satisfies LanguageServiceHost &
+        Pick<CompilerHost, "hasInvalidatedResolutions">;
       service ??= ts.createLanguageService(host);
       let result: CodeIntelligenceResultSchema;
       if (input.operation) {
         const formatOptions = {
-          indentSize: input.tabSize ?? 2, tabSize: input.tabSize ?? 2,
+          indentSize: input.tabSize ?? 2,
+          tabSize: input.tabSize ?? 2,
           convertTabsToSpaces: !input.useTabs,
           newLineCharacter: input.content.includes("\r\n") ? "\r\n" : "\n",
           insertSpaceAfterCommaDelimiter: true,
@@ -215,10 +221,24 @@ export const createTypeScriptAnalyzer = (
           insertSpaceBeforeFunctionParenthesis: false,
           insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces: true,
         };
-        const edits = input.operation === "format"
-          ? service.getFormattingEditsForDocument(target, formatOptions)
-          : service.organizeImports({ type: "file", fileName: target }, formatOptions, {}).filter((file) => file.fileName === target).flatMap((file) => file.textChanges);
-        result = { edits: edits.map((edit) => ({ from: edit.span.start, to: edit.span.start + edit.span.length, insert: edit.newText })) };
+        const edits =
+          input.operation === "format"
+            ? service.getFormattingEditsForDocument(target, formatOptions)
+            : service
+                .organizeImports(
+                  { type: "file", fileName: target },
+                  formatOptions,
+                  {},
+                )
+                .filter((file) => file.fileName === target)
+                .flatMap((file) => file.textChanges);
+        result = {
+          edits: edits.map((edit) => ({
+            from: edit.span.start,
+            to: edit.span.start + edit.span.length,
+            insert: edit.newText,
+          })),
+        };
       } else if (input.position !== undefined) {
         const completion = service.getCompletionsAtPosition(
           target,
@@ -286,13 +306,19 @@ export const createTypeScriptAnalyzer = (
     analyze: (input: CodeIntelligenceRequestSchema) => {
       if (closed)
         return Promise.reject(new Error("The analysis session is closed."));
-      const completion = input.position === undefined ? undefined : ++completionGeneration;
+      const completion =
+        input.position === undefined ? undefined : ++completionGeneration;
       const result = queued
-        .then((): Promise<CodeIntelligenceResultSchema> | CodeIntelligenceResultSchema => {
-          // A slow compiler must not accumulate obsolete keystrokes in its queue.
-          if (completion !== undefined && completion !== completionGeneration) return { completions: [] };
-          return run(input);
-        })
+        .then(
+          ():
+            | Promise<CodeIntelligenceResultSchema>
+            | CodeIntelligenceResultSchema => {
+            // A slow compiler must not accumulate obsolete keystrokes in its queue.
+            if (completion !== undefined && completion !== completionGeneration)
+              return { completions: [] };
+            return run(input);
+          },
+        )
         .catch((error: unknown) => {
           reset();
           throw error;

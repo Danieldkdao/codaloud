@@ -58,9 +58,7 @@ export const ProjectCodeStatus = ({
                   size={18}
                   className="text-foreground"
                 />
-                <PText className="text-base text-foreground">
-                  Unavailable
-                </PText>
+                <PText className="text-base text-foreground">Unavailable</PText>
               </View>
             ) : (
               diagnosticSeverities.map((severity) => {
@@ -104,7 +102,9 @@ export const ProjectCodeStatus = ({
             accessible
             accessibilityRole={canRetry ? "button" : "image"}
             accessibilityLabel={
-              readError ? "Couldn't load file. Tap to retry." : presentation.label
+              readError
+                ? "Couldn't load file. Tap to retry."
+                : presentation.label
             }
             accessibilityHint={canRetry ? save.message : undefined}
             accessibilityState={{ busy: presentation.busy }}

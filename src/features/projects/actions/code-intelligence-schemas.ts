@@ -7,8 +7,12 @@ import {
 
 export const diagnosticSeverities = ["error", "warning", "info"] as const;
 export type DiagnosticSeverity = (typeof diagnosticSeverities)[number];
-export const codeIntelligenceOperations = ["format", "organize-imports"] as const;
-export type CodeIntelligenceOperation = (typeof codeIntelligenceOperations)[number];
+export const codeIntelligenceOperations = [
+  "format",
+  "organize-imports",
+] as const;
+export type CodeIntelligenceOperation =
+  (typeof codeIntelligenceOperations)[number];
 
 export const codeIntelligenceRequestSchema = z
   .object({
@@ -56,7 +60,11 @@ export const codeCompletionSchema = z.object({
 });
 export type CodeCompletionSchema = z.infer<typeof codeCompletionSchema>;
 
-export const codeTextEditSchema = z.object({ from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), insert: z.string() });
+export const codeTextEditSchema = z.object({
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+  insert: z.string(),
+});
 export type CodeTextEditSchema = z.infer<typeof codeTextEditSchema>;
 
 export const codeIntelligenceResultSchema = z.union([

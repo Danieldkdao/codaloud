@@ -102,5 +102,5 @@ export const editorFontAssets = {
   IBMPlexMono_600SemiBold,
   IBMPlexMono_600SemiBold_Italic,
   IBMPlexMono_700Bold,
-  IBMPlexMono_700Bold_Italic
+  IBMPlexMono_700Bold_Italic,
 };

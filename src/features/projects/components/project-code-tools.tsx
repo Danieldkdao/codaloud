@@ -190,8 +190,24 @@ const EditorSettingStepper = ({
 export const ProjectCodeTools = () => {
   const [open, setOpen] = useState(false);
   const { preferences, update, error } = useEditorPreferences();
-  const { theme, font, fontSize, tabSize, wordWrap, lineNumbers, minimap, useTabs, keepIndentation, closeBrackets } = preferences;
-  const change = <K extends keyof EditorPreferences>(key: K, value: EditorPreferences[K]) => { void update({ [key]: value }); };
+  const {
+    theme,
+    font,
+    fontSize,
+    tabSize,
+    wordWrap,
+    lineNumbers,
+    minimap,
+    useTabs,
+    keepIndentation,
+    closeBrackets,
+  } = preferences;
+  const change = <K extends keyof EditorPreferences>(
+    key: K,
+    value: EditorPreferences[K],
+  ) => {
+    void update({ [key]: value });
+  };
   const background = useThemeColor("background");
   const { height } = useWindowDimensions();
 
@@ -248,14 +264,25 @@ export const ProjectCodeTools = () => {
               gap: 28,
             }}
           >
-            {error ? <Pressable onPress={() => void update({})} accessibilityRole="button" accessibilityLabel="Retry saving editor settings" className="min-h-11"><PText className="text-base text-destructive">{error}</PText></Pressable> : null}
+            {error ? (
+              <Pressable
+                onPress={() => void update({})}
+                accessibilityRole="button"
+                accessibilityLabel="Retry saving editor settings"
+                className="min-h-11"
+              >
+                <PText className="text-base text-destructive">{error}</PText>
+              </Pressable>
+            ) : null}
             <EditorSettingsSection title="Appearance">
               <EditorSettingRow label="Theme">
                 <EditorSettingSelect
                   label="Theme"
                   value={theme}
                   options={editorThemes}
-                  onSelect={(value) => change("theme", value as EditorPreferences["theme"])}
+                  onSelect={(value) =>
+                    change("theme", value as EditorPreferences["theme"])
+                  }
                 />
               </EditorSettingRow>
               <EditorSettingRow label="Font">
@@ -263,7 +290,9 @@ export const ProjectCodeTools = () => {
                   label="Font"
                   value={font}
                   options={editorFonts}
-                  onSelect={(value) => change("font", value as EditorPreferences["font"])}
+                  onSelect={(value) =>
+                    change("font", value as EditorPreferences["font"])
+                  }
                 />
               </EditorSettingRow>
               <EditorSettingRow label="Font size">

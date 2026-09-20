@@ -5,6 +5,8 @@ import { createEditorPreferences } from "../editor-preferences";
 const state = createEditorPreferences(Storage);
 export const useEditorPreferences = () => {
   const snapshot = useSyncExternalStore(state.subscribe, state.getSnapshot);
-  useEffect(() => { void state.load(); }, []);
+  useEffect(() => {
+    void state.load();
+  }, []);
   return { ...snapshot, update: state.update };
 };

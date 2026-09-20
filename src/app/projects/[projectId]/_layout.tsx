@@ -27,12 +27,12 @@ const WorkspaceScreen = ({
   const showDock = name === "code";
   return (
     <EditorControlsProvider>
-    <ProjectWorkspaceDockHeightProvider>
-      <View className="flex-1 bg-background">
-        {children}
-        {showDock ? <ProjectWorkspaceDock tab={name} /> : null}
-      </View>
-    </ProjectWorkspaceDockHeightProvider>
+      <ProjectWorkspaceDockHeightProvider>
+        <View className="flex-1 bg-background">
+          {children}
+          {showDock ? <ProjectWorkspaceDock tab={name} /> : null}
+        </View>
+      </ProjectWorkspaceDockHeightProvider>
     </EditorControlsProvider>
   );
 };

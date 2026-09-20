@@ -1,5 +1,12 @@
 import { useUnstableNativeVariable } from "nativewind";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Appearance, useColorScheme, type ColorValue } from "react-native";
 import type { AppThemeState, ThemePreference } from "@/lib/types";
 import { themePreferences } from "@/lib/constants";
@@ -24,8 +31,8 @@ type ThemeColor =
   | "muted-foreground";
 
 // NativeWind's default declarations describe its web stub, which has no arguments.
-const useNativeThemeVariable = useUnstableNativeVariable as
-  typeof import("react-native-css/native").useUnstableNativeVariable;
+const useNativeThemeVariable =
+  useUnstableNativeVariable as typeof import("react-native-css/native").useUnstableNativeVariable;
 
 export const useThemeColor = (name: ThemeColor): ColorValue =>
   useNativeThemeVariable(`--${name}`);
@@ -35,7 +42,9 @@ const AppThemeContext = createContext<AppThemeState | null>(null);
 const storageKey = "codaloud.theme";
 
 const applyPreference = (preference: ThemePreference) => {
-  Appearance.setColorScheme(preference === "system" ? "unspecified" : preference);
+  Appearance.setColorScheme(
+    preference === "system" ? "unspecified" : preference,
+  );
 };
 
 export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
@@ -48,7 +57,9 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
   const editorAppearance = formatEditorAppearance(editor.preferences.theme);
   const effectivePreference = editorAppearance ?? preference;
   const systemScheme = useColorScheme();
-  const isDarkMode = effectivePreference === "dark" || (effectivePreference === "system" && systemScheme === "dark");
+  const isDarkMode =
+    effectivePreference === "dark" ||
+    (effectivePreference === "system" && systemScheme === "dark");
   const background = useThemeColor("background");
   const card = useThemeColor("card");
   const text = useThemeColor("foreground");
@@ -63,7 +74,8 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
       let restored: ThemePreference = "system";
       try {
         const saved = await SecureStore.getItemAsync(storageKey);
-        restored = themePreferences.find((value) => value === saved) ?? "system";
+        restored =
+          themePreferences.find((value) => value === saved) ?? "system";
       } catch {
         // An unavailable preference store must not prevent the app from opening.
       }
@@ -73,7 +85,10 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
       setIsReady(true);
     };
     void restore();
-    return () => { cancelled = true; active.current = false; };
+    return () => {
+      cancelled = true;
+      active.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -92,7 +107,10 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
         await SecureStore.setItemAsync(storageKey, next);
         if (active.current) setError(null);
       } catch {
-        if (active.current) setError("Appearance changed, but couldn’t be saved on this device. Tap your choice to try again.");
+        if (active.current)
+          setError(
+            "Appearance changed, but couldn’t be saved on this device. Tap your choice to try again.",
+          );
       }
     });
   };
@@ -100,13 +118,25 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
   const navigationTheme = {
     ...(isDarkMode ? DarkTheme : DefaultTheme),
     colors: {
-      background: background as string, card: card as string, text: text as string,
-      primary: primary as string, border: border as string, notification: notification as string,
+      background: background as string,
+      card: card as string,
+      text: text as string,
+      primary: primary as string,
+      border: border as string,
+      notification: notification as string,
     },
   };
 
   return (
-    <AppThemeContext value={{ preference, isDarkMode, isReady: isReady && editor.ready, error, setPreference }}>
+    <AppThemeContext
+      value={{
+        preference,
+        isDarkMode,
+        isReady: isReady && editor.ready,
+        error,
+        setPreference,
+      }}
+    >
       <ThemeProvider value={navigationTheme}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
         {children}

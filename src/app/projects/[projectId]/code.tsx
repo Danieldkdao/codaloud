@@ -4,7 +4,10 @@ import { createEditorFlush } from "@/features/editor/flush";
 import { useEditorControls } from "@/features/editor/use-editor-controls";
 import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
-import type { EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
+import type {
+  EditorSearchQuery,
+  EditorSearchSummary,
+} from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
 import type { EditorCommand } from "@/features/editor/types";
 import { Alert, View } from "react-native";
@@ -47,10 +50,12 @@ const CodeScreen = () => {
   const { isDarkMode } = useTheme();
   const { preferences } = useEditorPreferences();
   const editor = useRef<CodeEditorRef>(null);
-  const [editorFlush] = useState(() => createEditorFlush((requestId) => {
-    if (!editor.current?.flushChanges) throw new Error("Editor not ready");
-    void editor.current.flushChanges(requestId);
-  }));
+  const [editorFlush] = useState(() =>
+    createEditorFlush((requestId) => {
+      if (!editor.current?.flushChanges) throw new Error("Editor not ready");
+      void editor.current.flushChanges(requestId);
+    }),
+  );
   useEffect(() => () => editorFlush.dispose(), [editorFlush]);
   const current = useRef({ files, documents });
   current.current = { files, documents };
@@ -71,9 +76,14 @@ const CodeScreen = () => {
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [replaceOpen, setReplaceOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState<EditorSearchQuery>({ search: "" });
+  const [searchQuery, setSearchQuery] = useState<EditorSearchQuery>({
+    search: "",
+  });
   const [searchSummary, setSearchSummary] = useState<EditorSearchSummary>();
-  useEffect(() => { setSearchOpen(false); setSearchSummary(undefined); }, [documents.activeKey]);
+  useEffect(() => {
+    setSearchOpen(false);
+    setSearchSummary(undefined);
+  }, [documents.activeKey]);
   const keyboardFrame = useKeyboardFrame();
   const [interaction, setInteraction] = useState<
     CodeEditorInteraction & { key?: string }
@@ -85,10 +95,13 @@ const CodeScreen = () => {
     },
     [],
   );
-  const runCommand = useCallback((command: EditorCommand, text?: string) => {
-    if (!documents.activeKey || isWorkspaceBusy || closing.current) return;
-    editor.current?.command(command, text ?? "", documents.activeKey);
-  }, [documents.activeKey, isWorkspaceBusy]);
+  const runCommand = useCallback(
+    (command: EditorCommand, text?: string) => {
+      if (!documents.activeKey || isWorkspaceBusy || closing.current) return;
+      editor.current?.command(command, text ?? "", documents.activeKey);
+    },
+    [documents.activeKey, isWorkspaceBusy],
+  );
   const [badgeHeight, setBadgeHeight] = useState(48);
   useEditorDevelopmentShortcuts();
 
@@ -108,7 +121,11 @@ const CodeScreen = () => {
   );
   const setControls = useEditorControls()?.setState;
   useEffect(() => {
-    setControls?.({ canUndo: Boolean(canShowEditorControls && interaction?.commands?.canUndo), canRedo: Boolean(canShowEditorControls && interaction?.commands?.canRedo), run: runCommand });
+    setControls?.({
+      canUndo: Boolean(canShowEditorControls && interaction?.commands?.canUndo),
+      canRedo: Boolean(canShowEditorControls && interaction?.commands?.canRedo),
+      run: runCommand,
+    });
     return () => setControls?.(null);
   }, [setControls, canShowEditorControls, interaction?.commands, runCommand]);
   const bottomInset = dockHeight + badgeHeight + 20;
@@ -172,10 +189,21 @@ const CodeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <EditorProblemsSheet open={problemsOpen} onOpenChange={setProblemsOpen} analysis={activeAnalysis} onSelect={(diagnostic) => {
-        setProblemsOpen(false);
-        if (documents.activeKey && activeAnalysis?.revision !== undefined) editor.current?.revealDiagnostic(diagnostic.from, diagnostic.to, activeAnalysis.revision, documents.activeKey);
-      }} />
+      <EditorProblemsSheet
+        open={problemsOpen}
+        onOpenChange={setProblemsOpen}
+        analysis={activeAnalysis}
+        onSelect={(diagnostic) => {
+          setProblemsOpen(false);
+          if (documents.activeKey && activeAnalysis?.revision !== undefined)
+            editor.current?.revealDiagnostic(
+              diagnostic.from,
+              diagnostic.to,
+              activeAnalysis.revision,
+              documents.activeKey,
+            );
+        }}
+      />
       {files.openFilePaths.size > 0 ? (
         <ProjectCodeTabs
           key={projectId}
@@ -191,7 +219,26 @@ const CodeScreen = () => {
           closingPath={closingPath}
         />
       ) : null}
-      {searchOpen ? <View className="px-3 py-2"><EditorSearchBar query={searchQuery} summary={searchSummary} replace={replaceOpen} onReplaceChange={setReplaceOpen} onChange={setSearchQuery} onClose={() => setSearchOpen(false)} onCommand={(command) => { if (documents.activeKey && !isWorkspaceBusy) editor.current?.searchCommand(command, searchQuery, documents.activeKey); }} /></View> : null}
+      {searchOpen ? (
+        <View className="px-3 py-2">
+          <EditorSearchBar
+            query={searchQuery}
+            summary={searchSummary}
+            replace={replaceOpen}
+            onReplaceChange={setReplaceOpen}
+            onChange={setSearchQuery}
+            onClose={() => setSearchOpen(false)}
+            onCommand={(command) => {
+              if (documents.activeKey && !isWorkspaceBusy)
+                editor.current?.searchCommand(
+                  command,
+                  searchQuery,
+                  documents.activeKey,
+                );
+            }}
+          />
+        </View>
+      ) : null}
       <View className="flex-1">
         {/* Warm the WebView before the first file read, then reuse it for every
             document. The empty editor stays hidden, read-only, and unfocused. */}
@@ -206,11 +253,21 @@ const CodeScreen = () => {
             ref={editor}
             preferences={preferences}
             searchQuery={searchOpen ? searchQuery : undefined}
-            onSearchSummary={async (summary, key) => { if (key === current.current.documents.activeKey) setSearchSummary(summary); }}
-            onFlushed={async (requestId, error) => { editorFlush.acknowledge(requestId, error); }}
-            onCommandError={async (message) => { Alert.alert("Couldn’t complete editor action", message); }}
+            onSearchSummary={async (summary, key) => {
+              if (key === current.current.documents.activeKey)
+                setSearchSummary(summary);
+            }}
+            onFlushed={async (requestId, error) => {
+              editorFlush.acknowledge(requestId, error);
+            }}
+            onCommandError={async (message) => {
+              Alert.alert("Couldn’t complete editor action", message);
+            }}
             onReadClipboard={Clipboard.getStringAsync}
-            onWriteClipboard={async (text) => { if (!await Clipboard.setStringAsync(text)) throw new Error("Couldn’t write to the clipboard."); }}
+            onWriteClipboard={async (text) => {
+              if (!(await Clipboard.setStringAsync(text)))
+                throw new Error("Couldn’t write to the clipboard.");
+            }}
             documentKey={documents.editor?.key ?? `prewarm/${projectId}`}
             openDocumentKeys={documents.openDocumentKeys}
             filename={documents.editor?.path ?? ""}
@@ -227,7 +284,10 @@ const CodeScreen = () => {
             keyboardAccessoryHeight={showKeyboardAccessory ? 96 : 0}
             onInteractionChange={onInteractionChange}
             dom={{
-              onLoadStart: () => { editorFlush.dispose(); setReadyKey(undefined); },
+              onLoadStart: () => {
+                editorFlush.dispose();
+                setReadyKey(undefined);
+              },
               style: { flex: 1 },
               containerStyle: { flex: 1 },
               scrollEnabled: true,
@@ -281,10 +341,25 @@ const CodeScreen = () => {
           <ProjectCodeToolbar
             onProblems={() => setProblemsOpen(true)}
             disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
-            onFormat={() => { if (documents.activeKey) editor.current?.transform("format", documents.activeKey); }}
-            onOrganize={() => { if (documents.activeKey) editor.current?.transform("organize-imports", documents.activeKey); }}
-            onFind={() => { setReplaceOpen(false); setSearchOpen(true); }}
-            onReplace={() => { setReplaceOpen(true); setSearchOpen(true); }}
+            onFormat={() => {
+              if (documents.activeKey)
+                editor.current?.transform("format", documents.activeKey);
+            }}
+            onOrganize={() => {
+              if (documents.activeKey)
+                editor.current?.transform(
+                  "organize-imports",
+                  documents.activeKey,
+                );
+            }}
+            onFind={() => {
+              setReplaceOpen(false);
+              setSearchOpen(true);
+            }}
+            onReplace={() => {
+              setReplaceOpen(true);
+              setSearchOpen(true);
+            }}
             readError={!documents.activeKey && query.isError}
             status={
               !documents.activeKey && query.isError && !query.isFetching
@@ -311,12 +386,20 @@ const CodeScreen = () => {
           canComment={interaction?.commands?.canComment}
           onDismissKeyboard={() => editor.current?.dismissKeyboard()}
         >
-          {showSelectionMenu ? <ProjectCodeSelectionMenu onCommand={runCommand} commands={interaction?.commands} /> : null}
+          {showSelectionMenu ? (
+            <ProjectCodeSelectionMenu
+              onCommand={runCommand}
+              commands={interaction?.commands}
+            />
+          ) : null}
         </ProjectCodeKeyboardAccessory>
       ) : showSelectionMenu && !keyboardFrame ? (
         <View className="absolute right-4 top-16">
           <GlassSurface borderRadius={24}>
-            <ProjectCodeSelectionMenu onCommand={runCommand} commands={interaction?.commands} />
+            <ProjectCodeSelectionMenu
+              onCommand={runCommand}
+              commands={interaction?.commands}
+            />
           </GlassSurface>
         </View>
       ) : null}

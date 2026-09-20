@@ -69,7 +69,7 @@ export interface CodeEditorRef {
   transform(operation: CodeIntelligenceOperation, documentKey: string): void;
   searchCommand(command: EditorSearchCommand, query: EditorSearchQuery, documentKey: string): void;
   command(command: EditorCommand, text: string, documentKey: string): void;
-  flushChanges: () => Promise<void>;
+  flushChanges(requestId?: string): Promise<void>;
   nextMatch: () => void;
   previousMatch: () => void;
   dismissKeyboard: () => void;
@@ -84,6 +84,7 @@ export type CodeEditorInteraction = {
 type CodeEditorProps = {
   searchQuery?: EditorSearchQuery;
   onSearchSummary?: (summary: EditorSearchSummary, documentKey?: string) => Promise<void>;
+  onFlushed?: (requestId: string, error: string | null) => Promise<void>;
   onCommandError?: (message: string) => Promise<void>;
   onReadClipboard?: () => Promise<string>;
   onWriteClipboard?: (text: string) => Promise<void>;
@@ -179,6 +180,7 @@ const CodeEditor = ({
   preferences = defaultEditorPreferences,
   searchQuery,
   onSearchSummary,
+  onFlushed,
   onCommandError,
   onReadClipboard,
   onWriteClipboard,
@@ -199,9 +201,12 @@ const CodeEditor = ({
   onRequestAnalysis,
   onAnalysis,
 }: CodeEditorProps) => {
+  const lastSearchSummary = useRef("");
   const searchCallback = useRef(onSearchSummary);
   searchCallback.current = onSearchSummary;
   const searchQueryKey = JSON.stringify(searchQuery ?? { search: "" });
+  const flushCallback = useRef(onFlushed);
+  flushCallback.current = onFlushed;
   const clipboard = useRef({ onReadClipboard, onWriteClipboard, onCommandError });
   clipboard.current = { onReadClipboard, onWriteClipboard, onCommandError };
   const activeFilename = useRef(filename);
@@ -318,9 +323,14 @@ const CodeEditor = ({
           void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Try again.").catch(() => {});
         });
       },
-      flushChanges: async () => {
-        while (pendingChanges.current.size)
-          await Promise.all([...pendingChanges.current]);
+      flushChanges: async (requestId?: string) => {
+        try {
+          while (pendingChanges.current.size) await Promise.all([...pendingChanges.current]);
+          if (requestId) await flushCallback.current?.(requestId, null);
+        } catch (error) {
+          if (requestId) await flushCallback.current?.(requestId, error instanceof Error ? error.message : "Changes could not be delivered.");
+          else throw error;
+        }
       },
       dismissKeyboard: () => {
         // Native Keyboard.dismiss only blurs registered React Native inputs.
@@ -415,7 +425,12 @@ const CodeEditor = ({
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
-        void searchCallback.current?.(getEditorSearchSummary(update.view), documentKey).catch(() => {});
+        const searchSummary = getEditorSearchSummary(update.view);
+        const searchSignature = JSON.stringify([documentKey, searchSummary]);
+        if (lastSearchSummary.current !== searchSignature) {
+          lastSearchSummary.current = searchSignature;
+          void searchCallback.current?.(searchSummary, documentKey).catch(() => {});
+        }
         if (update.focusChanged || update.selectionSet || update.docChanged || update.transactions.some((transaction) => transaction.effects.length)) {
           reportInteraction(update.view, documentKey);
         }

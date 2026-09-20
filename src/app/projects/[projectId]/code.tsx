@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createEditorFlush } from "@/features/editor/flush";
 import { useEditorControls } from "@/features/editor/use-editor-controls";
 import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
@@ -46,6 +47,11 @@ const CodeScreen = () => {
   const { isDarkMode } = useTheme();
   const { preferences } = useEditorPreferences();
   const editor = useRef<CodeEditorRef>(null);
+  const [editorFlush] = useState(() => createEditorFlush((requestId) => {
+    if (!editor.current?.flushChanges) throw new Error("Editor not ready");
+    void editor.current.flushChanges(requestId);
+  }));
+  useEffect(() => () => editorFlush.dispose(), [editorFlush]);
   const current = useRef({ files, documents });
   current.current = { files, documents };
   const alive = useRef(true);
@@ -136,8 +142,8 @@ const CodeScreen = () => {
     setClosingPath(path);
     const version = files.getFileVersion(path);
     try {
-      // Drain the asynchronous WebView bridge before confirming cloud durability.
-      await editor.current?.flushChanges();
+      // Native imperative methods are fire-and-forget; wait for the DOM acknowledgement.
+      await editorFlush.flush();
       await documents.flushFile(path);
       if (
         alive.current &&
@@ -201,9 +207,10 @@ const CodeScreen = () => {
             preferences={preferences}
             searchQuery={searchOpen ? searchQuery : undefined}
             onSearchSummary={async (summary, key) => { if (key === current.current.documents.activeKey) setSearchSummary(summary); }}
+            onFlushed={async (requestId, error) => { editorFlush.acknowledge(requestId, error); }}
             onCommandError={async (message) => { Alert.alert("Couldn’t complete editor action", message); }}
             onReadClipboard={Clipboard.getStringAsync}
-            onWriteClipboard={async (text) => { await Clipboard.setStringAsync(text); }}
+            onWriteClipboard={async (text) => { if (!await Clipboard.setStringAsync(text)) throw new Error("Couldn’t write to the clipboard."); }}
             documentKey={documents.editor?.key ?? `prewarm/${projectId}`}
             openDocumentKeys={documents.openDocumentKeys}
             filename={documents.editor?.path ?? ""}
@@ -220,7 +227,7 @@ const CodeScreen = () => {
             keyboardAccessoryHeight={showKeyboardAccessory ? 96 : 0}
             onInteractionChange={onInteractionChange}
             dom={{
-              onLoadStart: () => setReadyKey(undefined),
+              onLoadStart: () => { editorFlush.dispose(); setReadyKey(undefined); },
               style: { flex: 1 },
               containerStyle: { flex: 1 },
               scrollEnabled: true,

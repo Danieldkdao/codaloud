@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
 import type { EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
@@ -60,6 +61,7 @@ const CodeScreen = () => {
     key?: string;
     value: CodeEditorAnalysis;
   }>();
+  const [problemsOpen, setProblemsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState<EditorSearchQuery>({ search: "" });
@@ -158,6 +160,10 @@ const CodeScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
+      <EditorProblemsSheet open={problemsOpen} onOpenChange={setProblemsOpen} analysis={activeAnalysis} onSelect={(diagnostic) => {
+        setProblemsOpen(false);
+        if (documents.activeKey && activeAnalysis?.revision !== undefined) editor.current?.revealDiagnostic(diagnostic.from, diagnostic.to, activeAnalysis.revision, documents.activeKey);
+      }} />
       {files.openFilePaths.size > 0 ? (
         <ProjectCodeTabs
           key={projectId}
@@ -260,6 +266,7 @@ const CodeScreen = () => {
           }
         >
           <ProjectCodeToolbar
+            onProblems={() => setProblemsOpen(true)}
             disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
             onFormat={() => { if (documents.activeKey) editor.current?.transform("format", documents.activeKey); }}
             onOrganize={() => { if (documents.activeKey) editor.current?.transform("organize-imports", documents.activeKey); }}

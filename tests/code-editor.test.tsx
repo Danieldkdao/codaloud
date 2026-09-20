@@ -119,7 +119,7 @@ it("offers typed completions in a floating popup and accepts a touch-sized optio
   expect(container.querySelector(".cm-tooltip-autocomplete")).not.toBeNull();
   expect(container.querySelector(".cm-completion-kind")?.textContent).toBe("▪");
   const { acceptCompletion } = await import("@codemirror/autocomplete");
-  act(() => { acceptCompletion(view); });
+  await vi.waitFor(() => { act(() => { expect(acceptCompletion(view)).toBe(true); }); });
   expect(view.state.doc.toString()).toBe("options.enabled");
 });
 
@@ -139,7 +139,7 @@ it("marks and reports diagnostics, then clears corrected errors", async () => {
   expect(onAnalysis.mock.lastCall?.[0].diagnostics.map((item) => item.severity)).toEqual(["error", "warning", "info"]);
   act(() => editor().dispatch({ changes: { from: 0, to: editor().state.doc.length, insert: "const answer: number = 42;" } }));
   act(() => forceLinting(editor()));
-  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith({ status: "ready", diagnostics: [] }));
+  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready", diagnostics: [] })));
   expect(container.querySelector(".cm-lintRange-error")).toBeNull();
 });
 
@@ -247,14 +247,14 @@ it("keeps the last diagnostic counts while the next analysis is pending", async 
   const onAnalysis = vi.fn().mockResolvedValue(undefined);
   await act(async () => root.render(createElement(CodeEditor, { filename: "demo.ts", initialValue: "old", onRequestAnalysis: request, onAnalysis })));
   act(() => forceLinting(editor()));
-  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith({ status: "ready", diagnostics: [diagnostic] }));
+  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready", diagnostics: [expect.objectContaining(diagnostic)] })));
   onAnalysis.mockClear();
   act(() => editor().dispatch({ changes: { from: 0, to: 3, insert: "new" } }));
   act(() => forceLinting(editor()));
   await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
   expect(onAnalysis).not.toHaveBeenCalled();
   await act(async () => finish({ diagnostics: [] }));
-  expect(onAnalysis).toHaveBeenLastCalledWith({ status: "ready", diagnostics: [] });
+  expect(onAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready", diagnostics: [] }));
 });
 
 it("keeps edits and undo history when the available space changes", async () => {

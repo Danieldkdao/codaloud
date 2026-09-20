@@ -7,7 +7,8 @@ import type {
 
 export type CodeEditorAnalysis = {
   status: "checking" | "ready" | "unavailable" | "unsupported";
-  diagnostics: CodeDiagnosticSchema[];
+  revision?: number;
+  diagnostics: (CodeDiagnosticSchema & { line?: number; column?: number })[];
 };
 export type CodeEditorAnalysisRequest = (
   input: CodeIntelligenceRequestSchema,
@@ -58,8 +59,8 @@ export const createCodeEditorIntelligence = (
           return [];
         }
         const diagnostics = result.diagnostics.filter(
-          (item) => item.from <= item.to && item.to <= doc.length,
-        );
+          (item) => item.from >= 0 && item.from <= item.to && item.to <= doc.length,
+        ).map((item) => { const line = doc.lineAt(item.from); return { ...item, line: line.number, column: item.from - line.from + 1 }; });
         hasAnalysis = true;
         onAnalysis({ status: "ready", diagnostics });
         return diagnostics.map((item) => ({

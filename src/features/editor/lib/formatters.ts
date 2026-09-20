@@ -58,3 +58,9 @@ export const formatCompletionIcon = (type?: string) => {
     default: return { glyph: "𝑥", label: "Variable" };
   }
 };
+
+export const formatProblemFilter = (severity: import("@/features/projects/actions/code-intelligence-schemas").DiagnosticSeverity | "all") => {
+  switch (severity) { case "all": return "All"; case "error": return "Errors"; case "warning": return "Warnings"; case "info": return "Info"; }
+};
+export const formatProblemLocation = (item: { code: number; line?: number; column?: number }) =>
+  item.line ? `Line ${item.line}, column ${item.column ?? 1} · TS${item.code}` : `TS${item.code}`;

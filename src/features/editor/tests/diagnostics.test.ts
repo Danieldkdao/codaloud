@@ -15,3 +15,12 @@ it("renders every message inline as text and shades the line by highest severity
   expect(view.dom.querySelector(".cm-diagnostic-line-error")).not.toBeNull();
   view.dispatch(setDiagnostics(view.state, [])); expect(view.dom.querySelectorAll(".cm-inline-diagnostic")).toHaveLength(0);
 });
+
+it("filters problems locally by severity, message, and diagnostic code", async () => {
+  const { filterEditorProblems } = await import("../problems");
+  const diagnostics = [{ from: 0, to: 1, severity: "error" as const, message: "Type mismatch", code: 2322 }, { from: 2, to: 3, severity: "info" as const, message: "Unused value", code: 6133 }];
+  expect(filterEditorProblems(diagnostics, "  TYPE ", "all")).toHaveLength(1);
+  expect(filterEditorProblems(diagnostics, "TS6133", "all")).toHaveLength(1);
+  expect(filterEditorProblems(diagnostics, "", "warning")).toHaveLength(0);
+  expect(filterEditorProblems(diagnostics, "unused", "error")).toHaveLength(0);
+});

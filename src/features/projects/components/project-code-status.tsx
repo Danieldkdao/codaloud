@@ -21,9 +21,11 @@ export const ProjectCodeStatus = ({
   status: save,
   analysis,
   onRetry,
+  onProblems,
   readError = false,
   onLayout,
 }: {
+  onProblems?: () => void;
   onLayout?: ViewProps["onLayout"];
   readError?: boolean;
   status: SaveSnapshot;
@@ -41,9 +43,10 @@ export const ProjectCodeStatus = ({
         className="min-h-12 flex-row items-center gap-2 px-3"
       >
         {analysis && analysis.status !== "unsupported" ? (
-          <View
+          <Pressable
+            onPress={onProblems}
             accessible
-            accessibilityRole="text"
+            accessibilityRole="button"
             accessibilityLabel={formatCodeAnalysisLabel(analysis)}
             className="min-h-11 flex-row items-center gap-3"
           >
@@ -94,7 +97,7 @@ export const ProjectCodeStatus = ({
                 );
               })
             )}
-          </View>
+          </Pressable>
         ) : null}
         <View>
           <IndicatorContainer

@@ -65,6 +65,7 @@ import "@/global.css";
 import "@/styles/code-editor.css";
 
 export interface CodeEditorRef {
+  revealDiagnostic(from: number, to: number, revision: number, documentKey: string): void;
   transform(operation: CodeIntelligenceOperation, documentKey: string): void;
   searchCommand(command: EditorSearchCommand, query: EditorSearchQuery, documentKey: string): void;
   command(command: EditorCommand, text: string, documentKey: string): void;
@@ -205,6 +206,7 @@ const CodeEditor = ({
   clipboard.current = { onReadClipboard, onWriteClipboard, onCommandError };
   const activeFilename = useRef(filename);
   activeFilename.current = filename;
+  const revision = useRef(0);
   const transformPending = useRef(false);
   const activeDocument = useRef(documentKey);
   activeDocument.current = documentKey;
@@ -273,6 +275,15 @@ const CodeEditor = ({
     // the narrower serializable command contract above.
     (ref ?? null) as Ref<DOMImperativeFactory>,
     () => ({
+      revealDiagnostic: (from: number, to: number, expectedRevision: number, key: string) => {
+        const editor = view.current;
+        if (!editor || key !== activeDocument.current) return;
+        if (expectedRevision !== revision.current || from < 0 || to > editor.state.doc.length) {
+          void clipboard.current.onCommandError?.("This problem changed. Wait for analysis and select it again.").catch(() => {});
+          return;
+        }
+        editor.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: "center" }) });
+      },
       transform: (operation: CodeIntelligenceOperation, key: string) => {
         const editor = view.current;
         if (!editor || key !== activeDocument.current || transformPending.current) return;
@@ -369,6 +380,7 @@ const CodeEditor = ({
             analysisCallbacks.current.onRequestAnalysis?.(input, documentKey) ??
             null,
           (analysis) => {
+            analysis = { ...analysis, revision: revision.current };
             void (
               documentKey
                 ? analysisCallbacks.current.onAnalysis?.(analysis, documentKey)
@@ -413,6 +425,7 @@ const CodeEditor = ({
         )
           reportMatches(update.view);
         if (update.docChanged) {
+          revision.current++;
           const pending = documentKey
             ? changeCallback.current?.(update.state.sliceDoc(), documentKey)
             : changeCallback.current?.(update.state.sliceDoc());

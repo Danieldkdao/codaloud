@@ -76,7 +76,11 @@ export const ProjectBranchMenu = ({
       (git.data?.hasRemote === false || git.data?.headSha === null));
   const countsMatchBranch =
     !git.error && !isCheckingOut && git.data?.currentBranch === branch;
-  const unpublishedBranch = countsMatchBranch && git.data?.hasRemote === true && git.data.upstream === null && Boolean(git.data.headSha);
+  const unpublishedBranch =
+    countsMatchBranch &&
+    git.data?.hasRemote === true &&
+    git.data.upstream === null &&
+    Boolean(git.data.headSha);
   const outgoing = countsMatchBranch ? git.data?.outgoing : null;
   const incoming = countsMatchBranch ? git.data?.incoming : null;
   const sync = (action: (typeof syncActions)[number]) => {
@@ -265,17 +269,29 @@ export const ProjectBranchMenu = ({
               setOpen(false);
             },
           },
-          ...(unpublishedBranch ? [{
-            id: "publish-branch", label: "Publish branch to GitHub", icon: "upload" as const,
-            disabled: isWorkspaceBusy || isBranchLoading || !branch,
-            busy: workspaceOperation === "Publishing branch…",
-            onPress: () => {
-              void run("Publishing branch…", async () => {
-                const result = await git.gitPush.mutateAsync({});
-                return result.trackingUpdated ? "Branch published to GitHub." : "Branch published. Refresh to check tracking.";
-              }, { success: (message) => message });
-            },
-          }] : []),
+          ...(unpublishedBranch
+            ? [
+                {
+                  id: "publish-branch",
+                  label: "Publish branch to GitHub",
+                  icon: "upload" as const,
+                  disabled: isWorkspaceBusy || isBranchLoading || !branch,
+                  busy: workspaceOperation === "Publishing branch…",
+                  onPress: () => {
+                    void run(
+                      "Publishing branch…",
+                      async () => {
+                        const result = await git.gitPush.mutateAsync({});
+                        return result.trackingUpdated
+                          ? "Branch published to GitHub."
+                          : "Branch published. Refresh to check tracking.";
+                      },
+                      { success: (message) => message },
+                    );
+                  },
+                },
+              ]
+            : []),
           ...syncActions.map((action) => ({
             id: action,
             ...formatProjectSyncAction(action),
@@ -286,7 +302,11 @@ export const ProjectBranchMenu = ({
                   ? incoming
                   : null,
             disabled:
-              isWorkspaceBusy || !connected || !branch || isBranchLoading || (action === "push" && unpublishedBranch),
+              isWorkspaceBusy ||
+              !connected ||
+              !branch ||
+              isBranchLoading ||
+              (action === "push" && unpublishedBranch),
             busy:
               workspaceOperation === formatProjectSyncAction(action).pending,
             onPress: () => sync(action),

@@ -99,7 +99,8 @@ export const formatCompletionIcon = (type?: string) => {
       return { glyph: "▪", label: "Property" };
     case "keyword":
       return { glyph: "⌘", label: "Keyword" };
-    case "file": return { glyph: "▤", label: "File" };
+    case "file":
+      return { glyph: "▤", label: "File" };
     case "namespace":
       return { glyph: "▣", label: "Namespace" };
     default:
@@ -145,10 +146,15 @@ export const formatNativeEditorFontClass = (font: EditorFont) => {
   }
 };
 
-export const formatProblemAccent = (severity: import("@/features/projects/actions/code-intelligence-schemas").DiagnosticSeverity) => {
+export const formatProblemAccent = (
+  severity: import("@/features/projects/actions/code-intelligence-schemas").DiagnosticSeverity,
+) => {
   switch (severity) {
-    case "error": return { background: "bg-destructive/10", text: "text-destructive" };
-    case "warning": return { background: "bg-warning/10", text: "text-warning" };
-    case "info": return { background: "bg-info/10", text: "text-info" };
+    case "error":
+      return { background: "bg-destructive/10", text: "text-destructive" };
+    case "warning":
+      return { background: "bg-warning/10", text: "text-warning" };
+    case "info":
+      return { background: "bg-info/10", text: "text-info" };
   }
 };

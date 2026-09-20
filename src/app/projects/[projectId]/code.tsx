@@ -115,7 +115,10 @@ const CodeScreen = () => {
     !closingPath &&
     interaction?.key === documents.activeKey;
   const showKeyboardAccessory = Boolean(
-    canShowEditorControls && !searchOpen && keyboardFrame && interaction?.focused,
+    canShowEditorControls &&
+    !searchOpen &&
+    keyboardFrame &&
+    interaction?.focused,
   );
   const showSelectionMenu = Boolean(
     canShowEditorControls && interaction?.hasSelection,
@@ -311,65 +314,72 @@ const CodeScreen = () => {
         ) : null}
       </View>
       {files.activeFilePath && (searchOpen || !keyboardFrame) ? (
-        <EditorBottomBar frame={searchOpen ? keyboardFrame : undefined} dockHeight={dockHeight} onHeight={setBadgeHeight}>
+        <EditorBottomBar
+          frame={searchOpen ? keyboardFrame : undefined}
+          dockHeight={dockHeight}
+          onHeight={setBadgeHeight}
+        >
           {searchOpen ? (
-
-          <EditorSearchBar
-            query={searchQuery}
-            summary={searchSummary}
-            replace={replaceOpen}
-            onReplaceChange={setReplaceOpen}
-            onChange={setSearchQuery}
-            onClose={() => { setSearchOpen(false); Keyboard.dismiss(); }}
-            onCommand={(command) => {
-              if (documents.activeKey && !isWorkspaceBusy)
-                editor.current?.searchCommand(
-                  command,
-                  searchQuery,
-                  documents.activeKey,
-                );
-            }}
-          />
+            <EditorSearchBar
+              query={searchQuery}
+              summary={searchSummary}
+              replace={replaceOpen}
+              onReplaceChange={setReplaceOpen}
+              onChange={setSearchQuery}
+              onClose={() => {
+                setSearchOpen(false);
+                Keyboard.dismiss();
+              }}
+              onCommand={(command) => {
+                if (documents.activeKey && !isWorkspaceBusy)
+                  editor.current?.searchCommand(
+                    command,
+                    searchQuery,
+                    documents.activeKey,
+                  );
+              }}
+            />
           ) : (
-          <ProjectCodeToolbar
-            onProblems={() => setProblemsOpen(true)}
-            disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
-            onFormat={() => {
-              if (documents.activeKey)
-                editor.current?.transform("format", documents.activeKey);
-            }}
-            onOrganize={() => {
-              if (documents.activeKey)
-                editor.current?.transform(
-                  "organize-imports",
-                  documents.activeKey,
-                );
-            }}
-            onFind={() => {
-              setReplaceOpen(false);
-              setSearchOpen(true);
-            }}
-            onReplace={() => {
-              setReplaceOpen(true);
-              setSearchOpen(true);
-            }}
-            readError={!documents.activeKey && query.isError}
-            status={
-              !documents.activeKey && query.isError && !query.isFetching
-                ? { status: "error", message: query.error.message }
-                : isReady
-                  ? documents.status
-                  : { status: "loading" }
-            }
-            analysis={documents.activeKey ? activeAnalysis : undefined}
-            onRetry={
-              documents.activeKey
-                ? documents.retry
-                : () => {
-                    void query.refetch();
-                  }
-            }
-          />          )}
+            <ProjectCodeToolbar
+              onProblems={() => setProblemsOpen(true)}
+              disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
+              onFormat={() => {
+                if (documents.activeKey)
+                  editor.current?.transform("format", documents.activeKey);
+              }}
+              onOrganize={() => {
+                if (documents.activeKey)
+                  editor.current?.transform(
+                    "organize-imports",
+                    documents.activeKey,
+                  );
+              }}
+              onFind={() => {
+                setReplaceOpen(false);
+                setSearchOpen(true);
+              }}
+              onReplace={() => {
+                setReplaceOpen(true);
+                setSearchOpen(true);
+              }}
+              readError={!documents.activeKey && query.isError}
+              status={
+                !documents.activeKey && query.isError && !query.isFetching
+                  ? { status: "error", message: query.error.message }
+                  : isReady
+                    ? documents.status
+                    : { status: "loading" }
+              }
+              analysis={documents.activeKey ? activeAnalysis : undefined}
+              onRetry={
+                documents.activeKey
+                  ? documents.retry
+                  : () => {
+                      void query.refetch();
+                    }
+              }
+            />
+          )}
         </EditorBottomBar>
       ) : null}
       {showKeyboardAccessory ? (

@@ -6,6 +6,7 @@ import { EditorSearchBar } from "../components/editor-search-bar";
 import { EditorProblemsSheet } from "../components/editor-problems-sheet";
 import type { EditorSearchQuery } from "../types";
 vi.mock("react-native", () => ({
+  Platform: { OS: "ios" },
   KeyboardAvoidingView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   View: ({ children }: { children?: ReactNode }) =>
     createElement("div", null, children),

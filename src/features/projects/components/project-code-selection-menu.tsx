@@ -79,7 +79,8 @@ export const ProjectCodeSelectionMenu = ({
   const option = (action: SelectionAction) => ({
     value: action,
     label: formatSelectionAction(action).label,
-    disabled: action === "explain" || (action === "comment" && !commands?.canComment),
+    disabled:
+      action === "explain" || (action === "comment" && !commands?.canComment),
     image: images.find((source) => source.action === action)?.image,
     onSelect: () => {
       if (action !== "explain") onCommand?.(action);

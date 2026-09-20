@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { FlatList, KeyboardAvoidingView, Pressable, View, useWindowDimensions } from "react-native";
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Input } from "@/components/ui/input";
 import { PText } from "@/components/ui/text";
@@ -13,7 +20,11 @@ import {
 } from "@/features/projects/actions/code-intelligence-schemas";
 import { formatCodeDiagnostic } from "@/features/projects/lib/formatters";
 import { filterEditorProblems } from "../problems";
-import { formatProblemAccent, formatProblemFilter, formatProblemLocation } from "../lib/formatters";
+import {
+  formatProblemAccent,
+  formatProblemFilter,
+  formatProblemLocation,
+} from "../lib/formatters";
 
 export const EditorProblemsSheet = ({
   open,
@@ -49,7 +60,7 @@ export const EditorProblemsSheet = ({
       backgroundColor={background}
     >
       <KeyboardAvoidingView
-        behavior={process.env.EXPO_OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ height: height * 0.7 }}
         className="gap-3 px-4 pb-4"
         accessibilityViewIsModal
@@ -93,7 +104,10 @@ export const EditorProblemsSheet = ({
                 accessibilityRole="button"
                 accessibilityLabel={`${item.severity}: ${item.message}, ${formatProblemLocation(item)}`}
                 onPress={() => onSelect(item)}
-                className={cn("min-h-14 flex-row gap-3 rounded-2xl p-3 mb-2 active:opacity-70", accent.background)}
+                className={cn(
+                  "min-h-14 flex-row gap-3 rounded-2xl p-3 mb-2 active:opacity-70",
+                  accent.background,
+                )}
               >
                 <Icon
                   family="Feather"

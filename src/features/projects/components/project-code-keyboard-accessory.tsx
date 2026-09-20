@@ -17,7 +17,10 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { CodeText } from "@/components/ui/text";
 
-import type { EditorCommand, EditorCommandState } from "@/features/editor/types";
+import type {
+  EditorCommand,
+  EditorCommandState,
+} from "@/features/editor/types";
 
 const symbols = [
   "(",
@@ -55,6 +58,22 @@ type ProjectCodeKeyboardAccessoryProps = {
   frame?: KeyboardMetrics;
   children?: ReactNode;
   onDismissKeyboard: () => void;
+};
+
+const formatCursorFoldAction = (fold: EditorCommandState["fold"]) => {
+  switch (fold) {
+    case "unfold":
+      return {
+        label: "Unfold current line",
+        icon: "unfold-more-horizontal" as const,
+      };
+    case "fold":
+    case "unavailable":
+      return {
+        label: "Fold current line",
+        icon: "unfold-less-horizontal" as const,
+      };
+  }
 };
 
 export const ProjectCodeKeyboardAccessory = ({
@@ -106,13 +125,19 @@ export const ProjectCodeKeyboardAccessory = ({
               <View className="flex-1" />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={fold === "unfold" ? "Unfold current line" : "Fold current line"}
+                accessibilityLabel={formatCursorFoldAction(fold).label}
                 disabled={fold === "unavailable"}
                 accessibilityState={{ disabled: fold === "unavailable" }}
                 onPress={() => onCommand?.("fold")}
                 className="h-12 w-11 items-center justify-center active:opacity-50 disabled:opacity-40"
               >
-                <Icon family="MaterialCommunityIcons" name={fold === "unfold" ? "unfold-more-horizontal" : "unfold-less-horizontal"} size={22} className="text-foreground" accessible={false} />
+                <Icon
+                  family="MaterialCommunityIcons"
+                  name={formatCursorFoldAction(fold).icon}
+                  size={22}
+                  className="text-foreground"
+                  accessible={false}
+                />
               </Pressable>
               <Pressable
                 accessibilityRole="button"

@@ -70,11 +70,11 @@ export const ProjectBranchSection = ({
         <Icon
           family="Feather"
           name={icon}
-          size={18}
+          size={16}
           className="text-muted-foreground"
           accessible={false}
         />
-        <PText accessibilityRole="header" className="text-base font-medium">
+        <PText accessibilityRole="header" className="text-base font-medium text-muted-foreground">
           {title}
         </PText>
       </View>
@@ -183,16 +183,16 @@ export const ProjectBranchSection = ({
               }}
               disabled={disabled}
               onPress={() => onSelect(name)}
-              className="min-h-20 min-w-0 flex-1 flex-row items-center gap-4 px-5 py-4 active:bg-secondary"
+              className="min-h-14 min-w-0 flex-1 flex-row items-center gap-3 px-5 py-3 active:bg-secondary"
             >
-              <PText className="min-w-0 flex-1 text-xl font-medium text-foreground">
+              <PText className="min-w-0 flex-1 text-base font-normal text-foreground">
                 {name}
               </PText>
               {selectedBranch === name && (
                 <Icon
                   family="Feather"
                   name="check"
-                  size={26}
+                  size={20}
                   className="text-foreground"
                   accessible={false}
                 />
@@ -212,7 +212,7 @@ export const ProjectBranchSection = ({
                 <Icon
                   family="Feather"
                   name="trash-2"
-                  size={20}
+                  size={18}
                   className="text-destructive"
                   accessible={false}
                 />

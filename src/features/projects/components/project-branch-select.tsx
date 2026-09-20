@@ -304,13 +304,13 @@ export const ProjectBranchSelect = ({
                     <Icon
                       family="Feather"
                       name="cloud"
-                      size={18}
+                      size={16}
                       className="text-muted-foreground"
                       accessible={false}
                     />
                     <PText
                       accessibilityRole="header"
-                      className="text-base font-medium"
+                      className="text-base font-medium text-muted-foreground"
                     >
                       Remote branches
                     </PText>

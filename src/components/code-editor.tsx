@@ -47,6 +47,8 @@ import {
   type CodeEditorMatchState,
 } from "./code-editor-matches";
 
+import { editorAutocompletion } from "@/features/editor/completions";
+import { inlineDiagnostics } from "@/features/editor/diagnostics";
 import { transformEditor } from "@/features/editor/transforms";
 import type { CodeIntelligenceOperation } from "@/features/projects/actions/code-intelligence-schemas";
 import { editorSearch, updateEditorSearch, runSearchCommand, getEditorSearchSummary } from "@/features/editor/search";
@@ -396,6 +398,8 @@ const CodeEditor = ({
         EditorView.editable.of(!readOnlyRef.current),
       ]),
       intelligence?.extensions ?? [],
+      inlineDiagnostics,
+      editorAutocompletion(filename, hasAnalysis ? async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, documentKey) ?? null : undefined),
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {

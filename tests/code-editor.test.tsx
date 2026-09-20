@@ -106,22 +106,21 @@ it("toggles read-only without resetting the document, selection, or undo history
   expect(view.state.doc.toString()).toBe("original");
 });
 
-it.each(["demo.ts", "demo.html", "notes.txt"])("does not offer built-in completions in %s", async (filename) => {
+it("offers typed completions in a floating popup and accepts a touch-sized option", async () => {
   const request = vi.fn<CodeEditorAnalysisRequest>(async (input) => input.position === undefined
     ? { diagnostics: [] }
     : { completions: [{ label: "enabled", apply: "enabled", type: "property" }] });
   await act(async () => root.render(createElement(CodeEditor, {
-    filename, initialValue: "const options = { enabled: true };\noptions", onRequestAnalysis: request,
+    filename: "demo.ts", initialValue: "options.", onRequestAnalysis: request,
   })));
   const view = editor();
-  act(() => {
-    view.dispatch({ changes: { from: view.state.doc.length, insert: "." },
-      selection: { anchor: view.state.doc.length + 1 }, userEvent: "input.type" });
-    expect(startCompletion(view)).toBe(false);
-  });
-  expect(currentCompletions(view.state)).toEqual([]);
-  expect(container.querySelector(".cm-tooltip-autocomplete")).toBeNull();
-  expect(request.mock.calls.some(([input]) => input.position !== undefined)).toBe(false);
+  act(() => { view.focus(); view.dispatch({ selection: { anchor: view.state.doc.length } }); expect(startCompletion(view)).toBe(true); });
+  await vi.waitFor(() => expect(currentCompletions(view.state)).toHaveLength(1));
+  expect(container.querySelector(".cm-tooltip-autocomplete")).not.toBeNull();
+  expect(container.querySelector(".cm-completion-kind")?.textContent).toBe("▪");
+  const { acceptCompletion } = await import("@codemirror/autocomplete");
+  act(() => { acceptCompletion(view); });
+  expect(view.state.doc.toString()).toBe("options.enabled");
 });
 
 it("marks and reports diagnostics, then clears corrected errors", async () => {
@@ -197,7 +196,7 @@ it("keeps diagnostic underlines without showing a hover popup", async () => {
     expect(coords).toHaveBeenCalled();
     const tooltip = container.querySelector(".cm-tooltip");
     expect(tooltip ? getComputedStyle(tooltip).display : "none").toBe("none");
-    expect(container.textContent).not.toContain("Diagnostic details");
+    expect(container.querySelector(".cm-inline-diagnostic")?.textContent).toContain("Diagnostic details");
     expect(container.querySelector(".cm-panel")).toBeNull();
   } finally { style.remove(); vi.useRealTimers(); }
 });
@@ -306,7 +305,6 @@ it.each([
   { key: "F3" }, { key: "F3", shiftKey: true },
   { key: "M", keyCode: 77, ctrlKey: true, shiftKey: true }, { key: "M", keyCode: 77, metaKey: true, shiftKey: true },
   { key: "F8" }, { key: "F8", shiftKey: true },
-  { key: " ", ctrlKey: true },
   { key: "d", ctrlKey: true }, { key: "d", metaKey: true },
   { key: "L", keyCode: 76, ctrlKey: true, shiftKey: true }, { key: "L", keyCode: 76, metaKey: true, shiftKey: true },
   { key: "{", keyCode: 219, ctrlKey: true, shiftKey: true }, { key: "[", metaKey: true, altKey: true },

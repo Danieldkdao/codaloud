@@ -17,7 +17,7 @@ body { background: var(--background); }
 
 /* @codemirror/lint 6.9.7 still creates an empty tooltip shell when its filter
  * returns []. Helper popups belong in native UI, including this empty shell. */
-.code-editor-host .cm-tooltip { display: none; }
+.code-editor-host .cm-tooltip:not(.cm-tooltip-autocomplete) { display: none; }
 
 /* Use one masked wave instead of WebView text decorations and CodeMirror's SVG
  * backgrounds. Only severity marks draw the underline. */
@@ -50,3 +50,19 @@ body { background: var(--background); }
 .code-editor-host .cm-fileMatch { background: color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 3px; }
 .code-editor-host .cm-fileMatch-active { background: var(--primary); color: var(--primary-foreground); outline: 1px solid var(--primary); border-radius: 3px; }
 .code-editor-host .cm-fileMatch-active span { color: inherit; }
+
+/* Mobile completion rows are intentionally large and stay within the WebView. */
+.code-editor-host .cm-tooltip-autocomplete { border: 1px solid var(--border); border-radius: 12px; background: var(--popover); color: var(--popover-foreground); max-width: calc(100vw - 24px); overflow: hidden; box-shadow: 0 4px 16px var(--navigation-shadow); }
+.code-editor-host .cm-tooltip-autocomplete ul { max-height: min(264px, 40vh); font-family: var(--editor-font-regular), monospace; }
+.code-editor-host .cm-tooltip-autocomplete ul li { min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 16px; box-sizing: border-box; }
+.code-editor-host .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }
+.code-editor-host .cm-completion-kind { width: 24px; flex-shrink: 0; text-align: center; color: var(--syntax-type); }
+.code-editor-host .cm-completionLabel { overflow: hidden; text-overflow: ellipsis; }
+.code-editor-host .cm-completionDetail { font-family: EditorUI, sans-serif; font-style: normal; color: var(--muted-foreground); margin-left: auto; font-size: 16px; }
+.code-editor-host .cm-inline-diagnostic { padding-left: 20px; font-family: EditorUI, sans-serif; font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
+.code-editor-host .cm-inline-error { color: var(--destructive); }
+.code-editor-host .cm-inline-warning { color: var(--warning); }
+.code-editor-host .cm-inline-info { color: var(--info); }
+.code-editor-host .cm-diagnostic-line-error { background: color-mix(in srgb, var(--destructive) 8%, transparent); }
+.code-editor-host .cm-diagnostic-line-warning { background: color-mix(in srgb, var(--warning) 8%, transparent); }
+.code-editor-host .cm-diagnostic-line-info { background: color-mix(in srgb, var(--info) 8%, transparent); }

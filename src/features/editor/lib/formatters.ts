@@ -64,3 +64,12 @@ export const formatProblemFilter = (severity: import("@/features/projects/action
 };
 export const formatProblemLocation = (item: { code: number; line?: number; column?: number }) =>
   item.line ? `Line ${item.line}, column ${item.column ?? 1} · TS${item.code}` : `TS${item.code}`;
+
+export const formatNativeEditorFontClass = (font: EditorFont) => {
+  switch (font) {
+    case "JetBrains Mono": return "code-font-jetbrains";
+    case "Fira Code": return "code-font-fira";
+    case "Source Code Pro": return "code-font-source";
+    case "IBM Plex Mono": return "code-font-plex";
+  }
+};

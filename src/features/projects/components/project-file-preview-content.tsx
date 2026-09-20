@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import CodeEditor, { type CodeEditorRef } from "@/components/code-editor";
 import type { CodeEditorMatchState } from "@/components/code-editor-matches";
 import { CodeEditorLoading } from "@/components/code-editor-loading";
@@ -25,6 +26,7 @@ export const ProjectFilePreviewContent = ({
   dockHeight,
   onOpen,
 }: ProjectFilePreviewContentProps) => {
+  const { preferences } = useEditorPreferences();
   const { isDarkMode } = useTheme();
   const shadow = useThemeColor("navigation-shadow");
   const editor = useRef<CodeEditorRef>(null);
@@ -74,6 +76,7 @@ export const ProjectFilePreviewContent = ({
       >
         <CodeEditor
           ref={editor}
+          preferences={preferences}
           filename={filePath}
           initialValue={content}
           readOnly

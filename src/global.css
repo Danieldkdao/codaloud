@@ -163,7 +163,7 @@
  */
 @theme inline {
   --font-heading: var(--codaloud-heading-face, "Fraunces_400Regular");
-  --font-mono: var(--codaloud-mono-face, "JetBrainsMono_400Regular");
+  --font-mono: var(--codaloud-mono-face, var(--editor-mono-400, "JetBrainsMono_400Regular"));
   --font-sans: var(--codaloud-sans-face, "Outfit_400Regular");
 }
 
@@ -188,56 +188,56 @@
 @utility font-thin {
   --codaloud-heading-face: "Fraunces_100Thin";
   --codaloud-sans-face: "Outfit_100Thin";
-  --codaloud-mono-face: "JetBrainsMono_100Thin";
+  --codaloud-mono-face: var(--editor-mono-100, "JetBrainsMono_100Thin");
 }
 
 @utility font-extralight {
   --codaloud-heading-face: "Fraunces_200ExtraLight";
   --codaloud-sans-face: "Outfit_200ExtraLight";
-  --codaloud-mono-face: "JetBrainsMono_200ExtraLight";
+  --codaloud-mono-face: var(--editor-mono-200, "JetBrainsMono_200ExtraLight");
 }
 
 @utility font-light {
   --codaloud-heading-face: "Fraunces_300Light";
   --codaloud-sans-face: "Outfit_300Light";
-  --codaloud-mono-face: "JetBrainsMono_300Light";
+  --codaloud-mono-face: var(--editor-mono-300, "JetBrainsMono_300Light");
 }
 
 @utility font-normal {
   --codaloud-heading-face: "Fraunces_400Regular";
   --codaloud-sans-face: "Outfit_400Regular";
-  --codaloud-mono-face: "JetBrainsMono_400Regular";
+  --codaloud-mono-face: var(--editor-mono-400, "JetBrainsMono_400Regular");
 }
 
 @utility font-medium {
   --codaloud-heading-face: "Fraunces_500Medium";
   --codaloud-sans-face: "Outfit_500Medium";
-  --codaloud-mono-face: "JetBrainsMono_500Medium";
+  --codaloud-mono-face: var(--editor-mono-500, "JetBrainsMono_500Medium");
 }
 
 @utility font-semibold {
   --codaloud-heading-face: "Fraunces_600SemiBold";
   --codaloud-sans-face: "Outfit_600SemiBold";
-  --codaloud-mono-face: "JetBrainsMono_600SemiBold";
+  --codaloud-mono-face: var(--editor-mono-600, "JetBrainsMono_600SemiBold");
 }
 
 @utility font-bold {
   --codaloud-heading-face: "Fraunces_700Bold";
   --codaloud-sans-face: "Outfit_700Bold";
-  --codaloud-mono-face: "JetBrainsMono_700Bold";
+  --codaloud-mono-face: var(--editor-mono-700, "JetBrainsMono_700Bold");
 }
 
 @utility font-extrabold {
   --codaloud-heading-face: "Fraunces_800ExtraBold";
   --codaloud-sans-face: "Outfit_800ExtraBold";
-  --codaloud-mono-face: "JetBrainsMono_800ExtraBold";
+  --codaloud-mono-face: var(--editor-mono-800, "JetBrainsMono_800ExtraBold");
 }
 
 @utility font-black {
   --codaloud-heading-face: "Fraunces_900Black";
   --codaloud-sans-face: "Outfit_900Black";
   /* JetBrains Mono stops at 800, so use its heaviest available face. */
-  --codaloud-mono-face: "JetBrainsMono_800ExtraBold";
+  --codaloud-mono-face: var(--editor-mono-800, "JetBrainsMono_800ExtraBold");
 }
 
 /* Editor palettes are centralized theme tokens used inside the native DOM editor. */
@@ -400,4 +400,52 @@
   --syntax-operator: #89ddff;
   --syntax-tag: #f7768e;
   --syntax-comment: #9aa5ce;
+}
+
+@utility code-font-jetbrains {
+  --editor-mono-100: "JetBrainsMono_100Thin";
+  --editor-mono-200: "JetBrainsMono_200ExtraLight";
+  --editor-mono-300: "JetBrainsMono_300Light";
+  --editor-mono-400: "JetBrainsMono_400Regular";
+  --editor-mono-500: "JetBrainsMono_500Medium";
+  --editor-mono-600: "JetBrainsMono_600SemiBold";
+  --editor-mono-700: "JetBrainsMono_700Bold";
+  --editor-mono-800: "JetBrainsMono_800ExtraBold";
+  --editor-mono-900: "JetBrainsMono_800ExtraBold";
+}
+
+@utility code-font-fira {
+  --editor-mono-100: "FiraCode_300Light";
+  --editor-mono-200: "FiraCode_300Light";
+  --editor-mono-300: "FiraCode_300Light";
+  --editor-mono-400: "FiraCode_400Regular";
+  --editor-mono-500: "FiraCode_500Medium";
+  --editor-mono-600: "FiraCode_600SemiBold";
+  --editor-mono-700: "FiraCode_700Bold";
+  --editor-mono-800: "FiraCode_700Bold";
+  --editor-mono-900: "FiraCode_700Bold";
+}
+
+@utility code-font-source {
+  --editor-mono-100: "SourceCodePro_200ExtraLight";
+  --editor-mono-200: "SourceCodePro_200ExtraLight";
+  --editor-mono-300: "SourceCodePro_300Light";
+  --editor-mono-400: "SourceCodePro_400Regular";
+  --editor-mono-500: "SourceCodePro_500Medium";
+  --editor-mono-600: "SourceCodePro_600SemiBold";
+  --editor-mono-700: "SourceCodePro_700Bold";
+  --editor-mono-800: "SourceCodePro_800ExtraBold";
+  --editor-mono-900: "SourceCodePro_900Black";
+}
+
+@utility code-font-plex {
+  --editor-mono-100: "IBMPlexMono_100Thin";
+  --editor-mono-200: "IBMPlexMono_200ExtraLight";
+  --editor-mono-300: "IBMPlexMono_300Light";
+  --editor-mono-400: "IBMPlexMono_400Regular";
+  --editor-mono-500: "IBMPlexMono_500Medium";
+  --editor-mono-600: "IBMPlexMono_600SemiBold";
+  --editor-mono-700: "IBMPlexMono_700Bold";
+  --editor-mono-800: "IBMPlexMono_700Bold";
+  --editor-mono-900: "IBMPlexMono_700Bold";
 }

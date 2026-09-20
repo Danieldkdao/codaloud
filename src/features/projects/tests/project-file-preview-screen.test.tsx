@@ -252,3 +252,5 @@ it("ignores late match reports after the preview search changes", async () => {
   expect(container.textContent).toContain("1 / 1");
   expect(container.textContent).not.toContain("43 / 99");
 });
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => { const { defaultEditorPreferences } = await import("@/features/settings/constants"); return { useEditorPreferences: () => ({ preferences: defaultEditorPreferences }) }; });

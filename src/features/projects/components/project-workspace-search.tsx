@@ -1,4 +1,5 @@
 import { useDebouncer } from "@tanstack/react-pacer";
+import { useKeyboardSymbolsInset } from "@/hooks/use-keyboard-symbols";
 import {
   useCallback,
   useEffect,
@@ -65,6 +66,7 @@ export const ProjectWorkspaceSearch = ({
   children,
 }: ProjectWorkspaceSearchProps) => {
   const overlay = useProjectSearchOverlay();
+  const symbolInset = useKeyboardSymbolsInset();
   const insets = useSafeAreaInsets();
   const shadow = useThemeColor("navigation-shadow");
   const { width } = useWindowDimensions();
@@ -118,7 +120,7 @@ export const ProjectWorkspaceSearch = ({
     if (!anchor) return;
     const updateKeyboardOffset = (screenY: number, duration: number) => {
       keyboardOffset.value = withTiming(
-        Math.max(0, anchor.windowTop + buttonSize + 12 - screenY),
+        Math.max(0, anchor.windowTop + buttonSize + 12 + symbolInset - screenY),
         { duration: reducedMotion ? 0 : duration },
       );
     };
@@ -148,7 +150,7 @@ export const ProjectWorkspaceSearch = ({
       hide.remove();
       cancelAnimation(keyboardOffset);
     };
-  }, [anchor, keyboardOffset, reducedMotion]);
+  }, [anchor, keyboardOffset, reducedMotion, symbolInset]);
 
   const focusInput = () => {
     if (!closing.current) inputRef.current?.focus();

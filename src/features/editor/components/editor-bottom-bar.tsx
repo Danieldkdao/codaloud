@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { View, useWindowDimensions, type KeyboardMetrics } from "react-native";
+import { useKeyboardSymbolsInset } from "@/hooks/use-keyboard-symbols";
 import Animated, {
   LinearTransition,
   ReduceMotion,
@@ -23,6 +24,7 @@ export const EditorBottomBar = ({
   onHeight: (height: number) => void;
 }) => {
   const viewport = useRef<View>(null);
+  const symbolInset = useKeyboardSymbolsInset();
   const currentFrame = useRef(frame);
   currentFrame.current = frame;
   const [keyboardInset, setKeyboardInset] = useState(0);
@@ -53,7 +55,7 @@ export const EditorBottomBar = ({
           ReduceMotion.System,
         )}
         className="absolute left-4 right-4"
-        style={{ bottom: (frame ? keyboardInset : dockHeight) + 8 }}
+        style={{ bottom: (frame ? keyboardInset + symbolInset : dockHeight) + 8 }}
         onLayout={({ nativeEvent }) => onHeight(nativeEvent.layout.height)}
       >
         {children}

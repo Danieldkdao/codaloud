@@ -2,7 +2,7 @@
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
-import { act, createElement, useImperativeHandle, useState, useRef, type ReactNode, type Ref } from "react";
+import { act, createElement, useImperativeHandle, useEffect, useState, useRef, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -167,7 +167,10 @@ vi.mock("@expo/ui/community/bottom-sheet", () => ({
   },
   BottomSheetView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
 }));
-vi.mock("@/components/ui/text-prompt", () => import("@/components/ui/text-prompt.ios"));
+vi.mock("@/components/ui/text-prompt", () => ({ TextPrompt: ({ title, message, actionText, onSubmit, onCancel }: import("@/components/ui/text-prompt").TextPromptProps) => {
+  useEffect(() => { workspaceFiles.alert(title, message, [{ text: "Cancel", onPress: onCancel }, { text: actionText, onPress: onSubmit }]); }, [title, message, actionText, onSubmit, onCancel]);
+  return null;
+} }));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ placeholder, accessibilityLabel, value, onChangeText, editable }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void; editable?: boolean }) =>
     createElement("input", { placeholder, "aria-label": accessibilityLabel, value, readOnly: editable === false, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
@@ -1480,3 +1483,5 @@ it("publishes an untracked local branch through the existing remote without crea
   expect(git.gitPush.mutateAsync).toHaveBeenCalledExactlyOnceWith({});
   expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(git.gitPush.mutateAsync.mock.invocationCallOrder[0]);
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

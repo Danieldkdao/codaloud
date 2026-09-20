@@ -9,6 +9,7 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EditorBottomBar } from "../components/editor-bottom-bar";
+import { KeyboardSymbolsInsetContext } from "@/hooks/use-keyboard-symbols";
 
 const layout = vi.hoisted(() => ({
   y: 100,
@@ -117,4 +118,11 @@ it("never fades a glass ancestor through zero opacity", () => {
   expect(
     container.querySelector("[data-bar]")?.getAttribute("data-fades"),
   ).toBe("false");
+});
+
+it("keeps search above the Android symbol row", () => {
+  act(() => root.render(createElement(KeyboardSymbolsInsetContext, { value: 48 }, createElement(EditorBottomBar, {
+    frame, dockHeight: 72, onHeight: vi.fn(), children: "Find",
+  }))));
+  expect(bottom()).toBe("356px");
 });

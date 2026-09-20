@@ -15,9 +15,12 @@ export const createEditorCompletionSource = (
     context: CompletionContext,
   ): Promise<CompletionResult | null> => {
     const word = context.matchBefore(/[\w$]+/);
+    const before = context.state.sliceDoc(Math.max(0, context.pos - 2000), context.pos);
+    const modulePath = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["'][^"'\n]*$/.test(before);
+    const namedImport = /\b(?:import|export)\s+(?:type\s+)?\{[^}]*$/.test(before);
     if (
       !word &&
-      !context.explicit &&
+      !context.explicit && !modulePath && !namedImport &&
       context.state.sliceDoc(context.pos - 1, context.pos) !== "."
     )
       return null;

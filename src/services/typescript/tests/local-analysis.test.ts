@@ -158,3 +158,18 @@ it("coalesces queued completion requests to the latest buffer", async () => {
     expect("completions" in last && last.completions.some((item) => item.label === "toFixed")).toBe(true);
   } finally { await analyzer.dispose(); }
 });
+
+it("completes relative module paths and named exports from that module", async () => {
+  const files: Record<string, string> = { "src/helpers.ts": 'export const hello = 1; export function help() {}', "src/main.ts": "" };
+  const analyzer = createTypeScriptAnalyzer(async (path) => files[path] ?? null, async (path) => path === "src" ? [
+    { path: "src/helpers.ts", isDir: false }, { path: "src/main.ts", isDir: false }, { path: "src/nested", isDir: true },
+  ] : []);
+  try {
+    const content = 'import { hello } from "./he";';
+    const paths = await analyzer.analyze({ path: "src/main.ts", content, position: content.indexOf('./he') + 4 });
+    expect("completions" in paths && paths.completions.some((entry) => entry.label === "helpers")).toBe(true);
+    const named = 'import {  } from "./helpers";';
+    const exports = await analyzer.analyze({ path: "src/main.ts", content: named, position: 9 });
+    expect("completions" in exports && exports.completions.map((entry) => entry.label)).toEqual(expect.arrayContaining(["hello", "help"]));
+  } finally { await analyzer.dispose(); }
+});

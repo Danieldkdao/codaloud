@@ -60,3 +60,10 @@ it("treats service failure as unavailable suggestions without rejecting", async 
     ),
   ).toBeNull();
 });
+
+it.each(['import {  } from "./helpers";', 'import { x } from "./";', 'const x = import("./");'])("requests suggestions inside import contexts: %s", async (doc) => {
+  const request = vi.fn().mockResolvedValue({ completions: [] });
+  const pos = doc.includes('{  }') ? 9 : doc.indexOf('./') + 2;
+  await createEditorCompletionSource("main.ts", request)(new CompletionContext(EditorState.create({ doc }), pos, false));
+  expect(request).toHaveBeenCalledOnce();
+});

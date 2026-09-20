@@ -99,6 +99,7 @@ export const formatCompletionIcon = (type?: string) => {
       return { glyph: "▪", label: "Property" };
     case "keyword":
       return { glyph: "⌘", label: "Keyword" };
+    case "file": return { glyph: "▤", label: "File" };
     case "namespace":
       return { glyph: "▣", label: "Namespace" };
     default:

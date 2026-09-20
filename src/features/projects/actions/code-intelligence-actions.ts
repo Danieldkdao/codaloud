@@ -3,7 +3,8 @@ import {
   type CodeIntelligenceRequestSchema,
   type CodeIntelligenceResultSchema,
 } from "./code-intelligence-schemas";
-import { projectFileContentSchema } from "./file-schemas";
+import { z } from "zod";
+import { projectFileContentSchema, projectFileEntrySchema } from "./file-schemas";
 import { requireLocalProject } from "../local/access";
 import { executeWorkspace } from "@/services/local-workspace/execute";
 import type { createTypeScriptAnalyzer } from "@/services/typescript/analysis";
@@ -38,6 +39,10 @@ export const readProjectCodeIntelligence = async (
           } catch {
             return null;
           }
+        }, async (path) => {
+          try {
+            return z.array(projectFileEntrySchema).parse(await executeWorkspace(project.id, "list-files", { path }));
+          } catch { return []; }
         }),
       };
     }

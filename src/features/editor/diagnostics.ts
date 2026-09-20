@@ -25,7 +25,8 @@ class InlineDiagnostic extends WidgetType {
   toDOM() {
     const element = document.createElement("span");
     element.className = formatInlineDiagnosticClass(this.severity);
-    element.textContent = ` ${this.severity}: ${this.message}`;
+    element.textContent = ` ${this.message}`;
+    element.setAttribute("aria-label", `${this.severity}: ${this.message}`);
     element.setAttribute("role", "note");
     return element;
   }

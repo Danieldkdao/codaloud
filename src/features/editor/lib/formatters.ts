@@ -143,3 +143,11 @@ export const formatNativeEditorFontClass = (font: EditorFont) => {
       return "code-font-plex";
   }
 };
+
+export const formatProblemAccent = (severity: import("@/features/projects/actions/code-intelligence-schemas").DiagnosticSeverity) => {
+  switch (severity) {
+    case "error": return { background: "bg-destructive/10", text: "text-destructive" };
+    case "warning": return { background: "bg-warning/10", text: "text-warning" };
+    case "info": return { background: "bg-info/10", text: "text-info" };
+  }
+};

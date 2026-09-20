@@ -23,6 +23,8 @@ it("renders every message inline as text and shades the line by highest severity
   );
   expect(view.dom.querySelectorAll(".cm-inline-diagnostic")).toHaveLength(3);
   expect(view.dom.querySelector("script")).toBeNull();
+  expect(view.dom.querySelector(".cm-inline-error")?.textContent?.trim()).toBe("<script>bad</script>");
+  expect(view.dom.querySelector(".cm-inline-error")?.getAttribute("aria-label")).toBe("error: <script>bad</script>");
   expect(view.dom.textContent).toContain("<script>bad</script>");
   expect(view.dom.querySelector(".cm-diagnostic-line-error")).not.toBeNull();
   view.dispatch(setDiagnostics(view.state, []));

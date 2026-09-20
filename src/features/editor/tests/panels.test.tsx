@@ -6,6 +6,7 @@ import { EditorSearchBar } from "../components/editor-search-bar";
 import { EditorProblemsSheet } from "../components/editor-problems-sheet";
 import type { EditorSearchQuery } from "../types";
 vi.mock("react-native", () => ({
+  KeyboardAvoidingView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   View: ({ children }: { children?: ReactNode }) =>
     createElement("div", null, children),
   ScrollView: ({ children }: { children?: ReactNode }) =>
@@ -15,15 +16,17 @@ vi.mock("react-native", () => ({
     onPress,
     accessibilityLabel,
     disabled,
+    className,
   }: {
     children?: ReactNode;
     onPress?: () => void;
     accessibilityLabel?: string;
     disabled?: boolean;
+    className?: string;
   }) =>
     createElement(
       "button",
-      { onClick: onPress, "aria-label": accessibilityLabel, disabled },
+      { onClick: onPress, "aria-label": accessibilityLabel, disabled, className },
       children,
     ),
   FlatList: ({
@@ -193,6 +196,11 @@ it("debounces problem search, combines severity filters, and selects the exact d
     ),
   );
   const input = container.querySelector("input")!;
+  const warning = container.querySelector('[aria-label^="warning:"]')!;
+  expect(warning.className).toContain("bg-warning/10");
+  expect(warning.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const filters = [...container.querySelectorAll("button")].find((button) => button.textContent === "Warnings")!;
+  expect(filters.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   act(() => {
     input.value = "unused";
     input.dispatchEvent(new Event("input", { bubbles: true }));

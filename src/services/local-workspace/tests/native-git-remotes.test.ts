@@ -145,3 +145,14 @@ it("requires a local commit before publishing", () => {
   expect(call(secondId, "git/publish", { url: `file://${remote}`, expectedBranch: "main", expectedHeadSha: "a".repeat(40) })).toMatchObject({ ok: false, code: "UNBORN_HEAD" });
   expect(git(join(root, secondId), "remote")).toBe("");
 });
+
+it("publishes a new local branch and records its upstream without changing other branches", () => {
+  expect(call(firstId, "git/push").ok).toBe(true);
+  const main = git(remote, "rev-parse", "refs/heads/main");
+  git(join(root, firstId), "checkout", "-qb", "feature/new-work");
+  const head = commit(firstId, "feature.txt", "feature\n");
+  expect(call(firstId, "git/push")).toMatchObject({ ok: true, data: { pushed: true, trackingUpdated: true, remoteBranch: "feature/new-work" } });
+  expect(git(remote, "rev-parse", "refs/heads/feature/new-work")).toBe(head);
+  expect(git(remote, "rev-parse", "refs/heads/main")).toBe(main);
+  expect(git(join(root, firstId), "rev-parse", "--abbrev-ref", "@{upstream}")).toBe("origin/feature/new-work");
+});

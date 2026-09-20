@@ -251,6 +251,7 @@ beforeEach(() => {
   editorSelection.activeFilePath = "app.ts";
   git.data.headSha = "a".repeat(40);
   git.data.hasRemote = undefined;
+  git.data.upstream = "origin/main";
   changesQuery.gitInitialize.mutateAsync.mockReset().mockResolvedValue({ currentBranch: "main", headSha: null });
   changesQuery.gitInitialize.isPending = false;
   git.data.currentBranch = "main";
@@ -1467,4 +1468,15 @@ vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
     const [preferences, setPreferences] = useState(defaultEditorPreferences);
     return { preferences, ready: true, error: null, update: async (patch: Partial<typeof preferences>) => setPreferences((value) => ({ ...value, ...patch })) };
   } };
+});
+
+it("publishes an untracked local branch through the existing remote without creating a repository", async () => {
+  git.data.hasRemote = true;
+  git.data.upstream = null as unknown as string;
+  act(() => root.render(createElement(Workspace)));
+  openBranchActions();
+  click("Publish branch to GitHub");
+  await act(async () => {});
+  expect(git.gitPush.mutateAsync).toHaveBeenCalledExactlyOnceWith({});
+  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(git.gitPush.mutateAsync.mock.invocationCallOrder[0]);
 });

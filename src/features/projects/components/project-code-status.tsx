@@ -20,7 +20,6 @@ import type { SaveSnapshot } from "../lib/project-file-save-document";
 export const ProjectCodeStatus = ({
   status: save,
   analysis,
-  onShowProblems,
   onRetry,
   readError = false,
   onLayout,
@@ -29,7 +28,6 @@ export const ProjectCodeStatus = ({
   readError?: boolean;
   status: SaveSnapshot;
   analysis?: CodeEditorAnalysis;
-  onShowProblems: () => void;
   onRetry: () => void;
 }) => {
   const status = save.status;
@@ -43,11 +41,10 @@ export const ProjectCodeStatus = ({
         className="min-h-12 flex-row items-center gap-2 px-3"
       >
         {analysis && analysis.status !== "unsupported" ? (
-          <Pressable
-            accessibilityRole="button"
+          <View
+            accessible
+            accessibilityRole="text"
             accessibilityLabel={formatCodeAnalysisLabel(analysis)}
-            accessibilityHint="Opens the list of problems in this file."
-            onPress={onShowProblems}
             className="min-h-11 flex-row items-center gap-3"
           >
             {analysis.status === "unavailable" ? (
@@ -56,9 +53,9 @@ export const ProjectCodeStatus = ({
                   family="Feather"
                   name="alert-circle"
                   size={18}
-                  className="text-muted-foreground"
+                  className="text-foreground"
                 />
-                <PText className="text-base text-muted-foreground">
+                <PText className="text-base text-foreground">
                   Unavailable
                 </PText>
               </View>
@@ -78,18 +75,18 @@ export const ProjectCodeStatus = ({
                       family="Feather"
                       name={presentation.icon}
                       size={16}
-                      className="text-muted-foreground"
+                      className="text-foreground"
                     />
                     {analysis.status === "checking" ? (
                       <Icon
                         family="Octicons"
                         name="dot-fill"
                         size={8}
-                        className="text-muted-foreground"
+                        className="text-foreground"
                         accessible={false}
                       />
                     ) : (
-                      <PText className="text-base text-muted-foreground">
+                      <PText className="text-base text-foreground">
                         {formatCodeDiagnosticCount(count)}
                       </PText>
                     )}
@@ -97,7 +94,7 @@ export const ProjectCodeStatus = ({
                 );
               })
             )}
-          </Pressable>
+          </View>
         ) : null}
         <View>
           <IndicatorContainer
@@ -113,12 +110,12 @@ export const ProjectCodeStatus = ({
             className="min-h-11 min-w-11 items-center justify-center"
           >
             {presentation.busy ? (
-              <ActivityIndicator size="small" className="text-muted-foreground" />
+              <ActivityIndicator size="small" className="text-foreground" />
             ) : (
               <Icon
                 {...presentation.icon}
                 size={22}
-                className="text-muted-foreground"
+                className="text-foreground"
               />
             )}
           </IndicatorContainer>

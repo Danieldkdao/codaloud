@@ -193,6 +193,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  Switch: ({ value, disabled, accessibilityLabel }: { value: boolean; disabled?: boolean; accessibilityLabel: string }) => createElement("button", { role: "switch", "aria-checked": value, disabled, "aria-label": accessibilityLabel }),
   Alert: { alert: workspaceFiles.alert, prompt: workspaceFiles.alert },
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   Platform: { OS: "ios" },
@@ -506,8 +507,9 @@ it.each(["app.ts", null])("opens editor settings from the right toolbar with act
   const sheet = container.querySelector('[role="dialog"]');
   expect(sheet).not.toBeNull();
   expect(sheet?.textContent).not.toContain("app.ts");
-  expect(sheet?.textContent).toContain("Format code");
-  expect(sheet?.textContent).toContain("Font and size");
+  expect(sheet?.textContent).not.toContain("Format code");
+  expect(sheet?.textContent).toContain("Font size");
+  expect(sheet?.querySelector('[role="switch"][aria-label="Word wrap"]')).not.toBeNull();
   click("Swipe down");
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Editor tools");

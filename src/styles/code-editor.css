@@ -10,30 +10,17 @@ body { background: var(--background); }
 .code-editor-host .cm-line { padding: 0 20px 0 12px; }
 .code-editor-host .cm-gutters { border: 0; background: var(--background); color: var(--muted-foreground); }
 .code-editor-host .cm-lineNumbers .cm-gutterElement { min-width: 36px; padding-left: 10px; }
-.code-editor-host .cm-foldGutter .cm-gutterElement { padding: 0 6px; cursor: pointer; }
 .code-editor-host .cm-activeLine, .code-editor-host .cm-activeLineGutter { background: color-mix(in srgb, var(--secondary) 45%, transparent); }
 .code-editor-host .cm-cursor, .code-editor-host .cm-dropCursor { border-left-color: var(--secondary-foreground); }
 .code-editor-host .cm-selectionBackground, .code-editor-host .cm-focused .cm-selectionBackground, .code-editor-host .cm-content ::selection { background: var(--secondary); }
-.code-editor-host .cm-selectionMatch, .code-editor-host .cm-searchMatch { background: color-mix(in srgb, var(--secondary) 70%, transparent); }
-.code-editor-host .cm-searchMatch-selected { outline: 1px solid var(--secondary-foreground); }
 .code-editor-host .cm-matchingBracket { background: var(--secondary); color: var(--secondary-foreground); }
-.code-editor-host .cm-foldPlaceholder { color: var(--secondary-foreground); background: var(--secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
-.code-editor-host .cm-panels { background: var(--card); color: var(--foreground); font-family: EditorUI, sans-serif; font-size: 16px; }
-.code-editor-host .cm-panels-top { border-bottom: 1px solid var(--border); }
-.code-editor-host .cm-panel.cm-search { padding: 8px 44px 8px 12px; }
-.code-editor-host .cm-search input:not([type=checkbox]) { width: min(100%, 240px); }
-.code-editor-host .cm-textfield { color: var(--foreground); background: var(--background); border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 44px; font: inherit; }
-.code-editor-host .cm-button { background: var(--secondary); color: var(--foreground); border: 0; min-height: 44px; font: inherit; }
-.code-editor-host .cm-panel label { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; }
-.code-editor-host .cm-panel input[type=checkbox] { accent-color: var(--secondary-foreground); }
-.code-editor-host .cm-tooltip { border: 1px solid var(--border); border-radius: 8px; background: var(--popover); color: var(--foreground); font-size: 16px; }
-.code-editor-host .cm-tooltip-autocomplete ul li { padding: 8px 12px; min-height: 44px; }
-.code-editor-host .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }
 
-.code-editor-host .cm-textfield:focus { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* @codemirror/lint 6.9.7 still creates an empty tooltip shell when its filter
+ * returns []. Helper popups belong in native UI, including this empty shell. */
+.code-editor-host .cm-tooltip { display: none; }
 
 /* Use one masked wave instead of WebView text decorations and CodeMirror's SVG
- * backgrounds. Only severity marks draw it; the active wrapper stays unadorned. */
+ * backgrounds. Only severity marks draw the underline. */
 .code-editor-host .cm-editor .cm-lintRange { background-image: none; text-decoration: none; }
 .code-editor-host .cm-editor .cm-lintRange-error,
 .code-editor-host .cm-editor .cm-lintRange-warning,
@@ -56,21 +43,9 @@ body { background: var(--background); }
 .code-editor-host .cm-editor .cm-lintRange-error::after { background-color: var(--destructive); }
 .code-editor-host .cm-editor .cm-lintRange-warning::after { background-color: var(--warning); }
 .code-editor-host .cm-editor .cm-lintRange-info::after { background-color: var(--info); }
-.code-editor-host .cm-lintRange-active { background-color: var(--secondary); }
 .code-editor-host .cm-lintPoint-error::after { border-bottom-color: var(--destructive); }
 .code-editor-host .cm-lintPoint-warning::after { border-bottom-color: var(--warning); }
 .code-editor-host .cm-lintPoint-info::after { border-bottom-color: var(--info); }
-.code-editor-host .cm-diagnostic { padding: 10px 12px; font-size: 16px; }
-.code-editor-host .cm-diagnostic-error { border-left-color: var(--destructive); }
-.code-editor-host .cm-diagnostic-warning { border-left-color: var(--warning); }
-.code-editor-host .cm-diagnostic-info { border-left-color: var(--info); }
-.code-editor-host .cm-diagnosticSource { color: var(--muted-foreground); font-size: 16px; }
-.code-editor-host .cm-panels-bottom { border-top: 1px solid var(--border); }
-.code-editor-host .cm-panel.cm-panel-lint { padding-bottom: var(--editor-bottom-inset); }
-.code-editor-host .cm-panel-lint ul { max-height: min(30vh, 240px); }
-.code-editor-host .cm-panel-lint li { min-height: 44px; }
-.code-editor-host .cm-panel-lint [aria-selected] { background: var(--secondary); color: var(--secondary-foreground); }
-.code-editor-host .cm-panel-lint button[name=close] { min-width: 44px; min-height: 44px; color: var(--foreground); font-size: 20px; }
 
 .code-editor-host .cm-fileMatch { background: color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 3px; }
 .code-editor-host .cm-fileMatch-active { background: var(--primary); color: var(--primary-foreground); outline: 1px solid var(--primary); border-radius: 3px; }

@@ -3,6 +3,7 @@ import { act, createElement, type ReactNode, useImperativeHandle, type Ref, type
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectCodeTabs } from "../components/project-code-tabs";
+import { ProjectCodeToolbar } from "../components/project-code-toolbar";
 import { ProjectCodeStatus } from "../components/project-code-status";
 import { ProjectCodeTools } from "../components/project-code-tools";
 import { formatProjectEditorTab } from "../lib/formatters";
@@ -12,6 +13,12 @@ const scrollTo = vi.fn();
 const scrollToIndex = vi.fn();
 const pathQuery = vi.hoisted(() => ({ data: ["a.ts", "lib/b.ts", "src/Closed.ts"], isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn() }));
 vi.mock("../hooks/use-project-file-paths", () => ({ useProjectFilePaths: () => pathQuery }));
+vi.mock("@/components/ui/native-select", () => ({
+  NativeSelect: ({ label, sections }: import("@/components/ui/native-select").NativeSelectProps) => createElement("select", {
+    "aria-label": label, value: sections[0].value,
+    onChange: (event) => sections[0].options.find((option) => option.value === (event.currentTarget as HTMLSelectElement).value)?.onSelect(),
+  }, sections[0].options.map((option) => createElement("option", { key: option.value, value: option.value }, option.label))),
+}));
 vi.mock("@/components/ui/input", () => ({ Input: ({ value, onChangeText, accessibilityLabel }: { value: string; onChangeText: (value: string) => void; accessibilityLabel: string }) => createElement("input", { value, "aria-label": accessibilityLabel, onInput: (event) => onChangeText(event.currentTarget.value) }) }));
 
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
@@ -27,6 +34,7 @@ vi.mock("react-native-reanimated", () => {
   };
 });
 vi.mock("react-native", () => ({
+  Switch: ({ value, disabled, accessibilityLabel, onValueChange }: { value: boolean; disabled?: boolean; accessibilityLabel: string; onValueChange?: (value: boolean) => void }) => createElement("button", { role: "switch", "aria-checked": value, disabled, "aria-label": accessibilityLabel, onClick: () => onValueChange?.(!value) }),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   View: ({ children, testID, onLayout, className }: { children: ReactNode; testID?: string; onLayout?: (event: never) => void; className?: string }) => {
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
@@ -47,7 +55,7 @@ vi.mock("react-native", () => ({
     if (testID && onLayout) layoutEvents.set(testID, onLayout as never);
     return createElement("div", { "data-testid": testID }, children);
   },
-  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, disabled, className }: { children: ReactNode; onPress: () => void; accessibilityLabel: string; accessibilityState?: { selected?: boolean }; disabled?: boolean; className?: string }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-selected": accessibilityState?.selected, "data-class": className, disabled }, children),
+  Pressable: ({ children, onPress, accessibilityLabel, accessibilityState, disabled, className, style }: { children: ReactNode; style?: object; onPress: () => void; accessibilityLabel: string; accessibilityState?: { selected?: boolean }; disabled?: boolean; className?: string }) => createElement("button", { onClick: onPress, "aria-label": accessibilityLabel, "aria-selected": accessibilityState?.selected, "data-class": className, style, disabled }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
 }));
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", { "data-glass": true }, children) }));
@@ -103,22 +111,22 @@ it("keeps the plus and file count outside the scrolling tab strip", () => {
 
 it("lays out analysis and save indicators without position or size transitions", () => {
   act(() => root.render(createElement(ProjectCodeStatus, {
-    status: { status: "saved" }, onRetry: vi.fn(), onShowProblems: vi.fn(),
+    status: { status: "saved" }, onRetry: vi.fn(),
     analysis: { status: "checking", diagnostics: [] },
   })));
   expect(container.querySelector('[data-layout-animation="true"]')).toBeNull();
 });
 
-it("shows real diagnostic counts and exposes Problems and save retry independently", () => {
-  const onShowProblems = vi.fn(); const onRetry = vi.fn();
+it("shows diagnostic counts without a Problems button and keeps save retry available", () => {
+  const onRetry = vi.fn();
   act(() => root.render(createElement(ProjectCodeStatus, {
-    status: { status: "error", message: "Save failed" }, onRetry, onShowProblems,
+    status: { status: "error", message: "Save failed" }, onRetry,
     analysis: { status: "ready", diagnostics: [{ from: 0, to: 1, message: "Bad type", severity: "error", code: 1 }] },
   })));
   expect(container.querySelector('[data-icon="x-circle"]')).not.toBeNull();
+  expect(container.textContent).toBe("100");
+  expect(container.querySelectorAll("button")).toHaveLength(1);
   click("Couldn't save file. Tap to retry."); expect(onRetry).toHaveBeenCalledOnce();
-  act(() => [...container.querySelectorAll("button")].find((button) => button.getAttribute("aria-label")?.includes("error") && !button.getAttribute("aria-label")?.includes("save"))!.click());
-  expect(onShowProblems).toHaveBeenCalledOnce();
 });
 
 
@@ -222,18 +230,71 @@ it("shows an empty search result and clears back to open files without hiding Op
   expect(container.querySelector('[aria-label="Switch to a.ts"]')).not.toBeNull();
 });
 
-it("opens and dismisses the tool groups without a header or enabling unfinished operations", () => {
+it("tracks mock preferences across sheet dismissal without showing command or saving sections", () => {
   act(() => root.render(createElement(ProjectCodeTools)));
-  expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Editor tools");
   const sheet = container.querySelector('[role="dialog"]')!;
-  expect(sheet.textContent).not.toContain("Editor tools");
-  expect(sheet.textContent).not.toContain("Preview");
-  expect(sheet.textContent).not.toContain("src/hello.ts");
-  expect(sheet.textContent).not.toContain("These tools and settings are coming soon.");
-  for (const label of ["Find in file", "Replace in file", "Go to line", "Format code", "Organize imports", "Toggle comment", "Font and size", "Word wrap", "Line numbers"]) {
-    expect(sheet.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(true);
+  for (const text of ["Preview", "Saving", "Autosave", "Find and navigate", "Code tools", "Format code", "Go to line", "Toggle comment"]) {
+    expect(sheet.textContent).not.toContain(text);
   }
-  click("Dismiss sheet");
+  for (const label of ["Theme", "Font"]) {
+    const select = sheet.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+    expect(select.options.length).toBeGreaterThanOrEqual(3);
+    const nextValue = select.options[1].value;
+    act(() => { select.value = nextValue; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(select.value).toBe(nextValue);
+  }
+  for (const [label, initial] of [["Word wrap", false], ["Show line numbers", true], ["Use tabs for indentation", false], ["Keep indentation", true], ["Close brackets", true]] as const) {
+    expect(sheet.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-checked")).toBe(String(initial));
+    click(label);
+    expect(sheet.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-checked")).toBe(String(!initial));
+  }
+  click("Increase font size"); expect(sheet.textContent).toContain("17 pt");
+  click("Decrease font size"); expect(sheet.textContent).toContain("16 pt");
+  click("Increase tab size"); expect(sheet.textContent).toContain("3 columns");
+  click("Decrease tab size"); expect(sheet.textContent).toContain("2 columns");
+  click("Increase font size"); click("Increase tab size");
+  const values = [...sheet.querySelectorAll("select")].map((select) => select.value);
+  click("Done");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  click("Editor tools");
+  expect(container.textContent).toContain("17 pt");
+  expect(container.textContent).toContain("3 columns");
+  expect([...container.querySelectorAll("select")].map((select) => select.value)).toEqual(values);
+  expect(container.querySelector('[aria-label="Word wrap"]')?.getAttribute("aria-checked")).toBe("true");
+});
+
+it("keeps font and tab steppers within their supported mock ranges", () => {
+  act(() => root.render(createElement(ProjectCodeTools)));
+  click("Editor tools");
+  for (let index = 0; index < 40; index++) { click("Decrease font size"); click("Decrease tab size"); }
+  expect(container.textContent).toContain("10 pt");
+  expect(container.textContent).toContain("1 space");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Decrease font size"]')?.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Decrease tab size"]')?.disabled).toBe(true);
+  for (let index = 0; index < 40; index++) { click("Increase font size"); click("Increase tab size"); }
+  expect(container.textContent).toContain("32 pt");
+  expect(container.textContent).toContain("8 spaces");
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Increase font size"]')?.disabled).toBe(true);
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Increase tab size"]')?.disabled).toBe(true);
+});
+
+it("places four icon-only glass actions beside the status and matches the measured badge height", () => {
+  const onRetry = vi.fn();
+  act(() => root.render(createElement(ProjectCodeToolbar, {
+    status: { status: "saved" }, onRetry,
+    analysis: { status: "ready", diagnostics: [] },
+  })));
+  expect(container.querySelectorAll('[data-glass="true"]')).toHaveLength(5);
+  act(() => layoutEvents.get("editor-status-measure")!({ nativeEvent: { layout: { x: 0, y: 0, width: 180, height: 56 } } }));
+  for (const label of ["Format code", "Organize imports", "Find in file", "Replace in file"]) {
+    const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+    expect(button.textContent).toBe("");
+    expect(button.style.height).toBe("56px");
+    expect(button.style.width).toBe("56px");
+    expect(button.querySelector("[data-icon]")).not.toBeNull();
+    click(label);
+  }
+  expect(onRetry).not.toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });

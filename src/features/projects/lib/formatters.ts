@@ -64,7 +64,10 @@ export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
       return {
         label: "File saved",
         busy: false,
-        icon: { family: "MaterialCommunityIcons" as const, name: "cloud-check-outline" as const },
+        icon: {
+          family: "MaterialCommunityIcons" as const,
+          name: "cloud-check-outline" as const,
+        },
         className: "text-success-foreground",
       };
     case "error":
@@ -96,7 +99,7 @@ export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
     case "checking":
       return "Checking code…";
     case "unavailable":
-      return "Code analysis unavailable. Tap to retry.";
+      return "Code analysis unavailable.";
     case "unsupported":
       return "Code analysis is not available for this language.";
     case "ready": {
@@ -109,7 +112,7 @@ export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
       const information = analysis.diagnostics.filter(
         (item) => item.severity === "info",
       ).length;
-      return `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}, ${information} information message${information === 1 ? "" : "s"}. Show problems.`;
+      return `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}, ${information} information message${information === 1 ? "" : "s"}.`;
     }
   }
 };
@@ -358,12 +361,12 @@ export const formatProjectEditorTabStyle = (selected: boolean) =>
   selected
     ? {
         container: "bg-secondary border border-primary/40",
-        tabContainer: "bg-transparent",
+        tabContainer: "bg-secondary/25",
         text: "text-secondary-foreground font-semibold",
       }
     : {
         container: "bg-transparent",
-        tabContainer: "bg-secondary/40",
+        tabContainer: "bg-transparent",
         text: "text-muted-foreground",
       };
 
@@ -838,3 +841,8 @@ export const formatProjectRepositoryVisibility = (isPrivate: boolean) =>
           "Anyone can view this repository and its committed history.",
         icon: "globe" as const,
       };
+
+export const formatEditorFontSize = (size: number) => `${size} pt`;
+
+export const formatEditorTabSize = (size: number, useTabs = false) =>
+  `${size} ${useTabs ? (size === 1 ? "column" : "columns") : size === 1 ? "space" : "spaces"}`;

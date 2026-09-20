@@ -70,7 +70,8 @@ vi.mock("@/components/ui/text", () => {
   return { PText: Text, HeadingText: Text, CodeText: Text };
 });
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => createElement("button", { onClick: onPress }, children) }));
-vi.mock("react-native", () => ({ Keyboard: { dismiss: mocks.dismissKeyboard }, AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
+vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: (props: { children?: ReactNode }) => createElement(Children, props) }));
+vi.mock("react-native", () => ({ ScrollView: (props: { children?: ReactNode }) => createElement(Children, props), Keyboard: { dismiss: mocks.dismissKeyboard }, AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
   lifecycle.listeners.add(listener);
   return { remove: () => lifecycle.listeners.delete(listener) };
 } }, View: (props: { children?: ReactNode }) => createElement(Children, props), Pressable: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));

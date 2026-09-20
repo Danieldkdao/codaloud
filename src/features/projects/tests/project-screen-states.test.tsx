@@ -26,6 +26,8 @@ vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileCont
 const readFile = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
+vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
+vi.mock("@/components/ui/keyboard-aware-view", () => ({ KeyboardAwareView: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));
 const state = vi.hoisted(() => ({ editorMounts: 0, empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
@@ -52,9 +54,10 @@ vi.mock("@/components/app-wrapper", () => ({ AppWrapper: ({ children }: { childr
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
+  ScrollView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove: vi.fn() }) },
-  View: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+  View: ({ children, accessibilityLabel }: { children?: ReactNode; accessibilityLabel?: string }) => createElement("div", { "aria-label": accessibilityLabel }, children),
   Pressable: ({ children, accessibilityLabel, onPress }: { children?: ReactNode; accessibilityLabel?: string; onPress?: () => void }) => createElement("button", { "aria-label": accessibilityLabel, onClick: onPress }, children),
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent }: {
@@ -72,6 +75,7 @@ vi.mock("@/features/projects/components/project-changes-panel", () => ({
 }));
 vi.mock("@/features/projects/components/project-branch-select", () => ({ ProjectBranchSelect: () => null }));
 vi.mock("@/features/projects/components/project-workspace-search", () => ({ ProjectWorkspaceSearch: () => null }));
+vi.mock("@/features/projects/components/project-agent-search", () => ({ ProjectAgentSearch: () => null }));
 vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({
   useProjectWorkspaceBranch: () => ({ projectId: "project-one", gitTab: "changes", setGitTab: vi.fn() }),
 }));
@@ -148,14 +152,15 @@ it("shows severity counts in the floating badge and resets them for another file
   await act(async () => state.analysis!({ status: "ready", diagnostics: [
     { ...diagnostic, severity: "error" }, { ...diagnostic, severity: "warning" }, { ...diagnostic, severity: "info" },
   ] }));
-  expect(container.querySelector('button[aria-label="1 error, 1 warning, 1 information message. Show problems."]')).not.toBeNull();
+  expect(container.querySelector('div[aria-label="1 error, 1 warning, 1 information message."]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label^="1 error"]')).toBeNull();
   finishLoading("", "other.ts");
   renderCode("other.ts");
   await act(async () => previousAnalysis({ status: "ready", diagnostics: [{ ...diagnostic, severity: "error" }] }));
-  expect(container.querySelector('button[aria-label="Checking code…"]')).not.toBeNull();
-  expect(container.querySelector('button[aria-label^="1 error"]')).toBeNull();
+  expect(container.querySelector('div[aria-label="Checking code…"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label^="1 error"]')).toBeNull();
   await act(async () => state.analysis!({ status: "unavailable", diagnostics: [] }));
-  expect(container.querySelector('button[aria-label="Code analysis unavailable. Tap to retry."]')).not.toBeNull();
+  expect(container.querySelector('div[aria-label="Code analysis unavailable."]')).not.toBeNull();
 });
 
 it("shows the same loading UI for fetching and editor startup, without a preview timer", async () => {
@@ -259,31 +264,31 @@ it("clears the pending preview when the screen unmounts", () => {
   act(() => root.render(null));
   expect(vi.getTimerCount()).toBe(0);
 });
-it("shows loading, debounced saving, success, and failure icons after the lint controls", async () => {
+it("shows loading, debounced saving, success, and failure icons after the diagnostic counts", async () => {
   renderCode();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   finishLoading();
   renderCode();
   await act(async () => state.ready!());
-  expect(container.querySelector('[data-icon="check-circle"]')?.getAttribute("data-class")).toBe("text-success-foreground");
+  expect(container.querySelector('[data-icon="cloud-check-outline"]')?.getAttribute("data-class")).toBe("text-foreground");
   const diagnostic = { from: 0, to: 1, message: "Problem", code: 1, severity: "error" as const };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [diagnostic] }));
   const icons = [...container.querySelectorAll('[data-icon]')].map((icon) => icon.getAttribute("data-icon"));
-  expect(icons.at(-1)).toBe("check-circle");
+  expect(icons.slice(-5)).toEqual(["cloud-check-outline", "format-align-left", "sort-alphabetical-ascending", "magnify", "find-replace"]);
   let finish!: (value: unknown) => void;
   saveFile.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await act(async () => state.change!("edited"));
-  expect(container.querySelector('[data-icon="check-circle"]')).toBeNull();
+  expect(container.querySelector('[data-icon="cloud-check-outline"]')).toBeNull();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(3000));
   expect(saveFile).toHaveBeenCalledOnce();
   await act(async () => finish({ error: true, message: "Save failed." }));
-  expect(container.querySelector('[data-icon="alert-circle"]')?.getAttribute("data-class")).toBe("text-destructive");
+  expect(container.querySelector('[data-icon="alert-circle"]')?.getAttribute("data-class")).toBe("text-foreground");
   expect(container.querySelector("textarea")?.value).toBe("const value = 1;");
   saveFile.mockResolvedValueOnce({ error: false, message: "Saved.", data: { path: "app/page.tsx", size: 6, contentHash: "a".repeat(64) } });
   await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t save file. Tap to retry."]')!.click());
   expect(saveFile).toHaveBeenCalledTimes(2);
-  expect(container.querySelector('[data-icon="check-circle"]')).not.toBeNull();
+  expect(container.querySelector('[data-icon="cloud-check-outline"]')).not.toBeNull();
 });
 
 

@@ -10,7 +10,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import { ProjectCodeTabs } from "@/features/projects/components/project-code-tabs";
-import { ProjectCodeStatus } from "@/features/projects/components/project-code-status";
+import { ProjectCodeToolbar } from "@/features/projects/components/project-code-toolbar";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { readProjectCodeIntelligence } from "@/features/projects/actions/code-intelligence-actions";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
@@ -47,7 +47,6 @@ const CodeScreen = () => {
     key?: string;
     value: CodeEditorAnalysis;
   }>();
-  const [analysisPanelRequest, setAnalysisPanelRequest] = useState(0);
   const [badgeHeight, setBadgeHeight] = useState(48);
   useEditorDevelopmentShortcuts();
 
@@ -154,7 +153,6 @@ const CodeScreen = () => {
             onChange={documents.onChange}
             onRequestAnalysis={requestAnalysis}
             onAnalysis={onAnalysis}
-            analysisPanelRequest={analysisPanelRequest}
             bottomInset={bottomInset}
             dom={{
               onLoadStart: () => setReadyKey(undefined),
@@ -208,7 +206,7 @@ const CodeScreen = () => {
             setBadgeHeight(nativeEvent.layout.height)
           }
         >
-          <ProjectCodeStatus
+          <ProjectCodeToolbar
             readError={!documents.activeKey && query.isError}
             status={
               !documents.activeKey && query.isError && !query.isFetching
@@ -225,7 +223,6 @@ const CodeScreen = () => {
                     void query.refetch();
                   }
             }
-            onShowProblems={() => setAnalysisPanelRequest((value) => value + 1)}
           />
         </View>
       ) : null}

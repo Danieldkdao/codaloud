@@ -1,18 +1,29 @@
 "use dom";
 
-import { basicSetup, EditorView } from "codemirror";
+import {
+  EditorView,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import {
   HighlightStyle,
+  bracketMatching,
+  defaultHighlightStyle,
+  indentOnInput,
   LanguageDescription,
   syntaxHighlighting,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
-import { search } from "@codemirror/search";
-import { forceLinting, openLintPanel } from "@codemirror/lint";
 import {
   createCodeEditorIntelligence,
-  refreshCodeAnalysis,
   type CodeEditorAnalysis,
   type CodeEditorAnalysisRequest,
 } from "./code-editor-intelligence";
@@ -74,7 +85,6 @@ type CodeEditorProps = {
     analysis: CodeEditorAnalysis,
     documentKey?: string,
   ) => Promise<void>;
-  analysisPanelRequest?: number;
   dom?: import("expo/dom").DOMProps;
 };
 
@@ -147,7 +157,6 @@ const CodeEditor = ({
   onChange,
   onRequestAnalysis,
   onAnalysis,
-  analysisPanelRequest = 0,
 }: CodeEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
   const buffers = useRef(
@@ -179,8 +188,6 @@ const CodeEditor = ({
   analysisCallbacks.current = { onRequestAnalysis, onAnalysis };
   const hasAnalysis =
     Boolean(onRequestAnalysis) && CODE_INTELLIGENCE_FILE_PATTERN.test(filename);
-  const analysisStatus = useRef<CodeEditorAnalysis["status"]>("checking");
-  const pendingProblemsPanel = useRef(false);
   const notifiedEditor = useRef<object | null>(null);
   const [preparedEditor, setPreparedEditor] = useState<{
     editor: EditorView;
@@ -232,8 +239,6 @@ const CodeEditor = ({
     if (!host.current) return;
     const language = new Compartment();
     let disposed = false;
-    analysisStatus.current = hasAnalysis ? "checking" : "unsupported";
-    pendingProblemsPanel.current = false;
     const intelligence = hasAnalysis
       ? createCodeEditorIntelligence(
           filename,
@@ -241,30 +246,36 @@ const CodeEditor = ({
             analysisCallbacks.current.onRequestAnalysis?.(input, documentKey) ??
             null,
           (analysis) => {
-            analysisStatus.current = analysis.status;
             void (
               documentKey
                 ? analysisCallbacks.current.onAnalysis?.(analysis, documentKey)
                 : analysisCallbacks.current.onAnalysis?.(analysis)
             )?.catch(() => {});
-            if (analysis.status === "ready" && pendingProblemsPanel.current) {
-              pendingProblemsPanel.current = false;
-              requestAnimationFrame(() => {
-                if (!disposed && view.current === editor) openLintPanel(editor);
-              });
-            }
           },
         )
       : null;
     const extensions = [
-      basicSetup,
+      // Keep editing primitives explicit: basicSetup also installs desktop panels,
+      // completion popups, folding controls, and shortcuts that need native UI.
+      lineNumbers(),
+      highlightActiveLineGutter(),
+      highlightSpecialChars(),
+      history(),
+      drawSelection(),
+      dropCursor(),
+      EditorState.allowMultipleSelections.of(true),
+      indentOnInput(),
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      bracketMatching(),
+      closeBrackets(),
+      highlightActiveLine(),
+      keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
       codeEditorMatches,
       editability.of([
         EditorState.readOnly.of(readOnlyRef.current),
         EditorView.editable.of(!readOnlyRef.current),
       ]),
       intelligence?.extensions ?? [],
-      search({ top: true }),
       EditorState.tabSize.of(2),
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
@@ -314,7 +325,8 @@ const CodeEditor = ({
         }).state
       : EditorState.create({ doc: initialValue, extensions });
     // A tab owns its EditorState; the WebView and EditorView stay warm.
-    const editor = view.current ?? new EditorView({ parent: host.current, state });
+    const editor =
+      view.current ?? new EditorView({ parent: host.current, state });
     if (view.current) editor.setState(state);
     editor.scrollDOM.scrollTop = buffer?.top ?? 0;
     editor.scrollDOM.scrollLeft = buffer?.left ?? 0;
@@ -391,17 +403,6 @@ const CodeEditor = ({
   }, [readOnly, editability]);
 
   useEffect(() => {
-    if (analysisPanelRequest && view.current && hasAnalysis) {
-      if (analysisStatus.current === "ready") openLintPanel(view.current);
-      else {
-        pendingProblemsPanel.current = true;
-        view.current.dispatch({ effects: refreshCodeAnalysis.of(null) });
-        forceLinting(view.current);
-      }
-    }
-  }, [analysisPanelRequest, hasAnalysis]);
-
-  useEffect(() => {
     if (
       (!fontsLoaded && !fontError) ||
       !preparedEditor ||
@@ -419,9 +420,11 @@ const CodeEditor = ({
           if (!disposed && view.current === preparedEditor.editor)
             scrollToActiveCodeEditorMatch(preparedEditor.editor);
         });
-        void readyCallback.current?.(preparedEditor.key).catch((error: unknown) => {
-          console.warn("Unable to report editor readiness", error);
-        });
+        void readyCallback
+          .current?.(preparedEditor.key)
+          .catch((error: unknown) => {
+            console.warn("Unable to report editor readiness", error);
+          });
       },
     });
     return () => {

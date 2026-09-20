@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import { useRef } from "react";
 import {
   KeyboardAvoidingView,
@@ -59,6 +60,7 @@ export const ProjectFileCreateSheet = ({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
+        <KeyboardSymbolsProvider local fill>
         <View className="flex-1 justify-end">
           <Pressable
             accessibilityRole="button"
@@ -97,6 +99,7 @@ export const ProjectFileCreateSheet = ({
             />
           </View>
         </View>
+        </KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </Modal>
   );

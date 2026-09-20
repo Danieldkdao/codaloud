@@ -98,3 +98,5 @@ it("uses the backdrop to submit but swiping to cancel, without blur submission",
     act(() => root.unmount());
   }
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

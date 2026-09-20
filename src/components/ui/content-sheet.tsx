@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { ColorValue } from "react-native";
@@ -21,7 +22,7 @@ export const ContentSheet = ({ open, onOpenChange, onDismiss, backgroundColor, c
     <BottomSheet ref={ref} index={-1} enableDynamicSizing enablePanDownToClose
       backgroundStyle={{ backgroundColor }} onChange={(index) => onOpenChange(index >= 0)}
       onClose={() => { onOpenChange(false); onDismiss?.(); }}>
-      {children}
+      <KeyboardSymbolsProvider local>{children}</KeyboardSymbolsProvider>
     </BottomSheet>
   );
 };

@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { KeyboardAvoidingView, Platform, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,7 +49,7 @@ const EditProjectScreen = () => {
         {/* Keep native sheet sizing from expanding the form's nested ScrollView. */}
         <View collapsable={false} pointerEvents="none" />
         {/* Mount the query only with an ID, and reset the draft when the target changes. */}
-        <EditProjectContent key={projectId} projectId={projectId} />
+        <KeyboardSymbolsProvider local><EditProjectContent key={projectId} projectId={projectId} /></KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </>
   );

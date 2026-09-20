@@ -758,3 +758,5 @@ it("removes the load-more control only when the cursor is exhausted", () => {
   Object.assign(mocks.query, { hasNextPage: false });
   expect(renderList()).not.toContain("Load more repositories");
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

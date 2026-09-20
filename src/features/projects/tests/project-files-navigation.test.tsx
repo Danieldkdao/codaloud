@@ -393,3 +393,5 @@ it("disables an open file creation draft without submitting it during Git operat
   act(() => inputEvents.onSubmitEditing());
   expect(mocks.create).not.toHaveBeenCalled();
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

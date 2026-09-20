@@ -105,3 +105,5 @@ it("preserves the form during refetches but resets it when the project ID change
   render();
   expect(container.querySelector("input")?.value).toBe("Second");
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

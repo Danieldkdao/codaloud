@@ -73,3 +73,5 @@ it.each([
   state.route = "workspace-diff"; state.commitParams = params; render();
   expect(container.textContent).toContain("Workspace diff");
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

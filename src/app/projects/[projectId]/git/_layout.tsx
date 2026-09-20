@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import {
   Stack,
   useGlobalSearchParams,
@@ -27,6 +28,7 @@ const GitLayout = () => {
   const commit = getProjectCommitDiffParams(commitSha, source);
 
   return (
+    <KeyboardSymbolsProvider local fill>
     <ProjectSearchOverlayProvider bottomAligned>
       <Stack
         screenOptions={{
@@ -87,6 +89,7 @@ const GitLayout = () => {
       </Stack>
       {!isDiff && <ProjectWorkspaceDock tab="git" />}
     </ProjectSearchOverlayProvider>
+    </KeyboardSymbolsProvider>
   );
 };
 

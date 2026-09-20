@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import { Button } from "@/components/ui/button";
 import { CreateProjectForm } from "@/features/projects/components/create-project-form";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -53,7 +54,7 @@ const NewProjectScreen = () => {
         {/* Native sheets resize the first descendant ScrollView to the entire sheet.
             End that lookup here: our sibling scroll areas are sized by the form. */}
         <View collapsable={false} pointerEvents="none" />
-        <CreateProjectForm />
+        <KeyboardSymbolsProvider local><CreateProjectForm /></KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </>
   );

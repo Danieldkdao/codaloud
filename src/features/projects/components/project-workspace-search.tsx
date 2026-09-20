@@ -30,7 +30,7 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { useThemeColor } from "@/hooks/use-theme";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import {
   ProjectSearchOverlay,
   useProjectSearchOverlay,
@@ -68,7 +68,6 @@ export const ProjectWorkspaceSearch = ({
   const overlay = useProjectSearchOverlay();
   const symbolInset = useKeyboardSymbolsInset();
   const insets = useSafeAreaInsets();
-  const shadow = useThemeColor("navigation-shadow");
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const buttonRef = useRef<View>(null);
@@ -214,7 +213,7 @@ export const ProjectWorkspaceSearch = ({
 
   const morphStyle = useAnimatedStyle(() => ({
     width: buttonSize + (barWidth - buttonSize) * progress.value,
-    opacity: progress.value,
+    // Animate geometry only: ancestor opacity zero can permanently hide UIKit glass.
     transform: [
       {
         translateY:
@@ -261,17 +260,7 @@ export const ProjectWorkspaceSearch = ({
                 morphStyle,
               ]}
             >
-              {/* Native glass can stop rendering under a parent animated from opacity zero.
-                  A solid card keeps search readable throughout every opening. */}
-              <View
-                className="bg-card border border-border"
-                style={{
-                  borderRadius: 28,
-                  boxShadow: [
-                    { offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow },
-                  ],
-                }}
-              >
+              <GlassSurface>
                 <View
                   style={{
                     height: buttonSize,
@@ -323,7 +312,7 @@ export const ProjectWorkspaceSearch = ({
                     </Animated.View>
                   ) : null}
                 </View>
-              </View>
+              </GlassSurface>
             </Animated.View>
             {/* Native accessory sheets remain interactive inside the search layer. */}
             {children}

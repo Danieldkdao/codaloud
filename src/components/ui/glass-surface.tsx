@@ -44,9 +44,9 @@ export const GlassSurface = ({
     <View
       style={{
         borderRadius,
-        // Use the same contained native surface for badges, toolbars, and docks.
-        // An extra tinted shadow changes the appearance of the glass underneath.
-        overflow: "hidden",
+        // Let UIKit draw the same native rim and shadow as the keyboard capsule.
+        // Clip the controls separately so scrolling never escapes the surface.
+        overflow: "visible",
       }}
     >
       {/* Only the background may change type. Replacing a parent of the controls
@@ -65,7 +65,7 @@ export const GlassSurface = ({
           style={{ ...StyleSheet.absoluteFill, borderRadius }}
         />
       )}
-      <View>{children}</View>
+      <View style={{ borderRadius, overflow: "hidden" }}>{children}</View>
     </View>
   );
 };

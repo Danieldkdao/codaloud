@@ -175,6 +175,16 @@ it("opens an editable ghost search bar and dismisses through the outside-tap sur
   expect(container.querySelector("input")?.value).toBe("layout.tsx");
 });
 
+it("uses native glass for floating search and keeps it while typing", async () => {
+  transparency.read.mockResolvedValue(false);
+  await act(async () => click("Search files"));
+  const overlay = container.querySelector('[data-testid="project-search-overlay"]')!;
+  expect(overlay.querySelector("[data-glass]")).not.toBeNull();
+  const input = typeSearch("project");
+  expect(overlay.querySelector("[data-glass]")).not.toBeNull();
+  expect(container.querySelector("input")).toBe(input);
+});
+
 it("updates local preview results immediately and preserves the draft after dismissal", () => {
   const Preview = () => {
     const [draft, setDraft] = useState("");
@@ -362,10 +372,12 @@ it("opens Agent search above the dock and dismisses on an outside tap", () => {
 });
 
 
-it("keeps a solid card behind search text across repeated openings", () => {
+it.each([false, true])("keeps search readable across repeated openings with reduce transparency=%s", async (reduce) => {
+  transparency.read.mockResolvedValue(reduce);
   for (let attempt = 0; attempt < 3; attempt++) {
-    click("Search files");
-    expect(container.querySelector("input")?.closest(".bg-card")).not.toBeNull();
+    await act(async () => click("Search files"));
+    const overlay = container.querySelector('[data-testid="project-search-overlay"]')!;
+    expect(overlay.querySelector(reduce ? ".bg-card" : "[data-glass]")).not.toBeNull();
     click("Dismiss search");
   }
 });

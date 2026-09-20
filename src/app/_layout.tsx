@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import "../global.css";
 
 import { QueryProvider } from "@/components/query-provider";
@@ -57,6 +58,7 @@ const RootNavigator = () => {
   return (
     <QueryProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        <KeyboardSymbolsProvider fill>
         <ProjectSearchOverlayProvider>
           <SuccessFeedbackProvider>
             <Stack
@@ -111,6 +113,7 @@ const RootNavigator = () => {
             </Stack>
           </SuccessFeedbackProvider>
         </ProjectSearchOverlayProvider>
+        </KeyboardSymbolsProvider>
       </GestureHandlerRootView>
     </QueryProvider>
   );

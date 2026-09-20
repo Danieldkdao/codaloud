@@ -10,6 +10,7 @@ import { TextInput, TextInputProps, View, ViewProps } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import { useKeyboardSymbols } from "@/hooks/use-keyboard-symbols";
 
 export type InputType =
   | "text"
@@ -150,6 +151,7 @@ export const Input = ({
   const isInvalid = ariaInvalid ?? invalid;
   const hasToggle = isPassword && showPasswordToggle;
   const defaults = INPUT_TYPE_DEFAULTS[type];
+  const symbolInput = useKeyboardSymbols(inputRef, props, isEditable);
 
   return (
     <View
@@ -162,6 +164,7 @@ export const Input = ({
         underlineColorAndroid="transparent"
         textAlignVertical={multiline && !isPassword ? "top" : "center"}
         {...props}
+        {...symbolInput}
         // Zero restores UIKit's natural line height. A positive line height adds
         // a baseline offset to entered text that the placeholder does not share.
         style={[

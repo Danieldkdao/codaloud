@@ -147,3 +147,14 @@ it("reuses recently validated dependencies for rapid autocomplete without skippi
     expect(read).toHaveBeenCalled();
   } finally { await analyzer.dispose(); }
 });
+
+it("coalesces queued completion requests to the latest buffer", async () => {
+  const analyzer = createTypeScriptAnalyzer(async () => null);
+  try {
+    const content = "const value = 42; value.to";
+    const results = await Promise.all(Array.from({ length: 25 }, () => analyzer.analyze({ path: "main.ts", content, position: content.length })));
+    expect(results.slice(0, -1).every((result) => "completions" in result && result.completions.length === 0)).toBe(true);
+    const last = results.at(-1)!;
+    expect("completions" in last && last.completions.some((item) => item.label === "toFixed")).toBe(true);
+  } finally { await analyzer.dispose(); }
+});

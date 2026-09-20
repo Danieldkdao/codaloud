@@ -317,7 +317,7 @@ const CodeEditor = ({
             if (!clipboard.current.onWriteClipboard) throw new Error("Clipboard unavailable.");
             await clipboard.current.onWriteClipboard(value);
           },
-        }, text).then(() => {
+        }, text, () => view.current === editor && activeDocument.current === key).then(() => {
           if (editor === view.current) reportInteraction(editor, activeDocument.current);
         }).catch((error: unknown) => {
           void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Try again.").catch(() => {});

@@ -70,3 +70,14 @@ it("only toggles folds whose start line is selected", async () => {
   await runEditorCommand(view, "fold", clipboard());
   expect(getEditorCommandState(view).fold).toBe("fold");
 });
+
+it("does not reject clipboard operations because a non-editing editor effect ran", async () => {
+  const { StateEffect } = await import("@codemirror/state");
+  const view = await make("hello");
+  const disk = clipboard(); let done!: (value: string) => void;
+  disk.read.mockReturnValue(new Promise((resolve) => { done = resolve; }));
+  const action = runEditorCommand(view, "paste", disk);
+  view.dispatch({ effects: StateEffect.define<boolean>().of(true) });
+  done("new"); await action;
+  expect(view.state.doc.toString()).toBe("newhello");
+});

@@ -21,12 +21,13 @@ export const getEditorCommandState = (view: EditorView): EditorCommandState => {
     canComment: !view.state.readOnly && view.state.languageDataAt("commentTokens", view.state.selection.main.head).length > 0,
   };
 };
-export const runEditorCommand = async (view: EditorView, command: EditorCommand, clipboard: EditorClipboard, text = "") => {
+export const runEditorCommand = async (view: EditorView, command: EditorCommand, clipboard: EditorClipboard, text = "", isActive: () => boolean = () => true) => {
   const state = view.state;
   const selection = state.selection;
   const current = () => {
-    // State identity also protects against switching away and back to a cached tab.
-    if (view.state !== state) throw new Error("The document or selection changed. Try the command again.");
+    // Analysis and theme effects can change EditorState without changing the
+    // clipboard target. Only reject edits, selection changes, or tab switches.
+    if (!isActive() || view.state.doc !== state.doc || !view.state.selection.eq(selection) || view.state.readOnly) throw new Error("The document or selection changed. Try the command again.");
   };
   if (state.readOnly && !["copy", "copy-line", "select-all", "fold"].includes(command)) return;
   const insert = (value: string) => view.dispatch({ ...state.replaceSelection(value), annotations: isolateHistory.of("full"), userEvent: "input", scrollIntoView: true });

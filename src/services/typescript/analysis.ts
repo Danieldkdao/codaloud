@@ -69,6 +69,7 @@ export const createTypeScriptAnalyzer = (
   let service: LanguageService | undefined;
   let queued = Promise.resolve();
   let closed = false;
+  let completionGeneration = 0;
   const resetGraph = () => {
     dependencyValidationTime = 0;
     files.clear();
@@ -285,8 +286,13 @@ export const createTypeScriptAnalyzer = (
     analyze: (input: CodeIntelligenceRequestSchema) => {
       if (closed)
         return Promise.reject(new Error("The analysis session is closed."));
+      const completion = input.position === undefined ? undefined : ++completionGeneration;
       const result = queued
-        .then(() => run(input))
+        .then((): Promise<CodeIntelligenceResultSchema> | CodeIntelligenceResultSchema => {
+          // A slow compiler must not accumulate obsolete keystrokes in its queue.
+          if (completion !== undefined && completion !== completionGeneration) return { completions: [] };
+          return run(input);
+        })
         .catch((error: unknown) => {
           reset();
           throw error;

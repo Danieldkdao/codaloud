@@ -1,3 +1,4 @@
+import { formatEditorText } from "./formatting";
 import { isolateHistory } from "@codemirror/commands";
 import { indentRange, language } from "@codemirror/language";
 import type { EditorView } from "@codemirror/view";
@@ -16,6 +17,25 @@ export const transformEditor = async (
 ) => {
   if (view.state.readOnly) return;
   const doc = view.state.doc;
+  const assertUnchanged = () => {
+    if (!isActive() || view.state.doc !== doc || view.state.readOnly)
+      throw new Error("The document changed while preparing this action. Try again.");
+  };
+  if (operation === "format") {
+    const formatted = await formatEditorText(path, view.state.sliceDoc(), preferences, view.state.sliceDoc(0, view.state.selection.main.head).length);
+    assertUnchanged();
+    if (formatted) {
+      if (formatted.formatted !== view.state.sliceDoc())
+        view.dispatch({
+          changes: { from: 0, to: doc.length, insert: formatted.formatted },
+          // CodeMirror normalizes CRLF into one position per line break.
+          selection: { anchor: formatted.formatted.slice(0, Math.max(0, formatted.cursorOffset)).replace(/\r\n/g, "\n").length },
+          annotations: isolateHistory.of("full"), userEvent: "input.format",
+        });
+      return;
+    }
+  }
+
   if (!CODE_INTELLIGENCE_FILE_PATTERN.test(path)) {
     if (operation === "organize-imports")
       throw new Error(

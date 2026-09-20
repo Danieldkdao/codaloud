@@ -681,6 +681,27 @@ const CodeEditor = ({
     });
   }, [preferences, configuration]);
 
+  const indentation = `${preferences.tabSize}:${preferences.useTabs}`;
+  const previousIndentation = useRef(indentation);
+  useEffect(() => {
+    const changed = previousIndentation.current !== indentation;
+    previousIndentation.current = indentation;
+    const editor = view.current;
+    const key = documentKey;
+    if (!changed || !editor || readOnly) return;
+    // Coalesce stepper taps, and cancel before touching a different document.
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void transformEditor(editor, filename, "format", preferencesRef.current,
+        async (input) => analysisCallbacks.current.onRequestAnalysis?.(input, key) ?? null,
+        () => !cancelled && view.current === editor && activeDocument.current === key,
+      ).catch((error: unknown) => {
+        if (!cancelled) void clipboard.current.onCommandError?.(error instanceof Error ? error.message : "Couldn’t format this file.").catch(() => {});
+      });
+    }, 150);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [indentation, documentKey, filename, readOnly]);
+
   useEffect(() => {
     // Reconfigure in place so switching modes preserves document and undo state.
     view.current?.dispatch({

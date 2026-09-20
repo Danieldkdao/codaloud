@@ -19,7 +19,7 @@ it("applies one undoable transaction", async () => {
   await transformEditor(
     view,
     "main.ts",
-    "format",
+    "organize-imports",
     defaultEditorPreferences,
     async () => ({ edits: [{ from: 7, to: 8, insert: " = " }] }),
     () => true,
@@ -46,7 +46,7 @@ it("rejects formatting that arrives after typing or a tab switch", async () => {
     const action = transformEditor(
       view,
       "main.ts",
-      "format",
+      "organize-imports",
       defaultEditorPreferences,
       request,
       () => active,
@@ -73,7 +73,7 @@ it.each(
     transformEditor(
       view,
       "main.ts",
-      "format",
+      "organize-imports",
       defaultEditorPreferences,
       async () => ({ edits }),
       () => true,

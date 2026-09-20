@@ -631,3 +631,14 @@ it("applies global preferences to restored tabs without replacing their edits or
   act(() => undo(editor()));
   expect(editor().state.sliceDoc()).toBe("original");
 });
+
+it("automatically formats the active file after changing indentation preferences", async () => {
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  const props = { filename: "main.ts", documentKey: "main", initialValue: "function x(){return 1}", preferences: defaultEditorPreferences };
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  expect(editor().state.sliceDoc()).toBe(props.initialValue);
+  await act(async () => root.render(createElement(CodeEditor, { ...props, preferences: { ...defaultEditorPreferences, tabSize: 4 } })));
+  await vi.waitFor(() => expect(editor().state.sliceDoc()).toContain("\n    return 1;\n"));
+  act(() => undo(editor()));
+  expect(editor().state.sliceDoc()).toBe(props.initialValue);
+});

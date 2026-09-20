@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Platform, View, useWindowDimensions } from "react-native";
 import { KeyboardExtender } from "react-native-keyboard-controller";
+import { isLiquidGlassAvailable } from "expo-glass-effect";
 import {
   KeyboardSymbolsContext,
   KeyboardSymbolsInsetContext,
@@ -43,6 +44,9 @@ const SymbolHostProvider = ({
   const viewport = useRef<View>(null);
   const [bottom, setBottom] = useState(0);
   const { width, height } = useWindowDimensions();
+  // KeyboardExtender 1.21.9 draws its iOS 26 capsule 20pt inside the window.
+  // Inset the scroll viewport too, so its first/last keys remain fully reachable.
+  const glassInset = Platform.OS === "ios" && isLiquidGlassAvailable() ? 20 : 0;
   const measure = useCallback(() => {
     if (!frame) return;
     viewport.current?.measureInWindow((_x, y, _width, measuredHeight) => {
@@ -73,7 +77,17 @@ const SymbolHostProvider = ({
               {/* Listen before UIKit focuses an input, including in another window.
                   JS focus only routes insertion; toggling attachment here races iOS. */}
               <KeyboardExtender enabled>
-                {symbols}
+                <View
+                  testID="keyboard-symbols-viewport"
+                  style={{
+                    marginLeft: glassInset,
+                    marginRight: glassInset,
+                    borderRadius: glassInset ? 24 : 0,
+                    overflow: "hidden",
+                  }}
+                >
+                  {symbols}
+                </View>
               </KeyboardExtender>
             </View>
           </>

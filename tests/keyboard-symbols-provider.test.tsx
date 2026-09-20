@@ -15,6 +15,7 @@ import { KeyboardSymbolsContext } from "@/hooks/use-keyboard-symbols";
 
 const device = vi.hoisted(() => ({
   OS: "ios",
+  glass: true,
   y: 0,
   height: 800,
   frame: { screenY: 500, screenX: 0, width: 390, height: 300 } as
@@ -40,6 +41,9 @@ vi.mock("react-native", () => ({
     }));
     return createElement("div", { "data-testid": testID, style }, children);
   },
+}));
+vi.mock("expo-glass-effect", () => ({
+  isLiquidGlassAvailable: () => device.glass,
 }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({
   useKeyboardFrame: () => device.frame,
@@ -87,6 +91,7 @@ const render = () =>
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   device.OS = "ios";
+  device.glass = true;
   device.height = 800;
   device.frame = { screenY: 500, height: 300, width: 390, screenX: 0 };
   container = document.createElement("div");
@@ -160,3 +165,20 @@ it("registers iOS symbols before native focus, including between separate input 
   act(() => host.activate({ id: "commit-message", insert: vi.fn() }));
   expect(enabled()).toBe("true");
 });
+
+it.each([true, false])(
+  "contains symbol scrolling inside the native surface with glass=%s",
+  (glass) => {
+    device.glass = glass;
+    render();
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-testid="keyboard-symbols-viewport"]',
+    );
+    expect(viewport).not.toBeNull();
+    expect(viewport!.style.overflow).toBe("hidden");
+    expect(viewport!.style.marginLeft).toBe(glass ? "20px" : "0px");
+    expect(viewport!.style.marginRight).toBe(glass ? "20px" : "0px");
+    expect(viewport!.style.borderRadius).toBe(glass ? "24px" : "0px");
+    expect(viewport!.querySelector("button")).not.toBeNull();
+  },
+);

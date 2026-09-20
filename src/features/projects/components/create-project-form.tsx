@@ -165,7 +165,11 @@ export const CreateProjectForm = () => {
   );
 
   return (
-    <AppWrapper scrollable={false} headerShown className="flex-none shrink bg-transparent">
+    <AppWrapper
+      scrollable={false}
+      headerShown
+      className="flex-none shrink bg-transparent"
+    >
       <View className="w-full max-w-xl shrink gap-4 self-center">
         {/* These scroll surfaces are siblings so the picker keeps its own viewport. */}
         <ScrollView

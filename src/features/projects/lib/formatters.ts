@@ -122,6 +122,7 @@ export const formatProjectFileKind = (kind: ProjectFileKind) => {
     case "file":
       return {
         inputLabel: "File name",
+        createTitle: "New file",
         placeholder: "new-file.ts",
         successMessage: "File created",
         updateSuccessMessage: "File updated",
@@ -130,6 +131,7 @@ export const formatProjectFileKind = (kind: ProjectFileKind) => {
     case "folder":
       return {
         inputLabel: "Folder name",
+        createTitle: "New folder",
         placeholder: "new-folder",
         successMessage: "Folder created",
         updateSuccessMessage: "Folder updated",

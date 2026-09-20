@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => ({ dismissTo: vi.fn(), selectFile: vi.fn(), confi
 vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: null, version: 0, openFile: mocks.selectFile, refreshFile: vi.fn(), renameFiles: vi.fn(), removeFiles: vi.fn() }) }));
 vi.mock("@/features/projects/hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 0, setDockHeight: vi.fn() }) }));
 let inputEvents: { onChangeText: (text: string) => void; onSubmitEditing: () => void; onBlur: () => void };
-vi.mock("@/lib/utils", () => ({ confirmAction: mocks.confirm }));
+vi.mock("@/lib/utils", () => ({ confirmAction: mocks.confirm, cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("@/components/ui/input", () => ({ Input: (props: typeof inputEvents & { ref: Ref<HTMLInputElement>; value: string; disabled: boolean; invalid: boolean; accessibilityLabel: string }) => {
   inputEvents = props;
   return createElement("input", { ref: props.ref, value: props.value, disabled: props.disabled, "aria-invalid": props.invalid, "aria-label": props.accessibilityLabel, readOnly: true });
@@ -85,6 +85,10 @@ vi.mock("@/features/projects/components/project-workspace-state", () => ({ Proje
 
 vi.mock("react-native", () => ({
   Alert: { alert: mocks.alert },
+  Platform: { OS: "ios" },
+  Modal: ({ children }: { children: ReactNode }) => children,
+  KeyboardAvoidingView: ({ children }: { children: ReactNode }) => children,
+  PanResponder: { create: () => ({ panHandlers: {} }) },
   ActivityIndicator: () => createElement("span", { "data-native-spinner": true }),
   View: ({ children, className, pointerEvents, accessibilityRole, accessibilityLabel, accessibilityState, accessibilityElementsHidden, importantForAccessibility }: {
     children: ReactNode; className?: string; pointerEvents?: string; accessibilityRole?: string; accessibilityLabel?: string;

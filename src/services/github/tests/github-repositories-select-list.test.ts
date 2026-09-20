@@ -586,7 +586,7 @@ describe("project form repository validation", () => {
     expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project created");
     expect(mocks.alert).not.toHaveBeenCalled();
     expect(mocks.replace).toHaveBeenCalledWith({
-      pathname: "/projects/[projectId]",
+      pathname: "/projects/[projectId]/code",
       params: { projectId: "new-project-id" },
     });
     expect(mocks.replace.mock.invocationCallOrder[0]).toBeLessThan(

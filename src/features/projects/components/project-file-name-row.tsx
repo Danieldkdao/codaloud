@@ -1,5 +1,11 @@
 import { cn } from "@/lib/utils";
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,7 +27,10 @@ import {
   formatProjectFileNameAction,
 } from "@/features/projects/lib/formatters";
 
-export type ProjectFileNameRowHandle = { submit: () => void; cancel: () => void };
+export type ProjectFileNameRowHandle = {
+  submit: () => void;
+  cancel: () => void;
+};
 
 type ProjectFileNameRowProps = {
   ref?: Ref<ProjectFileNameRowHandle>;
@@ -117,7 +126,9 @@ export const ProjectFileNameRow = ({
   };
 
   useImperativeHandle(ref, () => ({
-    submit: () => { void submit("submit"); },
+    submit: () => {
+      void submit("submit");
+    },
     cancel: () => {
       if (disabled || submitting.current) return;
       cancelling.current = true;
@@ -127,7 +138,10 @@ export const ProjectFileNameRow = ({
 
   return (
     <View
-      className={cn("gap-2 px-4 py-3", surface === "row" && "border-b border-border bg-card")}
+      className={cn(
+        "gap-2 px-4 py-3",
+        surface === "row" && "border-b border-border bg-card",
+      )}
       accessibilityState={{ busy: pending }}
     >
       <View className="flex-row items-center gap-3">
@@ -158,7 +172,9 @@ export const ProjectFileNameRow = ({
           disabled={disabled || pending}
           invalid={visibleError !== null}
           onSubmitEditing={() => void submit("submit")}
-          onBlur={() => { if (submitOnBlur) void submit("blur"); }}
+          onBlur={() => {
+            if (submitOnBlur) void submit("blur");
+          }}
           onKeyPress={({ nativeEvent }) => {
             if (
               nativeEvent.key === "Escape" &&

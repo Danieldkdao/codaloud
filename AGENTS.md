@@ -15,8 +15,9 @@
 
 ## Commit messages
 
-- Every commit subject must use `type: description` or `type(scope): description`. Choose a lowercase prefix that describes the change, such as `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `build`, `ci`, `perf`, or `chore`.
-- Prefer lowercase descriptions and scopes. Capitals are allowed when useful for proper names, acronyms, or case-sensitive code identifiers.
+- Every commit subject must use only `type: description`. Choose a lowercase prefix such as `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `build`, `ci`, `perf`, or `chore`. Never add a scope or specifier to the prefix.
+- Never use parentheses anywhere in a commit message, including its subject and body. Check the entire message before committing.
+- Prefer lowercase descriptions. Capitals are allowed when useful for proper names, acronyms, or case-sensitive code identifiers.
 
 ## Working process
 

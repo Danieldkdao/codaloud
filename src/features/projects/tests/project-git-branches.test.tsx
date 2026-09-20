@@ -1,19 +1,25 @@
 // @vitest-environment happy-dom
+vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
-import { act, createElement, useImperativeHandle, useState, useRef, type ReactNode, type Ref } from "react";
+import { act, createElement, useImperativeHandle, useEffect, useState, useRef, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectChangesPanel } from "@/features/projects/components/project-changes-panel";
+import { ProjectBranchMenu } from "../components/project-branch-menu";
 import GitScreen from "@/app/projects/[projectId]/git/index";
 import { ProjectWorkspaceDock } from "@/features/projects/components/project-workspace-dock";
 import { ProjectWorkspaceBranchProvider } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectWorkspaceChangesProvider } from "@/features/projects/hooks/use-project-workspace-changes";
 import type { ProjectCommitPageSchema } from "@/features/projects/actions/commit-schemas";
+import { ProjectGitError } from "@/features/projects/lib/git-errors";
 
 import type { ProjectRepositoryChangesSchema, ProjectRepositoryChangeSchema } from "@/features/projects/actions/change-schemas";
 
+vi.mock("../components/project-publish-form", () => ({
+  ProjectPublishForm: ({ open }: { open: boolean }) => open ? createElement("div", { "data-testid": "publish-form" }) : null,
+}));
 const stashes = vi.hoisted(() => ({
   data: { pages: [{ stashes: [{ index: 0, sha: "c".repeat(40), message: "Saved mobile work", createdAt: "2026-09-16T12:00:00Z" }], nextCursor: null }] },
   refetch: vi.fn(), retry: vi.fn(), loadMore: vi.fn(), isFetching: false, isPending: false, hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
@@ -21,12 +27,13 @@ const stashes = vi.hoisted(() => ({
 }));
 vi.mock("@/features/projects/hooks/use-project-stashes", () => ({ useProjectStashes: () => stashes }));
 const git = vi.hoisted(() => ({
-  data: { currentBranch: "main", headSha: "a".repeat(40), upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3, isShallow: false, observedAt: "2026-09-16T12:00:00Z" },
+  data: { hasRemote: undefined as boolean | undefined, currentBranch: "main", headSha: "a".repeat(40) as string | null, upstream: "origin/main", upstreamSha: "b".repeat(40), outgoing: 2, incoming: 3, isShallow: false, observedAt: "2026-09-16T12:00:00Z" },
   isPending: false, isFetching: false, error: null as Error | null, refetch: vi.fn(),
   gitFetch: { mutateAsync: vi.fn() }, gitPush: { mutateAsync: vi.fn() }, gitPull: { mutateAsync: vi.fn() },
 }));
-vi.mock("@/features/projects/hooks/use-project-git", () => ({ useProjectGit: () => git }));
+vi.mock("@/features/projects/hooks/use-project-git-remote", () => ({ useProjectGitRemote: () => git }));
 const changesQuery = vi.hoisted(() => ({
+  gitInitialize: { mutateAsync: vi.fn(), isPending: false },
   discardPreview: { refetch: vi.fn() }, gitDiscardChanges: { mutateAsync: vi.fn() },
   query: vi.fn(), refetch: vi.fn(), isPending: false, isFetching: false,
   fetchStatus: "idle", error: null as Error | null,
@@ -63,50 +70,49 @@ const commitPage = (message = "Live commit"): ProjectCommitPageSchema => ({
 
 const live = vi.hoisted(() => ({
   projectId: "11111111-1111-4111-8111-111111111111",
-  userId: "user-one",
   repositoryId: "123" as string | null,
   query: vi.fn(),
   gitCheckout: { mutateAsync: vi.fn() },
   gitCreateBranch: { mutateAsync: vi.fn() },
+  gitDeleteBranch: { mutateAsync: vi.fn() },
   recoverCheckout: vi.fn(),
   loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
   data: { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main" as string | null, nextCursor: null as string | null }] } as { pages: { branches: string[]; currentBranch: string | null; nextCursor: string | null }[] } | undefined,
 }));
-const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPendingSaves: vi.fn(), refreshFile: vi.fn(), alert: vi.fn() }));
+const workspaceFiles = vi.hoisted(() => ({ withSavedFiles: vi.fn(), flushPendingSaves: vi.fn(), refreshFiles: vi.fn(), alert: vi.fn() }));
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => feedback.success }));
 vi.mock("@/features/projects/hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => workspaceFiles }));
-vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ filePath: "app.ts", refreshFile: workspaceFiles.refreshFile }) }));
+const editorSelection = vi.hoisted(() => ({ activeFilePath: "app.ts" as string | null }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ ...editorSelection, refreshFiles: workspaceFiles.refreshFiles }) }));
 let queryClient: QueryClient;
 const remote = vi.hoisted(() => ({
   query: vi.fn(), loadMore: vi.fn(), retry: vi.fn(),
   isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false,
   hasNextPage: false, fetchStatus: "idle", error: null as Error | null,
-  data: { pages: [{ branches: [{ name: "main" }, { name: "remote-only" }], nextCursor: null }] },
+  data: { pages: [{ branches: ["main", "remote-only"], nextCursor: null }] },
 }));
 vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => ({ data: { githubRepositoryId: live.repositoryId }, isPending: false, error: null }) }));
-vi.mock("@/services/github/hooks/use-github-repository-branches", () => ({ useGitHubRepositoryBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: { user: { id: live.userId } }, isPending: false, error: null }) }));
+vi.mock("../hooks/use-project-remote-branches", () => ({ useProjectRemoteBranches: (...args: unknown[]) => { remote.query(...args); return remote; } }));
 vi.mock("@/features/projects/hooks/use-project-branches", () => ({ useProjectBranches: (...args: unknown[]) => { if (!(args[1] && typeof args[1] === "object" && "enabled" in args[1] && args[1].enabled === false)) live.query(...args); return { ...live, data: live.data }; } }));
 let activeTab = "git";
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-const switchTab = vi.fn((name: string) => { activeTab = name; });
+const navigation = vi.hoisted(() => ({ push: vi.fn(), navigate: vi.fn() }));
 vi.mock("expo-router", () => ({ useRouter: () => navigation, usePathname: () => `/projects/${live.projectId}/${activeTab}`, useLocalSearchParams: () => ({ projectId: live.projectId }) }));
-vi.mock("expo-router/ui", () => ({
-  TabTrigger: ({ children }: { children: ReactNode }) => children,
-  useTabTrigger: () => ({ switchTab }),
-}));
-vi.mock("react-native-reanimated", () => ({
-  default: { View: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
-    createElement("div", { style: Object.assign({}, ...([style].flat().filter(Boolean) as object[])) }, children) },
-  ReduceMotion: { System: "system" },
-  useSharedValue: (value: number) => useRef({ value }).current,
-  useAnimatedStyle: (callback: () => object) => callback(),
-  withSpring: (value: number) => value,
-  withTiming: (value: number) => value,
-}));
+vi.mock("react-native-reanimated", () => {
+  const transition = { duration: () => transition, reduceMotion: () => transition };
+  return {
+    default: { createAnimatedComponent: (component: unknown) => component, View: ({ children, style, testID }: { children?: ReactNode; style?: unknown; testID?: string }) =>
+      createElement("div", { "data-testid": testID, style: Object.assign({}, ...([style].flat().filter(Boolean) as object[])) }, children) },
+    LinearTransition: transition,
+    ReduceMotion: { System: "system" },
+    useSharedValue: (value: number) => useRef({ value }).current,
+    useAnimatedStyle: (callback: () => object) => callback(),
+    withSpring: (value: number) => value,
+    withTiming: (value: number) => value,
+  };
+});
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, onPress, disabled, accessibilityLabel }: { children: ReactNode; onPress?: () => void; disabled?: boolean; accessibilityLabel?: string }) =>
     createElement("button", { onClick: onPress, disabled, "aria-label": accessibilityLabel }, children),
@@ -119,7 +125,7 @@ const Workspace = () => (
       <ProjectWorkspaceChangesProvider>
         <GitScreen />
         <ProjectWorkspaceFileCreationProvider projectId="demo">
-          <ProjectWorkspaceDock />
+          {activeTab === "code" || activeTab === "git" ? <ProjectWorkspaceDock /> : null}
         </ProjectWorkspaceFileCreationProvider>
       </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
@@ -162,7 +168,10 @@ vi.mock("@expo/ui/community/bottom-sheet", () => ({
   },
   BottomSheetView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
 }));
-vi.mock("@/components/ui/text-prompt", () => import("@/components/ui/text-prompt.ios"));
+vi.mock("@/components/ui/text-prompt", () => ({ TextPrompt: ({ title, message, actionText, onSubmit, onCancel }: import("@/components/ui/text-prompt").TextPromptProps) => {
+  useEffect(() => { workspaceFiles.alert(title, message, [{ text: "Cancel", onPress: onCancel }, { text: actionText, onPress: onSubmit }]); }, [title, message, actionText, onSubmit, onCancel]);
+  return null;
+} }));
 vi.mock("@/components/ui/input", () => ({
   Input: ({ placeholder, accessibilityLabel, value, onChangeText, editable }: { placeholder: string; accessibilityLabel: string; value?: string; onChangeText?: (value: string) => void; editable?: boolean }) =>
     createElement("input", { placeholder, "aria-label": accessibilityLabel, value, readOnly: editable === false, onInput: (event: { target: { value: string } }) => onChangeText?.(event.target.value) }),
@@ -189,6 +198,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  Switch: ({ value, disabled, accessibilityLabel }: { value: boolean; disabled?: boolean; accessibilityLabel: string }) => createElement("button", { role: "switch", "aria-checked": value, disabled, "aria-label": accessibilityLabel }),
   Alert: { alert: workspaceFiles.alert, prompt: workspaceFiles.alert },
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
   Platform: { OS: "ios" },
@@ -200,7 +210,7 @@ vi.mock("react-native", () => ({
     createElement("div", { role: "dialog" }, children, createElement("button", { onClick: onRequestClose, "aria-label": "System back" })),
   ScrollView: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   StyleSheet: { absoluteFill: {} },
-  View: ({ children, testID, accessibilityLabel }: { children?: ReactNode; testID?: string; accessibilityLabel?: string }) => createElement("div", { "data-testid": testID, "aria-label": accessibilityLabel }, children),
+  View: ({ children, testID, accessibilityLabel, style }: { children?: ReactNode; testID?: string; accessibilityLabel?: string; style?: object }) => createElement("div", { "data-testid": testID, "aria-label": accessibilityLabel, style }, children),
   FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent, ListFooterComponent, onEndReached }: {
     data: unknown[]; renderItem: (info: { item: unknown; index: number }) => ReactNode;
     ListHeaderComponent?: ReactNode; ListEmptyComponent?: ReactNode; ListFooterComponent?: ReactNode; onEndReached?: () => void;
@@ -242,6 +252,12 @@ const selectBranch = async (name: string) => {
 };
 
 beforeEach(() => {
+  editorSelection.activeFilePath = "app.ts";
+  git.data.headSha = "a".repeat(40);
+  git.data.hasRemote = undefined;
+  git.data.upstream = "origin/main";
+  changesQuery.gitInitialize.mutateAsync.mockReset().mockResolvedValue({ currentBranch: "main", headSha: null });
+  changesQuery.gitInitialize.isPending = false;
   git.data.currentBranch = "main";
   changesQuery.discardPreview.refetch.mockReset().mockResolvedValue({ data: { fingerprint: "d".repeat(64), changedPaths: ["file.txt"], currentBranch: "main", headSha: "a".repeat(40) } });
   changesQuery.gitDiscardChanges.mutateAsync.mockReset().mockResolvedValue({ remainingChanges: false });
@@ -260,13 +276,14 @@ beforeEach(() => {
   git.error = null; git.isPending = false; git.isFetching = false;
 
   feedback.success.mockReset();
+  live.gitDeleteBranch.mutateAsync.mockReset().mockResolvedValue({ deleted: true });
   live.gitCreateBranch.mutateAsync.mockReset().mockImplementation(async ({ branchName }) => ({ currentBranch: branchName, previousBranch: "main" }));
   history.gitCommit.mutateAsync.mockReset().mockResolvedValue({ hash: "b".repeat(40), currentBranch: "main", parentHash: "a".repeat(40) });
   history.gitCommit.isPending = false;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   workspaceFiles.withSavedFiles.mockReset().mockImplementation(async (action: () => Promise<unknown>) => { await workspaceFiles.flushPendingSaves(); return action(); });
   workspaceFiles.flushPendingSaves.mockReset().mockResolvedValue(undefined);
-  workspaceFiles.refreshFile.mockReset(); workspaceFiles.alert.mockReset();
+  workspaceFiles.refreshFiles.mockReset(); workspaceFiles.alert.mockReset();
   live.gitCheckout.mutateAsync.mockReset().mockImplementation(async ({ branchName }: { branchName: string }) => ({ previousBranch: "main", currentBranch: branchName }));
   live.recoverCheckout.mockReset().mockResolvedValue({ previousBranch: "main", currentBranch: "feature/live" });
   Object.assign(changesQuery, { data: repositoryChanges(), isPending: false, isFetching: false, fetchStatus: "idle", error: null });
@@ -279,12 +296,11 @@ beforeEach(() => {
   remote.query.mockClear(); remote.loadMore.mockClear(); remote.retry.mockClear();
   Object.assign(remote, { isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
   live.projectId = "11111111-1111-4111-8111-111111111111";
-  live.userId = "user-one";
   live.data = { pages: [{ branches: ["main", "feature/live", "fix/live"], currentBranch: "main", nextCursor: null }] };
   live.query.mockClear();
   live.loadMore.mockClear(); live.retry.mockClear();
   Object.assign(live, { isPending: false, isFetching: false, isFetchingNextPage: false, isFetchNextPageError: false, hasNextPage: false, fetchStatus: "idle", error: null });
-  switchTab.mockClear();
+  navigation.navigate.mockReset().mockImplementation(({ pathname }: { pathname: string }) => { activeTab = pathname.split("/").at(-1)!; });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   root = createRoot(container);
@@ -292,16 +308,25 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); });
 
-it("switches workspace sections through the menu and reflects the active route", () => {
-  for (const [name, label] of [["files", "Files"], ["code", "Code"], ["agent", "Agent"], ["git", "Git"]]) {
-    const option = container.querySelector<HTMLButtonElement>(`[data-branch="${label}"]`);
-    expect(option).not.toBeNull();
-    act(() => option!.click());
-    expect(switchTab).toHaveBeenLastCalledWith(name, { resetOnFocus: false });
+it("opens each supporting screen directly from Code without the workspace menu", () => {
+  for (const [name, label] of [["files", "Files"], ["git", "Git"], ["agent", "Agent log"]]) {
+    activeTab = "code";
     act(() => root.render(createElement(Workspace)));
-    expect(container.querySelector(`[aria-label="Workspace: ${label}"]`)).not.toBeNull();
-    expect(container.querySelector(`[data-branch="${label}"]`)?.getAttribute("aria-checked")).toBe("true");
-    expect(container.querySelectorAll('[data-branch][aria-checked="true"]')).toHaveLength(1);
+    expect(container.querySelector('[aria-label^="Workspace:"]')).toBeNull();
+    click(label);
+    expect(navigation.navigate).toHaveBeenLastCalledWith({ pathname: `/projects/[projectId]/${name}`, params: { projectId: live.projectId } });
+    act(() => root.render(createElement(Workspace)));
+    const dock = container.querySelector<HTMLElement>('[data-testid="project-workspace-dock"]');
+    if (name === "files" || name === "agent") {
+      expect(dock).toBeNull();
+      continue;
+    }
+    expect(dock).not.toBeNull();
+    expect(Number(dock!.style.zIndex)).toBeGreaterThan(1);
+    expect(dock!.querySelector('[aria-label="Microphone"]') !== null).toBe(name !== "git");
+    expect(activeTab).toBe(name);
+    expect(container.querySelector('[aria-label="Editor tools"]')).toBeNull();
+    expect(container.querySelector('[aria-label^="Workspace:"]')).toBeNull();
   }
 });
 
@@ -332,7 +357,7 @@ it("waits for a remote branch to exist locally before loading its history", asyn
   expect(history.query).toHaveBeenLastCalledWith(live.projectId, expect.objectContaining({ branch: "remote-only", source: "local", enabled: true }));
 });
 
-it("keeps a manual selection across server updates and resets it for another project or account", async () => {
+it("keeps a manual selection across server updates and resets it for another project", async () => {
   await selectBranch("feature/live");
   live.data = { pages: [{ branches: ["release"], currentBranch: "release", nextCursor: null }] };
   act(() => root.render(createElement(Workspace)));
@@ -340,10 +365,10 @@ it("keeps a manual selection across server updates and resets it for another pro
   live.projectId = "22222222-2222-4222-8222-222222222222";
   act(() => root.render(createElement(Workspace)));
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("release");
-  live.userId = "user-two";
-  live.data = { pages: [{ branches: ["account-branch"], currentBranch: "account-branch", nextCursor: null }] };
+  live.projectId = "33333333-3333-4333-8333-333333333333";
+  live.data = { pages: [{ branches: ["third-project-branch"], currentBranch: "third-project-branch", nextCursor: null }] };
   act(() => root.render(createElement(Workspace)));
-  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("account-branch");
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("third-project-branch");
 });
 
 it("keeps commit presses inert after changing branches", async () => {
@@ -369,7 +394,8 @@ it.each(["18: video call stream\n", "18: video call stream\n\nLong commit body",
 it("shows branch loading until the current branch resolves, then preserves selection while refreshing", () => {
   live.data = undefined; live.isPending = true; live.isFetching = true;
   act(() => root.render(createElement(Workspace, { key: "loading-branch" })));
-  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("Loading branches…");
+  expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).toBe("");
+  expect(container.querySelector('[data-testid="branch-indicator"] [role="progressbar"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Branch: Loading branches…"]')).not.toBeNull();
   click("Commit History");
   expect(container.textContent).not.toContain("Select a branch");
@@ -451,24 +477,50 @@ it("distinguishes an unfinished empty search from exhausted history and offline 
 it("shows only the active screen's controls in the lower bar", () => {
   const labels = () => [...container.querySelectorAll("button[aria-label]")]
     .map((button) => button.getAttribute("aria-label"));
-  expect(labels()).toContain("Microphone");
+  expect(labels()).not.toContain("Microphone");
   expect(labels()).toContain("Search Git");
   expect(labels()).not.toContain("Undo");
-  for (const tab of ["files", "agent", "code"]) {
+  for (const tab of ["agent", "code"]) {
     activeTab = tab;
     act(() => root.render(createElement(Workspace)));
-    expect(labels()).toContain("Microphone");
+    expect(labels().includes("Microphone")).toBe(tab === "code");
     expect(container.textContent).not.toContain("Current branch:");
     if (tab === "code") {
-      expect(labels()).toEqual(expect.arrayContaining(["Previous file", "Next file", "Undo", "Redo"]));
+      expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools", "Undo", "Redo"]));
+      expect(labels()).not.toContain("Previous file");
+      expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
     } else {
-      expect(labels()).toContain(tab === "files" ? "Search files" : "Search activity");
+      expect(labels()).not.toContain("Search activity");
+      expect(container.querySelector('[data-testid="project-workspace-dock"]')).toBeNull();
       expect(labels()).not.toContain("Previous file");
       expect(labels()).not.toContain("Undo");
-      expect(container.querySelector('[data-branch="Folder"]') !== null).toBe(tab === "files");
+      expect(container.querySelector('[data-branch="Folder"]')).toBeNull();
     }
   }
+});
+
+it.each(["app.ts", null])("opens editor settings from the right toolbar with active file %s", (activeFilePath) => {
+  editorSelection.activeFilePath = activeFilePath;
+  activeTab = "code";
+  act(() => root.render(createElement(Workspace)));
+  const dock = container.querySelector('[data-testid="project-workspace-dock"]')!;
+  expect(dock.querySelector('[aria-label="Editor tools"]')).not.toBeNull();
+  expect([...dock.querySelectorAll("button[aria-label]")].map((button) => button.getAttribute("aria-label"))).toEqual([
+    "Files", "Git", "Agent log", "Microphone", "Undo", "Redo", "Editor tools",
+  ]);
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  click("Editor tools");
+  const sheet = container.querySelector('[role="dialog"]');
+  expect(sheet).not.toBeNull();
+  expect(sheet?.textContent).not.toContain("app.ts");
+  expect(sheet?.textContent).not.toContain("Format code");
+  expect(sheet?.textContent).toContain("Font size");
+  expect(sheet?.querySelector('[role="switch"][aria-label="Word wrap"]')).not.toBeNull();
+  click("Swipe down");
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  click("Editor tools");
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 });
 
 
@@ -570,9 +622,11 @@ it.each(["local", "remote"])("opens a history commit from a %s branch with its f
 
 it("renders the empty state from an empty changes list", () => {
   changesQuery.data = { ...repositoryChanges(), changes: [] };
-  act(() => root.render(createElement(ProjectWorkspaceDockHeightProvider, null,
+  act(() => root.render(createElement(QueryClientProvider, { client: queryClient },
+    createElement(ProjectWorkspaceBranchProvider, null,
+    createElement(ProjectWorkspaceDockHeightProvider, null,
     createElement(ProjectWorkspaceChangesProvider, null,
-      createElement(ProjectChangesPanel, { projectId: live.projectId })))));
+      createElement(ProjectChangesPanel, { projectId: live.projectId })))))));
   expect(container.textContent).toContain("No uncommitted changes");
   expect(container.querySelector('[aria-label="Commit message"]')).toBeNull();
   expect(container.querySelector('[aria-label="Open commit form"]')).toBeNull();
@@ -663,11 +717,11 @@ it("shows separate local and remote lists, shares search, and distinguishes iden
   click("Branch: main");
   expect(container.textContent).toContain("Local branches");
   expect(container.textContent).toContain("Remote branches");
-  expect(remote.query).toHaveBeenLastCalledWith("123", { search: "", enabled: true });
+  expect(remote.query).toHaveBeenLastCalledWith(live.projectId, { search: "", enabled: true });
   const input = container.querySelector<HTMLInputElement>('[aria-label="Search branches"]')!;
   act(() => { input.value = "MAIN"; input.dispatchEvent(new Event("input", { bubbles: true })); });
   expect(live.query).toHaveBeenLastCalledWith(live.projectId, { search: "MAIN" });
-  expect(remote.query).toHaveBeenLastCalledWith("123", { search: "MAIN", enabled: true });
+  expect(remote.query).toHaveBeenLastCalledWith(live.projectId, { search: "MAIN", enabled: true });
   click("Remote branch: main");
   await act(async () => {});
   click("Branch: main");
@@ -689,7 +743,7 @@ it("keeps local selection usable when GitHub fails or no repository is connected
   click("Branch: feature/live");
   expect(container.textContent).toContain("No GitHub repository connected.");
   expect(container.querySelector('[aria-label="Remote branch: main"]')).toBeNull();
-  expect(remote.query).toHaveBeenLastCalledWith(undefined, { search: "", enabled: false });
+  expect(remote.query).toHaveBeenLastCalledWith(live.projectId, { search: "", enabled: false });
 });
 
 
@@ -731,17 +785,17 @@ it("reverts a rejected checkout and shows its message", async () => {
 it("finishes pending saves before checkout and refreshes only the submitted workspace", async () => {
   let finishSave!: () => void;
   workspaceFiles.flushPendingSaves.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve; }));
-  const key = ["projects", "file", live.userId, live.projectId, "app.ts"];
+  const key = ["projects", "file", live.projectId, "app.ts"];
   const otherKey = ["projects", "file", "other-user", live.projectId, "app.ts"];
   queryClient.setQueryData(key, { content: "old branch" });
-  queryClient.setQueryData(otherKey, { content: "other account" });
+  queryClient.setQueryData(otherKey, { content: "other project" });
   await selectBranch("feature/live");
   expect(live.gitCheckout.mutateAsync).not.toHaveBeenCalled();
   await act(async () => finishSave());
   expect(live.gitCheckout.mutateAsync).toHaveBeenCalledOnce();
   expect(queryClient.getQueryData(key)).toBeUndefined();
-  expect(queryClient.getQueryData(otherKey)).toEqual({ content: "other account" });
-  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(queryClient.getQueryData(otherKey)).toEqual({ content: "other project" });
+  expect(workspaceFiles.refreshFiles).toHaveBeenCalledWith();
 });
 
 it("reverts without checkout when saving fails", async () => {
@@ -757,9 +811,9 @@ it("reverts without checkout when saving fails", async () => {
 it("clears old documents after an unknown checkout and retries recovery without another checkout", async () => {
   live.gitCheckout.mutateAsync.mockRejectedValueOnce(Object.assign(new Error("Response lost."), { code: "CHECKOUT_OUTCOME_UNKNOWN" }));
   live.recoverCheckout.mockRejectedValueOnce(new Error("Reconnect to confirm the branch."));
-  const fileKey = ["projects", "file", live.userId, live.projectId, "app.ts"];
-  const searchKey = ["projects", "file-search", "infinite", live.userId, live.projectId, "old"];
-  const branchKey = ["projects", "branches", "infinite", "cursor", live.userId, live.projectId, "local", "old"];
+  const fileKey = ["projects", "file", live.projectId, "app.ts"];
+  const searchKey = ["projects", "file-search", "infinite", live.projectId, "old"];
+  const branchKey = ["projects", "branches", "infinite", "cursor", live.projectId, "local", "old"];
   const otherKey = ["projects", "file", "another-user", live.projectId, "app.ts"];
   for (const key of [fileKey, searchKey, branchKey, otherKey]) queryClient.setQueryData(key, "old bytes");
   click("Branch: main");
@@ -767,7 +821,7 @@ it("clears old documents after an unknown checkout and retries recovery without 
   await act(async () => {});
   for (const key of [fileKey, searchKey, branchKey]) expect(queryClient.getQueryData(key)).toBeUndefined();
   expect(queryClient.getQueryData(otherKey)).toBe("old bytes");
-  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(workspaceFiles.refreshFiles).toHaveBeenCalledWith();
   expect(container.querySelector('[aria-label="Retry branch recovery"]')).not.toBeNull();
   expect(container.querySelector('[data-testid="branch-indicator"]')?.textContent).not.toBe("main");
   click("Retry branch recovery");
@@ -778,9 +832,9 @@ it("clears old documents after an unknown checkout and retries recovery without 
 });
 
 it("keeps workspace readiness intact while checkout refreshes the root folder", async () => {
-  const projectKey = ["projects", "detail", live.userId, live.projectId];
-  const filesKey = ["projects", "files", live.userId, live.projectId, ""];
-  const project = { setupStatus: "ready", sandboxId: "sandbox-one" };
+  const projectKey = ["projects", "detail", live.projectId];
+  const filesKey = ["projects", "files", live.projectId, ""];
+  const project = { setupStatus: "ready" };
   queryClient.setQueryData(projectKey, project);
   queryClient.setQueryData(filesKey, [{ path: "app.ts" }]);
   const readProject = vi.fn(async () => project);
@@ -812,21 +866,21 @@ it("keeps workspace readiness intact while checkout refreshes the root folder", 
 });
 
 it("refreshes branch snapshots without touching project readiness or other workspaces", async () => {
-  const localHistoryKey = ["projects", "commits", "infinite", "cursor", live.userId, live.projectId,
+  const localHistoryKey = ["projects", "commits", "infinite", "cursor", live.projectId,
     { projectId: live.projectId, source: "local", branch: "main", cursor: null, pageSize: 20 }];
-  const remoteHistoryKey = [...localHistoryKey.slice(0, 6), { ...localHistoryKey[6] as object, source: "remote" }];
+  const remoteHistoryKey = [...localHistoryKey.slice(0, 5), { ...localHistoryKey[5] as object, source: "remote" }];
   const resetKeys = [
     localHistoryKey,
-    ["projects", "file-search", "infinite", live.userId, live.projectId, { query: "old" }],
-    ["projects", "branches", "infinite", "cursor", live.userId, live.projectId, "local", {}],
-    ["projects", "file", live.userId, live.projectId, "app.ts"],
+    ["projects", "file-search", "infinite", live.projectId, { query: "old" }],
+    ["projects", "branches", "infinite", "cursor", live.projectId, "local", {}],
+    ["projects", "file", live.projectId, "app.ts"],
   ];
-  const folderKey = ["projects", "files", live.userId, live.projectId, "src"];
+  const folderKey = ["projects", "files", live.projectId, "src"];
   const unchangedKeys = [
     remoteHistoryKey,
-    ["projects", "detail", live.userId, live.projectId],
-    ["projects", "files", live.userId, "other-project", ""],
-    ["projects", "files", "other-user", live.projectId, ""],
+    ["projects", "detail", live.projectId],
+    ["projects", "files", "other-project", ""],
+    ["projects", "files", "third-project", ""],
   ];
   for (const key of [...resetKeys, folderKey, ...unchangedKeys]) queryClient.setQueryData(key, "cached");
   await selectBranch("feature/live");
@@ -859,6 +913,54 @@ it("distinguishes loading, offline, failure, and an uninitialized repository", (
   expect(container.textContent).not.toContain("No uncommitted changes");
 });
 
+it("offers initialization only for a confirmed missing repository", () => {
+  expect(container.querySelector('[aria-label="Initialize Git Repository"]')).toBeNull();
+  for (const repositoryState of ["unborn", "not-initialized"] as const) {
+    changesQuery.data = { ...repositoryChanges(), repositoryState, changes: [], headSha: null };
+    act(() => root.render(createElement(Workspace)));
+    expect(Boolean(container.querySelector('[aria-label="Initialize Git Repository"]'))).toBe(repositoryState === "not-initialized");
+  }
+  for (const state of [{ isFetching: true }, { isFetching: false, error: new Error("Read failed") }]) {
+    Object.assign(changesQuery, state);
+    act(() => root.render(createElement(Workspace)));
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Initialize Git Repository"]')?.disabled).toBe(true);
+  }
+});
+
+it("initializes after saving files, blocks duplicate taps and removes the button after refresh", async () => {
+  live.repositoryId = null;
+  changesQuery.data = { ...repositoryChanges(), repositoryState: "not-initialized", currentBranch: null, headSha: null, changes: [] };
+  let finish!: () => void;
+  changesQuery.gitInitialize.mutateAsync.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  act(() => root.render(createElement(Workspace)));
+  click("Initialize Git Repository");
+  await act(async () => {});
+  expect(workspaceFiles.flushPendingSaves).toHaveBeenCalledOnce();
+  expect(changesQuery.gitInitialize.mutateAsync).toHaveBeenCalledOnce();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Initialize Git Repository"]')?.disabled).toBe(true);
+  click("Initialize Git Repository");
+  expect(changesQuery.gitInitialize.mutateAsync).toHaveBeenCalledOnce();
+  changesQuery.data = { ...repositoryChanges(), repositoryState: "unborn", headSha: null, changes: [change("new.txt", true)] };
+  await act(async () => { finish(); });
+  expect(feedback.success).toHaveBeenCalledWith("Git repository initialized.");
+  expect(container.querySelector('[aria-label="Initialize Git Repository"]')).toBeNull();
+  expect(container.textContent).toContain("new.txt");
+});
+
+it("shows initialization errors and leaves the action available to retry", async () => {
+  changesQuery.data = { ...repositoryChanges(), repositoryState: "not-initialized", currentBranch: null, headSha: null, changes: [] };
+  changesQuery.gitInitialize.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unable to initialize Git.", "LOCAL_GIT_ERROR"));
+  act(() => root.render(createElement(Workspace)));
+  click("Initialize Git Repository");
+  await act(async () => {});
+  expect(workspaceFiles.alert).toHaveBeenCalledWith("Git operation failed", "Unable to initialize Git.");
+  expect(feedback.success).not.toHaveBeenCalled();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Initialize Git Repository"]')?.disabled).toBe(false);
+  click("Initialize Git Repository");
+  await act(async () => {});
+  expect(changesQuery.gitInitialize.mutateAsync).toHaveBeenCalledTimes(2);
+});
+
 it("keeps selection and the commit draft through refreshes and reports stale data", () => {
   click("Select tracked changes");
   click("Open commit form");
@@ -881,20 +983,19 @@ it("keeps selection and the commit draft through refreshes and reports stale dat
   expect(container.querySelector('[aria-label="Refresh project changes"]')).toBeNull();
 });
 
-it("drops removed selections and resets draft and selection for another checkout or account", () => {
+it("drops removed selections and resets draft and selection for another checkout or project", () => {
   click("Select all changes");
   changesQuery.data = { ...repositoryChanges(), changes: [change("new.txt", true)] };
   act(() => root.render(createElement(Workspace)));
   changesQuery.data = repositoryChanges();
   act(() => root.render(createElement(Workspace)));
   expect(container.querySelector('[aria-label="Select tracked changes"]')?.getAttribute("aria-checked")).toBe("false");
-  for (const scope of ["checkout", "account", "project"]) {
+  for (const scope of ["checkout", "project"]) {
     click("Select tracked changes");
     click("Open commit form");
     const input = container.querySelector<HTMLInputElement>('[aria-label="Commit message"]')!;
     act(() => { input.value = "Old draft"; input.dispatchEvent(new Event("input", { bubbles: true })); });
     if (scope === "checkout") changesQuery.data = { ...repositoryChanges(), currentBranch: "release" };
-    if (scope === "account") live.userId = "other-user";
     if (scope === "project") live.projectId = "22222222-2222-4222-8222-222222222222";
     act(() => root.render(createElement(Workspace)));
     expect(container.querySelector('[aria-label="Select all changes"]')?.getAttribute("aria-checked")).toBe("false");
@@ -1097,10 +1198,19 @@ it("blocks sync after save failure and presents the failure", async () => {
   expect(workspaceFiles.alert).toHaveBeenCalledWith(expect.any(String), "Save failed");
   expect(feedback.success).not.toHaveBeenCalled();
 });
-it("cancels a pending force push confirmation after switching accounts", async () => {
+it("offers optional GitHub connection when a remote command needs credentials", async () => {
+  git.gitFetch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Connect GitHub to use repository commands.", "GITHUB_RECONNECT_REQUIRED"));
+  openBranchActions(); click("Fetch"); await act(async () => {});
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Connect GitHub", expect.any(String), expect.any(Array));
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  act(() => buttons.find((button: { text: string }) => button.text === "Open Settings").onPress());
+  expect(navigation.push).toHaveBeenLastCalledWith("/account");
+  expect(git.gitFetch.mutateAsync).toHaveBeenCalledOnce();
+});
+it("cancels a pending force push confirmation after switching projects", async () => {
   openBranchActions(); click("Force Push"); await act(async () => {});
   const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
-  live.userId = "user-two"; act(() => root.render(<Workspace />));
+  live.projectId = "33333333-3333-4333-8333-333333333333"; act(() => root.render(<Workspace />));
   await act(async () => buttons.find((button: { text: string }) => button.text === "Force Push").onPress());
   expect(git.gitPush.mutateAsync).not.toHaveBeenCalled();
 });
@@ -1241,7 +1351,7 @@ it("cancels stash without changing Git or showing success", async () => {
 it("refreshes file contents after pull conflicts without success feedback", async () => {
   git.gitPull.mutateAsync.mockRejectedValueOnce(new Error("Resolve conflicts before continuing."));
   openBranchActions(); click("Pull 3"); await act(async () => {});
-  expect(workspaceFiles.refreshFile).toHaveBeenCalledWith("app.ts");
+  expect(workspaceFiles.refreshFiles).toHaveBeenCalledWith();
   expect(feedback.success).not.toHaveBeenCalled();
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Resolve conflicts before continuing.");
 });
@@ -1251,11 +1361,11 @@ it("allows an unnamed stash without sending an invalid blank message", async () 
   await confirmAlert("Stash All", "   ");
   expect(stashes.gitStash.mutateAsync).toHaveBeenCalledWith({ message: undefined });
 });
-it("ignores a stash name submitted after the account changes", async () => {
+it("ignores a stash name submitted after the project changes", async () => {
   click("Other Options"); click("Stash All"); await act(async () => {});
   const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
-  live.userId = "user-two"; act(() => root.render(<Workspace />));
-  await act(async () => buttons.find((button: { text: string }) => button.text === "Stash All").onPress("Old account work"));
+  live.projectId = "33333333-3333-4333-8333-333333333333"; act(() => root.render(<Workspace />));
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Stash All").onPress("Old project work"));
   expect(stashes.gitStash.mutateAsync).not.toHaveBeenCalled();
 });
 
@@ -1295,4 +1405,142 @@ it("reports stale stash deletion failures without a success toast", async () => 
   await confirmAlert("Delete Stash");
   expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Stashes changed. Refresh the list.");
   expect(feedback.success).not.toHaveBeenCalled();
+});
+
+it("offers publishing only when the native repository has no remote", () => {
+  git.data.hasRemote = false;
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  openBranchActions();
+  const button = container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')!;
+  expect(button).not.toBeNull();
+  expect(button.disabled).toBe(false);
+  click("Publish to GitHub");
+  expect(container.querySelector('[data-testid="publish-form"]')).not.toBeNull();
+});
+
+it.each([true, undefined])("disables publishing when native remote state is %s", (hasRemote) => {
+  git.data.hasRemote = hasRemote;
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  openBranchActions();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(true);
+});
+
+
+it("shows Publish in the badge for a local repository without a remote", () => {
+  git.data.hasRemote = false;
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  const badge = container.querySelector('[aria-label^="Branch actions:"]')!;
+  expect(badge.textContent).toContain("Publish");
+  expect(badge.getAttribute("aria-label")).not.toContain("to pull");
+});
+
+it("shows only Publish when Git is not initialized", () => {
+  git.error = new ProjectGitError("No repository", "NOT_INITIALIZED");
+  live.repositoryId = null;
+  act(() => root.render(createElement(Workspace)));
+  const badge = container.querySelector('[aria-label^="Branch actions:"]')!;
+  expect(badge.textContent).toBe("Publish");
+});
+
+
+it("enables publish from native status without waiting for the branch picker to mount", () => {
+  git.data.hasRemote = false;
+  live.repositoryId = null;
+  act(() => root.render(<QueryClientProvider client={queryClient}><ProjectWorkspaceBranchProvider><ProjectBranchMenu maxWidth={300} onChangeBranch={vi.fn()} /></ProjectWorkspaceBranchProvider></QueryClientProvider>));
+  openBranchActions();
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(false);
+});
+
+
+it("shows Publish instead of empty counts before the first commit", () => {
+  git.data.hasRemote = true;
+  git.data.headSha = null;
+  act(() => root.render(createElement(Workspace)));
+  const badge = container.querySelector('[aria-label^="Branch actions:"]')!;
+  expect(badge.textContent).toContain("Publish");
+  openBranchActions();
+  // The prompt never enables creating a second remote.
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(true);
+});
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
+  const { useState } = await import("react");
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  return { useEditorPreferences: () => {
+    const [preferences, setPreferences] = useState(defaultEditorPreferences);
+    return { preferences, ready: true, error: null, update: async (patch: Partial<typeof preferences>) => setPreferences((value) => ({ ...value, ...patch })) };
+  } };
+});
+
+it("publishes an untracked local branch through the existing remote without creating a repository", async () => {
+  git.data.hasRemote = true;
+  git.data.upstream = null as unknown as string;
+  act(() => root.render(createElement(Workspace)));
+  openBranchActions();
+  click("Publish branch to GitHub");
+  await act(async () => {});
+  expect(git.gitPush.mutateAsync).toHaveBeenCalledExactlyOnceWith({});
+  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(git.gitPush.mutateAsync.mock.invocationCallOrder[0]);
+});
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));
+
+it("confirms local branch deletion, keeps the active branch protected, and preserves remote branches", async () => {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Delete local branch main"]')?.disabled).toBe(true);
+  expect(container.querySelector('[aria-label="Delete local branch remote-only"]')).toBeNull();
+  click("Delete local branch feature/live"); await act(async () => {});
+  expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
+  await confirmAlert("Delete branch");
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledExactlyOnceWith({ branchName: "feature/live" });
+  expect(live.gitCheckout.mutateAsync).not.toHaveBeenCalled();
+  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(live.gitDeleteBranch.mutateAsync.mock.invocationCallOrder[0]);
+});
+it("cancels deletion and reports native errors without hiding the branch", async () => {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  click("Delete local branch feature/live"); await act(async () => {}); await confirmAlert("Cancel");
+  expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new Error("Merge this branch first."));
+  click("Delete local branch feature/live"); await act(async () => {}); await confirmAlert("Delete branch");
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Merge this branch first.");
+  expect(container.querySelector('[aria-label="feature/live"]')).not.toBeNull();
+});
+it("does not delete after the confirmation's project has changed", async () => {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  click("Delete local branch feature/live"); await act(async () => {});
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  live.projectId = "33333333-3333-4333-8333-333333333333"; act(() => root.render(<Workspace />));
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Delete branch").onPress());
+  expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
+});
+it.each(["Cancel", "Delete anyway"])("offers explicit deletion for unmerged history and handles %s", async (choice) => {
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Delete branch");
+  expect(workspaceFiles.alert.mock.calls.at(-1)![0]).toBe("Delete branch anyway?");
+  expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("commits");
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
+  await confirmAlert(choice);
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(choice === "Cancel" ? 1 : 2);
+  if (choice === "Delete anyway") {
+    expect(live.gitDeleteBranch.mutateAsync).toHaveBeenLastCalledWith({ branchName: "feature/live", force: true });
+  }
+});
+it("does not force-delete if the project changes while the second confirmation is open", async () => {
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"));
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Delete branch");
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  expect(buttons?.some((button: { text: string }) => button.text === "Delete anyway")).toBe(true);
+  live.projectId = "33333333-3333-4333-8333-333333333333";
+  act(() => root.render(<Workspace />));
+  await act(async () => buttons.find((button: { text: string }) => button.text === "Delete anyway").onPress());
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
 });

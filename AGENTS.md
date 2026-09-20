@@ -13,6 +13,12 @@
 - Preserve filenames required by tools or frameworks, such as `AGENTS.md`, `CLAUDE.md`, Expo Router's `_layout.tsx`, and route parameter syntax. Preserve tool-generated filenames. These exceptions do not apply to ordinary component files.
 - Before reporting completion, inspect every added or renamed file, including untracked files. Correct any filename that violates this rule, update imports and references, and verify that no stale paths remain. Filename verification is part of completing every file-changing task.
 
+## Commit messages
+
+- Every commit subject must use only `type: description`. Choose a lowercase prefix such as `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `build`, `ci`, `perf`, or `chore`. Never add a scope or specifier to the prefix.
+- Never use parentheses anywhere in a commit message, including its subject and body. Check the entire message before committing.
+- Prefer lowercase descriptions. Capitals are allowed when useful for proper names, acronyms, or case-sensitive code identifiers.
+
 ## Working process
 
 - Work like a practical, efficient senior engineer. Think through each task in steps and choose the simplest implementation that meets the requirements.
@@ -26,7 +32,7 @@
 - Separate components and modules by responsibility. Keep files focused and use a clear, consistent folder structure that groups related code and makes it easy to find.
 - Add comments where you need to explain why something is done a certain way, especially if it is not obvious. Avoid comments that simply restate what the code does and do not add comments excessively. Use comments to explain the reasoning behind decisions, trade-offs, and any non-obvious implementation details.
 - If you have ran the application to test it, make sure to stop the application before returning your response. Do not leave the application running in the background while you are responding. Note that this only applies if YOU ran the application to test it, if the user ran it and you just used that instance, you do not need to stop it.
-- Before you create a new helper or implement some reusable logic, check if it already exists in the codebase. If it does, reuse it instead of creating a new one. If it doesn't exist, create a new helper or utility function and place it in the appropriate shared folder.
+- Before creating a helper or implementing reusable logic, search the codebase with `rg` for equivalent behavior, not just the proposed function name. Inspect relevant helper, utility, formatter, hook, and service files in shared folders and feature folders, plus their callers, to find implementations that already solve the same problem. Reuse or extend a suitable implementation before adding another. Create new logic only after this search finds no suitable implementation; keep feature-specific helpers in their feature folder and genuinely shared helpers in the appropriate shared folder.
 - For table enums, export them from a `shared.ts` file in the root of the `db` folder. For each enum, you should export three things.
 1. An array of all the enum values, for example `export const projectStatuses = ['draft', 'published', 'archived'] as const;`
 2. A type that represents the enum values, for example `export type ProjectStatus = (typeof ProjectStatusValues)[number];`
@@ -47,7 +53,10 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 ## Project conventions
 
+- Read environment variables through the typed T3 Env Core exports: `serverEnv` from `@/data/env/server` in server-only code and `clientEnv` from `@/data/env/client` in client code. Add new variables to the corresponding env schema before using them. Keep direct `process.env` reads inside those env modules for their runtime mappings; elsewhere, use them only for a specific technical requirement (such as tooling that cannot load the application env module) and document the reason next to the read. Keep server-only env imports out of client code.
+- Prefer type aliases for object shapes, props, and contracts. Use interfaces only when an interface-specific capability, such as declaration merging, is required.
 - Always use arrow functions when possible, including for React components and callbacks.
+- Always compose dynamic or conditional class names with `cn` from `@/lib/utils`, for example `cn("text-base", selected && "font-semibold", className)`, rather than template literals, string concatenation, or array joins. Static class strings can remain literals. Bypass `cn` only for a specific technical incompatibility, explained in an adjacent comment. Keep complete Tailwind utility names statically discoverable; select whole class strings instead of interpolating fragments such as `bg-${color}`.
 - Always format values through named formatter functions; never use object lookup maps for labels, styles, or other presentation formatting. Use an exhaustive `switch` for enum values. A formatter may return an object of related presentation fields, such as `{ label, className, textClassName }`. Keep resource-specific formatters in that feature's `lib/formatters.ts` and call them from components.
 - Use `text-base` or larger Tailwind classes for text. Use smaller text only when absolutely necessary to fit the layout. Apply the equivalent minimum size when styling without Tailwind.
 - Never use `leading-*` or `tracking-*` class names anywhere in the codebase, including variant-prefixed and arbitrary-value forms. Keep the default line height and letter spacing provided by the typography styles.

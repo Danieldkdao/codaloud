@@ -69,7 +69,11 @@ export type ProjectWorkspaceDiffEntry = Pick<
 
 export type ProjectWorkspaceDiffRow = { key: string; path: string } & (
   | { kind: "file"; file: ProjectWorkspaceDiffEntry }
-  | { kind: "comparison"; comparison: ProjectDiffComparison; status: ProjectWorkspaceDiffEntry["indexStatus"] }
+  | {
+      kind: "comparison";
+      comparison: ProjectDiffComparison;
+      status: ProjectWorkspaceDiffEntry["indexStatus"];
+    }
   | { kind: "line"; line: ProjectDiffLine }
 );
 
@@ -93,10 +97,10 @@ export type ProjectWorkspaceDiffData = Omit<
   };
 };
 
-// The API serializes database timestamps as ISO strings.
+// Action responses expose database timestamps as ISO strings.
 export type ProjectResponseData = Omit<
   ProjectSelectData,
-  "createdAt" | "updatedAt" | "lastOpenedAt"
+  "createdAt" | "updatedAt" | "lastOpenedAt" | "searchName"
 > & {
   deletionRequested?: boolean;
   createdAt: string;
@@ -109,20 +113,6 @@ export type ProjectPageData = {
   nextCursor: string | null;
 };
 
-export type ProjectSandboxLifecycleContext = {
-  operationId?: string;
-  projectId: string;
-  userId: string;
-  runId: string;
-};
-
-export type ProjectSandboxLifecycleTransition =
-  | { action: "start" }
-  | { action: "attach"; sandboxId: string }
-  | { action: "complete"; sandboxId: string }
-  | { action: "fail" };
-
-
 export type ProjectCommitData = {
   hash: string;
   message: string;
@@ -132,20 +122,11 @@ export type ProjectCommitData = {
   refs?: string[];
 };
 
-
 export type ProjectAgentActivityKind =
-  | "voice"
-  | "text"
-  | "symbol"
-  | "command"
-  | "review";
+  "voice" | "text" | "symbol" | "command" | "review";
 
 export type ProjectAgentActivityStatus =
-  | "queued"
-  | "running"
-  | "complete"
-  | "failed"
-  | "needs-attention";
+  "queued" | "running" | "complete" | "failed" | "needs-attention";
 
 export type ProjectAgentActivityData = {
   id: string;
@@ -159,7 +140,9 @@ export type ProjectAgentActivityData = {
 
 export type { ProjectFileSearchScope } from "./actions/file-search-schemas";
 
-export type ReadProjectFilesActionResult<Input> = Input extends { search: string }
+export type ReadProjectFilesActionResult<Input> = Input extends {
+  search: string;
+}
   ? ProjectFileSearchPageSchema
   : ProjectFileEntrySchema[];
 
@@ -183,10 +166,14 @@ export type ProjectGitReadFailureHandler = (
 export type ProjectGitMutationFailure = Extract<ApiResponse, { error: true }>;
 
 export type ProjectGitMutationResult<T> =
-  | ProjectGitMutationFailure
-  | { error: false; message: string; data: T };
+  ProjectGitMutationFailure | { error: false; message: string; data: T };
 
 export type ProjectGitMutationContext = {
-  userId: string | null;
   projectId: string | null | undefined;
+};
+
+export type ProjectOpenFilesState = {
+  openFilePaths: Set<string>;
+  activeFilePath: string | null;
+  versions: Map<string, number>;
 };

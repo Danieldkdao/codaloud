@@ -1,7 +1,6 @@
 import { isValidIds } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuthSession } from "@/hooks/use-auth-session";
 import { readProjectFilesAction } from "../actions/file-actions";
 import {
   projectFileSearchQuerySchema,
@@ -35,11 +34,6 @@ export const useProjectFileSearch = (
     enabled?: boolean;
   } = {},
 ) => {
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   const queryClient = useQueryClient();
   const { flushPendingSaves } = useProjectFileSaveRegistry();
   // Preserve meaningful spaces in literal content searches; blank searches are invalid.
@@ -52,22 +46,22 @@ export const useProjectFileSearch = (
   const validProject = !!projectId && isValidIds(projectId);
   const validationError = params.success
     ? null
-    : (params.error.issues[0]?.message ?? "Invalid project file search or pagination.");
-  const canSearch =
-    enabled && Boolean(userId) && validProject && params.success;
+    : (params.error.issues[0]?.message ??
+      "Invalid project file search or pagination.");
+  const canSearch = enabled && validProject && params.success;
   const queryKey = useMemo(
     () => [
       "projects",
       "file-search",
       "infinite",
-      userId,
       projectId,
       { search, scope, path, pageSize },
     ],
-    [userId, projectId, search, scope, path, pageSize],
+    [projectId, search, scope, path, pageSize],
   );
 
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey,
     enabled: canSearch,
     initialPageParam: null as string | null,
@@ -88,13 +82,12 @@ export const useProjectFileSearch = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch bypasses enabled, so validate again before sending a request.
-      if (!userId) throw new Error("Sign in to search project files.");
       if (!projectId || !validProject) {
         throw new Error("Invalid project file search or pagination.");
       }
       if (!params.success) throw new Error(validationError!);
       // A new snapshot must include pending editor writes. Continuations keep
-      // their existing snapshot and use the server's workspace-change recovery.
+      // their existing snapshot and use the local snapshot.
       if (pageParam === null) await flushPendingSaves();
       // Canceling search must not cancel accepted saves, but it must prevent
       // an obsolete request from starting once those saves settle.
@@ -123,8 +116,7 @@ export const useProjectFileSearch = (
       );
       if (result === null) {
         throw (
-          requestError ??
-          new Error(formatProjectFileSearchError(undefined))
+          requestError ?? new Error(formatProjectFileSearchError(undefined))
         );
       }
       return result;

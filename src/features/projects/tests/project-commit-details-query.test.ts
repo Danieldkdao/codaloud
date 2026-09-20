@@ -7,12 +7,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readProjectCommitDetailsAction } from "../actions/git-actions";
 import type { ProjectCommitDetailsSchema } from "../actions/commit-details-schemas";
 import { useProjectCommitDetails } from "../hooks/use-project-commit-details";
-
-const session = vi.hoisted(() => ({
-  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
-  isPending: false, error: null as Error | null,
-}));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
 vi.mock("../actions/git-actions", () => ({ readProjectCommitDetailsAction: vi.fn() }));
 
 const read = vi.mocked(readProjectCommitDetailsAction);
@@ -25,7 +19,7 @@ const details: ProjectCommitDetailsSchema = {
     committedAt: "2026-09-15T12:00:00Z", parentHashes: [], isMerge: false },
   baseSha: null, files: [], summary: { fileCount: 0, additions: 0, deletions: 0, unavailableCount: 0 }, githubUrl: null,
 };
-const key = ["projects", "commit-details", "user-one", projectId, commitSha, "local"];
+const key = ["projects", "commit-details", projectId, commitSha, "local"];
 type Options = Parameters<typeof useProjectCommitDetails>[1];
 let client: QueryClient;
 let root: Root;
@@ -49,7 +43,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000, retry: 3 } } });
   root = createRoot(document.createElement("div"));
-  Object.assign(session, { data: { user: { id: "user-one" } }, isPending: false, error: null });
   read.mockReset().mockResolvedValue(details);
 });
 afterEach(() => {
@@ -69,15 +62,7 @@ it("returns the useQuery result and forwards the identity and cancellation signa
   expect(client.getQueryData(key)).toEqual(details);
 });
 
-it.each(["pending", "signed-out", "error"])("blocks automatic and manual requests when authentication is %s", async (state) => {
-  if (state === "pending") session.isPending = true;
-  else if (state === "signed-out") session.data = null;
-  else session.error = new Error("Session unavailable");
-  await render();
-  expect(current.fetchStatus).toBe("idle");
-  await act(async () => { await current.refetch(); });
-  expect(read).not.toHaveBeenCalled();
-});
+it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
 it.each([
   [null, { commitSha, source: "local" }], ["invalid", { commitSha, source: "local" }],
@@ -91,20 +76,16 @@ it.each([
   expect(read).not.toHaveBeenCalled();
 });
 
-it("starts loading when enabled and the session is ready", async () => {
-  session.isPending = true;
-  await render();
-  session.isPending = false;
+it("starts loading when enabled", async () => {
   await render(projectId, { commitSha, source: "local", enabled: false });
   expect(read).not.toHaveBeenCalled();
   await render();
   expect(current.isSuccess).toBe(true);
 });
 
-it.each(["project", "sha", "source", "account"])("isolates the cache when the %s changes", async (field) => {
+it.each(["project", "sha", "source"])("isolates the cache when the %s changes", async (field) => {
   await render();
   read.mockImplementationOnce(() => new Promise(() => {}));
-  if (field === "account") session.data = { user: { id: "user-two" } };
   await render(field === "project" ? "22222222-2222-4222-8222-222222222222" : projectId, {
     commitSha: field === "sha" ? "b".repeat(40) : commitSha,
     source: field === "source" ? "remote" : "local",

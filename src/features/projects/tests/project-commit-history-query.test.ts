@@ -6,14 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createProjectCommitAction, readProjectCommitsAction } from "../actions/git-actions";
 import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import type { ProjectCommitPageSchema } from "../actions/commit-schemas";
-
-const session = vi.hoisted(() => ({
-  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
-  isPending: false, error: null as Error | null,
-}));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
 vi.mock("../actions/git-actions", () => ({ readProjectCommitsAction: vi.fn(), createProjectCommitAction: vi.fn() }));
 
 const read = vi.mocked(readProjectCommitsAction);
@@ -55,9 +49,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
   root = createRoot(document.createElement("div"));
-  session.data = { user: { id: "user-one" } };
-  session.isPending = false;
-  session.error = null;
   read.mockReset().mockResolvedValue(page("first"));
   createCommit.mockReset().mockResolvedValue({ error: false, message: "Committed.", data: createdCommit });
 });
@@ -98,27 +89,17 @@ it("normalizes filters and starts each branch, source, author, search and page-s
   expect(client.getQueryCache().getAll()).toHaveLength(6);
 });
 
-it("isolates projects and accounts in the cache", async () => {
+it("isolates projects in the cache", async () => {
   read.mockResolvedValueOnce(page("one")).mockResolvedValueOnce(page("two")).mockResolvedValueOnce(page("three"));
   await render();
   await render({}, otherProjectId);
   expect(current.data?.pages).toEqual([page("two")]);
-  session.data = { user: { id: "user-two" } };
   await render();
-  expect(current.data?.pages).toEqual([page("three")]);
-  expect(client.getQueryCache().getAll()).toHaveLength(3);
+  expect(current.data?.pages).toEqual([page("one")]);
+  expect(client.getQueryCache().getAll()).toHaveLength(2);
 });
 
-it.each(["pending", "signed-out", "error"])("blocks reads and manual refetch when authentication is %s", async (state) => {
-  if (state === "pending") session.isPending = true;
-  if (state === "signed-out") session.data = null;
-  if (state === "error") session.error = new Error("Unavailable");
-  await render();
-  await run(() => current.refetch());
-  expect(current.onLoadMore()).toBeUndefined();
-  expect(current.retry()).toBeUndefined();
-  expect(read).not.toHaveBeenCalled();
-});
+it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
 it.each<Options>([{ branch: undefined }, { source: undefined }, { branch: "main..private" },
   { pageSize: 0 }, { search: "x".repeat(201) }, { author: "x".repeat(201) }, { maxPages: -1 }, { maxPages: 1.5 }])(
@@ -189,13 +170,13 @@ it("guards callbacks during an active fetch and avoids duplicate load-more calls
   await flush();
 });
 
-it("does not load more or retry while offline", async () => {
+it("reads and refreshes local history while offline", async () => {
   onlineManager.setOnline(false);
   await render();
-  expect(current.fetchStatus).toBe("paused");
-  expect(current.onLoadMore()).toBeUndefined();
-  expect(current.retry()).toBeUndefined();
-  expect(read).not.toHaveBeenCalled();
+  expect(current.fetchStatus).toBe("idle");
+  expect(read).toHaveBeenCalledTimes(1);
+  await act(async () => { await current.retry(); });
+  expect(read).toHaveBeenCalledTimes(2);
 });
 
 it("forwards cancellation without showing an error", async () => {
@@ -275,14 +256,7 @@ it("preserves action error codes and disables automatic commit retries", async (
   expect(createCommit).toHaveBeenCalledOnce();
 });
 
-it.each(["pending", "signed-out", "error"])("blocks committing when authentication is %s", async (state) => {
-  if (state === "pending") session.isPending = true;
-  if (state === "signed-out") session.data = null;
-  if (state === "error") session.error = new Error("Unavailable");
-  await render();
-  await run(async () => { await expect(current.gitCommit.mutateAsync(commitInput)).rejects.toThrow("Sign in to commit changes."); });
-  expect(createCommit).not.toHaveBeenCalled();
-});
+it("works locally without an account or session", async () => { await render(); await run(() => current.gitCommit.mutateAsync(commitInput)); expect(createCommit).toHaveBeenCalledOnce(); });
 
 it("blocks committing without a project", async () => {
   await render({}, null);
@@ -292,7 +266,7 @@ it("blocks committing without a project", async () => {
 
 it("refreshes local history from page one after eviction and invalidates changed files", async () => {
   read.mockResolvedValueOnce(page("first", "next")).mockResolvedValueOnce(page("second")).mockResolvedValue(page("new commit"));
-  const changesKey = ["projects", "changes", "user-one", projectId];
+  const changesKey = ["projects", "changes", projectId];
   client.setQueryData(changesKey, { headSha: "a".repeat(40) });
   await render({ maxPages: 1 });
   await run(() => current.onLoadMore());
@@ -302,11 +276,11 @@ it("refreshes local history from page one after eviction and invalidates changed
   expect(client.getQueryState(changesKey)?.isInvalidated).toBe(true);
 });
 
-it("refreshes the submitted account and project when navigation changes during a commit", async () => {
+it("refreshes the submitted project when navigation changes during a commit", async () => {
   let finish!: (value: Awaited<ReturnType<typeof createProjectCommitAction>>) => void;
   createCommit.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  const originalChanges = ["projects", "changes", "user-one", projectId];
-  const otherChanges = ["projects", "changes", "user-two", otherProjectId];
+  const originalChanges = ["projects", "changes", projectId];
+  const otherChanges = ["projects", "changes", otherProjectId];
   client.setQueryData(originalChanges, { changed: true });
   client.setQueryData(otherChanges, { changed: true });
   await render({ source: "remote" });
@@ -314,7 +288,6 @@ it("refreshes the submitted account and project when navigation changes during a
   await render();
   let pending!: ReturnType<typeof current.gitCommit.mutateAsync>;
   await act(async () => { pending = current.gitCommit.mutateAsync(commitInput); });
-  session.data = { user: { id: "user-two" } };
   await render({}, otherProjectId);
   await run(async () => {
     finish({ error: false, message: "Committed.", data: createdCommit });
@@ -346,16 +319,16 @@ it("does not queue an offline commit for execution after reconnecting", async ()
 });
 
 it("invalidates every file, directory and local branch query for the submitted workspace", async () => {
-  const keys = (userId: string, id: string) => [
-    ["projects", "file", userId, id, "file.ts"],
-    ["projects", "file", userId, id, "other.ts"],
-    ["projects", "files", userId, id, ""],
-    ["projects", "files", userId, id, "src/nested"],
-    ["projects", "changes", userId, id],
-    ["projects", "branches", "infinite", "cursor", userId, id, "local", { search: "" }],
+  const keys = (id: string) => [
+    ["projects", "file", id, "file.ts"],
+    ["projects", "file", id, "other.ts"],
+    ["projects", "files", id, ""],
+    ["projects", "files", id, "src/nested"],
+    ["projects", "changes", id],
+    ["projects", "branches", "infinite", "cursor", id, "local", { search: "" }],
   ];
-  const affected = keys("user-one", projectId);
-  const unrelated = [...keys("user-two", projectId), ...keys("user-one", otherProjectId)];
+  const affected = keys(projectId);
+  const unrelated = [...keys("project-three"), ...keys(otherProjectId)];
   for (const key of [...affected, ...unrelated]) client.setQueryData(key, { cached: true });
   await render({ enabled: false });
   await run(() => current.gitCommit.mutateAsync(commitInput));
@@ -370,8 +343,8 @@ it("invalidates every file, directory and local branch query for the submitted w
 });
 
 it("discards old file-search snapshots without resetting other workspaces", async () => {
-  const searchKey = ["projects", "file-search", "infinite", "user-one", projectId, { search: "text" }];
-  const otherKey = ["projects", "file-search", "infinite", "user-one", otherProjectId, { search: "text" }];
+  const searchKey = ["projects", "file-search", "infinite", projectId, { search: "text" }];
+  const otherKey = ["projects", "file-search", "infinite", otherProjectId, { search: "text" }];
   for (const key of [searchKey, otherKey]) client.setQueryData(key, { pages: ["old snapshot"], pageParams: [null] });
   await render({ enabled: false });
   await run(() => current.gitCommit.mutateAsync(commitInput));
@@ -380,7 +353,7 @@ it("discards old file-search snapshots without resetting other workspaces", asyn
 });
 
 it("cancels an older individual-file read and refetches its contents and stats", async () => {
-  const queryKey = ["projects", "file", "user-one", projectId, "file.ts"];
+  const queryKey = ["projects", "file", projectId, "file.ts"];
   const refreshed = { content: "later edit", stats: { staged: false, modified: true } };
   let finishOldRead!: (value: typeof refreshed) => void;
   let oldSignal!: AbortSignal;
@@ -403,8 +376,8 @@ it("cancels an older individual-file read and refetches its contents and stats",
 
 it.each(["COMMIT_FAILED", "COMMIT_OUTCOME_UNKNOWN", "COMMIT_STAGING_OUTCOME_UNKNOWN"])(
   "refreshes potentially changed staging after %s while preserving the commit error", async (code) => {
-    const key = ["projects", "file", "user-one", projectId, "file.ts"];
-    const changesKey = ["projects", "changes", "user-one", projectId];
+    const key = ["projects", "file", projectId, "file.ts"];
+    const changesKey = ["projects", "changes", projectId];
     for (const queryKey of [key, changesKey]) client.setQueryData(queryKey, { staged: false });
     createCommit.mockResolvedValue({ error: true, code, message: "Refresh before retrying." });
     await render({ enabled: false });

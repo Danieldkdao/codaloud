@@ -1,41 +1,56 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { readProjectCodeIntelligence } from "@/features/projects/actions/code-intelligence-actions";
+import { beforeEach, expect, it, vi } from "vitest";
 
-const network = vi.hoisted(() => vi.fn<typeof fetch>());
-vi.mock("@/lib/utils", () => ({
-  fetchBase: network,
-  isValidIds: (id: string) => id === "project",
-  createRequestHeaders: async () => new Headers({ Cookie: "session=test" }),
+const mocks = vi.hoisted(() => ({
+  requireProject: vi.fn(),
+  execute: vi.fn(),
+  createAnalyzer: vi.fn(),
+  analyzeOnce: vi.fn(),
+}));
+vi.mock("../local/access", () => ({ requireLocalProject: mocks.requireProject }));
+vi.mock("@/services/local-workspace/execute", () => ({ executeWorkspace: mocks.execute }));
+vi.mock("@/services/typescript/analysis", () => ({
+  createTypeScriptAnalyzer: mocks.createAnalyzer,
+  analyzeTypeScript: mocks.analyzeOnce,
 }));
 beforeEach(() => {
-  network.mockReset().mockResolvedValue(Response.json({ error: false, data: { diagnostics: [] } }));
-  // React Native's AbortSignal polyfill does not expose the static timeout API.
-  vi.stubGlobal("AbortSignal", class {});
-});
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
-const input = { path: "demo.ts", content: "const value = 1;" };
-
-it("uses a native-compatible timeout and preserves the unsaved buffer", async () => {
-  expect(await readProjectCodeIntelligence("project", input)).toEqual({ diagnostics: [] });
-  expect(JSON.parse(String(network.mock.calls[0][1]?.body))).toEqual(input);
-  expect(new Headers(network.mock.calls[0][1]?.headers).get("Cookie")).toBe("session=test");
-});
-
-it("returns null for failed or mismatched analysis instead of a clean result", async () => {
-  for (const response of [Response.json({}, { status: 503 }), Response.json({ error: false, data: { completions: [] } }), Response.json({ error: false, data: { diagnostics: [{ severity: "other" }] } })]) {
-    network.mockResolvedValueOnce(response);
-    expect(await readProjectCodeIntelligence("project", input)).toBeNull();
-  }
-});
-
-it("aborts a stalled request and releases its timer", async () => {
-  vi.useFakeTimers();
-  network.mockImplementationOnce(async (_url, init) => new Promise((_resolve, reject) => {
-    init?.signal?.addEventListener("abort", () => reject(new Error("Aborted")));
+  vi.resetModules();
+  vi.resetAllMocks();
+  mocks.requireProject.mockImplementation(async (id: string) => ({ id }));
+  mocks.createAnalyzer.mockImplementation(() => ({
+    analyze: vi.fn().mockResolvedValue({ diagnostics: [] }),
+    dispose: vi.fn().mockResolvedValue(undefined),
   }));
-  const result = readProjectCodeIntelligence("project", input);
-  await vi.advanceTimersByTimeAsync(70_000);
-  expect(await result).toBeNull();
-  expect(network.mock.calls[0][1]?.signal?.aborted).toBe(true);
-  expect(vi.getTimerCount()).toBe(0);
+});
+const input = { path: "src/main.ts", content: "const count = 42;" };
+
+it("reuses the active project's analyzer and releases it when changing projects", async () => {
+  const { readProjectCodeIntelligence } = await import("../actions/code-intelligence-actions");
+  expect(await readProjectCodeIntelligence("first", input)).toEqual({ diagnostics: [] });
+  expect(await readProjectCodeIntelligence("first", { ...input, content: "const count = 43;" })).toEqual({ diagnostics: [] });
+  expect(mocks.createAnalyzer).toHaveBeenCalledOnce();
+  const first = mocks.createAnalyzer.mock.results[0].value;
+  expect(first.analyze).toHaveBeenCalledTimes(2);
+  await readProjectCodeIntelligence("second", input);
+  expect(first.dispose).toHaveBeenCalledOnce();
+  expect(mocks.createAnalyzer).toHaveBeenCalledTimes(2);
+});
+
+it("reads dependencies through the correct native workspace and treats missing files as absent", async () => {
+  const { readProjectCodeIntelligence } = await import("../actions/code-intelligence-actions");
+  await readProjectCodeIntelligence("first", input);
+  const read = mocks.createAnalyzer.mock.calls[0][0];
+  mocks.execute.mockResolvedValue({ path: "src/value.ts", content: "hello", size: 5 });
+  expect(await read("src/value.ts")).toBe("hello");
+  expect(mocks.execute).toHaveBeenCalledWith("first", "read-file", { path: "src/value.ts" });
+  mocks.execute.mockRejectedValue(new Error("Missing file"));
+  expect(await read("missing.ts")).toBeNull();
+});
+
+it("returns null on access or analysis failure", async () => {
+  const { readProjectCodeIntelligence } = await import("../actions/code-intelligence-actions");
+  mocks.requireProject.mockRejectedValueOnce(new Error("No project"));
+  expect(await readProjectCodeIntelligence("first", input)).toBeNull();
+  expect(mocks.createAnalyzer).not.toHaveBeenCalled();
+  mocks.createAnalyzer.mockReturnValueOnce({ analyze: vi.fn().mockRejectedValue(new Error("Analysis failed")) });
+  expect(await readProjectCodeIntelligence("first", input)).toBeNull();
 });

@@ -1,0 +1,104 @@
+import {
+  readGitIdentity,
+  requireGitIdentity,
+} from "@/features/settings/git-identity";
+import { getGitHubAccessToken } from "@/services/github/credentials";
+import {
+  executeWorkspace,
+  LocalWorkspaceError,
+} from "@/services/local-workspace/execute";
+import { requireLocalProject } from "./access";
+import {
+  readLocalBranches,
+  readLocalHistory,
+  readLocalStashes,
+} from "./git-readers";
+
+import type { ProjectGitCommand } from "./git-types";
+
+const requireAccessToken = async () => {
+  try {
+    return await getGitHubAccessToken();
+  } catch (error) {
+    throw new LocalWorkspaceError(
+      "GITHUB_RECONNECT_REQUIRED",
+      error instanceof Error ? error.message : "Connect GitHub in Settings.",
+    );
+  }
+};
+
+export const executeProjectGit = async (
+  projectId: string,
+  command: ProjectGitCommand,
+) => {
+  const project = await requireLocalProject(projectId);
+  const operation = command.operation;
+  switch (operation) {
+    case "branches":
+      return readLocalBranches(project.id, command.args);
+    case "history":
+      return readLocalHistory(project.id, command.args);
+    case "stashes":
+      return readLocalStashes(project.id, command.args);
+    case "git/initialize":
+    case "git/counts":
+    case "git/changes":
+    case "git/discard-preview":
+      return executeWorkspace(project.id, command.operation);
+    case "git/commit-details":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/checkout":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/create-branch":
+    case "git/delete-branch":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/stash-apply":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/stash-drop":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/discard":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/undo":
+      return executeWorkspace(project.id, command.operation, command.args);
+    case "git/commit":
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        identity: await requireGitIdentity(),
+      });
+    case "git/stash-save":
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        identity: await requireGitIdentity(),
+      });
+    case "git/revert":
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        identity: await requireGitIdentity(),
+      });
+    case "git/fetch":
+      return executeWorkspace(project.id, command.operation, {
+        accessToken: await requireAccessToken(),
+      });
+    case "git/push":
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        accessToken: await requireAccessToken(),
+      });
+    case "git/publish":
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        accessToken: await requireAccessToken(),
+      });
+    case "git/pull": {
+      const identity = await readGitIdentity();
+      return executeWorkspace(project.id, command.operation, {
+        ...command.args,
+        ...(identity ? { identity } : {}),
+        accessToken: await requireAccessToken(),
+      });
+    }
+    default: {
+      throw new Error(`Unsupported Git command: ${operation satisfies never}`);
+    }
+  }
+};

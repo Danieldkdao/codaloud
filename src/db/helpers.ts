@@ -1,12 +1,5 @@
-import { timestamp, uuid } from "drizzle-orm/pg-core";
+import { text } from "drizzle-orm/sqlite-core";
 
-export const id = uuid("id").defaultRandom().primaryKey();
-export const createdAt = timestamp("created_at", {
-  withTimezone: true,
-})
-  .defaultNow()
-  .notNull();
-export const updatedAt = timestamp("updated_at", { withTimezone: true })
-  .defaultNow()
-  .notNull()
-  .$onUpdate(() => new Date());
+export const id = text("id").primaryKey();
+export const createdAt = text("created_at").notNull();
+export const updatedAt = text("updated_at").notNull();

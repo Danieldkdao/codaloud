@@ -11,12 +11,11 @@ const mocks = vi.hoisted(() => ({
   nextMatch: vi.fn(), previousMatch: vi.fn(), dismissTo: vi.fn(), navigate: vi.fn(), selectFile: vi.fn(), read: vi.fn(), editor: vi.fn(), isDarkMode: false,
 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => mocks.params, useRouter: () => ({ dismissTo: mocks.dismissTo, navigate: mocks.navigate }) }));
-vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ setFilePath: mocks.selectFile }) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
+vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ openFile: mocks.selectFile }) }));
 vi.mock("../actions/file-actions", () => ({ readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: mocks.isDarkMode }), useThemeColor: () => "transparent" }));
 vi.mock("@/components/code-editor", () => ({ default: (props: ComponentProps<typeof CodeEditor>) => {
-  useImperativeHandle(props.ref, () => ({ nextMatch: mocks.nextMatch, previousMatch: mocks.previousMatch }));
+  useImperativeHandle(props.ref, () => ({ revealDiagnostic: () => {}, transform: () => {}, searchCommand: () => {}, command: async () => {}, flushChanges: async () => {}, dismissKeyboard: vi.fn(), nextMatch: mocks.nextMatch, previousMatch: mocks.previousMatch }));
   mocks.editor(props);
   return <div data-testid="editor">{props.initialValue}</div>;
 } }));
@@ -80,7 +79,7 @@ it("fetches the selected file through the shared hook and renders a read-only ed
 
 it("refreshes recently cached content on every preview mount and replaces it with confirmed bytes", async () => {
   const cached = { path: mocks.params.filePath, content: "old bytes", size: 9 };
-  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], cached);
+  client.setQueryData(["projects", "file", "project-one", mocks.params.filePath], cached);
   let finish!: (value: unknown) => void;
   mocks.read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await render();
@@ -100,7 +99,7 @@ it("refreshes recently cached content on every preview mount and replaces it wit
 });
 
 it.each(["FILE_NOT_FOUND", undefined])("shows a failed fresh read instead of presenting cached content (%s)", async (code) => {
-  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
+  client.setQueryData(["projects", "file", "project-one", mocks.params.filePath], {
     path: mocks.params.filePath, content: "cached bytes", size: 12,
   });
   mocks.read.mockImplementationOnce(async (_project, _path, _signal, onFailure) => {
@@ -120,15 +119,15 @@ it.each(["FILE_NOT_FOUND", undefined])("shows a failed fresh read instead of pre
   expect(editorProps().initialValue).toBe("export const answer = 42;");
 });
 
-it("shows reconnect feedback when a cached preview cannot be refreshed offline", async () => {
-  client.setQueryData(["projects", "file", "user-one", "project-one", mocks.params.filePath], {
+it("refreshes cached previews from the device while offline", async () => {
+  client.setQueryData(["projects", "file", "project-one", mocks.params.filePath], {
     path: mocks.params.filePath, content: "cached bytes", size: 12,
   });
   onlineManager.setOnline(false);
   await render();
-  expect(container.textContent).toContain("Reconnect to the internet");
-  expect(container.querySelector('[data-testid="editor"]')).toBeNull();
-  expect(mocks.read).not.toHaveBeenCalled();
+  expect(container.textContent).not.toContain("Reconnect to the internet");
+  expect(container.querySelector('[data-testid="editor"]')).not.toBeNull();
+  expect(mocks.read).toHaveBeenCalledOnce();
   await act(async () => onlineManager.setOnline(true));
   await flush();
   expect(mocks.read).toHaveBeenCalledOnce();
@@ -144,7 +143,7 @@ it("opens the previewed file in Code only when the floating action is pressed", 
   expect(editorProps().bottomInset).toBeGreaterThan(80);
   act(() => button!.click());
   expect(mocks.selectFile).toHaveBeenCalledExactlyOnceWith("src/My File [id].tsx");
-  expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
+  expect(mocks.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
 });
 
 it("shows loading while fetching and opens an empty file successfully", async () => {
@@ -190,11 +189,11 @@ it("replaces the previous preview when the selected path changes", async () => {
   expect(container.textContent).not.toContain("export const answer");
 });
 
-it("shows reconnect feedback for a paused initial read", async () => {
+it("opens an uncached local file while offline", async () => {
   onlineManager.setOnline(false);
   await render();
-  expect(container.textContent).toContain("Reconnect to the internet");
-  expect(mocks.read).not.toHaveBeenCalled();
+  expect(container.textContent).not.toContain("Reconnect to the internet");
+  expect(mocks.read).toHaveBeenCalledOnce();
 });
 
 
@@ -253,3 +252,5 @@ it("ignores late match reports after the preview search changes", async () => {
   expect(container.textContent).toContain("1 / 1");
   expect(container.textContent).not.toContain("43 / 99");
 });
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => { const { defaultEditorPreferences } = await import("@/features/settings/constants"); return { useEditorPreferences: () => ({ preferences: defaultEditorPreferences }) }; });

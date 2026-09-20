@@ -1,90 +1,76 @@
 // @vitest-environment happy-dom
-
-import { act, createElement, useEffect } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { useGitHubConnected } from "@/services/github/hooks/use-github-connected";
+import { useGitHubConnected } from "../hooks/use-github-connected";
+import { useGitHubRepositories } from "../hooks/use-github-repositories";
 
-const mocks = vi.hoisted(() => ({
-  platform: { OS: "ios" },
-  listAccounts: vi.fn(),
-  linkSocial: vi.fn(),
-}));
-vi.mock("react-native", () => ({ Platform: mocks.platform }));
-vi.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({}),
-  useFocusEffect: (callback: () => (() => void)) => useEffect(callback, [callback]),
-}));
-vi.mock("@/lib/auth/auth-client", () => ({
-  authClient: { listAccounts: mocks.listAccounts, linkSocial: mocks.linkSocial },
-}));
-
+const mocks = vi.hoisted(() => ({ connect: vi.fn(), disconnect: vi.fn(), read: vi.fn() }));
+vi.mock("../actions/actions", () => ({ readGitHubRepositories: mocks.read }));
+vi.mock("../authorization", () => ({ connectGitHub: mocks.connect }));
+vi.mock("../credentials", () => ({ disconnectGitHub: mocks.disconnect, loadGitHubConnection: vi.fn() }));
+vi.mock("../hooks/use-github-profile", () => ({ useGitHubProfile: () => ({ ready: true, profile: { id: 1 }, scopes: ["repo"], error: null }) }));
 let root: Root;
-let connection: ReturnType<typeof useGitHubConnected>;
 let client: QueryClient;
-const callbackURL = "/new-project?source=github&name=My+project";
-const Probe = () => {
-  connection = useGitHubConnected(callbackURL);
-  return null;
-};
-
+let connection: ReturnType<typeof useGitHubConnected>;
+const Probe = () => { connection = useGitHubConnected(); return null; };
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  mocks.platform.OS = "ios";
-  mocks.listAccounts.mockResolvedValue({ data: [{ providerId: "github", scopes: ["repo"] }], error: null });
-  mocks.linkSocial.mockResolvedValue({ error: null });
+  mocks.connect.mockReset().mockResolvedValue(true);
+  mocks.disconnect.mockReset().mockResolvedValue(undefined);
   client = new QueryClient();
-  client.setQueryData(["github", "repositories", "infinite", { search: "old" }], "stale repositories");
-  client.setQueryData(["projects"], "keep projects");
+  client.setQueryData(["github", "repositories"], "old account repositories");
+  client.setQueryData(["projects"], "local projects");
   root = createRoot(document.createElement("div"));
   await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
 });
+afterEach(() => { act(() => root.unmount()); client.clear(); });
 
-afterEach(() => {
-  act(() => root.unmount());
-  client.clear();
+it("clears GitHub data after authorization without clearing local projects", async () => {
+  await act(async () => connection.handleConnect());
+  expect(mocks.connect).toHaveBeenCalledOnce();
+  expect(client.getQueryData(["github", "repositories"])).toBeUndefined();
+  expect(client.getQueryData(["projects"])).toBe("local projects");
 });
 
-it.each(["ios", "android"])("clears cached repository data after native authorization on %s", async (platform) => {
-  mocks.platform.OS = platform;
-  const reset = vi.spyOn(client, "resetQueries");
+it("keeps existing connection data when authorization is cancelled", async () => {
+  mocks.connect.mockResolvedValue(false);
   await act(async () => connection.handleConnect());
-  expect(mocks.linkSocial).toHaveBeenCalledWith({ provider: "github", scopes: ["repo"], callbackURL, errorCallbackURL: callbackURL });
-  expect(mocks.listAccounts).toHaveBeenCalledTimes(2);
-  expect(connection.isConnected).toBe(true);
-  expect(connection.isPending).toBe(false);
-  expect(reset).toHaveBeenCalledWith({ queryKey: ["github", "repositories"] });
-  expect(client.getQueryData(["github", "repositories", "infinite", { search: "old" }])).toBeUndefined();
-  expect(client.getQueryData(["projects"])).toBe("keep projects");
-});
-
-it("waits for native authorization before resetting repositories", async () => {
-  let complete!: (value: { error: null }) => void;
-  mocks.linkSocial.mockReturnValue(new Promise((resolve) => { complete = resolve; }));
-  const reset = vi.spyOn(client, "resetQueries");
-  await act(async () => connection.handleConnect());
-  expect(connection.isPending).toBe(true);
-  expect(reset).not.toHaveBeenCalled();
-  await act(async () => complete({ error: null }));
-  expect(reset).toHaveBeenCalledOnce();
-  expect(connection.isPending).toBe(false);
+  expect(client.getQueryData(["github", "repositories"])).toBe("old account repositories");
 });
 
 it("keeps failed authorization recoverable", async () => {
-  mocks.linkSocial.mockResolvedValue({ error: { message: "Authorization failed" } });
-  const reset = vi.spyOn(client, "resetQueries");
+  mocks.connect.mockRejectedValue(new Error("Authorization failed"));
   await act(async () => connection.handleConnect());
-  expect(connection.status).toContain("Unable to connect GitHub");
+  expect(connection.connectionError).toBeTruthy();
   expect(connection.isPending).toBe(false);
-  expect(reset).not.toHaveBeenCalled();
 });
 
-it("does not reset repositories if the repo grant is still missing", async () => {
-  mocks.listAccounts.mockResolvedValue({ data: [{ providerId: "github", scopes: ["read:user"] }], error: null });
-  const reset = vi.spyOn(client, "resetQueries");
+it("disconnects GitHub without deleting local projects", async () => {
+  await act(async () => connection.handleDisconnect());
+  expect(mocks.disconnect).toHaveBeenCalledOnce();
+  expect(client.getQueryData(["github", "repositories"])).toBeUndefined();
+  expect(client.getQueryData(["projects"])).toBe("local projects");
+});
+
+it("automatically reloads an already mounted repository picker after connecting", async () => {
+  let repositories!: ReturnType<typeof useGitHubRepositories>;
+  const RepositoryPicker = () => {
+    repositories = { ...useGitHubRepositories() };
+    return null;
+  };
+  client.setDefaultOptions({ queries: { retry: false } });
+  mocks.read.mockResolvedValueOnce(null).mockResolvedValue({ repositories: [], nextCursor: null });
+  await act(async () => {
+    root.render(createElement(QueryClientProvider, { client },
+      createElement("div", null, createElement(Probe), createElement(RepositoryPicker))));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(repositories.isError).toBe(true);
   await act(async () => connection.handleConnect());
-  expect(connection.isConnected).toBe(false);
-  expect(connection.status).toContain("wasn’t granted");
-  expect(reset).not.toHaveBeenCalled();
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(repositories.isSuccess).toBe(true);
+  expect(mocks.read).toHaveBeenCalledTimes(2);
 });

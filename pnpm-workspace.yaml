@@ -8,16 +8,10 @@ minimumReleaseAgeExclude:
   - expo-modules-jsi@57.0.8
   - expo-router@57.0.19
   - expo@57.0.20
-  - '@better-auth/core@1.7.3'
-  - '@better-auth/drizzle-adapter@1.7.3'
-  - '@better-auth/expo@1.7.3'
-  - '@better-auth/kysely-adapter@1.7.3'
-  - '@better-auth/memory-adapter@1.7.3'
-  - '@better-auth/mongo-adapter@1.7.3'
-  - '@better-auth/prisma-adapter@1.7.3'
-  - '@better-auth/telemetry@1.7.3'
-  - better-auth@1.7.3
 
 allowBuilds:
   esbuild: false
   protobufjs: false
+
+patchedDependencies:
+  react-native-keyboard-controller@1.21.9: patches/react-native-keyboard-controller@1.21.9.patch

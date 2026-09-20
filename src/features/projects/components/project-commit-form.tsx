@@ -19,7 +19,6 @@ import { useProjectCommitHistory } from "../hooks/use-project-commit-history";
 import { useProjectWorkspaceBranch } from "../hooks/use-project-workspace-branch";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectChanges } from "../hooks/use-project-changes";
-import { useAuthSession } from "@/hooks/use-auth-session";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 
 export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
@@ -36,17 +35,14 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
     assertWorkspaceCurrent,
     runWorkspaceOperation,
   } = useProjectWorkspaceBranch();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error ? session.data?.user.id : undefined;
   const { gitCommit } = useProjectCommitHistory(projectId, { enabled: false });
   const { refetch } = useProjectChanges(projectId, { enabled: false });
   const { withSavedFiles } = useProjectFileSaveRegistry();
   const showSuccess = useSuccessFeedback();
   const blocked = useRef(false);
   useEffect(() => {
-    blocked.current = !enabled || isCheckingOut || !userId;
-  }, [enabled, isCheckingOut, userId]);
+    blocked.current = !enabled || isCheckingOut;
+  }, [enabled, isCheckingOut]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -60,7 +56,6 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
   const busy = submitting || gitCommit.isPending;
   const canSubmit =
     enabled &&
-    Boolean(userId) &&
     !isWorkspaceBusy &&
     commitSelection.isReady &&
     input.success &&
@@ -87,7 +82,6 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
               "Unable to refresh changes. Try again before committing.",
             );
           const freshScope = JSON.stringify([
-            userId,
             projectId,
             fresh.currentBranch,
             fresh.headSha,
@@ -154,9 +148,9 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
         style={{ width: 48, height: 48 }}
       >
         <Icon
-          family="MaterialCommunityIcons"
-          name="source-commit"
-          size={28}
+          family="Feather"
+          name="git-commit"
+          size={22}
           accessible={false}
           className="text-foreground"
         />

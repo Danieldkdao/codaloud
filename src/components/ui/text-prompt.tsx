@@ -1,13 +1,10 @@
-import {
-  AlertDialog,
-  Column,
-  Host,
-  OutlinedTextField,
-  Text,
-  TextButton,
-  useNativeState,
-} from "@expo/ui/jetpack-compose";
-import { useTheme, useThemeColor } from "@/hooks/use-theme";
+import { useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { useThemeColor } from "@/hooks/use-theme";
+import { ContentSheet } from "./content-sheet";
+import { Input } from "./input";
+import { Button } from "./button";
+import { PText } from "./text";
 
 export type TextPromptProps = {
   title: string;
@@ -20,44 +17,56 @@ export type TextPromptProps = {
 };
 
 export const TextPrompt = ({
-  title, message, actionText, placeholder, defaultValue = "", onSubmit, onCancel,
+  title,
+  message,
+  actionText,
+  placeholder,
+  defaultValue = "",
+  onSubmit,
+  onCancel,
 }: TextPromptProps) => {
-  const value = useNativeState(defaultValue);
-  const { isDarkMode } = useTheme();
-  const primary = useThemeColor("primary");
-  const card = useThemeColor("card");
-  const foreground = useThemeColor("foreground");
-  const muted = useThemeColor("muted-foreground");
-
+  const [value, setValue] = useState(defaultValue);
+  const finished = useRef(false);
+  const background = useThemeColor("card");
+  const finish = (submit: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    if (submit) onSubmit(value);
+    else onCancel();
+  };
   return (
-    <Host matchContents colorScheme={isDarkMode ? "dark" : "light"} seedColor={primary}>
-      <AlertDialog
-        onDismissRequest={onCancel}
-        colors={{ containerColor: card, titleContentColor: foreground, textContentColor: muted }}
+    <ContentSheet
+      open
+      onOpenChange={(open) => {
+        if (!open) finish(false);
+      }}
+      backgroundColor={background}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "android" ? "height" : undefined}
       >
-        <AlertDialog.Title><Text style={{ fontSize: 20 }}>{title}</Text></AlertDialog.Title>
-        <AlertDialog.Text>
-          <Column verticalArrangement={{ spacedBy: 12 }}>
-            <Text style={{ fontSize: 16 }}>{message}</Text>
-            <OutlinedTextField
-              value={value}
-              autoFocus
-              singleLine
-              textStyle={{ fontSize: 16 }}
-              keyboardOptions={{ capitalization: "sentences", imeAction: "done" }}
-              keyboardActions={{ onDone: onSubmit }}
-            >
-              <OutlinedTextField.Label><Text style={{ fontSize: 16 }}>{placeholder}</Text></OutlinedTextField.Label>
-            </OutlinedTextField>
-          </Column>
-        </AlertDialog.Text>
-        <AlertDialog.DismissButton>
-          <TextButton onClick={onCancel}><Text style={{ fontSize: 16 }}>Cancel</Text></TextButton>
-        </AlertDialog.DismissButton>
-        <AlertDialog.ConfirmButton>
-          <TextButton onClick={() => onSubmit(value.get())}><Text style={{ fontSize: 16 }}>{actionText}</Text></TextButton>
-        </AlertDialog.ConfirmButton>
-      </AlertDialog>
-    </Host>
+        <View className="gap-4 px-5 pb-5 pt-3">
+          <PText accessibilityRole="header" className="text-xl font-semibold">
+            {title}
+          </PText>
+          <PText>{message}</PText>
+          <Input
+            autoFocus
+            value={value}
+            onChangeText={setValue}
+            accessibilityLabel={placeholder}
+            placeholder={placeholder}
+            returnKeyType="done"
+            onSubmitEditing={() => finish(true)}
+          />
+          <View className="flex-row justify-end gap-3">
+            <Button variant="ghost" onPress={() => finish(false)}>
+              Cancel
+            </Button>
+            <Button onPress={() => finish(true)}>{actionText}</Button>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </ContentSheet>
   );
 };

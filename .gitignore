@@ -45,3 +45,8 @@ example
 .env.local
 
 .trigger
+
+# Generated native editor build context
+/compile_commands.json
+/buildServer.json
+/.compile

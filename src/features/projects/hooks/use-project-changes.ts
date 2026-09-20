@@ -1,22 +1,23 @@
 import { isValidIds } from "@/lib/utils";
 import type { GitDiscardedSchema } from "../server/git-discard-schemas";
+import type { GitCountsSchema } from "../server/git-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitDiscardSchema } from "../server/git-discard-schemas";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   discardProjectChangesAction,
+  initializeProjectGitAction,
   readProjectDiscardPreviewAction,
   readProjectChangesAction,
 } from "../actions/git-actions";
 import {
   ProjectGitError,
   ProjectGitRequestError,
-  requireProjectGitSession,
+  requireLocalGitProject,
 } from "../lib/git-errors";
 import { useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import type { z } from "zod";
-import { useAuthSession } from "@/hooks/use-auth-session";
 export const useProjectChanges = (
   projectId: string | null | undefined,
   {
@@ -25,16 +26,12 @@ export const useProjectChanges = (
   }: { enabled?: boolean; discardPreviewEnabled?: boolean } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   const validProject = !!projectId && isValidIds(projectId);
 
   const query = useQuery({
-    queryKey: ["projects", "changes", userId, projectId],
-    enabled: enabled && Boolean(userId) && validProject,
+    networkMode: "always",
+    queryKey: ["projects", "changes", projectId],
+    enabled: enabled && validProject,
     // Keep snapshots until a manual refresh or an explicit invalidation after
     // a workspace write. Stale snapshots reload when this panel becomes active.
     staleTime: Infinity,
@@ -48,7 +45,6 @@ export const useProjectChanges = (
     retry: false,
     queryFn: async ({ signal }) => {
       // Manual refetch bypasses enabled, so guard the request here too.
-      if (!userId) throw new Error("Sign in to view project changes.");
       if (!projectId || !validProject) throw new Error("Invalid project ID.");
 
       const changes = await readProjectChangesAction(projectId, signal);
@@ -59,9 +55,9 @@ export const useProjectChanges = (
     },
   });
   const discardPreview = useQuery({
-    queryKey: ["projects", "discard-preview", userId, projectId],
-    enabled:
-      enabled && discardPreviewEnabled && Boolean(userId) && validProject,
+    networkMode: "always",
+    queryKey: ["projects", "discard-preview", projectId],
+    enabled: enabled && discardPreviewEnabled && validProject,
     staleTime: 0,
     retry: (failureCount, error) =>
       error instanceof ProjectGitRequestError &&
@@ -72,7 +68,7 @@ export const useProjectChanges = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ signal }) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       let failure: ProjectGitRequestError | undefined;
       const preview = await readProjectDiscardPreviewAction(
         id,
@@ -98,14 +94,35 @@ export const useProjectChanges = (
       // Explicit cancellation also replaces an initial read without cached data;
       // refetch alone can reuse that request and return a pre-save snapshot.
       await queryClient.cancelQueries({
-        queryKey: ["projects", "changes", userId, projectId],
+        queryKey: ["projects", "changes", projectId],
         exact: true,
       });
       if (signal?.aborted) return;
       return refetch({ throwOnError: true });
     },
-    [projectId, queryClient, refetch, userId],
+    [projectId, queryClient, refetch],
   );
+
+  const gitInitialize = useMutation<
+    GitCountsSchema,
+    ProjectGitError,
+    void,
+    ProjectGitMutationContext
+  >({
+    mutationKey: ["projects", "git", "initialize", projectId],
+    networkMode: "always",
+    retry: false,
+    onMutate: () => ({ projectId }),
+    mutationFn: async () => {
+      const id = requireLocalGitProject(projectId);
+      const result = await initializeProjectGitAction(id);
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    // Re-read even after a lost response: the repository may already exist.
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
 
   const gitDiscardChanges = useMutation<
     GitDiscardedSchema,
@@ -113,21 +130,27 @@ export const useProjectChanges = (
     z.input<typeof gitDiscardSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "discardChanges", userId, projectId],
+    mutationKey: ["projects", "git", "discardChanges", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitDiscardSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await discardProjectChangesAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { gitDiscardChanges, ...query, refreshAfterSaves, discardPreview };
+  return {
+    gitInitialize,
+    gitDiscardChanges,
+    ...query,
+    refreshAfterSaves,
+    discardPreview,
+  };
 };

@@ -5,7 +5,10 @@ import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { ScrollFadeFlatList } from "@/components/ui/scroll-fade-flat-list";
 import { PText } from "@/components/ui/text";
-import type { GitHubRepository, GitHubRepositoryPage } from "@/services/github/types";
+import type {
+  GitHubRepository,
+  GitHubRepositoryPage,
+} from "@/services/github/types";
 import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
 import { cn } from "@/lib/utils";
 import { GitHubRepositorySelectItem } from "@/services/github/components/github-repository-select-item";
@@ -43,7 +46,11 @@ export const GitHubRepositoriesSelectList = ({
     loadMore,
     retry,
   } = useGitHubRepositories({ search });
-  const repositories = useUniquePaginatedItems(data?.pages, getRepositories, getRepositoryKey);
+  const repositories = useUniquePaginatedItems(
+    data?.pages,
+    getRepositories,
+    getRepositoryKey,
+  );
   const selectedRepository = repositories.find(
     (repository) => String(repository.id) === selectedRepositoryId,
   );
@@ -53,7 +60,7 @@ export const GitHubRepositoriesSelectList = ({
   return (
     <View
       className={cn(
-        "max-h-80 min-h-24 shrink overflow-hidden rounded-xl border border-border bg-card",
+        "max-h-80 min-h-24 shrink overflow-hidden rounded-xl border border-border bg-background",
         className,
         selectedRepository && "h-auto min-h-0 shrink-0",
       )}
@@ -88,6 +95,7 @@ export const GitHubRepositoriesSelectList = ({
               initialSearch={search}
               onValueChange={setSearch}
               placeholder="Search repositories"
+              parentClassName="bg-card/50"
             />
           </View>
           <ScrollFadeFlatList<GitHubRepository>
@@ -115,9 +123,7 @@ export const GitHubRepositoriesSelectList = ({
                   {isPending && (
                     <ActivityIndicator className="text-foreground" />
                   )}
-                  <PText
-                    accessibilityLiveRegion="polite"
-                  >
+                  <PText accessibilityLiveRegion="polite">
                     {isPending
                       ? "Loading repositories…"
                       : hasNextPage
@@ -144,18 +150,13 @@ export const GitHubRepositoriesSelectList = ({
                   </Button>
                 </View>
               ) : fetchStatus === "paused" ? (
-                <PText
-                  accessibilityLiveRegion="polite"
-                  className="p-4"
-                >
+                <PText accessibilityLiveRegion="polite" className="p-4">
                   Waiting for a connection…
                 </PText>
               ) : isFetchingNextPage ? (
                 <View className="flex-row items-center justify-center gap-2 p-4">
                   <ActivityIndicator className="text-foreground" />
-                  <PText
-                    accessibilityLiveRegion="polite"
-                  >
+                  <PText accessibilityLiveRegion="polite">
                     Loading more repositories…
                   </PText>
                 </View>

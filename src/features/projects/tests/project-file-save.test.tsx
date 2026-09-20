@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppStateStatus } from "react-native";
 import { ProjectFileSaveRegistryProvider, ProjectFileSaveProvider, useProjectFileSave, useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 
+import { useProjectEditorDocuments } from "../hooks/use-project-editor-documents";
+
 const mocks = vi.hoisted(() => ({ save: vi.fn(), read: vi.fn() }));
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: AppStateStatus) => void>() }));
 vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, listener: (state: AppStateStatus) => void) => {
@@ -14,7 +16,6 @@ vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, 
   return { remove: () => lifecycle.listeners.delete(listener) };
 } } }));
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: mocks.save, readProjectFileContentAction: mocks.read }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, data: { user: { id: "user-one" } } }) }));
 const hash = (content: string) => createHash("sha256").update(content).digest("hex");
 const success = (content: string, path = "one.ts") => ({ error: false, message: "Saved.", data: { path, size: Buffer.byteLength(content), contentHash: hash(content) } });
 let current: NonNullable<ReturnType<typeof useProjectFileSave>>;
@@ -59,7 +60,7 @@ it("flushes all pending documents, including edits and documents added while wai
   expect(mocks.save.mock.calls.map((call) => [call[1].path, call[1].content])).toEqual([
     ["one.ts", "first"], ["one.ts", "second"], ["two.ts", "another file"],
   ]);
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: "second" });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toMatchObject({ content: "second" });
   await tick();
   expect(mocks.save).toHaveBeenCalledTimes(3);
 });
@@ -119,7 +120,7 @@ it("debounces only edits for three seconds, retaining exact text and confirmed c
   await tick(1);
   expect(mocks.save).toHaveBeenCalledExactlyOnceWith("project-one", { path: "one.ts", content: "你好\r\n", expectedContentHash: hash("original") });
   expect(current.status).toBe("saved");
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toEqual({ path: "one.ts", content: "你好\r\n", size: 8 });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toEqual({ path: "one.ts", content: "你好\r\n", size: 8 });
   expect(current.initialValue).toBe("original");
 });
 
@@ -147,7 +148,7 @@ it("releases an unused document only after its entire save queue settles", async
   await act(async () => finishes[0](success("first")));
   expect(registry.getDocument("one.ts", 0, "first")).toBe(previous);
   await act(async () => finishes[1](success("second")));
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: "second" });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toMatchObject({ content: "second" });
   expect(registry.getDocument("one.ts", 0, "second")).not.toBe(previous);
 });
 
@@ -393,7 +394,7 @@ it.each([
   expect(disk).toBe(latest);
   expect(current.status).toBe("saved");
   expect(mocks.read).toHaveBeenCalledWith("project-one", "one.ts");
-  expect(client.getQueryData(["projects", "file", "user-one", "project-one", "one.ts"])).toMatchObject({ content: latest });
+  expect(client.getQueryData(["projects", "file", "project-one", "one.ts"])).toMatchObject({ content: latest });
   expect(mocks.save).toHaveBeenLastCalledWith("project-one", { path: "one.ts", content: latest, expectedContentHash: hash(submitted) });
 });
 
@@ -491,11 +492,11 @@ it("keeps the document active when React checks initializers twice in Strict Mod
 });
 
 
-it.each([true, false])("invalidates only this account and project's changes after a confirmed save (active: %s)", async (active) => {
-  const key = ["projects", "changes", "user-one", "project-one"];
+it.each([true, false])("invalidates only this project's changes after a confirmed save (active: %s)", async (active) => {
+  const key = ["projects", "changes", "project-one"];
   const unrelated = [
-    ["projects", "changes", "user-two", "project-one"],
-    ["projects", "changes", "user-one", "project-two"],
+    ["projects", "changes", "project-three"],
+    ["projects", "changes", "project-two"],
   ];
   for (const queryKey of [key, ...unrelated]) client.setQueryData(queryKey, { revision: "before" });
   const fetchChanges = vi.fn().mockResolvedValue({ revision: "after" });
@@ -525,7 +526,7 @@ it.each([true, false])("invalidates only this account and project's changes afte
 });
 
 it("does not invalidate changes for failed saves", async () => {
-  const key = ["projects", "changes", "user-one", "project-one"];
+  const key = ["projects", "changes", "project-one"];
   client.setQueryData(key, { revision: "before" });
   mocks.save.mockResolvedValueOnce({ error: true, message: "Save failed." });
   await render();
@@ -571,4 +572,61 @@ it("blocks renames and dependent flushes while Git holds the documents", async (
   await expect(registry.renameFiles("one.ts", "other.ts", vi.fn())).rejects.toThrow("Git");
   await expect(registry.flushPendingSaves()).rejects.toThrow("Git");
   await act(async () => { finish(); await pending; });
+});
+
+
+let editorDocuments: ReturnType<typeof useProjectEditorDocuments>;
+const EditorProbe = ({ path, content, paths }: { path: string; content: string; paths: string[] }) => {
+  editorDocuments = useProjectEditorDocuments({ activeFilePath: path, openFilePaths: new Set(paths), getFileVersion: () => 0 }, content);
+  registry = useProjectFileSaveRegistry();
+  return null;
+};
+const renderEditor = (path: string, content = "original", paths = ["one.ts", "two.ts"]) => act(async () => root.render(
+  createElement(QueryClientProvider, { client }, createElement(ProjectFileSaveRegistryProvider, { projectId: "project-one", children:
+    createElement(EditorProbe, { path, content, paths }),
+  })),
+));
+
+it("retains each open document and routes late bridge edits to their source", async () => {
+  await renderEditor("one.ts");
+  const first = editorDocuments.editor!.key;
+  await act(async () => editorDocuments.onChange("first draft", first));
+  await renderEditor("two.ts", "second file");
+  const second = editorDocuments.editor!.key;
+  await act(async () => editorDocuments.onChange("late first draft", first));
+  expect(editorDocuments.status.status).toBe("saved");
+  await tick();
+  expect(mocks.save.mock.calls.every((call) => call[1].path === "one.ts")).toBe(true);
+  await renderEditor("one.ts", "late first draft");
+  expect(editorDocuments.editor!.key).toBe(first);
+  await renderEditor("two.ts", "second file");
+  expect(editorDocuments.editor!.key).toBe(second);
+});
+
+it("flushes a closing file and refuses to hide a failed save", async () => {
+  await renderEditor("one.ts");
+  await act(async () => editorDocuments.onChange("draft", editorDocuments.editor!.key));
+  mocks.save.mockResolvedValueOnce({ error: true, message: "Cannot save" });
+  await act(async () => { await expect(editorDocuments.flushFile("one.ts")).rejects.toThrow("Cannot save"); });
+  expect(editorDocuments.status.status).toBe("error");
+  await act(async () => editorDocuments.retry());
+  await act(async () => { await expect(editorDocuments.flushFile("one.ts")).resolves.toBeUndefined(); });
+});
+
+it("does not replace a local draft when server content refreshes", async () => {
+  await renderEditor("one.ts");
+  const first = editorDocuments.editor!.key;
+  await act(async () => editorDocuments.onChange("local draft", first));
+  await renderEditor("one.ts", "external change");
+  expect(editorDocuments.editor!.key).toBe(first);
+  expect(registry.getDocument("one.ts", 0, "external change").getContent()).toBe("local draft");
+});
+
+
+it("invalidates deleted documents so delayed edits cannot recreate them", async () => {
+  await renderEditor("one.ts");
+  const key = editorDocuments.editor!.key;
+  await act(async () => { registry.invalidateFiles("one.ts"); await editorDocuments.onChange("late edit", key); });
+  await tick();
+  expect(mocks.save).not.toHaveBeenCalled();
 });

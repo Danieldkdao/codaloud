@@ -26,19 +26,13 @@ import { useThemeColor } from "@/hooks/use-theme";
 import { ProjectBranchSection } from "./project-branch-section";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { useProject } from "../hooks/use-project";
-import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-repository-branches";
-import type {
-  GitHubRepositoryBranchPage,
-  GitHubRepositoryBranch,
-} from "@/services/github/types";
+import { useProjectRemoteBranches } from "../hooks/use-project-remote-branches";
 import { formatProjectBranchLabel } from "../lib/formatters";
-import { useAuthSession } from "@/hooks/use-auth-session";
 import { useProjectFileSaveRegistry } from "../hooks/use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
 import { projectCommitParamsSchema } from "../lib/commit-params";
-
-const getRemoteBranches = (page: GitHubRepositoryBranchPage) => page.branches;
-const getRemoteBranchKey = (branch: GitHubRepositoryBranch) => branch.name;
+import { useProjectGitOperation } from "../hooks/use-project-git-operation";
+import { ProjectGitError } from "../lib/git-errors";
 
 const getBranches = (page: ProjectBranchPageSchema) => page.branches;
 const getBranchKey = (branch: string) => branch;
@@ -69,22 +63,21 @@ export const ProjectBranchSelect = ({
     retryCheckoutRecovery,
   } = useProjectWorkspaceBranch();
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId = session.data?.user.id;
   const { withSavedFiles } = useProjectFileSaveRegistry();
-  const { filePath, refreshFile } = useProjectWorkspaceCurrentFile();
+  const { refreshFiles } = useProjectWorkspaceCurrentFile();
   const [search, setSearch] = useState("");
   const projectQuery = useProject(projectId);
   const repositoryId = projectQuery.data?.githubRepositoryId ?? undefined;
   const query = useProjectBranches(projectId, { search });
-  const remoteQuery = useGitHubRepositoryBranches(repositoryId, {
+  const { run, confirm } = useProjectGitOperation();
+  const remoteQuery = useProjectRemoteBranches(projectId, {
     search,
     enabled: Boolean(repositoryId),
   });
   const remoteBranches = useUniquePaginatedItems(
     remoteQuery.data?.pages,
-    getRemoteBranches,
-    getRemoteBranchKey,
+    getBranches,
+    getBranchKey,
   );
   const branches = useUniquePaginatedItems(
     query.data?.pages,
@@ -109,46 +102,36 @@ export const ProjectBranchSelect = ({
     if (checkoutError) Alert.alert("Couldn’t switch branches", checkoutError);
   }, [checkoutError]);
   const refreshWorkspace = async () => {
-    if (userId) {
-      const folders = { queryKey: ["projects", "files", userId, projectId] };
-      await queryClient.cancelQueries(folders);
-      // Keep folder data as readiness evidence, but discard branch-specific bytes
-      // and pagination even when checkout's response was lost.
-      await Promise.allSettled([
-        queryClient.invalidateQueries(folders),
-        queryClient.resetQueries({
-          queryKey: ["projects", "file", userId, projectId],
-        }),
-        queryClient.resetQueries({
-          queryKey: ["projects", "file-search", "infinite", userId, projectId],
-        }),
-        queryClient.resetQueries({
-          queryKey: [
-            "projects",
-            "commits",
-            "infinite",
-            "cursor",
-            userId,
-            projectId,
-          ],
-          predicate: ({ queryKey }) =>
-            projectCommitParamsSchema.safeParse(queryKey[6]).data?.source ===
-            "local",
-        }),
-        queryClient.resetQueries({
-          queryKey: [
-            "projects",
-            "branches",
-            "infinite",
-            "cursor",
-            userId,
-            projectId,
-            "local",
-          ],
-        }),
-      ]);
-    }
-    if (filePath) refreshFile(filePath);
+    const folders = { queryKey: ["projects", "files", projectId] };
+    await queryClient.cancelQueries(folders);
+    // Keep folder data as readiness evidence, but discard branch-specific bytes
+    // and pagination even when checkout's response was lost.
+    await Promise.allSettled([
+      queryClient.invalidateQueries(folders),
+      queryClient.resetQueries({
+        queryKey: ["projects", "file", projectId],
+      }),
+      queryClient.resetQueries({
+        queryKey: ["projects", "file-search", "infinite", projectId],
+      }),
+      queryClient.resetQueries({
+        queryKey: ["projects", "commits", "infinite", "cursor", projectId],
+        predicate: ({ queryKey }) =>
+          projectCommitParamsSchema.safeParse(queryKey[5]).data?.source ===
+          "local",
+      }),
+      queryClient.resetQueries({
+        queryKey: [
+          "projects",
+          "branches",
+          "infinite",
+          "cursor",
+          projectId,
+          "local",
+        ],
+      }),
+    ]);
+    refreshFiles();
   };
   const selectBranch = (
     name: string,
@@ -176,6 +159,51 @@ export const ProjectBranchSelect = ({
         await refreshWorkspace();
         return query.recoverCheckout();
       },
+    );
+  };
+
+  const deleteBranch = (name: string) => {
+    if (isWorkspaceBusy) return;
+    void run(
+      "Deleting branch…",
+      async (assertCurrent) => {
+        if (
+          !(await confirm(
+            "Delete local branch?",
+            `Delete “${name}” from this device? This does not delete a branch on GitHub. If it has unmerged commits, you’ll be asked before continuing.`,
+            "Delete branch",
+            true,
+          ))
+        )
+          return false;
+        assertCurrent();
+        try {
+          await query.gitDeleteBranch.mutateAsync({ branchName: name });
+        } catch (error) {
+          if (
+            !(error instanceof ProjectGitError) ||
+            error.code !== "UNMERGED_BRANCH"
+          )
+            throw error;
+          assertCurrent();
+          if (
+            !(await confirm(
+              "Delete branch anyway?",
+              `“${name}” has commits that are not in the current local branch. This can happen after a squash merge or before pulling merged changes. Deleting it may lose commits unique to this branch. Your current files and GitHub will not change.`,
+              "Delete anyway",
+              true,
+            ))
+          )
+            return false;
+          assertCurrent();
+          await query.gitDeleteBranch.mutateAsync({
+            branchName: name,
+            force: true,
+          });
+        }
+        return true;
+      },
+      { success: (deleted) => (deleted ? "Local branch deleted." : null) },
     );
   };
 
@@ -211,9 +239,9 @@ export const ProjectBranchSelect = ({
           <ActivityIndicator className="text-foreground" />
         ) : (
           <Icon
-            family="MaterialCommunityIcons"
-            name="source-branch"
-            size={26}
+            family="Feather"
+            name="git-branch"
+            size={22}
             className="text-foreground"
             accessible={false}
           />
@@ -222,7 +250,9 @@ export const ProjectBranchSelect = ({
       <ContentSheet
         open={
           open &&
-          (!isWorkspaceBusy || workspaceOperation === "Creating branch…")
+          (!isWorkspaceBusy ||
+            workspaceOperation === "Creating branch…" ||
+            workspaceOperation === "Deleting branch…")
         }
         onOpenChange={(value) => {
           if (!value || !isWorkspaceBusy) setOpen(value);
@@ -277,12 +307,14 @@ export const ProjectBranchSelect = ({
                 query={query}
                 disabled={isWorkspaceBusy}
                 onSelect={selectBranch}
+                onDelete={deleteBranch}
+                currentBranch={currentBranch ?? branch}
               />
               <View className="h-px shrink-0 bg-border" />
               {repositoryId ? (
                 <ProjectBranchSection
                   source="remote"
-                  branches={remoteBranches.map(({ name }) => name)}
+                  branches={remoteBranches}
                   selectedBranch={branchSource === "remote" ? branch : null}
                   search={search}
                   open={open}
@@ -296,13 +328,13 @@ export const ProjectBranchSelect = ({
                     <Icon
                       family="Feather"
                       name="cloud"
-                      size={18}
+                      size={16}
                       className="text-muted-foreground"
                       accessible={false}
                     />
                     <PText
                       accessibilityRole="header"
-                      className="text-base font-medium"
+                      className="text-base font-medium text-muted-foreground"
                     >
                       Remote branches
                     </PText>

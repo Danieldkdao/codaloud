@@ -8,7 +8,7 @@ import EditProjectScreen from "@/app/edit-project";
 const state = vi.hoisted(() => ({
   projectId: undefined as string | string[] | undefined,
   query: {
-    data: undefined as { id: string; name: string; userId: string } | undefined,
+    data: undefined as { id: string; name: string } | undefined,
     isPending: true,
     isError: false,
     isFetching: false,
@@ -76,7 +76,7 @@ it("loads the requested project before showing the form", () => {
   expect(state.useProject).toHaveBeenCalledWith("project-one");
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   expect(state.formProps).not.toHaveBeenCalled();
-  state.query.data = { id: "project-one", name: "My project", userId: "user-one" };
+  state.query.data = { id: "project-one", name: "My project" };
   state.query.isPending = false;
   render();
   expect(container.querySelector("input")?.value).toBe("My project");
@@ -94,7 +94,7 @@ it("offers a retry when the project cannot be loaded", () => {
 });
 
 it("preserves the form during refetches but resets it when the project ID changes", () => {
-  Object.assign(state.query, { isPending: false, data: { id: "project-one", name: "First", userId: "user-one" } });
+  Object.assign(state.query, { isPending: false, data: { id: "project-one", name: "First" } });
   render();
   state.query.data = { ...state.query.data!, name: "Refetched" };
   state.query.isFetching = true;
@@ -105,3 +105,5 @@ it("preserves the form during refetches but resets it when the project ID change
   render();
   expect(container.querySelector("input")?.value).toBe("Second");
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

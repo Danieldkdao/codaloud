@@ -3,6 +3,8 @@ import { projectBranchNameSchema } from "../actions/branch-schemas";
 import { commitHashSchema } from "../actions/commit-schemas";
 
 export const gitCountsSchema = z.object({
+  // Older installed native engines omit this. Unknown must not enable publish.
+  hasRemote: z.boolean().optional(),
   currentBranch: projectBranchNameSchema.nullable(),
   headSha: commitHashSchema.nullable(),
   upstream: z.string().min(1).nullable(),

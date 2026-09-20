@@ -586,7 +586,7 @@ describe("project form repository validation", () => {
     expect(mocks.success).toHaveBeenCalledExactlyOnceWith("Project created");
     expect(mocks.alert).not.toHaveBeenCalled();
     expect(mocks.replace).toHaveBeenCalledWith({
-      pathname: "/projects/[projectId]",
+      pathname: "/projects/[projectId]/code",
       params: { projectId: "new-project-id" },
     });
     expect(mocks.replace.mock.invocationCallOrder[0]).toBeLessThan(
@@ -758,3 +758,5 @@ it("removes the load-more control only when the cursor is exhausted", () => {
   Object.assign(mocks.query, { hasNextPage: false });
   expect(renderList()).not.toContain("Load more repositories");
 });
+
+vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));

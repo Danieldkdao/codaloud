@@ -43,35 +43,38 @@ export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
       return {
         label: "Loading file…",
         busy: true,
-        icon: "cloud-sync-outline" as const,
+        icon: { family: "Feather" as const, name: "refresh-cw" as const },
         className: "text-muted-foreground",
       };
     case "pending":
       return {
         label: "Changes waiting to save…",
         busy: true,
-        icon: "cloud-sync-outline" as const,
+        icon: { family: "Feather" as const, name: "refresh-cw" as const },
         className: "text-muted-foreground",
       };
     case "saving":
       return {
         label: "Saving file…",
         busy: true,
-        icon: "cloud-sync-outline" as const,
+        icon: { family: "Feather" as const, name: "refresh-cw" as const },
         className: "text-muted-foreground",
       };
     case "saved":
       return {
         label: "File saved",
         busy: false,
-        icon: "cloud-check-outline" as const,
+        icon: {
+          family: "MaterialCommunityIcons" as const,
+          name: "cloud-check-outline" as const,
+        },
         className: "text-success-foreground",
       };
     case "error":
       return {
         label: "Couldn't save file. Tap to retry.",
         busy: false,
-        icon: "cloud-remove-outline" as const,
+        icon: { family: "Feather" as const, name: "alert-circle" as const },
         className: "text-destructive",
       };
   }
@@ -96,7 +99,7 @@ export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
     case "checking":
       return "Checking code…";
     case "unavailable":
-      return "Code analysis unavailable. Tap to retry.";
+      return "Code analysis unavailable.";
     case "unsupported":
       return "Code analysis is not available for this language.";
     case "ready": {
@@ -109,7 +112,7 @@ export const formatCodeAnalysisLabel = (analysis: CodeEditorAnalysis) => {
       const information = analysis.diagnostics.filter(
         (item) => item.severity === "info",
       ).length;
-      return `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}, ${information} information message${information === 1 ? "" : "s"}. Show problems.`;
+      return `${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}, ${information} information message${information === 1 ? "" : "s"}.`;
     }
   }
 };
@@ -119,6 +122,7 @@ export const formatProjectFileKind = (kind: ProjectFileKind) => {
     case "file":
       return {
         inputLabel: "File name",
+        createTitle: "New file",
         placeholder: "new-file.ts",
         successMessage: "File created",
         updateSuccessMessage: "File updated",
@@ -127,6 +131,7 @@ export const formatProjectFileKind = (kind: ProjectFileKind) => {
     case "folder":
       return {
         inputLabel: "Folder name",
+        createTitle: "New folder",
         placeholder: "new-folder",
         successMessage: "Folder created",
         updateSuccessMessage: "Folder updated",
@@ -176,6 +181,10 @@ export const formatProjectFileDeletion = (
   }
 };
 
+// Repository IDs describe a connection, not how the workspace was created.
+export const formatProjectGitHubConnection = (repositoryId: string | null) =>
+  repositoryId ? "GitHub connected" : null;
+
 export const formatProjectSource = (
   source: CreateProjectSchema["source"],
 ): {
@@ -190,7 +199,7 @@ export const formatProjectSource = (
         value: source,
         icon: "box",
         title: "New project",
-        description: "Start from scratch in an empty cloud workspace.",
+        description: "Start from scratch in an empty workspace.",
       };
     case "github":
       return {
@@ -318,6 +327,50 @@ export const formatProjectChangePath = (path: string) => {
 
 export const formatProjectChangeCount = (count: number) =>
   `${count} file${count === 1 ? "" : "s"}`;
+
+export const formatProjectEditorTab = (path: string, openPaths: string[]) => {
+  const file = formatProjectChangePath(path);
+  const dot = file.name.lastIndexOf(".");
+  const duplicates = openPaths.filter(
+    (other) =>
+      other !== path && formatProjectChangePath(other).name === file.name,
+  );
+  let directory: string | null = null;
+  if (duplicates.length) {
+    const folders = path.split("/").slice(0, -1);
+    directory = folders.length ? folders.join("/") : "Project root";
+    for (let length = 1; length <= folders.length; length++) {
+      const suffix = folders.slice(-length).join("/");
+      if (
+        duplicates.every(
+          (other) =>
+            other.split("/").slice(0, -1).slice(-length).join("/") !== suffix,
+        )
+      ) {
+        directory = suffix;
+        break;
+      }
+    }
+  }
+  return {
+    name: dot > 0 ? file.name.slice(0, dot) : file.name,
+    extension: dot > 0 ? file.name.slice(dot) : "",
+    directory,
+  };
+};
+
+export const formatProjectEditorTabStyle = (selected: boolean) =>
+  selected
+    ? {
+        container: "bg-secondary border border-primary/40",
+        tabContainer: "bg-secondary/25",
+        text: "text-secondary-foreground font-semibold",
+      }
+    : {
+        container: "bg-transparent",
+        tabContainer: "bg-transparent",
+        text: "text-muted-foreground",
+      };
 
 export const formatProjectChangeSelection = (selected: number, total: number) =>
   `${selected} of ${formatProjectChangeCount(total)} selected`;
@@ -558,16 +611,16 @@ export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
     case "code":
       return {
         label: "Code",
-        icon: { family: "Ionicons", name: "document-text-outline" },
+        icon: { family: "Feather", name: "file-text" },
       } as const;
     case "git":
       return {
         label: "Git",
-        icon: { family: "MaterialCommunityIcons", name: "source-branch" },
+        icon: { family: "Feather", name: "git-branch" },
       } as const;
     case "agent":
       return {
-        label: "Agent",
+        label: "Agent log",
         icon: { family: "Ionicons", name: "sparkles-outline" },
       } as const;
     default:
@@ -768,3 +821,30 @@ export const formatProjectDiscardChoice = (includeUntracked: boolean) =>
   includeUntracked
     ? "Discard tracked and untracked changes"
     : "Discard tracked changes";
+export const formatProjectRepositoryName = (name: string) => {
+  const formatted = name
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, "-")
+    .slice(0, 100);
+  return formatted === "." || formatted === ".." ? "" : formatted;
+};
+
+export const formatProjectRepositoryVisibility = (isPrivate: boolean) =>
+  isPrivate
+    ? {
+        title: "Private",
+        description:
+          "Only you and people you invite can access this repository.",
+        icon: "lock" as const,
+      }
+    : {
+        title: "Public",
+        description:
+          "Anyone can view this repository and its committed history.",
+        icon: "globe" as const,
+      };
+
+export const formatEditorFontSize = (size: number) => `${size} pt`;
+
+export const formatEditorTabSize = (size: number, useTabs = false) =>
+  `${size} ${useTabs ? (size === 1 ? "column" : "columns") : size === 1 ? "space" : "spaces"}`;

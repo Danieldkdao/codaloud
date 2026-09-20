@@ -10,7 +10,7 @@ import { useGitHubRepositoryBranches } from "@/services/github/hooks/use-github-
 import type { GitHubRepositoryBranchPage } from "@/services/github/types";
 
 const auth = vi.hoisted(() => ({ userId: "user-one" as string | null }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ data: auth.userId ? { user: { id: auth.userId } } : null, isPending: false, error: null }) }));
+vi.mock("../hooks/use-github-profile", () => ({ useGitHubProfile: () => ({ profile: auth.userId ? { id: auth.userId } : null, ready: true, scopes: ["repo"] }) }));
 vi.mock("@/services/github/actions/actions", () => ({ readGitHubRepositoryBranches: vi.fn() }));
 const read = vi.mocked(readGitHubRepositoryBranches);
 let client: QueryClient;
@@ -179,7 +179,7 @@ describe("useGitHubRepositoryBranches", () => {
 });
 
 
-it("isolates remote branches by account and blocks signed-out requests", async () => {
+it("isolates remote branches by account and blocks disconnected requests", async () => {
   read.mockResolvedValue(page(["private"], null));
   await render({});
   auth.userId = "user-two";

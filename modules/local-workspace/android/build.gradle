@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.localworkspace'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.localworkspace"
+  sourceSets.main.assets.srcDirs += ["../licenses"]
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+    externalNativeBuild {
+      cmake {
+        arguments "-DANDROID_STL=c++_shared", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+        cppFlags "-std=c++17"
+      }
+    }
+  }
+  externalNativeBuild {
+    cmake { path "../CMakeLists.txt" }
+  }
+}

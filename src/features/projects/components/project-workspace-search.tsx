@@ -1,4 +1,5 @@
 import { useDebouncer } from "@tanstack/react-pacer";
+import { useKeyboardSymbolsInset } from "@/hooks/use-keyboard-symbols";
 import {
   useCallback,
   useEffect,
@@ -29,8 +30,11 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
-import { useThemeColor } from "@/hooks/use-theme";
-import { ProjectSearchOverlay, useProjectSearchOverlay } from "./project-search-overlay";
+import { GlassSurface } from "@/components/ui/glass-surface";
+import {
+  ProjectSearchOverlay,
+  useProjectSearchOverlay,
+} from "./project-search-overlay";
 
 const buttonSize = 56;
 
@@ -62,8 +66,8 @@ export const ProjectWorkspaceSearch = ({
   children,
 }: ProjectWorkspaceSearchProps) => {
   const overlay = useProjectSearchOverlay();
+  const symbolInset = useKeyboardSymbolsInset();
   const insets = useSafeAreaInsets();
-  const shadow = useThemeColor("navigation-shadow");
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const buttonRef = useRef<View>(null);
@@ -80,9 +84,11 @@ export const ProjectWorkspaceSearch = ({
     setQuery(value ?? "");
   }, [value, cancel]);
   const keyboardOffset = useSharedValue(0);
-  const [anchor, setAnchor] = useState<{ right: number; top: number; windowTop: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<{
+    right: number;
+    top: number;
+    windowTop: number;
+  } | null>(null);
   const progress = useSharedValue(0);
   const availableWidth = width - insets.left - insets.right - 32;
   const barWidth = Math.min(availableWidth, 440);
@@ -111,15 +117,18 @@ export const ProjectWorkspaceSearch = ({
 
   useEffect(() => {
     if (!anchor) return;
+    const updateKeyboardOffset = (screenY: number, duration: number) => {
+      keyboardOffset.value = withTiming(
+        Math.max(0, anchor.windowTop + buttonSize + 12 + symbolInset - screenY),
+        { duration: reducedMotion ? 0 : duration },
+      );
+    };
     const show = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow",
       (event) => {
-        keyboardOffset.value = withTiming(
-          Math.max(
-            0,
-            anchor.windowTop + buttonSize + 12 - event.endCoordinates.screenY,
-          ),
-          { duration: reducedMotion ? 0 : event.duration || 250 },
+        updateKeyboardOffset(
+          event.endCoordinates.screenY,
+          event.duration || 250,
         );
       },
     );
@@ -131,12 +140,16 @@ export const ProjectWorkspaceSearch = ({
         });
       },
     );
+    // Moving focus from the editor may leave the keyboard open, with no new
+    // show event. Position search above its existing frame before focusing it.
+    const metrics = Keyboard.metrics();
+    if (metrics) updateKeyboardOffset(metrics.screenY, 0);
     return () => {
       show.remove();
       hide.remove();
       cancelAnimation(keyboardOffset);
     };
-  }, [anchor, keyboardOffset, reducedMotion]);
+  }, [anchor, keyboardOffset, reducedMotion, symbolInset]);
 
   const focusInput = () => {
     if (!closing.current) inputRef.current?.focus();
@@ -145,16 +158,17 @@ export const ProjectWorkspaceSearch = ({
   const open = () => {
     const target = anchorRef?.current ?? buttonRef.current;
     target?.measureInWindow((_x, y) => {
-      overlay.measureRoot((_rootX, rootY) => {
+      overlay.measureRoot((_rootX, rootY, rootWindowY) => {
         closing.current = false;
         openingStarted.current = false;
         progress.value = 0;
         keyboardOffset.value = 0;
-        const windowTop = Math.max(
+        const measuredTop = Math.max(
           insets.top + 8,
           anchorPlacement === "replace" ? y : y - buttonSize - 4,
         );
-        setAnchor({ right: rightInset, top: windowTop - rootY, windowTop });
+        const top = measuredTop - rootY;
+        setAnchor({ right: rightInset, top, windowTop: top + rootWindowY });
       });
     });
   };
@@ -167,16 +181,21 @@ export const ProjectWorkspaceSearch = ({
     progress.value = withTiming(
       0,
       { duration: reducedMotion ? 0 : 260, easing: Easing.out(Easing.cubic) },
-      (finished) => { if (finished) scheduleOnRN(finishClosing); },
+      (finished) => {
+        if (finished) scheduleOnRN(finishClosing);
+      },
     );
   }, [progress, reducedMotion, finishClosing]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      close();
-      return true;
-    });
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        close();
+        return true;
+      },
+    );
     return () => subscription.remove();
   }, [isOpen, close]);
 
@@ -186,13 +205,15 @@ export const ProjectWorkspaceSearch = ({
     progress.value = withTiming(
       1,
       { duration: reducedMotion ? 0 : 340, easing: Easing.out(Easing.cubic) },
-      (finished) => { if (finished) scheduleOnRN(focusInput); },
+      (finished) => {
+        if (finished) scheduleOnRN(focusInput);
+      },
     );
   };
 
   const morphStyle = useAnimatedStyle(() => ({
     width: buttonSize + (barWidth - buttonSize) * progress.value,
-    opacity: progress.value,
+    // Animate geometry only: ancestor opacity zero can permanently hide UIKit glass.
     transform: [
       {
         translateY:
@@ -217,9 +238,9 @@ export const ProjectWorkspaceSearch = ({
           style={{ width: 48, height: 48 }}
         >
           <Icon
-            family="MaterialCommunityIcons"
-            name="magnify"
-            size={28}
+            family="Feather"
+            name="search"
+            size={22}
             accessible={false}
             className="text-foreground"
           />
@@ -228,24 +249,18 @@ export const ProjectWorkspaceSearch = ({
 
       {anchor ? (
         <ProjectSearchOverlay onOutsidePress={close} onShow={startOpening}>
-          <View style={{ flex: 1 }} pointerEvents="box-none" onAccessibilityEscape={close}>
+          <View
+            style={{ flex: 1 }}
+            pointerEvents="box-none"
+            onAccessibilityEscape={close}
+          >
             <Animated.View
               style={[
                 { position: "absolute", top: anchor.top, right: anchor.right },
                 morphStyle,
               ]}
             >
-              {/* Native glass can stop rendering under a parent animated from opacity zero.
-                  A solid card keeps search readable throughout every opening. */}
-              <View
-                className="bg-card border border-border"
-                style={{
-                  borderRadius: 28,
-                  boxShadow: [
-                    { offsetX: 0, offsetY: 2, blurRadius: 12, color: shadow },
-                  ],
-                }}
-              >
+              <GlassSurface>
                 <View
                   style={{
                     height: buttonSize,
@@ -297,7 +312,7 @@ export const ProjectWorkspaceSearch = ({
                     </Animated.View>
                   ) : null}
                 </View>
-              </View>
+              </GlassSurface>
             </Animated.View>
             {/* Native accessory sheets remain interactive inside the search layer. */}
             {children}

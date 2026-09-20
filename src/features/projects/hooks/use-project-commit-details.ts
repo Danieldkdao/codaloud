@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { useAuthSession } from "@/hooks/use-auth-session";
 import {
   projectCommitDetailsParamsSchema,
   type ProjectCommitDetailsParamsSchema,
@@ -17,11 +16,6 @@ export const useProjectCommitDetails = (
     enabled?: boolean;
   } = {},
 ) => {
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   const params = projectCommitDetailsParamsSchema.safeParse({
     projectId,
     commitSha,
@@ -29,20 +23,13 @@ export const useProjectCommitDetails = (
   });
 
   return useQuery({
-    queryKey: [
-      "projects",
-      "commit-details",
-      userId,
-      projectId,
-      commitSha,
-      source,
-    ],
-    enabled: enabled && Boolean(userId) && params.success,
+    networkMode: "always",
+    queryKey: ["projects", "commit-details", projectId, commitSha, source],
+    enabled: enabled && params.success,
     // The read action returns null without HTTP status; let the caller retry explicitly.
     retry: false,
     queryFn: async ({ signal }) => {
       // Manual refetch bypasses enabled, so guard the request here too.
-      if (!userId) throw new Error("Sign in to view commit details.");
       if (!params.success)
         throw new Error("Invalid project, commit SHA, or source.");
 

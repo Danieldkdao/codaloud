@@ -1,22 +1,22 @@
 import { useEffect, useRef } from "react";
 import { Alert } from "react-native";
-import { onlineManager, useQueryClient } from "@tanstack/react-query";
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
 import { useTextPrompt } from "@/hooks/use-text-prompt";
 import { useProjectWorkspaceBranch } from "./use-project-workspace-branch";
 import { useProjectFileSaveRegistry } from "./use-project-file-save";
 import { useProjectWorkspaceCurrentFile } from "./use-project-workspace-current-file";
+import { ProjectGitError } from "../lib/git-errors";
 
 export const useProjectGitOperation = () => {
+  const router = useRouter();
   const workspace = useProjectWorkspaceBranch();
   const { withSavedFiles } = useProjectFileSaveRegistry();
   const currentFile = useProjectWorkspaceCurrentFile();
   const selectedFile = useRef(currentFile);
   selectedFile.current = currentFile;
   const client = useQueryClient();
-  const session = useAuthSession();
-  const userId = session.data?.user.id;
   const showSuccess = useSuccessFeedback();
   const lifetime = useRef<AbortController | null>(null);
   const textPrompt = useTextPrompt();
@@ -24,7 +24,7 @@ export const useProjectGitOperation = () => {
     const controller = new AbortController();
     lifetime.current = controller;
     return () => controller.abort();
-  }, [userId, workspace.projectId]);
+  }, [workspace.projectId]);
 
   const confirm = (
     title: string,
@@ -77,8 +77,6 @@ export const useProjectGitOperation = () => {
     try {
       return await workspace.runWorkspaceOperation(label, async () => {
         assertCurrent();
-        if (!onlineManager.isOnline())
-          throw new Error("Reconnect to the internet to continue.");
         if (
           client.isMutating({
             predicate: ({ options: mutation }) => {
@@ -86,8 +84,7 @@ export const useProjectGitOperation = () => {
               return (
                 key?.[0] === "projects" &&
                 key[1] === "files" &&
-                key[3] === userId &&
-                key[4] === workspace.projectId
+                key[3] === workspace.projectId
               );
             },
           })
@@ -105,20 +102,40 @@ export const useProjectGitOperation = () => {
             return result;
           } finally {
             // Pull, discard, stash and history changes can replace file contents even
-            // on conflicts. Remount the editor from confirmed server bytes afterward.
+            // on conflicts. Remount the editor from confirmed local file contents afterward.
             if (options.changesFiles) {
               workspace.assertWorkspaceCurrent();
               await client.resetQueries({
-                queryKey: ["projects", "file", userId, workspace.projectId],
+                queryKey: ["projects", "file", workspace.projectId],
               });
               workspace.assertWorkspaceCurrent();
               const file = selectedFile.current;
-              if (file.filePath) file.refreshFile(file.filePath);
+              file.refreshFiles();
             }
           }
         });
       });
     } catch (error) {
+      if (
+        !signal?.aborted &&
+        error instanceof ProjectGitError &&
+        error.code === "GITHUB_RECONNECT_REQUIRED"
+      ) {
+        Alert.alert(
+          "Connect GitHub",
+          "GitHub is optional. Connect it in Settings to fetch, pull, or push repositories.",
+          [
+            { text: "Not now", style: "cancel" },
+            {
+              text: "Open Settings",
+              onPress: () => {
+                if (!signal?.aborted) router.push("/account");
+              },
+            },
+          ],
+        );
+        return undefined;
+      }
       if (!signal?.aborted)
         Alert.alert(
           "Git operation failed",

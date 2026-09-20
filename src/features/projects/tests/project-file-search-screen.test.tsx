@@ -15,18 +15,17 @@ const mocks = vi.hoisted(() => ({ read: vi.fn(), flushSaves: vi.fn(), browse: vi
 vi.mock("../components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => <>{children}</> }));
 const projectId = "abcdef00-0000-4000-8000-000000000001";
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId }), useRouter: () => ({ navigate: mocks.navigate, push: mocks.push }) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, error: null, data: { user: { id: "user-one" } } }) }));
 vi.mock("../actions/file-actions", () => ({ readProjectFilesAction: mocks.read }));
 vi.mock("../hooks/use-project-files", () => ({ useProjectFiles: (...args: unknown[]) => {
   mocks.browse(...args);
   return { query: { data: [], isPending: false, isError: false }, creation: {}, update: {}, deletion: {} };
 } }));
 vi.mock("../hooks/use-project-workspace-file-creation", () => ({ useProjectWorkspaceFileCreation: () => ({ kind: null }) }));
-vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ setFilePath: mocks.select }) }));
+vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorkspaceCurrentFile: () => ({ openFile: mocks.select }) }));
 vi.mock("../hooks/use-project-file-save", () => ({ useProjectFileSaveRegistry: () => ({ flushPendingSaves: mocks.flushSaves }) }));
 vi.mock("../hooks/use-project-workspace-dock-height", () => ({ useProjectWorkspaceDockHeight: () => ({ dockHeight: 80 }) }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
-vi.mock("../components/project-file-create-row", () => ({ ProjectFileCreateRow: () => null }));
+vi.mock("../components/project-file-create-sheet", () => ({ ProjectFileCreateSheet: () => null }));
 vi.mock("../components/project-files-list", () => ({ ProjectFilesList: ({ onDirectoryPress }: { onDirectoryPress: (path: string) => void }) =>
   <><button onClick={() => onDirectoryPress("src")}>Original directory</button>
     <button onClick={() => onDirectoryPress("src/components")}>Nested directory</button>
@@ -362,12 +361,12 @@ it("omits content coverage feedback for title-only searches", async () => {
   expect(container.textContent).not.toContain("No matches in searched files");
 });
 
-it("shows a reconnect message when the initial request is paused offline", async () => {
+it("searches local files while offline", async () => {
   onlineManager.setOnline(false);
   await applySearch("live");
-  expect(container.textContent).toContain("Reconnect to the internet to continue.");
+  expect(container.textContent).not.toContain("Reconnect to the internet to continue.");
   expect(container.textContent).not.toContain("No matching files");
-  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.read).toHaveBeenCalled();
   onlineManager.setOnline(true);
   await flush();
   expect(container.textContent).toContain("live.ts");

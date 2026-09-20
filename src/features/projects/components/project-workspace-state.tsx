@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
@@ -8,6 +9,8 @@ type ProjectWorkspaceStateProps = {
   description: string;
   icon: "code" | "git-commit" | "activity";
   isLoading?: boolean;
+  action?: ReactNode;
+  centerInWindow?: boolean;
 };
 
 export const ProjectWorkspaceState = ({
@@ -15,8 +18,15 @@ export const ProjectWorkspaceState = ({
   description,
   icon,
   isLoading = false,
+  action,
+  centerInWindow,
 }: ProjectWorkspaceStateProps) => (
-  <ProjectWorkspacePlaceholder title={title} description={description}>
+  <ProjectWorkspacePlaceholder
+    title={title}
+    description={description}
+    action={action}
+    centerInWindow={centerInWindow}
+  >
     {isLoading ? (
       <ActivityIndicator
         size="large"

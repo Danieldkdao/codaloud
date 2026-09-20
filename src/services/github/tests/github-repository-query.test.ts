@@ -8,6 +8,7 @@ import { readGitHubRepositories } from "@/services/github/actions/actions";
 import type { GitHubRepositoryPage } from "@/services/github/types";
 
 vi.mock("@/services/github/actions/actions", () => ({ readGitHubRepositories: vi.fn() }));
+vi.mock("../hooks/use-github-profile", () => ({ useGitHubProfile: () => ({ ready: true, profile: { id: 1 }, scopes: ["repo"] }) }));
 const read = vi.mocked(readGitHubRepositories);
 let client: QueryClient;
 let root: Root;

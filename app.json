@@ -18,9 +18,13 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.codaloud.development"
     },
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "web": {
       "output": "server"
     },
@@ -42,7 +46,9 @@
             "enableSceneSupport": true
           }
         }
-      ]
+      ],
+      "expo-sqlite",
+      "./scripts/with-local-workspace.cjs"
     ],
     "experiments": {
       "typedRoutes": true,

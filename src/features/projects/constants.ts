@@ -1,8 +1,3 @@
-export const projectSandboxDispatchInitialDelaySeconds = 60;
-export const projectSandboxDispatchMaxDelaySeconds = 300;
-export const projectSandboxDispatchBatchSize = 10;
-export const projectSandboxDispatchBudgetMs = 40_000;
-
 export const MAX_PROJECT_FILE_SIZE_BYTES = 1024 * 1024;
 export const CODE_INTELLIGENCE_FILE_PATTERN = /\.(?:[cm]?[jt]s|[jt]sx)$/i;
 
@@ -21,7 +16,15 @@ export const projectFileSearchLimits = {
 } as const;
 
 export const projectFileSearchExcludedDirectories = [
-  ".git", "node_modules", ".expo", ".next", "dist", "build", "coverage", "__pycache__", ".venv",
+  ".git",
+  "node_modules",
+  ".expo",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  "__pycache__",
+  ".venv",
 ] as const;
 
 export const projectCommitDetailsLimits = {

@@ -1,0 +1,24 @@
+diff --git a/ios/views/KeyboardExtenderContainerView.swift b/ios/views/KeyboardExtenderContainerView.swift
+index 0b4f18841a8ce2c88c63522957c3c53e80739d31..d8dea4a5e3b29e304bc0bdf52e59524244235669 100644
+--- a/ios/views/KeyboardExtenderContainerView.swift
++++ b/ios/views/KeyboardExtenderContainerView.swift
+@@ -103,16 +103,13 @@ private class ModernContainerView: BaseContainerView {
+ 
+   private func setupVisualEffect() {
+     #if canImport(UIKit.UIGlassEffect)
+-      let isDark = FocusedInputHolder.shared.get()?.keyboardAppearanceValue == "dark"
+-      let glassEffect = UIGlassEffect()
+-      let color =
+-        isDark ? UIColor.black.withAlphaComponent(0.3) : UIColor.gray.withAlphaComponent(0.3)
+-      glassEffect.tintColor = color
++      // Match Codaloud's untinted regular GlassSurface and inherit its appearance.
++      let glassEffect = UIGlassEffect(style: .regular)
+       glassEffect.isInteractive = true
+ 
+       visualEffectView = UIVisualEffectView(effect: glassEffect)
+-      visualEffectView?.overrideUserInterfaceStyle = isDark ? .dark : .light
+       visualEffectView?.cornerConfiguration = .capsule()
++      visualEffectView?.clipsToBounds = true
+ 
+       if let visualEffectView = visualEffectView {
+         visualEffectView.contentView.addSubview(contentView)

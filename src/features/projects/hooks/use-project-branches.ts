@@ -1,12 +1,17 @@
 import { isValidIds } from "@/lib/utils";
-import type { GitCreatedBranchSchema } from "../server/git-branch-schemas";
+import type {
+  GitCreatedBranchSchema,
+  GitDeletedBranchSchema,
+  GitDeleteBranchSchema,
+} from "../server/git-branch-schemas";
 import type { ProjectGitMutationContext } from "../types";
 import { gitCreateBranchSchema } from "../server/git-branch-schemas";
 import type { z } from "zod";
-import { ProjectGitError, requireProjectGitSession } from "../lib/git-errors";
+import { ProjectGitError, requireLocalGitProject } from "../lib/git-errors";
 import { refreshProjectGitQueries } from "../lib/git-cache";
 import {
   createProjectBranchAction,
+  deleteProjectBranchAction,
   checkoutProjectBranchAction,
   readProjectBranchesAction,
 } from "../actions/git-actions";
@@ -19,7 +24,6 @@ import {
   projectBranchParamsSchema,
   type ProjectBranchParamsSchema,
 } from "../lib/branch-params";
-import { useAuthSession } from "@/hooks/use-auth-session";
 import type {
   CheckoutProjectBranchSchema,
   ProjectBranchCheckoutSchema,
@@ -58,11 +62,6 @@ export const useProjectBranches = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   const params = projectBranchParamsSchema.safeParse({
     ...filters,
     projectId,
@@ -71,22 +70,21 @@ export const useProjectBranches = (
   const validPageLimit = Number.isSafeInteger(maxPages) && maxPages >= 0;
 
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey: [
       "projects",
       "branches",
       "infinite",
       "cursor",
-      userId,
       projectId,
       "local",
       params.success ? params.data : filters,
     ],
-    enabled: enabled && Boolean(userId) && params.success && validPageLimit,
+    enabled: enabled && params.success && validPageLimit,
     initialPageParam: (params.success ? (params.data.cursor ?? null) : null) as
       string | null,
     maxPages: validPageLimit ? maxPages : 0,
-    // A remount can refresh cached branches while Daytona is waking up. Retry
-    // restoration while observed, and give transient network/server failures two retries.
+    // Retry transient storage failures while this view is observed.
     retry: (failureCount, error) =>
       error instanceof ProjectBranchRequestError &&
       ((error.status === 503 && error.code === "WORKSPACE_RESTORING") ||
@@ -97,7 +95,6 @@ export const useProjectBranches = (
         : 0,
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch can run while the query is disabled.
-      if (!userId) throw new Error("Sign in to view project branches.");
       if (!params.success || !validPageLimit) {
         throw new Error("Invalid project branch search or pagination.");
       }
@@ -131,15 +128,13 @@ export const useProjectBranches = (
     ProjectBranchCheckoutSchema,
     ProjectBranchCheckoutError,
     CheckoutProjectBranchSchema,
-    { userId: string | null; projectId: string | null | undefined }
+    { projectId: string | null | undefined }
   >({
-    mutationKey: ["projects", "branches", "checkout", userId, projectId],
+    mutationKey: ["projects", "branches", "checkout", projectId],
     retry: false,
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input) => {
-      if (!userId)
-        throw new ProjectBranchCheckoutError("Sign in to switch branches.");
       if (!projectId || !isValidIds(projectId))
         throw new ProjectBranchCheckoutError("Invalid project ID.");
       // The action validates input and confirms the response matches the requested branch.
@@ -156,8 +151,7 @@ export const useProjectBranches = (
   });
 
   const recoverCheckout = async (): Promise<ProjectBranchCheckoutSchema> => {
-    if (!userId || !projectId)
-      throw new Error("Sign in to confirm the current branch.");
+    if (!projectId) throw new Error("The local workspace is not ready.");
     // Capture this hook's workspace, rather than refetching an observer that may
     // have moved to another project while the checkout response was in flight.
     const branches = await readProjectBranchesAction(projectId, {
@@ -175,7 +169,6 @@ export const useProjectBranches = (
   const loadMore = () => {
     if (
       enabled &&
-      userId &&
       params.success &&
       validPageLimit &&
       query.hasNextPage &&
@@ -189,7 +182,6 @@ export const useProjectBranches = (
   const retry = () => {
     if (
       !enabled ||
-      !userId ||
       !params.success ||
       !validPageLimit ||
       query.isFetching ||
@@ -207,21 +199,51 @@ export const useProjectBranches = (
     z.input<typeof gitCreateBranchSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "createBranch", userId, projectId],
+    mutationKey: ["projects", "git", "createBranch", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitCreateBranchSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await createProjectBranchAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });
 
-  return { gitCreateBranch, ...query, loadMore, retry, gitCheckout, recoverCheckout };
+  const gitDeleteBranch = useMutation<
+    GitDeletedBranchSchema,
+    ProjectGitError,
+    GitDeleteBranchSchema,
+    ProjectGitMutationContext
+  >({
+    mutationKey: ["projects", "git", "deleteBranch", projectId],
+    retry: false,
+    networkMode: "always",
+    onMutate: () => ({ projectId }),
+    mutationFn: async (input) => {
+      const result = await deleteProjectBranchAction(
+        requireLocalGitProject(projectId),
+        input,
+      );
+      if (result.error) throw new ProjectGitError(result.message, result.code);
+      return result.data;
+    },
+    onSettled: (_data, _error, _input, context) =>
+      refreshProjectGitQueries(queryClient, context),
+  });
+
+  return {
+    gitDeleteBranch,
+    gitCreateBranch,
+    ...query,
+    loadMore,
+    retry,
+    gitCheckout,
+    recoverCheckout,
+  };
 };

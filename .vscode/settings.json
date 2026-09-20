@@ -3,5 +3,9 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json",
+  "clangd.arguments": [
+    "--query-driver=**/toolchains/llvm/prebuilt/*/bin/clang++"
+  ]
 }

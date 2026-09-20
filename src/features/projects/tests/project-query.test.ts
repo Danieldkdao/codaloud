@@ -8,18 +8,11 @@ import { readProjectAction } from "@/features/projects/actions/actions";
 import { useProject } from "@/features/projects/hooks/use-project";
 import type { ProjectResponseData } from "@/features/projects/types";
 import { createQueryClient } from "@/lib/query-client";
-
-const session = vi.hoisted(() => ({
-  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
-  isPending: false,
-  error: null as Error | null,
-}));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
 vi.mock("@/features/projects/actions/actions", () => ({ readProjectAction: vi.fn() }));
 
 const read = vi.mocked(readProjectAction);
 const project: ProjectResponseData = {
-  id: "project-one", userId: "user-one", name: "My project", sandboxId: null,
+  id: "project-one", name: "My project",
   setupStatus: "pending", setupError: null, githubRepositoryId: null,
   lastOpenedFilePath: null, lastOpenedAt: null,
   createdAt: "2026-09-07T12:00:00.000Z", updatedAt: "2026-09-07T12:00:00.000Z",
@@ -50,9 +43,6 @@ beforeEach(() => {
     queries: { ...client.getDefaultOptions().queries, retryDelay: 0 },
   });
   root = createRoot(document.createElement("div"));
-  session.data = { user: { id: "user-one" } };
-  session.isPending = false;
-  session.error = null;
   read.mockReset().mockResolvedValue(project);
 });
 afterEach(() => {
@@ -81,41 +71,24 @@ describe("useProject", () => {
     expect(read).toHaveBeenCalledTimes(3);
   });
 
-  it("returns the query result and caches by user and project", async () => {
+  it("returns the query result and caches by project", async () => {
     await render();
     expect(current.isSuccess).toBe(true);
     expect(current.data).toEqual(project);
     expect(read).toHaveBeenCalledWith(project.id, expect.any(AbortSignal));
-    expect(client.getQueryData(["projects", "detail", "user-one", project.id])).toEqual(project);
+    expect(client.getQueryData(["projects", "detail", project.id])).toEqual(project);
   });
 
-  it.each(["pending", "signed-out", "error"])("does not fetch when authentication is %s, even on manual refetch", async (state) => {
-    if (state === "pending") session.isPending = true;
-    if (state === "signed-out") session.data = null;
-    if (state === "error") session.error = new Error("Session unavailable");
-    await render();
-    expect(current.fetchStatus).toBe("idle");
-    expect(read).not.toHaveBeenCalled();
-    await act(async () => { await current.refetch(); });
-    expect(read).not.toHaveBeenCalled();
-  });
+  it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
-  it("loads when authentication resolves and isolates project and account changes", async () => {
-    session.isPending = true;
-    await render();
-    session.isPending = false;
+  it("isolates project changes without requiring an account", async () => {
     await render();
     const secondProject = { ...project, id: "project-two" };
     read.mockResolvedValueOnce(secondProject);
     await render(secondProject.id);
     expect(current.data).toEqual(secondProject);
-    const otherUserProject = { ...project, userId: "user-two" };
-    session.data = { user: { id: "user-two" } };
-    read.mockResolvedValueOnce(otherUserProject);
-    await render();
-    expect(current.data).toEqual(otherUserProject);
-    expect(client.getQueryData(["projects", "detail", "user-one", project.id])).toEqual(project);
-    expect(read).toHaveBeenCalledTimes(3);
+    expect(client.getQueryData(["projects", "detail", project.id])).toEqual(project);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it("fails once on a statusless read failure and supports a manual retry", async () => {
@@ -123,7 +96,7 @@ describe("useProject", () => {
     await render();
     await act(async () => {
       await vi.waitFor(() => {
-        expect(client.getQueryState(["projects", "detail", "user-one", project.id])?.status).toBe("error");
+        expect(client.getQueryState(["projects", "detail", project.id])?.status).toBe("error");
       });
     });
     await flush();

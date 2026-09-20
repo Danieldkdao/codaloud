@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from "react";
 import { useLocalSearchParams } from "expo-router";
-import { useAuthSession } from "@/hooks/use-auth-session";
 import type { ProjectGitTab } from "../types";
 import type { ProjectBranchCheckoutSchema } from "../actions/branch-schemas";
 
@@ -55,18 +54,8 @@ export const ProjectWorkspaceBranchProvider = ({
   children: ReactNode;
 }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   return (
-    <ProjectWorkspaceBranchStateProvider
-      key={`${projectId}/${userId}`}
-      projectId={projectId}
-      userId={userId}
-      sessionPending={session.isPending}
-    >
+    <ProjectWorkspaceBranchStateProvider key={projectId} projectId={projectId}>
       {children}
     </ProjectWorkspaceBranchStateProvider>
   );
@@ -74,18 +63,13 @@ export const ProjectWorkspaceBranchProvider = ({
 
 const ProjectWorkspaceBranchStateProvider = ({
   projectId,
-  userId,
-  sessionPending,
   children,
 }: {
   projectId: string;
-  userId: string | null;
-  sessionPending: boolean;
   children: ReactNode;
 }) => {
   const [selection, setSelection] = useState<{
     projectId: string;
-    userId: string;
     branch: string;
     source: ProjectBranchSource;
   } | null>(null);
@@ -111,7 +95,7 @@ const ProjectWorkspaceBranchStateProvider = ({
     };
   }, []);
   const assertWorkspaceCurrent = () => {
-    if (!mounted.current || !userId)
+    if (!mounted.current)
       throw new Error(
         "This workspace session has changed. Reopen the project and try again.",
       );
@@ -143,13 +127,12 @@ const ProjectWorkspaceBranchStateProvider = ({
     : (optimisticSelection?.branch ?? null);
   const recoverCheckout = async () => {
     try {
-      if (!recoveryAction.current || !userId)
+      if (!recoveryAction.current)
         throw new Error("Reopen the project to confirm the current branch.");
       const result = await recoveryAction.current();
       startCheckout(() => {
         setSelection({
           projectId,
-          userId,
           branch: result.currentBranch,
           source: "local",
         });
@@ -186,7 +169,6 @@ const ProjectWorkspaceBranchStateProvider = ({
     recover,
   ) => {
     if (
-      !userId ||
       !mounted.current ||
       workspaceInFlight.current ||
       checkoutInFlight.current ||
@@ -200,7 +182,6 @@ const ProjectWorkspaceBranchStateProvider = ({
     startCheckout(async () => {
       setOptimisticSelection({
         projectId,
-        userId,
         branch: name,
         source: "local",
       });
@@ -211,7 +192,6 @@ const ProjectWorkspaceBranchStateProvider = ({
         startCheckout(() =>
           setSelection({
             projectId,
-            userId,
             branch: result.currentBranch,
             source: "local",
           }),
@@ -246,57 +226,47 @@ const ProjectWorkspaceBranchStateProvider = ({
   };
   const [branchLoading, setBranchLoading] = useState<{
     projectId: string;
-    userId: string | null;
     loading: boolean;
   } | null>(null);
   const setIsBranchLoading = useCallback(
     (loading: boolean) => {
       setBranchLoading((previous) =>
-        previous?.projectId === projectId &&
-        previous.userId === userId &&
-        previous.loading === loading
+        previous?.projectId === projectId && previous.loading === loading
           ? previous
-          : { projectId, userId, loading },
+          : { projectId, loading },
       );
     },
-    [projectId, userId],
+    [projectId],
   );
   // Before the picker reports its first query state, an unknown branch is still resolving.
   const isBranchLoading =
     branch === null &&
-    (sessionPending || Boolean(userId)) &&
-    (branchLoading?.projectId === projectId && branchLoading.userId === userId
-      ? branchLoading.loading
-      : true);
+    (branchLoading?.projectId === projectId ? branchLoading.loading : true);
   const [historyView, setHistoryView] = useState({
     projectId,
-    userId,
     search: "",
     tab: "changes" as ProjectGitTab,
   });
-  const ownsHistoryView =
-    historyView.projectId === projectId && historyView.userId === userId;
+  const ownsHistoryView = historyView.projectId === projectId;
   const setCommitSearch = useCallback(
     (search: string) => {
-      setHistoryView({ projectId, userId, search, tab: "history" });
+      setHistoryView({ projectId, search, tab: "history" });
     },
-    [projectId, userId],
+    [projectId],
   );
   const setGitTab = useCallback(
     (tab: ProjectGitTab) => {
       setHistoryView((previous) => {
-        const sameWorkspace =
-          previous.projectId === projectId && previous.userId === userId;
+        const sameWorkspace = previous.projectId === projectId;
         if (sameWorkspace && previous.tab === tab) return previous;
         return {
           projectId,
-          userId,
           search: sameWorkspace ? previous.search : "",
           tab,
         };
       });
     },
-    [projectId, userId],
+    [projectId],
   );
 
   return (
@@ -307,8 +277,8 @@ const ProjectWorkspaceBranchStateProvider = ({
         branchSource: optimisticSelection?.source ?? null,
         // Initial reads must not overwrite an active checkout.
         setBranch: (name, source = "local") => {
-          if (userId && !checkoutInFlight.current && !isCheckingOut)
-            setSelection({ projectId, userId, branch: name, source });
+          if (!checkoutInFlight.current && !isCheckingOut)
+            setSelection({ projectId, branch: name, source });
         },
         checkoutBranch,
         isCheckingOut,

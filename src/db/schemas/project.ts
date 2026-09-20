@@ -1,49 +1,32 @@
-import { relations, sql } from "drizzle-orm";
-import {
-  check,
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { desc, sql } from "drizzle-orm";
+import { check, index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createdAt, id, updatedAt } from "../helpers";
-import { projectSetupStatusEnum } from "../shared";
-import { user } from "./user";
+import { projectSetupStatuses } from "../shared";
 
-export const ProjectTable = pgTable(
+// Repository contents live in the device filesystem; this table stores metadata.
+export const ProjectTable = sqliteTable(
   "projects",
   {
     id,
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
-    sandboxId: text("sandbox_id").unique(),
-    setupStatus: projectSetupStatusEnum("setup_status").default("pending").notNull(),
+    searchName: text("search_name").notNull(),
+    setupStatus: text("setup_status", { enum: projectSetupStatuses }).notNull(),
     setupError: text("setup_error"),
     githubRepositoryId: text("github_repository_id"),
     lastOpenedFilePath: text("last_opened_file_path"),
-    lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),
+    lastOpenedAt: text("last_opened_at"),
     createdAt,
     updatedAt,
   },
   (table) => [
-    index("projects_user_id_updated_at_idx").on(table.userId, table.updatedAt.desc()),
-    check("projects_name_not_blank", sql`length(btrim(${table.name})) > 0`),
+    index("projects_updated_at_idx").on(desc(table.updatedAt)),
+    check("projects_name_not_blank", sql`length(trim(${table.name})) > 0`),
     check(
-      "projects_ready_has_sandbox",
-      sql`${table.setupStatus} <> 'ready' OR ${table.sandboxId} IS NOT NULL`,
+      "projects_setup_status_valid",
+      sql`${table.setupStatus} IN ('pending', 'running', 'ready', 'failed')`,
     ),
   ],
 );
 
 export type ProjectSelectData = typeof ProjectTable.$inferSelect;
 export type ProjectInsertData = typeof ProjectTable.$inferInsert;
-
-export const projectRelations = relations(ProjectTable, ({ one }) => ({
-  user: one(user, {
-    fields: [ProjectTable.userId],
-    references: [user.id],
-  }),
-}));

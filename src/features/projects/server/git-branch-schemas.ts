@@ -12,3 +12,14 @@ export const gitCreatedBranchSchema = z.object({
   headSha: commitHashSchema,
 });
 export type GitCreatedBranchSchema = z.infer<typeof gitCreatedBranchSchema>;
+
+export const gitDeleteBranchSchema = z.strictObject({
+  branchName: projectBranchNameSchema,
+  force: z.boolean().optional(),
+});
+export type GitDeleteBranchSchema = z.infer<typeof gitDeleteBranchSchema>;
+export const gitDeletedBranchSchema = z.object({
+  branchName: projectBranchNameSchema,
+  deleted: z.literal(true),
+});
+export type GitDeletedBranchSchema = z.infer<typeof gitDeletedBranchSchema>;

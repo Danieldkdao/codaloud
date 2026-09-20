@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["LocalWorkspaceModule"],
+    "swiftModuleName": "LocalWorkspace"
+  },
+  "android": {
+    "modules": ["expo.modules.localworkspace.LocalWorkspaceModule"]
+  }
+}

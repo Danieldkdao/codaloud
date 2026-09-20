@@ -6,15 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { readProjectChangesAction } from "../actions/git-actions";
 import type { ProjectRepositoryChangesSchema } from "../actions/change-schemas";
 import { useProjectChanges } from "../hooks/use-project-changes";
-
-const session = vi.hoisted(() => ({
-  data: { user: { id: "user-one" } } as { user: { id: string } } | null,
-  isPending: false,
-  error: null as Error | null,
-}));
 vi.mock("react-native", () => ({ Alert: {} }));
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => session }));
 vi.mock("../actions/git-actions", () => ({ readProjectChangesAction: vi.fn() }));
 
 const read = vi.mocked(readProjectChangesAction);
@@ -48,9 +41,6 @@ beforeEach(() => {
   onlineManager.setOnline(true);
   client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: 3 } } });
   root = createRoot(document.createElement("div"));
-  session.data = { user: { id: "user-one" } };
-  session.isPending = false;
-  session.error = null;
   read.mockReset().mockResolvedValue(snapshot);
 });
 afterEach(() => {
@@ -68,7 +58,7 @@ it("returns the ordinary query result and preserves empty changes", async () => 
   expect(current.data).toEqual(snapshot);
   expect(current.data).not.toHaveProperty("pages");
   expect(read).toHaveBeenCalledExactlyOnceWith(projectId, expect.any(AbortSignal));
-  expect(client.getQueryData(["projects", "changes", "user-one", projectId])).toEqual(snapshot);
+  expect(client.getQueryData(["projects", "changes", projectId])).toEqual(snapshot);
 });
 
 it("does not poll while focused or in the background", async () => {
@@ -175,26 +165,18 @@ it("does not refresh cached changes on focus or reconnect", async () => {
   expect(read).toHaveBeenCalledOnce();
 });
 
-it("resumes the initial load after reconnecting", async () => {
+it("loads local changes while offline", async () => {
   act(() => onlineManager.setOnline(false));
   await render();
-  expect(current.fetchStatus).toBe("paused");
-  expect(read).not.toHaveBeenCalled();
+  expect(current.fetchStatus).toBe("idle");
+  expect(read).toHaveBeenCalledOnce();
   act(() => onlineManager.setOnline(true));
   await tick();
   expect(current.isSuccess).toBe(true);
   expect(read).toHaveBeenCalledOnce();
 });
 
-it.each(["pending", "signed-out", "error"])("blocks automatic and manual reads when authentication is %s", async (state) => {
-  if (state === "pending") session.isPending = true;
-  if (state === "signed-out") session.data = null;
-  if (state === "error") session.error = new Error("Session unavailable");
-  await render();
-  await tick(20_000);
-  await act(async () => { await current.refetch(); });
-  expect(read).not.toHaveBeenCalled();
-});
+it("works locally without an account or session", async () => { await render(); expect(read).toHaveBeenCalledOnce(); });
 
 it.each([null, "", "invalid"])("blocks invalid project IDs, including manual refetch: %s", async (id) => {
   await render(id);
@@ -214,18 +196,16 @@ it("loads when enabled without refreshing cached data on reactivation", async ()
   expect(read).toHaveBeenCalledOnce();
 });
 
-it("isolates project and account caches without showing a previous project's data", async () => {
+it("isolates projects without showing a previous project's data", async () => {
   await render();
   read.mockImplementationOnce(() => new Promise(() => {}));
   await render(otherProjectId);
   expect(current.data).toBeUndefined();
   expect(current.isPending).toBe(true);
-  session.data = { user: { id: "user-two" } };
-  read.mockResolvedValue({ ...snapshot, currentBranch: "other-account" });
   await render();
-  expect(current.data?.currentBranch).toBe("other-account");
-  expect(client.getQueryData(["projects", "changes", "user-one", projectId])).toEqual(snapshot);
-  expect(client.getQueryCache().getAll().filter((query) => query.queryKey[1] === "changes")).toHaveLength(3);
+  expect(current.data).toEqual(snapshot);
+  expect(client.getQueryData(["projects", "changes", projectId])).toEqual(snapshot);
+  expect(client.getQueryCache().getAll().filter((query) => query.queryKey[1] === "changes")).toHaveLength(2);
 });
 
 it("reuses cached data when remounted", async () => {
@@ -257,7 +237,7 @@ it.each(["active", "disabled", "unmounted"])("refreshes a save-invalidated snaps
   const next = { ...snapshot, observedAt: "2026-09-14T00:00:00Z" };
   read.mockResolvedValue(next);
   await act(async () => {
-    await client.invalidateQueries({ queryKey: ["projects", "changes", "user-one", projectId], exact: true });
+    await client.invalidateQueries({ queryKey: ["projects", "changes", projectId], exact: true });
   });
   await tick();
   if (state !== "active") {

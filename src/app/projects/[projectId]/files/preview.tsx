@@ -14,12 +14,17 @@ import { ProjectFilePreviewContent } from "@/features/projects/components/projec
 import { projectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
 
 const FilePreviewScreen = () => {
-  const { projectId, filePath: pathParam, search: searchParam } = useLocalSearchParams<{
+  const {
+    projectId,
+    filePath: pathParam,
+    search: searchParam,
+  } = useLocalSearchParams<{
     projectId: string;
     filePath?: string | string[];
     search?: string | string[];
   }>();
-  const parsedSearch = projectFileSearchQuerySchema.shape.search.safeParse(searchParam);
+  const parsedSearch =
+    projectFileSearchQuerySchema.shape.search.safeParse(searchParam);
   const search = parsedSearch.success ? parsedSearch.data : null;
   const parsedPath = projectFilePathSchema.safeParse(pathParam);
   const filePath = parsedPath.success ? parsedPath.data : null;
@@ -35,37 +40,84 @@ const FilePreviewScreen = () => {
           variant="ghost"
           size="icon"
           accessibilityLabel="Back to files"
-          onPress={() => router.dismissTo({
-            pathname: "/projects/[projectId]/files",
-            params: { projectId },
-          })}
+          onPress={() =>
+            router.dismissTo({
+              pathname: "/projects/[projectId]/files",
+              params: { projectId },
+            })
+          }
         >
-          <Icon family="Feather" name="chevron-left" size={22} accessible={false} className="text-foreground" />
+          <Icon
+            family="Feather"
+            name="chevron-left"
+            size={22}
+            accessible={false}
+            className="text-foreground"
+          />
         </Button>
         {filePath ? <ProjectIcon name={filePath} isDirectory={false} /> : null}
         <View className="min-w-0 flex-1">
-          <PText className="text-lg font-medium text-foreground" numberOfLines={1} ellipsizeMode="middle">
+          <PText
+            className="text-lg font-medium text-foreground"
+            numberOfLines={1}
+            ellipsizeMode="middle"
+          >
             {filePath ?? "File preview"}
           </PText>
         </View>
-        {query.isFetching && query.data ? <ActivityIndicator className="text-muted-foreground" accessibilityLabel="Refreshing file" /> : null}
-        <Icon family="Feather" name="lock" size={18} accessible accessibilityLabel="Read-only preview" className="text-muted-foreground" />
+        {query.isFetching && query.data ? (
+          <ActivityIndicator
+            className="text-muted-foreground"
+            accessibilityLabel="Refreshing file"
+          />
+        ) : null}
+        <Icon
+          family="Feather"
+          name="lock"
+          size={18}
+          accessible
+          accessibilityLabel="Read-only preview"
+          className="text-muted-foreground"
+        />
       </View>
       <View className="flex-1">
         {!filePath ? (
-          <View className="flex-1 items-center justify-center gap-3 px-6" style={{ paddingBottom: dockHeight }}>
-            <HeadingText className="text-center text-2xl">No file selected</HeadingText>
-            <PText className="text-center">Return to Files and choose a search result to preview.</PText>
+          <View
+            className="flex-1 items-center justify-center gap-3 px-6"
+            style={{ paddingBottom: dockHeight }}
+          >
+            <HeadingText className="text-center text-2xl">
+              No file selected
+            </HeadingText>
+            <PText className="text-center">
+              Return to Files and choose a search result to preview.
+            </PText>
           </View>
         ) : query.fetchStatus === "paused" ? (
-          <View className="flex-1 items-center justify-center px-6" style={{ paddingBottom: dockHeight }}>
-            <PText className="text-center" accessibilityLiveRegion="polite">Reconnect to the internet to load this file.</PText>
+          <View
+            className="flex-1 items-center justify-center px-6"
+            style={{ paddingBottom: dockHeight }}
+          >
+            <PText className="text-center" accessibilityLiveRegion="polite">
+              Reconnect to the internet to load this file.
+            </PText>
           </View>
         ) : query.isError ? (
-          <View className="flex-1 items-center justify-center gap-4 px-6" style={{ paddingBottom: dockHeight }}>
-            <HeadingText className="text-center text-2xl">Couldn't open this file</HeadingText>
-            <PText accessibilityRole="alert" className="text-center">{query.error.message}</PText>
-            <Button variant="outline" disabled={query.isFetching} onPress={() => void query.refetch()}>
+          <View
+            className="flex-1 items-center justify-center gap-4 px-6"
+            style={{ paddingBottom: dockHeight }}
+          >
+            <HeadingText className="text-center text-2xl">
+              Couldn't open this file
+            </HeadingText>
+            <PText accessibilityRole="alert" className="text-center">
+              {query.error.message}
+            </PText>
+            <Button
+              variant="outline"
+              disabled={query.isFetching}
+              onPress={() => void query.refetch()}
+            >
               {query.isFetching ? "Retrying…" : "Try again"}
             </Button>
           </View>
@@ -77,13 +129,17 @@ const FilePreviewScreen = () => {
             search={search}
             dockHeight={dockHeight}
             onOpen={() => {
-              currentFile.setFilePath(filePath);
-              router.navigate({ pathname: "/projects/[projectId]/code", params: { projectId } });
+              currentFile.openFile(filePath);
+              router.dismissTo({
+                pathname: "/projects/[projectId]/code",
+                params: { projectId },
+              });
             }}
           />
-        ) : <CodeEditorLoading bottomInset={dockHeight} />}
+        ) : (
+          <CodeEditorLoading bottomInset={dockHeight} />
+        )}
       </View>
-
     </View>
   );
 };

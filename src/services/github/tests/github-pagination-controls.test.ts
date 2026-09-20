@@ -9,9 +9,7 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 vi.mock("@tanstack/react-query", () => ({ useInfiniteQuery: () => mocks.query }));
-vi.mock("@/hooks/use-auth-session", () => ({
-  useAuthSession: () => ({ data: { user: { id: "pagination-test-user" } }, isPending: false, error: null }),
-}));
+vi.mock("../hooks/use-github-profile", () => ({ useGitHubProfile: () => ({ profile: { id: 1 }, ready: true, scopes: ["repo"] }) }));
 vi.mock("@/services/github/actions/actions", () => ({ readGitHubRepositories: vi.fn(), readGitHubRepositoryBranches: vi.fn() }));
 
 beforeEach(() => {

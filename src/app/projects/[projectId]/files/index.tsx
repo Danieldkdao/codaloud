@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
-import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
+import { ProjectFileCreateSheet } from "@/features/projects/components/project-file-create-sheet";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
@@ -16,10 +16,7 @@ import { useProjectWorkspaceFileSearch } from "@/features/projects/hooks/use-pro
 import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useProjectFileSearch } from "@/features/projects/hooks/use-project-file-search";
 import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
-import {
-  getDirectoryFiles,
-  isProjectFilePathWithin,
-} from "@/features/projects/lib/files";
+import { getDirectoryFiles } from "@/features/projects/lib/files";
 
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -28,7 +25,7 @@ const FilesScreen = () => {
   const fileSearch = useProjectWorkspaceFileSearch();
   const workspace = useProjectWorkspaceBranch();
   const saves = useProjectFileSaveRegistry();
-  const [currentDirectory, setCurrentDirectory] = useState("");
+  const { currentDirectory, setCurrentDirectory } = fileSearch;
   const { query, creation, update, deletion } = useProjectFiles(
     projectId,
     currentDirectory,
@@ -54,8 +51,8 @@ const FilesScreen = () => {
   const renameInFlight = useRef(false);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const openFile = (path: string) => {
-    currentFile.setFilePath(path);
-    router.navigate({
+    currentFile.openFile(path);
+    router.dismissTo({
       pathname: "/projects/[projectId]/code",
       params: { projectId },
     });
@@ -176,7 +173,7 @@ const FilesScreen = () => {
   return (
     <View className="flex-1 bg-background">
       {fileCreation.kind && !deletion.isPending && renamingPath === null && (
-        <ProjectFileCreateRow
+        <ProjectFileCreateSheet
           key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
           disabled={workspace.isWorkspaceBusy}
           kind={fileCreation.kind}
@@ -229,11 +226,7 @@ const FilesScreen = () => {
                   },
                 );
                 assertCurrent();
-                currentFile.setFilePath((path) =>
-                  path !== null && isProjectFilePathWithin(path, previousPath)
-                    ? updatedFile.path + path.slice(previousPath.length)
-                    : path,
-                );
+                currentFile.renameFiles(previousPath, updatedFile.path);
                 showSuccess(
                   formatProjectFileKind(input.kind).updateSuccessMessage,
                 );
@@ -252,14 +245,13 @@ const FilesScreen = () => {
               "Deleting file…",
               async (assertCurrent) => {
                 assertCurrent();
-                const deletedFile = await deletion.mutateAsync(input);
-                assertCurrent();
-                currentFile.setFilePath((path) =>
-                  path !== null &&
-                  isProjectFilePathWithin(path, deletedFile.path)
-                    ? null
-                    : path,
-                );
+                await saves.withSavedFiles(async () => {
+                  assertCurrent();
+                  const deletedFile = await deletion.mutateAsync(input);
+                  assertCurrent();
+                  saves.invalidateFiles(deletedFile.path);
+                  currentFile.removeFiles(deletedFile.path);
+                });
                 showSuccess(
                   formatProjectFileKind(input.kind).deleteSuccessMessage,
                 );

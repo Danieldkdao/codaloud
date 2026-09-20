@@ -1,3 +1,4 @@
+import { executeProjectGit } from "../local/git";
 import type { ProjectGitReadFailureHandler } from "../types";
 import { gitUndoSchema, gitUndoneSchema } from "../server/git-undo-schemas";
 import { gitRevertSchema } from "../server/git-revert-schemas";
@@ -20,6 +21,8 @@ import {
 import {
   gitCreateBranchSchema,
   gitCreatedBranchSchema,
+  gitDeleteBranchSchema,
+  gitDeletedBranchSchema,
 } from "../server/git-branch-schemas";
 import { gitPullSchema, gitPulledSchema } from "../server/git-pull-schemas";
 import { gitPushSchema, gitPushedSchema } from "../server/git-push-schemas";
@@ -65,14 +68,22 @@ import {
   type CreateProjectCommitSchema,
 } from "./create-commit-schemas";
 
+export const initializeProjectGitAction = async (projectId: string) =>
+  mutateProjectGitRequest({
+    execute: () =>
+      executeProjectGit(projectId, { operation: "git/initialize" }),
+    input: z.strictObject({}),
+    unsafeInput: {},
+    output: gitCountsSchema,
+  });
+
 export const readProjectGitCountsAction = async (
   projectId: string,
   signal?: AbortSignal,
   onFailure?: ProjectGitReadFailureHandler,
 ) =>
   readProjectGitRequest({
-    projectId,
-    path: "git/counts",
+    execute: () => executeProjectGit(projectId, { operation: "git/counts" }),
     input: z.strictObject({}),
     output: gitCountsSchema,
     signal,
@@ -81,8 +92,7 @@ export const readProjectGitCountsAction = async (
 
 export const fetchProjectGitAction = async (projectId: string) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/fetch",
+    execute: () => executeProjectGit(projectId, { operation: "git/fetch" }),
     input: z.strictObject({}),
     unsafeInput: {},
     output: gitCountsSchema,
@@ -93,8 +103,8 @@ export const createProjectCommitAction = async (
   unsafeInput: CreateProjectCommitSchema,
 ): Promise<CreateProjectCommitResponseSchema> =>
   mutateProjectGitRequest({
-    projectId,
-    path: "commits",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/commit", args: input }),
     input: createProjectCommitSchema,
     unsafeInput,
     output: projectCreatedCommitSchema,
@@ -135,8 +145,8 @@ export const checkoutProjectBranchAction = async (
       "Unable to confirm the branch switch. Refresh the current branch and files before trying again.",
   };
   return mutateProjectGitRequest({
-    projectId,
-    path: "checkout",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/checkout", args: input }),
     input: checkoutProjectBranchSchema,
     unsafeInput,
     output: projectBranchCheckoutSchema,
@@ -164,8 +174,7 @@ export const readProjectChangesAction = async (
   signal?: AbortSignal,
 ): Promise<ProjectRepositoryChangesSchema | null> =>
   readProjectGitRequest({
-    projectId,
-    path: "changes",
+    execute: () => executeProjectGit(projectId, { operation: "git/changes" }),
     input: z.strictObject({}),
     output: readProjectChangesResponseSchema.shape.data,
     signal,
@@ -178,11 +187,10 @@ export const readProjectBranchesAction = async (
   onFailure?: ProjectGitReadFailureHandler,
 ): Promise<ProjectBranchPageSchema | null> =>
   readProjectGitRequest({
-    projectId,
-    path: "branches",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "branches", args: input }),
     input: projectBranchParamsSchema,
     params: { ...params, projectId },
-    query: ({ search, cursor, pageSize }) => ({ search, cursor, pageSize }),
     output: readProjectBranchesResponseSchema.shape.data,
     signal,
     onFailure: onFailure
@@ -229,11 +237,13 @@ export const readProjectCommitDetailsAction = async (
   signal?: AbortSignal,
 ): Promise<ProjectCommitDetailsSchema | null> =>
   readProjectGitRequest({
-    projectId,
-    path: ({ commitSha }) => `commit/${commitSha}`,
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/commit-details",
+        args: input,
+      }),
     input: projectCommitDetailsParamsSchema,
     params: { ...params, projectId },
-    query: ({ source }) => ({ source }),
     output: readProjectCommitDetailsResponseSchema.shape.data,
     signal,
     validate: (data, { commitSha, source }) =>
@@ -247,11 +257,10 @@ export const readProjectCommitsAction = async (
   onFailure?: ProjectGitReadFailureHandler,
 ): Promise<ProjectCommitPageSchema | null> =>
   readProjectGitRequest({
-    projectId,
-    path: "commits",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "history", args: input }),
     input: projectCommitParamsSchema,
     params: { ...params, projectId },
-    query: ({ projectId: _projectId, ...queryParams }) => queryParams,
     output: readProjectCommitsResponseSchema.shape.data,
     signal,
     onFailure,
@@ -274,8 +283,8 @@ export const pushProjectGitAction = async (
   unsafeInput: z.input<typeof gitPushSchema> = {},
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/push",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/push", args: input }),
     output: gitPushedSchema,
     input: gitPushSchema,
     unsafeInput,
@@ -286,8 +295,8 @@ export const pullProjectGitAction = async (
   unsafeInput: z.input<typeof gitPullSchema> = {},
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/pull",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/pull", args: input }),
     output: gitPulledSchema,
     input: gitPullSchema,
     unsafeInput,
@@ -298,11 +307,30 @@ export const createProjectBranchAction = async (
   unsafeInput: z.input<typeof gitCreateBranchSchema>,
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/branches",
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/create-branch",
+        args: input,
+      }),
     output: gitCreatedBranchSchema,
     input: gitCreateBranchSchema,
     unsafeInput,
+  });
+
+export const deleteProjectBranchAction = async (
+  projectId: string,
+  unsafeInput: z.input<typeof gitDeleteBranchSchema>,
+) =>
+  mutateProjectGitRequest({
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/delete-branch",
+        args: input,
+      }),
+    output: gitDeletedBranchSchema,
+    input: gitDeleteBranchSchema,
+    unsafeInput,
+    validate: (data, input) => data.branchName === input.branchName,
   });
 
 export const readProjectStashesAction = async (
@@ -312,8 +340,8 @@ export const readProjectStashesAction = async (
   onFailure?: ProjectGitReadFailureHandler,
 ) =>
   readProjectGitRequest({
-    projectId,
-    path: "git/stash",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "stashes", args: input }),
     output: gitStashListSchema,
     input: gitStashQuerySchema,
     params,
@@ -326,8 +354,11 @@ export const stashProjectChangesAction = async (
   unsafeInput: z.input<typeof gitStashPushSchema> = {},
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/stash",
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/stash-save",
+        args: input,
+      }),
     output: gitStashPushedSchema,
     input: gitStashPushSchema,
     unsafeInput,
@@ -338,8 +369,11 @@ export const popProjectStashAction = async (
   unsafeInput: z.input<typeof gitStashPopSchema>,
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/stash-pop",
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/stash-apply",
+        args: input,
+      }),
     output: gitStashPoppedSchema,
     input: gitStashPopSchema,
     unsafeInput,
@@ -350,8 +384,11 @@ export const deleteProjectStashAction = async (
   unsafeInput: z.input<typeof gitStashDropSchema>,
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/stash-drop",
+    execute: (input) =>
+      executeProjectGit(projectId, {
+        operation: "git/stash-drop",
+        args: input,
+      }),
     output: gitStashDroppedSchema,
     input: gitStashDropSchema,
     unsafeInput,
@@ -363,8 +400,8 @@ export const readProjectDiscardPreviewAction = async (
   onFailure?: ProjectGitReadFailureHandler,
 ) =>
   readProjectGitRequest({
-    projectId,
-    path: "git/discard",
+    execute: () =>
+      executeProjectGit(projectId, { operation: "git/discard-preview" }),
     input: z.strictObject({}),
     output: gitDiscardPreviewSchema,
     signal,
@@ -376,8 +413,8 @@ export const discardProjectChangesAction = async (
   unsafeInput: z.input<typeof gitDiscardSchema>,
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/discard",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/discard", args: input }),
     output: gitDiscardedSchema,
     input: gitDiscardSchema,
     unsafeInput,
@@ -388,8 +425,8 @@ export const revertProjectCommitAction = async (
   unsafeInput: z.input<typeof gitRevertSchema> = {},
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/revert",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/revert", args: input }),
     output: projectCreatedCommitSchema,
     input: gitRevertSchema,
     unsafeInput,
@@ -400,8 +437,8 @@ export const undoProjectCommitAction = async (
   unsafeInput: z.input<typeof gitUndoSchema>,
 ) =>
   mutateProjectGitRequest({
-    projectId,
-    path: "git/undo",
+    execute: (input) =>
+      executeProjectGit(projectId, { operation: "git/undo", args: input }),
     output: gitUndoneSchema,
     input: gitUndoSchema,
     unsafeInput,

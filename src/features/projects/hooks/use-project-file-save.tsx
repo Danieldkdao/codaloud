@@ -15,13 +15,13 @@ import {
   createFileSaveDocument,
   type SaveSnapshot,
 } from "@/features/projects/lib/project-file-save-document";
-import { useAuthSession } from "@/hooks/use-auth-session";
 export type { ProjectFileSaveStatus } from "@/features/projects/lib/project-file-save-document";
 
 type SaveDocument = ReturnType<typeof createFileSaveDocument>;
 type FileSaveRegistryState = {
   getDocument: (path: string, version: number, content: string) => SaveDocument;
   flushPendingSaves: () => Promise<void>;
+  invalidateFiles: (root: string) => void;
   withSavedFiles: <T>(action: () => Promise<T>) => Promise<T>;
   renameFiles: <T>(
     previousPath: string,
@@ -39,11 +39,9 @@ const FileSaveContext = createContext<ProjectFileSaveState | null>(null);
 
 const FileSaveRegistry = ({
   projectId,
-  userId,
   children,
 }: {
   projectId: string;
-  userId: string | null;
   children: ReactNode;
 }) => {
   const queryClient = useQueryClient();
@@ -100,17 +98,18 @@ const FileSaveRegistry = ({
         content,
         (savedPath, savedContent, size) => {
           // Cache only confirmed bytes; newer local edits remain in this document.
-          queryClient.setQueryData(
-            ["projects", "file", userId, projectId, savedPath],
-            { path: savedPath, content: savedContent, size },
-          );
+          queryClient.setQueryData(["projects", "file", projectId, savedPath], {
+            path: savedPath,
+            content: savedContent,
+            size,
+          });
           void queryClient.invalidateQueries({
-            queryKey: ["projects", "files", userId, projectId],
+            queryKey: ["projects", "files", projectId],
           });
           // Refresh an active changes panel, or mark its snapshot stale so it
           // reloads when reopened. Only confirmed writes reach this callback.
           void queryClient.invalidateQueries({
-            queryKey: ["projects", "changes", userId, projectId],
+            queryKey: ["projects", "changes", projectId],
             exact: true,
           });
         },
@@ -135,7 +134,6 @@ const FileSaveRegistry = ({
       projectId,
       queryClient,
       registerDocument,
-      userId,
       gitOperation,
       protectedDrafts,
     ],
@@ -279,7 +277,20 @@ const FileSaveRegistry = ({
   }, [documents]);
   return (
     <RegistryContext
-      value={{ getDocument, flushPendingSaves, withSavedFiles, renameFiles }}
+      value={{
+        getDocument,
+        flushPendingSaves,
+        withSavedFiles,
+        renameFiles,
+        invalidateFiles: (root) => {
+          for (const [path, entry] of documents) {
+            if (!isProjectFilePathWithin(path, root)) continue;
+            entry.document.invalidate();
+            protectedDrafts.delete(entry.document);
+            documents.delete(path);
+          }
+        },
+      }}
     >
       {children}
     </RegistryContext>
@@ -293,17 +304,8 @@ export const ProjectFileSaveRegistryProvider = ({
   projectId: string;
   children: ReactNode;
 }) => {
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   return (
-    <FileSaveRegistry
-      key={`${userId}/${projectId}`}
-      projectId={projectId}
-      userId={userId}
-    >
+    <FileSaveRegistry key={projectId} projectId={projectId}>
       {children}
     </FileSaveRegistry>
   );

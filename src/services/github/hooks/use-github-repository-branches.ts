@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 
-import { useAuthSession } from "@/hooks/use-auth-session";
+import { useGitHubProfile } from "./use-github-profile";
 import { PAGE_SIZE } from "@/lib/constants";
 import { readGitHubRepositoryBranches } from "../actions/actions";
 import { gitHubRepositoryBranchesRequestSchema } from "../schemas";
@@ -16,20 +16,33 @@ export const useGitHubRepositoryBranches = (
     enabled?: boolean;
   } = {},
 ) => {
-  const session = useAuthSession();
-  const userId = !session.isPending && !session.error ? session.data?.user.id ?? null : null;
+  const connection = useGitHubProfile();
+  const userId =
+    connection.ready && connection.scopes.includes("repo")
+      ? (connection.profile?.id ?? null)
+      : null;
   const normalizedSearch = search.trim().toLowerCase();
-  const validatedId = gitHubRepositoryBranchesRequestSchema.shape.repositoryId.safeParse(repositoryId);
+  const validatedId =
+    gitHubRepositoryBranchesRequestSchema.shape.repositoryId.safeParse(
+      repositoryId,
+    );
 
   const query = useInfiniteQuery({
     queryKey: [
-      "github", "repositories", repositoryId, "branches", "infinite", "cursor", userId,
+      "github",
+      "repositories",
+      repositoryId,
+      "branches",
+      "infinite",
+      "cursor",
+      userId,
       { pageSize, search: normalizedSearch },
     ],
     queryFn: async ({ pageParam, signal }) => {
       // Manual refetch can run even when the query is disabled.
-      if (!userId) throw new Error("Sign in to view GitHub branches.");
-      if (!validatedId.success) throw new Error("Select a valid GitHub repository.");
+      if (!userId) throw new Error("Connect GitHub to view branches.");
+      if (!validatedId.success)
+        throw new Error("Select a valid GitHub repository.");
 
       const branches = await readGitHubRepositoryBranches(validatedId.data, {
         cursor: pageParam,
@@ -38,23 +51,42 @@ export const useGitHubRepositoryBranches = (
         signal,
       });
       // Read actions return null on failure; queries must reject to expose an error.
-      if (branches === null) throw new Error("Unable to load GitHub repository branches. Please try again.");
+      if (branches === null)
+        throw new Error(
+          "Unable to load GitHub repository branches. Please try again.",
+        );
 
       return branches;
     },
     initialPageParam: null as string | null,
     // Sparse searches can return an empty page with more branches to scan.
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    networkMode: "online",
     enabled: enabled && Boolean(userId) && validatedId.success,
   });
 
   const loadMore = () => {
-    if (enabled && userId && validatedId.success && query.hasNextPage && !query.isFetching && !query.error && query.fetchStatus !== "paused") {
+    if (
+      enabled &&
+      userId &&
+      validatedId.success &&
+      query.hasNextPage &&
+      !query.isFetching &&
+      !query.error &&
+      query.fetchStatus !== "paused"
+    ) {
       return query.fetchNextPage({ cancelRefetch: false });
     }
   };
   const retry = () => {
-    if (!enabled || !userId || !validatedId.success || query.isFetching || query.fetchStatus === "paused") return;
+    if (
+      !enabled ||
+      !userId ||
+      !validatedId.success ||
+      query.isFetching ||
+      query.fetchStatus === "paused"
+    )
+      return;
     return query.isFetchNextPageError
       ? query.fetchNextPage({ cancelRefetch: false })
       : query.refetch();

@@ -4,15 +4,17 @@ import { readFileSync } from "node:fs";
 import { createRoot, type Root } from "react-dom/client";
 import { EditorView } from "codemirror";
 import { deleteCharBackward, selectAll, undo } from "@codemirror/commands";
-import { LanguageDescription, foldEffect, foldedRanges, type LanguageSupport } from "@codemirror/language";
-import { openSearchPanel } from "@codemirror/search";
-import { acceptCompletion, currentCompletions, startCompletion } from "@codemirror/autocomplete";
-import { forceLinting, forEachDiagnostic, openLintPanel } from "@codemirror/lint";
+import { LanguageDescription, codeFolding, foldEffect, foldedRanges, type LanguageSupport } from "@codemirror/language";
+import { StateEffect } from "@codemirror/state";
+import { runScopeHandlers } from "@codemirror/view";
+import { currentCompletions, startCompletion } from "@codemirror/autocomplete";
+import { forceLinting, forEachDiagnostic } from "@codemirror/lint";
 import type { CodeEditorAnalysis, CodeEditorAnalysisRequest } from "@/components/code-editor-intelligence";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { codeEditorMatches } from "@/components/code-editor-matches";
 import CodeEditor, { type CodeEditorRef } from "@/components/code-editor";
 
+vi.mock("@/features/editor/fonts", () => ({ editorFontAssets: {} }));
 vi.mock("expo/dom", async () => ({ useDOMImperativeHandle: (await import("react")).useImperativeHandle }));
 
 const fontState = vi.hoisted(() => ({ loaded: true, error: null as Error | null }));
@@ -104,60 +106,21 @@ it("toggles read-only without resetting the document, selection, or undo history
   expect(view.state.doc.toString()).toBe("original");
 });
 
-it("offers TypeScript object members at the cursor", async () => {
-  const onReady = vi.fn().mockResolvedValue(undefined);
+it("offers typed completions in a floating popup and accepts a touch-sized option", async () => {
+  const request = vi.fn<CodeEditorAnalysisRequest>(async (input) => input.position === undefined
+    ? { diagnostics: [] }
+    : { completions: [{ label: "enabled", apply: "enabled", type: "property" }] });
   await act(async () => root.render(createElement(CodeEditor, {
-    filename: "demo.ts", initialValue: 'const options: { enabled: boolean } = { enabled: true };\noptions.', onReady,
-    onRequestAnalysis: async (input) => input.position === undefined ? { diagnostics: [] } : { completions: [{ label: "enabled", apply: "enabled", type: "property" }] },
+    filename: "demo.ts", initialValue: "options.", onRequestAnalysis: request,
   })));
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
   const view = editor();
-  act(() => {
-    view.dispatch({ selection: { anchor: view.state.doc.length } });
-    startCompletion(view);
-  });
-  await vi.waitFor(() => expect(currentCompletions(view.state).map((option) => option.label)).toContain("enabled"));
+  act(() => { view.focus(); view.dispatch({ selection: { anchor: view.state.doc.length } }); expect(startCompletion(view)).toBe(true); });
+  await vi.waitFor(() => expect(currentCompletions(view.state)).toHaveLength(1));
+  expect(container.querySelector(".cm-tooltip-autocomplete")).not.toBeNull();
+  expect(container.querySelector(".cm-completion-kind")?.textContent).toBe("▪");
+  const { acceptCompletion } = await import("@codemirror/autocomplete");
   await vi.waitFor(() => { act(() => { expect(acceptCompletion(view)).toBe(true); }); });
-  expect(view.state.doc.toString()).toContain("options.enabled");
-});
-
-it("automatically completes properties typed while a remote lookup is pending", async () => {
-  const onReady = vi.fn().mockResolvedValue(undefined);
-  const request = vi.fn<CodeEditorAnalysisRequest>(async (input) => {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return input.position === undefined ? { diagnostics: [] } : { completions: [{ label: "enabled", apply: "enabled", type: "property" }] };
-  });
-  const content = 'const options = { enabled: true };\noptions';
-  await act(async () => root.render(createElement(CodeEditor, { filename: "demo.ts", initialValue: content, onReady, onRequestAnalysis: request })));
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
-  const view = editor();
-  act(() => { view.focus(); view.dispatch({ selection: { anchor: content.length } }); });
-  const type = (text: string) => act(() => view.dispatch({
-    changes: { from: view.state.selection.main.head, insert: text },
-    selection: { anchor: view.state.selection.main.head + text.length }, userEvent: "input.type",
-  }));
-  type(".");
-  await vi.waitFor(() => expect(request.mock.calls.some(([input]) => input.content.endsWith("options."))).toBe(true));
-  type("en");
-  await vi.waitFor(() => expect(currentCompletions(view.state).map((option) => option.label)).toContain("enabled"), { timeout: 3000 });
-});
-
-it("applies a contextual string completion without duplicating quotes", async () => {
-  const content = 'const mode = "f";';
-  const from = content.indexOf('"') + 1;
-  const onReady = vi.fn().mockResolvedValue(undefined);
-  await act(async () => root.render(createElement(CodeEditor, {
-    filename: "demo.ts", initialValue: content, onReady,
-    onRequestAnalysis: async (input) => input.position === undefined ? { diagnostics: [] } : {
-      completions: [{ label: "fast", apply: "fast", type: "constant", from, to: from + 1 }],
-    },
-  })));
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
-  const view = editor();
-  act(() => { view.dispatch({ selection: { anchor: from + 1 } }); startCompletion(view); });
-  await vi.waitFor(() => expect(currentCompletions(view.state).length).toBe(1));
-  await vi.waitFor(() => { act(() => { expect(acceptCompletion(view)).toBe(true); }); });
-  expect(view.state.doc.toString()).toBe('const mode = "fast";');
+  expect(view.state.doc.toString()).toBe("options.enabled");
 });
 
 it("marks and reports diagnostics, then clears corrected errors", async () => {
@@ -176,11 +139,11 @@ it("marks and reports diagnostics, then clears corrected errors", async () => {
   expect(onAnalysis.mock.lastCall?.[0].diagnostics.map((item) => item.severity)).toEqual(["error", "warning", "info"]);
   act(() => editor().dispatch({ changes: { from: 0, to: editor().state.doc.length, insert: "const answer: number = 42;" } }));
   act(() => forceLinting(editor()));
-  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith({ status: "ready", diagnostics: [] }));
+  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready", diagnostics: [] })));
   expect(container.querySelector(".cm-lintRange-error")).toBeNull();
 });
 
-it.each(["error", "warning", "info"] as const)("selects a %s diagnostic without extra underline layers regardless of stylesheet order", async (severity) => {
+it.each(["error", "warning", "info"] as const)("renders a %s diagnostic without extra underline layers regardless of stylesheet order", async (severity) => {
   const style = document.createElement("style");
   const baseStyle = document.createElement("style");
   style.textContent = readFileSync("src/styles/code-editor.css", "utf8");
@@ -194,10 +157,7 @@ it.each(["error", "warning", "info"] as const)("selects a %s diagnostic without 
     })));
     act(() => forceLinting(editor()));
     await vi.waitFor(() => expect(container.querySelector(`.cm-lintRange-${severity}`)).not.toBeNull());
-    act(() => { openLintPanel(editor()); });
-    const selected = container.querySelector<HTMLElement>(".cm-lintRange-active")!;
-    const mark = selected.querySelector<HTMLElement>(`.cm-lintRange-${severity}`)!;
-    expect(selected).not.toBeNull();
+    const mark = container.querySelector<HTMLElement>(`.cm-lintRange-${severity}`)!;
     expect(mark).not.toBeNull();
     // Happy DOM drops CodeMirror's SVG data URLs. Preserve its selectors and
     // declarations with a simple URL so the background cascade is exercised.
@@ -207,11 +167,38 @@ it.each(["error", "warning", "info"] as const)("selects a %s diagnostic without 
     document.head.prepend(baseStyle);
     for (const position of ["last", "first"] as const) {
       if (position === "first") document.head.prepend(style);
-      expect(getComputedStyle(selected).textDecoration).toBe("none");
       expect(getComputedStyle(mark).textDecoration).toBe("none");
       expect(getComputedStyle(mark).backgroundImage).toBe("none");
     }
   } finally { style.remove(); baseStyle.remove(); }
+});
+
+it("keeps diagnostic underlines without showing a hover popup", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const style = document.createElement("style");
+  style.textContent = readFileSync("src/styles/code-editor.css", "utf8");
+  document.head.append(style);
+  try {
+    await act(async () => root.render(createElement(CodeEditor, {
+      filename: "demo.ts", initialValue: "const value = 1;",
+      onRequestAnalysis: async () => ({ diagnostics: [
+        { from: 6, to: 11, severity: "error" as const, message: "Diagnostic details", code: 1 },
+      ] }),
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    const view = editor();
+    const mark = container.querySelector(".cm-lintRange-error")!;
+    expect(mark).not.toBeNull();
+    const coords = vi.spyOn(view, "posAtCoords").mockReturnValue(8);
+    vi.spyOn(view, "coordsAtPos").mockReturnValue({ left: 10, right: 20, top: 0, bottom: 20 });
+    act(() => mark.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 15, clientY: 10 })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(coords).toHaveBeenCalled();
+    const tooltip = container.querySelector(".cm-tooltip");
+    expect(tooltip ? getComputedStyle(tooltip).display : "none").toBe("none");
+    expect(container.querySelector(".cm-inline-diagnostic")?.textContent).toContain("Diagnostic details");
+    expect(container.querySelector(".cm-panel")).toBeNull();
+  } finally { style.remove(); vi.useRealTimers(); }
 });
 
 it("ignores diagnostics for older edits and closed editors", async () => {
@@ -232,6 +219,42 @@ it("ignores diagnostics for older edits and closed editors", async () => {
   await act(async () => root.render(null));
   await act(async () => pending[1]({ diagnostics: [] }));
   expect(onAnalysis.mock.calls.some(([value]) => value.status === "ready")).toBe(false);
+});
+
+it("analyzes edits after a short pause without waiting for the former 600 ms debounce", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const request = vi.fn().mockResolvedValue({ diagnostics: [] });
+    await act(async () => root.render(createElement(CodeEditor, {
+      filename: "demo.ts", initialValue: "const answer = 42;", onRequestAnalysis: request,
+    })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    expect(request).toHaveBeenCalledOnce();
+    act(() => editor().dispatch({ changes: { from: 0, insert: "// edit\n" } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(149); });
+    expect(request).toHaveBeenCalledOnce();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1][0].content).toContain("// edit");
+  } finally { vi.useRealTimers(); }
+});
+
+it("keeps the last diagnostic counts while the next analysis is pending", async () => {
+  const diagnostic = { from: 0, to: 1, severity: "error" as const, message: "Bad type", code: 2322 };
+  let finish!: (value: { diagnostics: typeof diagnostic[] }) => void;
+  const request = vi.fn().mockResolvedValueOnce({ diagnostics: [diagnostic] })
+    .mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const onAnalysis = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { filename: "demo.ts", initialValue: "old", onRequestAnalysis: request, onAnalysis })));
+  act(() => forceLinting(editor()));
+  await vi.waitFor(() => expect(onAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready", diagnostics: [expect.objectContaining(diagnostic)] })));
+  onAnalysis.mockClear();
+  act(() => editor().dispatch({ changes: { from: 0, to: 3, insert: "new" } }));
+  act(() => forceLinting(editor()));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(onAnalysis).not.toHaveBeenCalled();
+  await act(async () => finish({ diagnostics: [] }));
+  expect(onAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready", diagnostics: [] }));
 });
 
 it("keeps edits and undo history when the available space changes", async () => {
@@ -269,21 +292,43 @@ it("creates a fresh document when the file identity changes", async () => {
   const previous = editor();
   act(() => previous.dispatch({ changes: { from: 0, insert: "// old file\n" } }));
   await render("other.unknown");
-  expect(editor()).not.toBe(previous);
+  expect(editor()).toBe(previous);
   expect(editor().state.doc.toString()).toBe("const answer = 42;");
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("other.unknown code editor");
 });
 
-it("keeps search available to editor commands without a web toolbar", async () => {
-  await render();
-  expect(container.querySelector("header")).toBeNull();
-  expect(container.querySelector("details")).toBeNull();
-  act(() => { openSearchPanel(editor()); });
-  expect(container.querySelector('input[name="search"]')).not.toBeNull();
+it.each([
+  { key: "f", ctrlKey: true }, { key: "f", metaKey: true },
+  { key: "g", ctrlKey: true }, { key: "g", metaKey: true },
+  { key: "G", keyCode: 71, ctrlKey: true, shiftKey: true }, { key: "G", keyCode: 71, metaKey: true, shiftKey: true },
+  { key: "g", ctrlKey: true, altKey: true }, { key: "g", metaKey: true, altKey: true },
+  { key: "F3" }, { key: "F3", shiftKey: true },
+  { key: "M", keyCode: 77, ctrlKey: true, shiftKey: true }, { key: "M", keyCode: 77, metaKey: true, shiftKey: true },
+  { key: "F8" }, { key: "F8", shiftKey: true },
+  { key: "d", ctrlKey: true }, { key: "d", metaKey: true },
+  { key: "L", keyCode: 76, ctrlKey: true, shiftKey: true }, { key: "L", keyCode: 76, metaKey: true, shiftKey: true },
+  { key: "{", keyCode: 219, ctrlKey: true, shiftKey: true }, { key: "[", metaKey: true, altKey: true },
+  { key: "[", ctrlKey: true, altKey: true },
+])("does not bind a built-in editor helper to %j", async (keys) => {
+  await act(async () => root.render(createElement(CodeEditor, {
+    filename: "demo.ts", initialValue: "const answer = 42;", onRequestAnalysis: async () => ({ diagnostics: [] }),
+  })));
+  act(() => {
+    expect(runScopeHandlers(editor(), new KeyboardEvent("keydown", keys), "editor")).toBe(false);
+  });
+  expect(container.querySelector(".cm-panel, .cm-tooltip-autocomplete")).toBeNull();
+  expect(editor().state.doc.toString()).toBe("const answer = 42;");
 });
 
+it("keeps line numbers without built-in folding controls or selection-match highlights", async () => {
+  await render();
+  expect(container.querySelector(".cm-lineNumbers")).not.toBeNull();
+  expect(container.querySelector(".cm-foldGutter")).toBeNull();
+  act(() => editor().dispatch({ selection: { anchor: 6, head: 12 } }));
+  expect(container.querySelector(".cm-selectionMatch")).toBeNull();
+});
 
-it("reports readiness after fonts and language setup, without resetting edits on callback changes", async () => {
+it("reports readiness after fonts without waiting for language setup, without resetting edits on callback changes", async () => {
   fontState.loaded = false;
   const onReady = vi.fn().mockResolvedValue(undefined);
   let finishLanguage!: (value: LanguageSupport) => void;
@@ -295,7 +340,7 @@ it("reports readiness after fonts and language setup, without resetting edits on
   expect(onReady).not.toHaveBeenCalled();
   fontState.loaded = true;
   await render("demo.ts", 0, onReady);
-  expect(onReady).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
   await act(async () => { finishLanguage({ extension: [] } as unknown as LanguageSupport); });
   await vi.waitFor(() => expect(onReady).toHaveBeenCalledOnce());
   act(() => view.dispatch({ changes: { from: 0, insert: "// keep edits\n" } }));
@@ -319,6 +364,7 @@ it("still becomes ready with fallback fonts and unavailable highlighting", async
 });
 
 it("does not report readiness for an editor removed during initialization", async () => {
+  fontState.loaded = false;
   let finishLanguage!: (value: LanguageSupport) => void;
   vi.spyOn(LanguageDescription, "matchFilename").mockReturnValue({
     load: () => new Promise((resolve) => { finishLanguage = resolve; }),
@@ -423,9 +469,176 @@ it("reveals a match hidden inside a folded section", async () => {
   await act(async () => root.render(createElement(CodeEditor, {
     ref, filename: "notes.txt", initialValue: "target\n{\n  target\n}\n", matches: ["target"], readOnly: true,
   })));
+  // The match helper still handles folds supplied by a future native control.
+  act(() => editor().dispatch({ effects: StateEffect.appendConfig.of(codeFolding()) }));
   act(() => editor().dispatch({ effects: foldEffect.of({ from: 8, to: 18 }) }));
   expect(foldedRanges(editor().state).size).toBe(1);
   act(() => ref.current!.nextMatch());
   expect(foldedRanges(editor().state).size).toBe(0);
   expect(container.querySelector(".cm-fileMatch-active")?.textContent).toBe("target");
+});
+
+
+it("preserves per-document text, selection, scroll and undo when switching tabs", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  const show = (key: string, initialValue: string) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.txt`, initialValue, documentKey: key, openDocumentKeys: ["a", "b"], onChange,
+  })));
+  await show("a", "first");
+  act(() => editor().dispatch({ changes: { from: 0, insert: "edited " }, selection: { anchor: 3 } }));
+  editor().scrollDOM.scrollTop = 84;
+  await show("b", "second");
+  expect(editor().state.sliceDoc()).toBe("second");
+  expect(editor().scrollDOM.scrollTop).toBe(0);
+  act(() => editor().dispatch({ changes: { from: 0, insert: "other " } }));
+  await show("a", "first");
+  expect(editor().state.sliceDoc()).toBe("edited first");
+  expect(editor().state.selection.main.anchor).toBe(3);
+  expect(editor().scrollDOM.scrollTop).toBe(84);
+  act(() => undo(editor()));
+  expect(editor().state.sliceDoc()).toBe("first");
+  expect(onChange).toHaveBeenLastCalledWith("first", "a");
+  await show("b", "second");
+  expect(editor().state.sliceDoc()).toBe("other second");
+});
+
+it("drops closed buffers and binds queued bridge events to their originating document", async () => {
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  const show = (key: string, keys: string[]) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.txt`, initialValue: "original", documentKey: key, openDocumentKeys: keys, onChange,
+  })));
+  await show("a", ["a", "b"]);
+  act(() => editor().dispatch({ changes: { from: 0, insert: "old " } }));
+  expect(onChange).toHaveBeenLastCalledWith("old original", "a");
+  await show("b", ["b"]);
+  await show("a", ["a", "b"]);
+  expect(editor().state.sliceDoc()).toBe("original");
+  expect(undo(editor())).toBe(false);
+});
+
+
+it("switches open tabs in the existing editor without waiting for highlighting", async () => {
+  const onReady = vi.fn().mockResolvedValue(undefined);
+  const show = (key: string) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.ts`, initialValue: `// ${key}`, documentKey: key,
+    openDocumentKeys: ["a", "b"], onReady,
+  })));
+  await show("a");
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith("a"));
+  const first = editor();
+  vi.spyOn(LanguageDescription, "matchFilename").mockReturnValue({
+    load: () => new Promise(() => {}),
+  } as unknown as LanguageDescription);
+  await show("b");
+  expect(editor()).toBe(first);
+  expect(editor().state.doc.toString()).toBe("// b");
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith("b"));
+  await show("a");
+  expect(editor()).toBe(first);
+  expect(onReady.mock.lastCall).toEqual(["a"]);
+});
+
+it("reports focus and selection to native without editing the document", async () => {
+  const onInteractionChange = vi.fn().mockResolvedValue(undefined);
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    documentKey: "one", filename: "notes.txt", initialValue: "hello", onInteractionChange, onChange,
+  })));
+  act(() => { editor().focus(); editor().dispatch({ selection: { anchor: 0, head: 3 } }); });
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: true }), "one");
+  act(() => editor().dispatch({ selection: { anchor: 3 } }));
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: false }), "one");
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+it("restores selection UI for the new document and reserves space above the keyboard strip", async () => {
+  const onInteractionChange = vi.fn().mockResolvedValue(undefined);
+  const showDocument = (documentKey: string) => act(async () => root.render(createElement(CodeEditor, {
+    documentKey, filename: "notes.txt", initialValue: "hello", openDocumentKeys: ["one", "two"],
+    onInteractionChange, keyboardAccessoryHeight: 96, bottomInset: 180,
+  })));
+  await showDocument("one");
+  act(() => { editor().focus(); editor().dispatch({ selection: { anchor: 0, head: 3 } }); });
+  await showDocument("two");
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: false }), "two");
+  await showDocument("one");
+  expect(onInteractionChange).toHaveBeenLastCalledWith(expect.objectContaining({ focused: true, hasSelection: true }), "one");
+  expect((container.querySelector(".code-editor-shell") as HTMLElement).style.getPropertyValue("--editor-bottom-inset")).toBe("108px");
+});
+
+
+it("dismisses the WebView keyboard by blurring the editor without losing its selection or edits", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, filename: "notes.txt", initialValue: "hello", onChange,
+  })));
+  act(() => editor().dispatch({ selection: { anchor: 1, head: 4 } }));
+  act(() => editor().focus());
+  expect(document.activeElement).toBe(editor().contentDOM);
+  act(() => ref.current!.dismissKeyboard());
+  expect(document.activeElement).not.toBe(editor().contentDOM);
+  expect(editor().state.selection.main).toMatchObject({ from: 1, to: 4 });
+  expect(editor().state.doc.toString()).toBe("hello");
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => editor().focus());
+  expect(document.activeElement).toBe(editor().contentDOM);
+});
+
+it("reconfigures editing preferences without losing text, selection or undo", async () => {
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  const props = { filename: "notes.txt", initialValue: "first\nsecond", preferences: defaultEditorPreferences };
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  const view = editor();
+  act(() => view.dispatch({ changes: { from: 0, insert: "edit " }, selection: { anchor: 3 } }));
+  await act(async () => root.render(createElement(CodeEditor, { ...props, preferences: { ...defaultEditorPreferences, fontSize: 24, tabSize: 8, lineNumbers: false, wordWrap: true, useTabs: true, keepIndentation: false } })));
+  expect(editor()).toBe(view);
+  expect(view.state.tabSize).toBe(8);
+  expect(view.contentDOM.classList.contains("cm-lineWrapping")).toBe(true);
+  expect(container.querySelector(".cm-lineNumbers")).toBeNull();
+  expect(view.state.selection.main.head).toBe(3);
+  act(() => undo(view));
+  expect(view.state.doc.toString()).toBe(props.initialValue);
+});
+
+it("routes native search commands to the active document and rejects stale tab commands", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onSearchSummary = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { ref, filename: "test.txt", documentKey: "active", initialValue: "x x", onSearchSummary })));
+  act(() => ref.current!.searchCommand("replace-all", { search: "x", replace: "y" }, "old"));
+  expect(editor().state.doc.toString()).toBe("x x");
+  act(() => ref.current!.searchCommand("replace-all", { search: "x", replace: "y" }, "active"));
+  expect(editor().state.doc.toString()).toBe("y y");
+  expect(onSearchSummary).toHaveBeenLastCalledWith(expect.objectContaining({ total: 0 }), "active");
+});
+
+it("applies global preferences to restored tabs without replacing their edits or undo history", async () => {
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  const changed = { ...defaultEditorPreferences, tabSize: 8, lineNumbers: false, wordWrap: true };
+  const show = (key: string, preferences: typeof defaultEditorPreferences) => act(async () => root.render(createElement(CodeEditor, {
+    filename: `${key}.txt`, initialValue: "original", documentKey: key, openDocumentKeys: ["a", "b"], preferences,
+  })));
+  await show("a", defaultEditorPreferences);
+  act(() => editor().dispatch({ changes: { from: 0, insert: "edit " }, selection: { anchor: 2 } }));
+  await show("b", defaultEditorPreferences);
+  await show("b", changed);
+  await show("a", changed);
+  expect(editor().state.tabSize).toBe(8);
+  expect(editor().contentDOM.classList.contains("cm-lineWrapping")).toBe(true);
+  expect(container.querySelector(".cm-lineNumbers")).toBeNull();
+  expect(editor().state.sliceDoc()).toBe("edit original");
+  expect(editor().state.selection.main.anchor).toBe(2);
+  act(() => undo(editor()));
+  expect(editor().state.sliceDoc()).toBe("original");
+});
+
+it("automatically formats the active file after changing indentation preferences", async () => {
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  const props = { filename: "main.ts", documentKey: "main", initialValue: "function x(){return 1}", preferences: defaultEditorPreferences };
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  expect(editor().state.sliceDoc()).toBe(props.initialValue);
+  await act(async () => root.render(createElement(CodeEditor, { ...props, preferences: { ...defaultEditorPreferences, tabSize: 4 } })));
+  await vi.waitFor(() => expect(editor().state.sliceDoc()).toContain("\n    return 1;\n"));
+  act(() => undo(editor()));
+  expect(editor().state.sliceDoc()).toBe(props.initialValue);
 });

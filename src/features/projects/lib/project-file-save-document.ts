@@ -43,7 +43,11 @@ export const createFileSaveDocument = (
     listeners.forEach((notify) => notify());
   };
   const save = (retry = false, whilePaused = false): Promise<void> => {
-    if (!active || (paused && !whilePaused) || (snapshot.status === "error" && !retry))
+    if (
+      !active ||
+      (paused && !whilePaused) ||
+      (snapshot.status === "error" && !retry)
+    )
       return Promise.resolve();
     if (inFlight) {
       queued = true;
@@ -61,16 +65,21 @@ export const createFileSaveDocument = (
     inFlight = Promise.resolve().then(async () => {
       try {
         if (previousUncertainContent !== undefined) {
-          const currentFile = await readProjectFileContentAction(projectId, path);
+          const currentFile = await readProjectFileContentAction(
+            projectId,
+            path,
+          );
           if (!active) return;
-          if (!currentFile) throw new Error("Unable to reconcile the previous save");
+          if (!currentFile)
+            throw new Error("Unable to reconcile the previous save");
           if (
             currentFile.content !== confirmedContent &&
             currentFile.content !== previousUncertainContent
           ) {
             publish({
               status: "error",
-              message: "The file changed elsewhere. Reload it before trying again.",
+              message:
+                "The file changed elsewhere. Reload it before trying again.",
             });
             return;
           }
@@ -116,7 +125,9 @@ export const createFileSaveDocument = (
     return inFlight;
   };
   const shouldRetain = () =>
-    Boolean(inFlight) || content !== confirmedContent || uncertainContent !== undefined;
+    Boolean(inFlight) ||
+    content !== confirmedContent ||
+    uncertainContent !== undefined;
   const flush = async (whilePaused = false) => {
     // Await the complete document, including edits queued behind the current PUT.
     // A background event must not write through a rename's pause.
@@ -131,9 +142,16 @@ export const createFileSaveDocument = (
     getSnapshot: () => snapshot,
     shouldRetain,
     isPaused: () => paused,
-    pause: () => { paused = true; },
-    resume: () => { paused = false; releaseIfUnused(); },
-    move: (nextPath: string) => { path = nextPath; },
+    pause: () => {
+      paused = true;
+    },
+    resume: () => {
+      paused = false;
+      releaseIfUnused();
+    },
+    move: (nextPath: string) => {
+      path = nextPath;
+    },
     flush,
     subscribe: (notify: () => void) => {
       listeners.add(notify);

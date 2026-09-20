@@ -2,7 +2,6 @@
 import { act, createElement, type ReactNode, type Ref } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 import { ProjectFileNameRow } from "@/features/projects/components/project-file-name-row";
 
 const mocks = vi.hoisted(() => ({ alert: vi.fn() }));
@@ -24,8 +23,9 @@ let root: Root;
 let container: HTMLDivElement;
 const create = vi.fn();
 const cancel = vi.fn();
-const render = (kind: "file" | "folder" = "file", existingNames: readonly string[] = []) => act(() => root.render(createElement(ProjectFileCreateRow, {
-  kind, existingNames, parentPath: "notes", onCreate: create, onCancel: cancel,
+const render = (kind: "file" | "folder" = "file", existingNames: readonly string[] = []) => act(() => root.render(createElement(ProjectFileNameRow, {
+  mode: "create",
+  kind, existingNames, parentPath: "notes", onSubmit: create, onCancel: cancel,
 })));
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -162,3 +162,5 @@ it("keeps cancellation available while the name conflicts", async () => {
   expect(cancel).toHaveBeenCalledOnce();
   expect(create).not.toHaveBeenCalled();
 });
+
+vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));

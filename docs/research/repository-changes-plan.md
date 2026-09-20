@@ -1,5 +1,10 @@
 # Repository changes and diff implementation plan
 
+> Historical cloud implementation research. The Daytona adapters, API routes, and
+> Linux test runner referenced below have been retired. See
+> [Local workspace migration](local-workspace-migration.md) for the current native
+> implementation and verification.
+
 Researched September 13, 2026 against working tree HEAD `0f9d1b3`. Research and proposal only; no application implementation or live Daytona verification was performed. Read the companion [API research](daytona-repository-changes-api-research.md) for exact provider contracts, Git examples, and the disposable local Git probe.
 
 ## Implemented API — September 13, 2026

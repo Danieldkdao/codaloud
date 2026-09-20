@@ -25,11 +25,10 @@ import {
   useMutation,
 } from "@tanstack/react-query";
 import type { z } from "zod";
-import { useAuthSession } from "@/hooks/use-auth-session";
 import {
   ProjectGitError,
   ProjectGitRequestError,
-  requireProjectGitSession,
+  requireLocalGitProject,
 } from "../lib/git-errors";
 
 export const useProjectStashes = (
@@ -44,11 +43,6 @@ export const useProjectStashes = (
   } = {},
 ) => {
   const queryClient = useQueryClient();
-  const session = useAuthSession();
-  const userId =
-    !session.isPending && !session.error
-      ? (session.data?.user.id ?? null)
-      : null;
   const validProject = !!projectId && isValidIds(projectId);
   const params = gitStashQuerySchema.safeParse({
     ...filters,
@@ -62,18 +56,13 @@ export const useProjectStashes = (
     "projects",
     "stashes",
     "infinite",
-    userId,
     projectId,
     params.success ? params.data : filters,
   ] as const;
   const query = useInfiniteQuery({
+    networkMode: "always",
     queryKey,
-    enabled:
-      enabled &&
-      Boolean(userId) &&
-      validProject &&
-      params.success &&
-      validPageLimit,
+    enabled: enabled && validProject && params.success && validPageLimit,
     initialPageParam: undefined as string | undefined,
     maxPages: validPageLimit ? maxPages : 0,
     retry: (failureCount, error) =>
@@ -85,7 +74,7 @@ export const useProjectStashes = (
         ? error.retryAfterMs || Math.min(1000 * 2 ** attempt, 30_000)
         : 0,
     queryFn: async ({ pageParam, signal }) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       if (!params.success || !validPageLimit)
         throw new Error("Invalid stash search or pagination.");
       let failure: ProjectGitRequestError | undefined;
@@ -111,7 +100,6 @@ export const useProjectStashes = (
   const loadMore = () => {
     if (
       enabled &&
-      userId &&
       validProject &&
       params.success &&
       validPageLimit &&
@@ -125,7 +113,6 @@ export const useProjectStashes = (
   const retry = () => {
     if (
       !enabled ||
-      !userId ||
       !validProject ||
       !params.success ||
       !validPageLimit ||
@@ -150,18 +137,18 @@ export const useProjectStashes = (
     z.input<typeof gitStashPushSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "stash", userId, projectId],
+    mutationKey: ["projects", "git", "stash", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitStashPushSchema> = {}) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await stashProjectChangesAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });
@@ -172,18 +159,18 @@ export const useProjectStashes = (
     z.input<typeof gitStashPopSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "popStash", userId, projectId],
+    mutationKey: ["projects", "git", "popStash", projectId],
     retry: false,
     // Execute now or fail; never replay a queued write against a later workspace.
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input: z.input<typeof gitStashPopSchema>) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await popProjectStashAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;
     },
-    // Conflicts and lost responses can leave partial changes on the server.
+    // Conflicts and lost responses can leave partial changes in the repository.
     onSettled: (_data, _error, _input, context) =>
       refreshProjectGitQueries(queryClient, context),
   });
@@ -194,12 +181,12 @@ export const useProjectStashes = (
     z.input<typeof gitStashDropSchema>,
     ProjectGitMutationContext
   >({
-    mutationKey: ["projects", "git", "deleteStash", userId, projectId],
+    mutationKey: ["projects", "git", "deleteStash", projectId],
     retry: false,
     networkMode: "always",
-    onMutate: () => ({ userId, projectId }),
+    onMutate: () => ({ projectId }),
     mutationFn: async (input) => {
-      const id = requireProjectGitSession(userId, projectId);
+      const id = requireLocalGitProject(projectId);
       const result = await deleteProjectStashAction(id, input);
       if (result.error) throw new ProjectGitError(result.message, result.code);
       return result.data;

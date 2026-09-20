@@ -5,9 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectWorkspaceBranchProvider, useProjectWorkspaceBranch } from "../hooks/use-project-workspace-branch";
 import type { ProjectBranchCheckoutSchema } from "../actions/branch-schemas";
 
-const scope = vi.hoisted(() => ({ projectId: "project-one", userId: "user-one" }));
+const scope = vi.hoisted(() => ({ projectId: "project-one" }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: scope.projectId }) }));
-vi.mock("@/hooks/use-auth-session", () => ({ useAuthSession: () => ({ isPending: false, data: { user: { id: scope.userId } } }) }));
 let current: ReturnType<typeof useProjectWorkspaceBranch>;
 let root: Root;
 let frames: (string | null)[];
@@ -27,7 +26,7 @@ const deferred = () => {
 };
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  scope.projectId = "project-one"; scope.userId = "user-one";
+  scope.projectId = "project-one";
   frames = [];
   root = createRoot(document.createElement("div"));
   await render();
@@ -114,7 +113,7 @@ it("retries only recovery and does not trust stale branch reads after recovery f
   expect(current.isCheckingOut).toBe(false);
 });
 
-it.each(["projectId", "userId"] as const)("ignores completion from an earlier %s", async (field) => {
+it.each(["projectId"] as const)("ignores completion from an earlier %s", async (field) => {
   const request = deferred();
   await act(async () => current.checkoutBranch("feature", () => request.promise));
   scope[field] = "another";
@@ -149,7 +148,7 @@ it("releases the workspace after an operation fails", async () => {
   expect(current.workspaceOperation).toBeNull();
 });
 
-it.each(["user", "project"])("invalidates delayed operation callbacks after changing %s", async (kind) => {
+it.each(["project"])("invalidates delayed operation callbacks after changing %s", async (kind) => {
   const previous = current;
   const request = deferred();
   const action = vi.fn();
@@ -161,7 +160,7 @@ it.each(["user", "project"])("invalidates delayed operation callbacks after chan
       action();
     });
   });
-  if (kind === "user") scope.userId = "user-two"; else scope.projectId = "project-two";
+  scope.projectId = "project-two";
   await render();
   await act(async () => {
     request.resolve({ previousBranch: "main", currentBranch: "main" });

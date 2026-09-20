@@ -66,20 +66,8 @@ vi.mock("@/components/ui/button", () => ({
   }) => createElement("button", { onClick: onPress, disabled }, children),
 }));
 
-const activeKey = [
-  "projects",
-  "infinite",
-  "cursor",
-  "user-one",
-  projectParamsSchema.parse({}),
-];
-const filteredKey = [
-  "projects",
-  "infinite",
-  "cursor",
-  "user-one",
-  projectParamsSchema.parse({ search: "other" }),
-];
+const activeKey = ["projects", "infinite", "cursor", projectParamsSchema.parse({})];
+const filteredKey = ["projects", "infinite", "cursor", projectParamsSchema.parse({ search: "other" })];
 const repositoryKey = ["github", "repositories"];
 const oldPage = {
   pages: [{ projects: [], nextCursor: null }],
@@ -174,7 +162,7 @@ describe("project creation cache updates", () => {
     expect(client.getQueryState(filteredKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(repositoryKey)?.isInvalidated).toBe(false);
     expect(mocks.replace).toHaveBeenCalledWith({
-      pathname: "/projects/[projectId]",
+      pathname: "/projects/[projectId]/code",
       params: { projectId: "new-project" },
     });
   });

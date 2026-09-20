@@ -1,3 +1,4 @@
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import { Button } from "@/components/ui/button";
 import { CreateProjectForm } from "@/features/projects/components/create-project-form";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -22,8 +23,12 @@ const NewProjectScreen = () => {
       <Stack.Screen
         options={{
           title: "New project",
-          contentStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : background },
-          headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : background },
+          contentStyle: {
+            backgroundColor: Platform.OS === "ios" ? "transparent" : background,
+          },
+          headerStyle: {
+            backgroundColor: Platform.OS === "ios" ? "transparent" : background,
+          },
           headerTintColor: foreground,
           headerShadowVisible: false,
           headerRight: () => (
@@ -53,7 +58,9 @@ const NewProjectScreen = () => {
         {/* Native sheets resize the first descendant ScrollView to the entire sheet.
             End that lookup here: our sibling scroll areas are sized by the form. */}
         <View collapsable={false} pointerEvents="none" />
-        <CreateProjectForm />
+        <KeyboardSymbolsProvider local>
+          <CreateProjectForm />
+        </KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </>
   );

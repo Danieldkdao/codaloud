@@ -41,7 +41,7 @@ export const ProjectGitTabs = ({ tab, onTabChange }: ProjectGitTabsProps) => {
   return (
     <View
       accessibilityRole="tablist"
-      className="rounded-full bg-secondary p-1"
+      className="rounded-full bg-secondary/50 p-1"
       onLayout={(event) => setLayout(event.nativeEvent.layout)}
     >
       {layout.width > 0 ? (
@@ -59,7 +59,7 @@ export const ProjectGitTabs = ({ tab, onTabChange }: ProjectGitTabsProps) => {
             indicatorStyle,
           ]}
         >
-          <GlassSurface borderRadius={28} shadow={false}>
+          <GlassSurface borderRadius={28}>
             <View style={{ height: Math.max(0, layout.height - 8) }} />
           </GlassSurface>
         </Animated.View>

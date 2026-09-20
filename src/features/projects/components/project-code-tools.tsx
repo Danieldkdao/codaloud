@@ -16,18 +16,9 @@ import {
 import { PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 
-const editorThemes = [
-  "Codaloud",
-  "GitHub Light",
-  "One Dark",
-  "Dracula",
-] as const;
-const editorFonts = [
-  "JetBrains Mono",
-  "Fira Code",
-  "Source Code Pro",
-  "IBM Plex Mono",
-] as const;
+import { editorThemes, editorFonts } from "@/features/settings/constants";
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
+import type { EditorPreferences } from "@/features/settings/types";
 
 const EditorSettingsSection = ({
   title,
@@ -198,18 +189,9 @@ const EditorSettingStepper = ({
 
 export const ProjectCodeTools = () => {
   const [open, setOpen] = useState(false);
-  // Mock preferences live above the sheet so dismissing it preserves selections.
-  // They deliberately do not configure CodeMirror or persist to device storage.
-  const [theme, setTheme] = useState<string>(editorThemes[0]);
-  const [font, setFont] = useState<string>(editorFonts[0]);
-  const [fontSize, setFontSize] = useState(16);
-  const [tabSize, setTabSize] = useState(2);
-  const [wordWrap, setWordWrap] = useState(false);
-  const [lineNumbers, setLineNumbers] = useState(true);
-  const [minimap, setMinimap] = useState(false);
-  const [useTabs, setUseTabs] = useState(false);
-  const [keepIndentation, setKeepIndentation] = useState(true);
-  const [closeBrackets, setCloseBrackets] = useState(true);
+  const { preferences, update, error } = useEditorPreferences();
+  const { theme, font, fontSize, tabSize, wordWrap, lineNumbers, minimap, useTabs, keepIndentation, closeBrackets } = preferences;
+  const change = <K extends keyof EditorPreferences>(key: K, value: EditorPreferences[K]) => { void update({ [key]: value }); };
   const background = useThemeColor("background");
   const { height } = useWindowDimensions();
 
@@ -266,13 +248,14 @@ export const ProjectCodeTools = () => {
               gap: 28,
             }}
           >
+            {error ? <Pressable onPress={() => void update({})} accessibilityRole="button" accessibilityLabel="Retry saving editor settings" className="min-h-11"><PText className="text-base text-destructive">{error}</PText></Pressable> : null}
             <EditorSettingsSection title="Appearance">
               <EditorSettingRow label="Theme">
                 <EditorSettingSelect
                   label="Theme"
                   value={theme}
                   options={editorThemes}
-                  onSelect={setTheme}
+                  onSelect={(value) => change("theme", value as EditorPreferences["theme"])}
                 />
               </EditorSettingRow>
               <EditorSettingRow label="Font">
@@ -280,7 +263,7 @@ export const ProjectCodeTools = () => {
                   label="Font"
                   value={font}
                   options={editorFonts}
-                  onSelect={setFont}
+                  onSelect={(value) => change("font", value as EditorPreferences["font"])}
                 />
               </EditorSettingRow>
               <EditorSettingRow label="Font size">
@@ -289,7 +272,7 @@ export const ProjectCodeTools = () => {
                   min={10}
                   max={32}
                   displayValue={formatEditorFontSize(fontSize)}
-                  onChange={setFontSize}
+                  onChange={(value) => change("fontSize", value)}
                   decreaseLabel="Decrease font size"
                   increaseLabel="Increase font size"
                 />
@@ -297,18 +280,18 @@ export const ProjectCodeTools = () => {
               <EditorSettingSwitch
                 label="Word wrap"
                 value={wordWrap}
-                onValueChange={setWordWrap}
+                onValueChange={(value) => change("wordWrap", value)}
                 description="Keep long lines within the width of the editor."
               />
               <EditorSettingSwitch
                 label="Show line numbers"
                 value={lineNumbers}
-                onValueChange={setLineNumbers}
+                onValueChange={(value) => change("lineNumbers", value)}
               />
               <EditorSettingSwitch
                 label="Show minimap"
                 value={minimap}
-                onValueChange={setMinimap}
+                onValueChange={(value) => change("minimap", value)}
                 description="Show a compact overview of the file beside the editor."
               />
             </EditorSettingsSection>
@@ -319,7 +302,7 @@ export const ProjectCodeTools = () => {
                   min={1}
                   max={8}
                   displayValue={formatEditorTabSize(tabSize, useTabs)}
-                  onChange={setTabSize}
+                  onChange={(value) => change("tabSize", value)}
                   decreaseLabel="Decrease tab size"
                   increaseLabel="Increase tab size"
                 />
@@ -327,19 +310,19 @@ export const ProjectCodeTools = () => {
               <EditorSettingSwitch
                 label="Use tabs for indentation"
                 value={useTabs}
-                onValueChange={setUseTabs}
+                onValueChange={(value) => change("useTabs", value)}
                 description="Use tab characters instead of spaces."
               />
               <EditorSettingSwitch
                 label="Keep indentation"
                 value={keepIndentation}
-                onValueChange={setKeepIndentation}
+                onValueChange={(value) => change("keepIndentation", value)}
                 description="Continue the previous line’s indentation when starting a new line."
               />
               <EditorSettingSwitch
                 label="Close brackets"
                 value={closeBrackets}
-                onValueChange={setCloseBrackets}
+                onValueChange={(value) => change("closeBrackets", value)}
                 description="Insert matching brackets and quotes as you type."
               />
             </EditorSettingsSection>

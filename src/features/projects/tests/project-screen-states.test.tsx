@@ -155,15 +155,15 @@ it("shows severity counts in the floating badge and resets them for another file
   await act(async () => state.analysis!({ status: "ready", diagnostics: [
     { ...diagnostic, severity: "error" }, { ...diagnostic, severity: "warning" }, { ...diagnostic, severity: "info" },
   ] }));
-  expect(container.querySelector('div[aria-label="1 error, 1 warning, 1 information message."]')).not.toBeNull();
-  expect(container.querySelector('button[aria-label^="1 error"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="1 error, 1 warning, 1 information message."]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label^="1 error"]')).not.toBeNull();
   finishLoading("", "other.ts");
   renderCode("other.ts");
   await act(async () => previousAnalysis({ status: "ready", diagnostics: [{ ...diagnostic, severity: "error" }] }));
-  expect(container.querySelector('div[aria-label="Checking code…"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Checking code…"]')).not.toBeNull();
   expect(container.querySelector('[aria-label^="1 error"]')).toBeNull();
   await act(async () => state.analysis!({ status: "unavailable", diagnostics: [] }));
-  expect(container.querySelector('div[aria-label="Code analysis unavailable."]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="Code analysis unavailable."]')).not.toBeNull();
 });
 
 it("shows the same loading UI for fetching and editor startup, without a preview timer", async () => {
@@ -303,3 +303,16 @@ it("shows file read failures in the badge and retries the read", () => {
   act(() => retry!.click());
   expect(fileQuery.refetch).toHaveBeenCalledOnce();
 });
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
+  const { useState } = await import("react");
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  return { useEditorPreferences: () => {
+    const [preferences, setPreferences] = useState(defaultEditorPreferences);
+    return { preferences, ready: true, error: null, update: async (patch: Partial<typeof preferences>) => setPreferences((value) => ({ ...value, ...patch })) };
+  } };
+});
+
+vi.mock("@/features/editor/components/editor-problems-sheet", () => ({ EditorProblemsSheet: () => null }));
+vi.mock("@/features/editor/components/editor-search-bar", () => ({ EditorSearchBar: () => null }));
+vi.mock("expo-clipboard", () => ({ getStringAsync: async () => "", setStringAsync: async () => true }));

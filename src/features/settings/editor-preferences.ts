@@ -31,7 +31,7 @@ export const createEditorPreferences = (storage: {
     publish();
   })();
   const update = async (patch: Partial<EditorPreferences>) => {
-    await load();
+    if (!snapshot.ready) await load();
     snapshot.preferences = restorePreferences(JSON.stringify({ ...snapshot.preferences, ...patch }));
     const value = JSON.stringify(snapshot.preferences);
     snapshot.error = null;

@@ -133,3 +133,17 @@ it("organizes imports semantically while preserving side-effect and used type im
   for (const edit of [...result.edits].sort((a, b) => b.from - a.from)) content = content.slice(0, edit.from) + edit.insert + content.slice(edit.to);
   expect(content).not.toContain("unused"); expect(content).toContain('import "./side-effect"'); expect(content).toContain("import type { Item }"); expect(content).toContain("used");
 });
+
+it("reuses recently validated dependencies for rapid autocomplete without skipping diagnostic revalidation", async () => {
+  const read = vi.fn(async (path: string) => path === "value.ts" ? 'export const value = "hello";' : null);
+  const analyzer = createTypeScriptAnalyzer(read);
+  try {
+    const content = 'import { value } from "./value"; value.to';
+    await analyzer.analyze({ path: "main.ts", content });
+    read.mockClear();
+    await analyzer.analyze({ path: "main.ts", content, position: content.length });
+    expect(read).not.toHaveBeenCalled();
+    await analyzer.analyze({ path: "main.ts", content });
+    expect(read).toHaveBeenCalled();
+  } finally { await analyzer.dispose(); }
+});

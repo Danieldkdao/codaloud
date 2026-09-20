@@ -442,3 +442,16 @@ it("configures Agent's native header and Done at the presenting navigator", () =
   expect(mocks.dismissKeyboard).toHaveBeenCalledOnce();
   expect(mocks.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
 });
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
+  const { useState } = await import("react");
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  return { useEditorPreferences: () => {
+    const [preferences, setPreferences] = useState(defaultEditorPreferences);
+    return { preferences, ready: true, error: null, update: async (patch: Partial<typeof preferences>) => setPreferences((value) => ({ ...value, ...patch })) };
+  } };
+});
+
+vi.mock("@/features/editor/components/editor-problems-sheet", () => ({ EditorProblemsSheet: () => null }));
+vi.mock("@/features/editor/components/editor-search-bar", () => ({ EditorSearchBar: () => null }));
+vi.mock("expo-clipboard", () => ({ getStringAsync: async () => "", setStringAsync: async () => true }));

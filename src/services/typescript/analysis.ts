@@ -63,12 +63,14 @@ export const createTypeScriptAnalyzer = (
   let target = "";
   let bytes = 0;
   let revision = 0;
+  let dependencyValidationTime = 0;
   let invalidatedResolutions = false;
   let options: CompilerOptions = {};
   let service: LanguageService | undefined;
   let queued = Promise.resolve();
   let closed = false;
   const resetGraph = () => {
+    dependencyValidationTime = 0;
     files.clear();
     versions.clear();
     for (const path of snapshots.keys()) {
@@ -132,9 +134,13 @@ export const createTypeScriptAnalyzer = (
     update(target, input.content);
     // The editor buffer wins over the saved copy. Revalidate dependencies and
     // failed lookups so saves, Git operations, and new files cannot go stale.
-    for (const path of files.keys()) {
-      if (path !== target)
-        update(path, await readFile(path.slice("/workspace/".length)));
+    // Typing can reuse a graph validated within the last 250 ms. Diagnostics
+    // and code transformations always refresh it, including failed lookups.
+    if (input.position === undefined || Date.now() - dependencyValidationTime >= 250) {
+      for (const path of files.keys()) {
+        if (path !== target) update(path, await readFile(path.slice("/workspace/".length)));
+      }
+      dependencyValidationTime = Date.now();
     }
     // The synchronous compiler discovers imports; load them through the native
     // boundary and retry. Project code and package scripts are never executed.
@@ -259,7 +265,10 @@ export const createTypeScriptAnalyzer = (
         };
       }
       invalidatedResolutions = false;
-      if (!pending.size) return result;
+      if (!pending.size) {
+        if (input.position === undefined) dependencyValidationTime = Date.now();
+        return result;
+      }
       if (files.size + pending.size > 4096)
         throw new Error(
           "This file needs more dependencies than the on-device analysis limit.",

@@ -117,7 +117,7 @@ it("lays out analysis and save indicators without position or size transitions",
   expect(container.querySelector('[data-layout-animation="true"]')).toBeNull();
 });
 
-it("shows diagnostic counts without a Problems button and keeps save retry available", () => {
+it("opens Problems from diagnostic counts and keeps save retry available", () => {
   const onRetry = vi.fn();
   act(() => root.render(createElement(ProjectCodeStatus, {
     status: { status: "error", message: "Save failed" }, onRetry,
@@ -125,7 +125,7 @@ it("shows diagnostic counts without a Problems button and keeps save retry avail
   })));
   expect(container.querySelector('[data-icon="x-circle"]')).not.toBeNull();
   expect(container.textContent).toBe("100");
-  expect(container.querySelectorAll("button")).toHaveLength(1);
+  expect(container.querySelectorAll("button")).toHaveLength(2);
   click("Couldn't save file. Tap to retry."); expect(onRetry).toHaveBeenCalledOnce();
 });
 
@@ -300,4 +300,13 @@ it("places four icon-only glass actions beside the status and matches the measur
   }
   expect(onRetry).not.toHaveBeenCalled();
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
+  const { useState } = await import("react");
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  return { useEditorPreferences: () => {
+    const [preferences, setPreferences] = useState(defaultEditorPreferences);
+    return { preferences, ready: true, error: null, update: async (patch: Partial<typeof preferences>) => setPreferences((value) => ({ ...value, ...patch })) };
+  } };
 });

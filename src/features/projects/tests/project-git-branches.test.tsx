@@ -1459,3 +1459,12 @@ it("shows Publish instead of empty counts before the first commit", () => {
   // The prompt never enables creating a second remote.
   expect(container.querySelector<HTMLButtonElement>('[aria-label="Publish to GitHub"]')?.disabled).toBe(true);
 });
+
+vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
+  const { useState } = await import("react");
+  const { defaultEditorPreferences } = await import("@/features/settings/constants");
+  return { useEditorPreferences: () => {
+    const [preferences, setPreferences] = useState(defaultEditorPreferences);
+    return { preferences, ready: true, error: null, update: async (patch: Partial<typeof preferences>) => setPreferences((value) => ({ ...value, ...patch })) };
+  } };
+});

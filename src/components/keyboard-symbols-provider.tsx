@@ -62,10 +62,16 @@ const SymbolHostProvider = ({
         {Platform.OS === "ios" ? (
           <>
             {children}
-            {/* Native attachment follows inputs into sheets and supports UITextView. */}
-            <KeyboardExtender enabled={Boolean(target)}>
-              {symbols}
-            </KeyboardExtender>
+            {/* UIKit moves the content into the keyboard, but its Yoga node keeps
+                its height even while disabled. Do not shrink the navigator for it. */}
+            <View
+              pointerEvents="box-none"
+              style={{ position: "absolute", left: 0, right: 0, height: 0 }}
+            >
+              <KeyboardExtender enabled={Boolean(target)}>
+                {symbols}
+              </KeyboardExtender>
+            </View>
           </>
         ) : (
           <View style={fill ? { flex: 1 } : undefined}>

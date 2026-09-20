@@ -52,9 +52,12 @@ vi.mock("react-native-keyboard-controller", () => ({
     enabled: boolean;
     children: ReactNode;
   }) =>
-    enabled
-      ? createElement("section", { "data-native-accessory": true }, children)
-      : null,
+    // Native enabled only controls attachment; its Yoga node still occupies space.
+    createElement(
+      "section",
+      { "data-native-accessory": true, style: { height: 48 } },
+      enabled ? children : null,
+    ),
 }));
 vi.mock("@/components/keyboard-symbols", () => ({
   KeyboardSymbols: ({ onInsert }: { onInsert: (text: string) => void }) =>
@@ -113,5 +116,28 @@ it.each([800, 500])(
     device.frame = undefined;
     render();
     expect(container.querySelector("button")).toBeNull();
+  },
+);
+
+it.each([false, true])(
+  "keeps the iOS accessory out of screen layout when enabled=%s",
+  (enabled) => {
+    render();
+    if (enabled) act(() => host.activate({ id: "field", insert: vi.fn() }));
+    const accessory = container.querySelector<HTMLElement>(
+      "[data-native-accessory]",
+    )!;
+    let ancestor = accessory.parentElement;
+    while (
+      ancestor &&
+      ancestor !== container &&
+      ancestor.style.position !== "absolute"
+    ) {
+      ancestor = ancestor.parentElement;
+    }
+    // The native accessory has intrinsic height even while detached. A normal-flow
+    // sibling would subtract those 48 points from the full-screen navigator.
+    expect(ancestor).not.toBe(container);
+    expect(ancestor?.style.position).toBe("absolute");
   },
 );

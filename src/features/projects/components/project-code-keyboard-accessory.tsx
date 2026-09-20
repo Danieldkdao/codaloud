@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   Pressable,
+  ScrollView,
   View,
   useWindowDimensions,
   type KeyboardMetrics,
@@ -91,68 +92,136 @@ export const ProjectCodeKeyboardAccessory = ({
               className="h-12 flex-row items-center border-b border-border"
               style={{ paddingLeft: insets.left, paddingRight: insets.right }}
             >
-              {children}
-              <View className="flex-1" />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={formatCursorFoldAction(fold).label}
-                disabled={fold === "unavailable"}
-                accessibilityState={{ disabled: fold === "unavailable" }}
-                onPress={() => onCommand?.("fold")}
-                className="h-12 w-11 items-center justify-center active:opacity-50 disabled:opacity-40"
+              <ScrollView
+                testID="editor-keyboard-action-scroll"
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+                accessibilityLabel="Editor actions"
+                accessibilityHint="Swipe horizontally for more actions"
+                style={{ flex: 1 }}
+                contentContainerStyle={{ flexGrow: 1, alignItems: "center" }}
               >
-                <Icon
-                  family="MaterialCommunityIcons"
-                  name={formatCursorFoldAction(fold).icon}
-                  size={22}
-                  className="text-foreground"
-                  accessible={false}
-                />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Copy current line"
-                onPress={() => onCommand?.("copy-line")}
-                className="h-12 w-11 items-center justify-center active:opacity-50"
-              >
-                <Icon
-                  family="Feather"
-                  name="copy"
-                  size={22}
-                  className="text-foreground"
-                  accessible={false}
-                />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Delete current line"
-                onPress={() => onCommand?.("delete-line")}
-                className="h-12 w-11 items-center justify-center active:opacity-50"
-              >
-                <Icon
-                  family="Feather"
-                  name="trash-2"
-                  size={22}
-                  className="text-foreground"
-                  accessible={false}
-                />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Toggle comment"
-                onPress={() => onCommand?.("comment")}
-                disabled={!canComment}
-                accessibilityState={{ disabled: !canComment }}
-                className="h-12 w-11 items-center justify-center active:opacity-50"
-              >
-                <Icon
-                  family="MaterialCommunityIcons"
-                  name="comment-text-outline"
-                  size={22}
-                  className="text-foreground"
-                  accessible={false}
-                />
-              </Pressable>
+                {children}
+                <View className="flex-1" />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Move cursor left"
+                  onPress={() => onCommand?.("cursor-left")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="Feather"
+                    name="arrow-left"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Move cursor right"
+                  onPress={() => onCommand?.("cursor-right")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="Feather"
+                    name="arrow-right"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Move cursor up"
+                  onPress={() => onCommand?.("cursor-up")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="Feather"
+                    name="arrow-up"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Move cursor down"
+                  onPress={() => onCommand?.("cursor-down")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="Feather"
+                    name="arrow-down"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={formatCursorFoldAction(fold).label}
+                  disabled={fold === "unavailable"}
+                  accessibilityState={{ disabled: fold === "unavailable" }}
+                  onPress={() => onCommand?.("fold")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50 disabled:opacity-40"
+                >
+                  <Icon
+                    family="MaterialCommunityIcons"
+                    name={formatCursorFoldAction(fold).icon}
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy current line"
+                  onPress={() => onCommand?.("copy-line")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="Feather"
+                    name="copy"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete current line"
+                  onPress={() => onCommand?.("delete-line")}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="Feather"
+                    name="trash-2"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle comment"
+                  onPress={() => onCommand?.("comment")}
+                  disabled={!canComment}
+                  accessibilityState={{ disabled: !canComment }}
+                  className="h-12 w-11 items-center justify-center active:opacity-50"
+                >
+                  <Icon
+                    family="MaterialCommunityIcons"
+                    name="comment-text-outline"
+                    size={22}
+                    className="text-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+              </ScrollView>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Hide keyboard"

@@ -1,5 +1,9 @@
 export type EditorCommand =
   | "insert"
+  | "cursor-left"
+  | "cursor-right"
+  | "cursor-up"
+  | "cursor-down"
   | "copy-line"
   | "delete-line"
   | "comment"

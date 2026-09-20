@@ -90,7 +90,7 @@ it("offers all symbol and line-action placeholders without emitting edits", () =
     expect(button).not.toBeNull();
     act(() => button.click());
   }
-  expect(container.querySelectorAll("button")).toHaveLength(26);
+  expect(container.querySelectorAll("button")).toHaveLength(31);
 });
 
 it("offers native selection menu placeholders with familiar clipboard and code actions", async () => {
@@ -117,7 +117,7 @@ it("keeps line and selection actions above a full-width, scrollable symbol row",
     expect(symbols.querySelector(`[aria-label="${label}"]`)).toBeNull();
   }
   expect(actions.compareDocumentPosition(symbols) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(symbols.querySelectorAll("button")).toHaveLength(21);
+  expect(symbols.querySelectorAll("button")).toHaveLength(22);
   expect(state.scrollProps.horizontal).toBe(true);
   expect(container.querySelector('[data-icon="chevron-left"]')).toBeNull();
   expect(container.querySelector('[data-icon="chevron-right"]')).toBeNull();
@@ -130,7 +130,7 @@ it("offers a working keyboard-close command at the end of the action row", () =>
   const actions = container.querySelector('[data-testid="editor-keyboard-actions"]')!;
   const button = actions.querySelector('[aria-label="Hide keyboard"]') as HTMLButtonElement;
   expect(button).not.toBeNull();
-  expect(actions.querySelectorAll("button")[4]).toBe(button);
+  expect(actions.querySelectorAll("button")[8]).toBe(button);
   expect(button.querySelector('[data-icon="keyboard-close-outline"]')).not.toBeNull();
   act(() => button.click());
   expect(state.dismissKeyboard).toHaveBeenCalledOnce();
@@ -154,11 +154,31 @@ it("offers cursor folding above symbols without requiring a selection", async ()
   expect(onCommand).toHaveBeenCalledWith("fold");
 });
 
-it.each(["/", "\\", "|", "+", "-"])("inserts the extra %s symbol into the editor", async (symbol) => {
+it.each(["/", "\\", "|", "+", "-", "@"])("inserts the extra %s symbol into the editor", async (symbol) => {
   const onCommand = vi.fn();
   await act(async () => root.render(createElement(ProjectCodeKeyboardAccessory, { onCommand, onDismissKeyboard: state.dismissKeyboard, frame: { screenX: 0, screenY: 500, height: 344, width: 390 } })));
   const button = [...container.querySelectorAll("button")].find((item) => item.textContent === symbol)!;
   expect(button).toBeDefined();
   act(() => button.click());
   expect(onCommand).toHaveBeenCalledWith("insert", symbol);
+});
+
+
+it("routes all four cursor controls through a scrollable action row without dismissing the keyboard", () => {
+  const onCommand = vi.fn();
+  act(() => root.render(createElement(ProjectCodeKeyboardAccessory, {
+    onCommand, onDismissKeyboard: state.dismissKeyboard,
+    frame: { screenX: 0, screenY: 500, height: 344, width: 390 },
+  })));
+  const actions = container.querySelector('[data-testid="editor-keyboard-action-scroll"]')!;
+  expect(actions).not.toBeNull();
+  expect(actions.getAttribute("data-persist-taps")).toBe("always");
+  for (const direction of ["left", "right", "up", "down"]) {
+    const button = actions.querySelector(`[aria-label="Move cursor ${direction}"]`) as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    act(() => button.click());
+    expect(onCommand).toHaveBeenLastCalledWith(`cursor-${direction}`);
+  }
+  expect(actions.querySelector('[aria-label="Hide keyboard"]')).toBeNull();
+  expect(state.dismissKeyboard).not.toHaveBeenCalled();
 });

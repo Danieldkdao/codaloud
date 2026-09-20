@@ -1,4 +1,8 @@
 import {
+  cursorCharLeft,
+  cursorCharRight,
+  cursorLineUp,
+  cursorLineDown,
   deleteLine,
   redo,
   redoDepth,
@@ -68,7 +72,16 @@ export const runEditorCommand = async (
   };
   if (
     state.readOnly &&
-    !["copy", "copy-line", "select-all", "fold"].includes(command)
+    ![
+      "copy",
+      "copy-line",
+      "select-all",
+      "fold",
+      "cursor-left",
+      "cursor-right",
+      "cursor-up",
+      "cursor-down",
+    ].includes(command)
   )
     return;
   const insert = (value: string) =>
@@ -79,6 +92,18 @@ export const runEditorCommand = async (
       scrollIntoView: true,
     });
   switch (command) {
+    case "cursor-left":
+      cursorCharLeft(view);
+      break;
+    case "cursor-right":
+      cursorCharRight(view);
+      break;
+    case "cursor-up":
+      cursorLineUp(view);
+      break;
+    case "cursor-down":
+      cursorLineDown(view);
+      break;
     case "insert":
       insert(text);
       break;

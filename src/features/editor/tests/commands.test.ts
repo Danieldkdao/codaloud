@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { history, undo } from "@codemirror/commands";
+import { defaultKeymap, history, undo } from "@codemirror/commands";
 import { languages } from "@codemirror/language-data";
 import { codeFolding, ensureSyntaxTree } from "@codemirror/language";
 import { runEditorCommand, getEditorCommandState } from "../commands";
@@ -146,4 +146,42 @@ it("uses the cursor line, including backward selections, just like the fold gutt
   view.dispatch({ selection: { anchor: 7 } });
   await runEditorCommand(view, "fold", clipboard());
   expect(getEditorCommandState(view).fold).toBe("unfold");
+});
+
+it("moves across characters, emoji, and line breaks without editing text", async () => {
+  const view = await make("a👋\nb");
+  for (const position of [1, 3, 4, 5, 5]) {
+    await runEditorCommand(view, "cursor-right", clipboard());
+    expect(view.state.selection.main.head).toBe(position);
+  }
+  for (const position of [4, 3, 1, 0, 0]) {
+    await runEditorCommand(view, "cursor-left", clipboard());
+    expect(view.state.selection.main.head).toBe(position);
+  }
+  expect(view.state.doc.toString()).toBe("a👋\nb");
+  expect(getEditorCommandState(view).canUndo).toBe(false);
+});
+
+it.each([true, false])("collapses selections with arrow keys, readOnly=%s", async (readOnly) => {
+  const view = await make("hello world", readOnly);
+  for (const [command, expected] of [["cursor-left", 1], ["cursor-right", 8], ["cursor-up", 1], ["cursor-down", 8]] as const) {
+    view.dispatch({ selection: { anchor: 8, head: 1 } });
+    await runEditorCommand(view, command, clipboard());
+    expect(view.state.selection.main.empty).toBe(true);
+    expect(view.state.selection.main.head).toBe(expected);
+  }
+});
+
+it("matches standard vertical arrow-key navigation through uneven lines", async () => {
+  const view = await make("abcdef\nx\nabcdef");
+  const keyboard = await make("abcdef\nx\nabcdef");
+  for (const editor of [view, keyboard]) editor.dispatch({ selection: { anchor: 5 } });
+  // This DOM harness has no physical line geometry. Compare with the real
+  // keyboard commands so goal-column and boundary semantics stay library-owned.
+  for (const [command, key] of [["cursor-down", "ArrowDown"], ["cursor-down", "ArrowDown"], ["cursor-up", "ArrowUp"], ["cursor-up", "ArrowUp"]] as const) {
+    defaultKeymap.find((binding) => binding.key === key)!.run!(keyboard);
+    await runEditorCommand(view, command, clipboard());
+    expect(view.state.selection.eq(keyboard.state.selection, true)).toBe(true);
+  }
+  expect(view.state.doc.toString()).toBe("abcdef\nx\nabcdef");
 });

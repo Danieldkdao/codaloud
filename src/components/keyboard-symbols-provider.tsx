@@ -66,9 +66,13 @@ const SymbolHostProvider = ({
                 its height even while disabled. Do not shrink the navigator for it. */}
             <View
               pointerEvents="box-none"
-              style={{ position: "absolute", left: 0, right: 0, height: 0 }}
+              // Keep measurable space for the native accessory's content. Absolute
+              // positioning (not a zero-height constraint) prevents the screen gap.
+              style={{ position: "absolute", left: 0, right: 0, height: 48 }}
             >
-              <KeyboardExtender enabled={Boolean(target)}>
+              {/* Listen before UIKit focuses an input, including in another window.
+                  JS focus only routes insertion; toggling attachment here races iOS. */}
+              <KeyboardExtender enabled>
                 {symbols}
               </KeyboardExtender>
             </View>

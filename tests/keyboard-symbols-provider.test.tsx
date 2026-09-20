@@ -55,7 +55,11 @@ vi.mock("react-native-keyboard-controller", () => ({
     // Native enabled only controls attachment; its Yoga node still occupies space.
     createElement(
       "section",
-      { "data-native-accessory": true, style: { height: 48 } },
+      {
+        "data-native-accessory": true,
+        "data-enabled": enabled,
+        style: { height: 48 },
+      },
       enabled ? children : null,
     ),
 }));
@@ -100,7 +104,8 @@ it("switches the native accessory target and ignores a late blur from the previo
   expect(first).not.toHaveBeenCalled();
   expect(second).toHaveBeenCalledWith("|");
   act(() => host.deactivate("second"));
-  expect(container.querySelector("button")).toBeNull();
+  act(() => container.querySelector("button")?.click());
+  expect(second).toHaveBeenCalledTimes(1);
 });
 it.each([800, 500])(
   "positions Android symbols above the keyboard in a %s-pixel viewport",
@@ -120,10 +125,10 @@ it.each([800, 500])(
 );
 
 it.each([false, true])(
-  "keeps the iOS accessory out of screen layout when enabled=%s",
-  (enabled) => {
+  "keeps the iOS accessory out of screen layout when input focused=%s",
+  (focused) => {
     render();
-    if (enabled) act(() => host.activate({ id: "field", insert: vi.fn() }));
+    if (focused) act(() => host.activate({ id: "field", insert: vi.fn() }));
     const accessory = container.querySelector<HTMLElement>(
       "[data-native-accessory]",
     )!;
@@ -139,5 +144,19 @@ it.each([false, true])(
     // sibling would subtract those 48 points from the full-screen navigator.
     expect(ancestor).not.toBe(container);
     expect(ancestor?.style.position).toBe("absolute");
+    expect(parseFloat(ancestor?.style.height ?? "0")).toBeGreaterThanOrEqual(48);
   },
 );
+
+it("registers iOS symbols before native focus, including between separate input focus events", () => {
+  render();
+  const enabled = () =>
+    container.querySelector("[data-native-accessory]")?.getAttribute("data-enabled");
+  // Native focus notifications arrive before the JS onFocus handler, including in sheets.
+  expect(enabled()).toBe("true");
+  act(() => host.activate({ id: "project-name", insert: vi.fn() }));
+  act(() => host.deactivate("project-name"));
+  expect(enabled()).toBe("true");
+  act(() => host.activate({ id: "commit-message", insert: vi.fn() }));
+  expect(enabled()).toBe("true");
+});

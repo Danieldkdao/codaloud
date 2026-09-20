@@ -89,3 +89,18 @@ describe("workspace editor preferences", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+it.each(["Codaloud White", "Codaloud Dark", "GitHub Dark"])("persists explicit theme %s", async (theme) => {
+  const disk = storage();
+  disk.getItem.mockResolvedValue(JSON.stringify({ theme }));
+  const state = createEditorPreferences(disk);
+  await state.load();
+  expect(state.getSnapshot().preferences.theme).toBe(theme);
+});
+it("migrates the retired Nord theme to GitHub Dark", async () => {
+  const disk = storage();
+  disk.getItem.mockResolvedValue(JSON.stringify({ theme: "Nord" }));
+  const state = createEditorPreferences(disk);
+  await state.load();
+  expect(state.getSnapshot().preferences.theme).toBe("GitHub Dark");
+});

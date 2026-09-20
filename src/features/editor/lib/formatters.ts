@@ -6,14 +6,16 @@ export const formatEditorAppearance = (
   switch (theme) {
     case "Codaloud":
       return null;
+    case "Codaloud White":
     case "GitHub Light":
     case "Solarized Light":
     case "Rose Pine Dawn":
     case "Quiet Light":
       return "light";
+    case "Codaloud Dark":
     case "One Dark":
     case "Dracula":
-    case "Nord":
+    case "GitHub Dark":
     case "Tokyo Night":
       return "dark";
   }
@@ -21,6 +23,8 @@ export const formatEditorAppearance = (
 export const formatEditorThemeClass = (theme: EditorTheme) => {
   switch (theme) {
     case "Codaloud":
+    case "Codaloud White":
+    case "Codaloud Dark":
       return "";
     case "GitHub Light":
       return "editor-github-light";
@@ -34,8 +38,8 @@ export const formatEditorThemeClass = (theme: EditorTheme) => {
       return "editor-one-dark";
     case "Dracula":
       return "editor-dracula";
-    case "Nord":
-      return "editor-nord";
+    case "GitHub Dark":
+      return "editor-github-dark";
     case "Tokyo Night":
       return "editor-tokyo-night";
   }

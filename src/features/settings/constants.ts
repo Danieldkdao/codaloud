@@ -2,13 +2,15 @@ import type { EditorPreferences } from "./types";
 
 export const editorThemes = [
   "Codaloud",
+  "Codaloud White",
+  "Codaloud Dark",
   "GitHub Light",
   "Solarized Light",
   "Rose Pine Dawn",
   "Quiet Light",
   "One Dark",
   "Dracula",
-  "Nord",
+  "GitHub Dark",
   "Tokyo Night",
 ] as const;
 export const editorFonts = [

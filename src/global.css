@@ -364,25 +364,25 @@
   --syntax-tag: #ff5555;
   --syntax-comment: #a5aecb;
 }
-@utility editor-nord {
-  --background: #2e3440;
-  --foreground: #eceff4;
-  --card: #3b4252;
-  --popover: #3b4252;
-  --popover-foreground: #eceff4;
-  --secondary: #434c5e;
-  --secondary-foreground: #eceff4;
-  --muted-foreground: #a8b4c7;
-  --border: #434c5e;
-  --syntax-keyword: #81a1c1;
-  --syntax-string: #a3be8c;
-  --syntax-number: #b48ead;
-  --syntax-type: #8fbcbb;
-  --syntax-function: #88c0d0;
-  --syntax-property: #d8dee9;
-  --syntax-operator: #81a1c1;
-  --syntax-tag: #bf616a;
-  --syntax-comment: #a8b4c7;
+@utility editor-github-dark {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+  --secondary: #30363d;
+  --secondary-foreground: #e6edf3;
+  --muted-foreground: #9198a1;
+  --border: #30363d;
+  --syntax-keyword: #ff7b72;
+  --syntax-string: #a5d6ff;
+  --syntax-number: #79c0ff;
+  --syntax-type: #ffa657;
+  --syntax-function: #d2a8ff;
+  --syntax-property: #79c0ff;
+  --syntax-operator: #ff7b72;
+  --syntax-tag: #7ee787;
+  --syntax-comment: #9198a1;
 }
 @utility editor-tokyo-night {
   --background: #1a1b26;

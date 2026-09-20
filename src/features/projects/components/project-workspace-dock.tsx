@@ -16,19 +16,17 @@ import { ProjectBranchMenu } from "./project-branch-menu";
 
 export const ProjectWorkspaceDock = ({
   tab,
-}: { tab?: "code" | "git" | "agent" } = {}) => {
+}: { tab?: "code" | "git" } = {}) => {
   const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const dockRef = useRef<View>(null);
   const branchIndicatorRef = useRef<View>(null);
   const [isGitSearchOpen, setIsGitSearchOpen] = useState(false);
   const [branchPickerOpen, setBranchPickerOpen] = useState(false);
   const pathname = usePathname();
-  // Keep this screen's controls stable while the Files modal covers it.
+  // Keep the editor controls stable while a supporting modal covers them.
   const routeName = tab ?? pathname.split("/")[3];
-  const activeTab =
-    routeName === "git" || routeName === "agent" ? routeName : "code";
+  const activeTab = routeName === "git" ? "git" : "code";
   // Preserve six 44-point targets plus the 56-point microphone on small phones.
   // Wider phones share the extra room between larger targets and real gaps.
   const safeWidth = width - insets.left - insets.right;
@@ -48,7 +46,6 @@ export const ProjectWorkspaceDock = ({
   return (
     <View
       testID="project-workspace-dock"
-      ref={dockRef}
       collapsable={false}
       onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
       style={{
@@ -131,7 +128,6 @@ export const ProjectWorkspaceDock = ({
                 >
                   <ProjectActionButtonsRight
                     tab={activeTab}
-                    dockRef={dockRef}
                     branchIndicatorRef={branchIndicatorRef}
                     onGitSearchOpenChange={setIsGitSearchOpen}
                   />

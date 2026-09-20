@@ -2,7 +2,6 @@ import {
   Stack,
   useLocalSearchParams,
   useRouter,
-  useSegments,
 } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
@@ -19,7 +18,6 @@ import { useThemeColor } from "@/hooks/use-theme";
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
-  const segments = useSegments();
   const insets = useSafeAreaInsets();
   const verticalPadding = Math.max(insets.top, insets.bottom) + 24;
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
@@ -42,7 +40,6 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
     workspace.failureCount === 0;
   const workspaceError = setupReady && workspace.isError;
   const checking = workspaceError ? workspace.isFetching : isFetching;
-  const isSupportingScreen = ready && segments[2] === "agent";
   useEffect(() => {
     if (ready) setOpenedProjectId(projectId);
   }, [projectId, ready]);
@@ -66,25 +63,14 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerLeft: () => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={isSupportingScreen ? "Back to Code" : "Home"}
-              accessibilityHint={
-                isSupportingScreen
-                  ? "Returns to your code editor"
-                  : "Returns to your projects"
-              }
-              onPress={() =>
-                isSupportingScreen
-                  ? router.dismissTo({
-                      pathname: "/projects/[projectId]/code",
-                      params: { projectId },
-                    })
-                  : router.dismissTo("/(main)")
-              }
+              accessibilityLabel="Home"
+              accessibilityHint="Returns to your projects"
+              onPress={() => router.dismissTo("/(main)")}
               className="size-11 items-center justify-center rounded-full active:bg-secondary"
             >
               <Icon
                 family="Feather"
-                name={isSupportingScreen ? "chevron-left" : "home"}
+                name="home"
                 size={22}
                 accessible={false}
                 className="text-foreground"

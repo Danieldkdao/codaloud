@@ -24,15 +24,15 @@ vi.mock("react-native-reanimated", () => {
 });
 vi.mock("@/lib/auth/utils", () => ({ getBaseURL: () => "https://codaloud.test" }));
 
-const mocks = vi.hoisted(() => ({ projectId: "project-one", filesVisible: true, readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
+const mocks = vi.hoisted(() => ({ dismissTo: vi.fn(), dismissKeyboard: vi.fn(), projectId: "project-one", filesVisible: true, readContent: vi.fn(), save: vi.fn(), change: undefined as ((value: string) => Promise<void>) | undefined, create: vi.fn(), update: vi.fn(), delete: vi.fn() }));
 const redirect = vi.hoisted(() => vi.fn());
 const lifecycle = vi.hoisted(() => ({ listeners: new Set<(state: string) => void>() }));
 vi.mock("@/features/projects/components/project-file-entrance", () => ({ ProjectFileEntrance: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children) }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("expo-router", () => ({ Redirect: ({ href }: { href: unknown }) => { redirect(href); return null; }, usePathname: () => `/projects/${mocks.projectId}/code`, useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn(), dismissTo: vi.fn() }), Stack: Object.assign((props: ComponentProps<typeof Stack>) => { stackOptions = props.screenOptions; const renderScreen = (name: string, Screen: typeof FilesScreen) => props.screenLayout!({
+vi.mock("expo-router", () => ({ Redirect: ({ href }: { href: unknown }) => { redirect(href); return null; }, usePathname: () => `/projects/${mocks.projectId}/code`, useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ navigate: vi.fn(), dismissTo: mocks.dismissTo }), Stack: Object.assign((props: ComponentProps<typeof Stack>) => { stackOptions = props.screenOptions; const renderScreen = (name: string, Screen: typeof FilesScreen) => props.screenLayout!({
   route: { key: name, name }, children: createElement(Screen),
 } as Parameters<NonNullable<ComponentProps<typeof Stack>["screenLayout"]>>[0]);
-return createElement(Fragment, null, props.children, createElement(SelectionProbe), mocks.filesVisible ? renderScreen("files", FilesScreen) : null, renderScreen("code", CodeScreen)); }, { Screen: ({ name, options }: { name: string; options?: { presentation?: string } }) => { screenOptions.set(name, options); return null; } }) }));
+return createElement(Fragment, null, props.children, createElement(SelectionProbe), mocks.filesVisible ? renderScreen("files", FilesScreen) : null, renderScreen("code", CodeScreen)); }, { Screen: ({ name, options }: { name: string; options?: { presentation?: string; headerShown?: boolean; title?: string; headerRight?: () => ReactNode } }) => { screenOptions.set(name, options); return null; } }) }));
 const Children = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
 const SelectionProbe = () => {
   selection = useProjectWorkspaceCurrentFile();
@@ -40,7 +40,7 @@ const SelectionProbe = () => {
   return null;
 };
 let stackOptions: ComponentProps<typeof Stack>["screenOptions"];
-const screenOptions = new Map<string, { presentation?: string } | undefined>();
+const screenOptions = new Map<string, { presentation?: string; headerShown?: boolean; title?: string; headerRight?: () => ReactNode } | undefined>();
 vi.mock("@/features/projects/components/project-setup-gate", () => ({ ProjectSetupGate: (props: { children?: ReactNode }) => createElement(Children, props) }));
 vi.mock("@/features/projects/components/project-workspace-dock", () => ({ ProjectWorkspaceDock: () => null }));
 vi.mock("@/features/projects/components/project-files-list", () => ({ ProjectFilesList: (props: ComponentProps<typeof ProjectFilesList>) => { fileList = props; return null; } }));
@@ -69,8 +69,8 @@ vi.mock("@/components/ui/text", () => {
   const Text = (props: { children?: ReactNode }) => createElement(Children, props);
   return { PText: Text, HeadingText: Text, CodeText: Text };
 });
-vi.mock("@/components/ui/button", () => ({ Button: (props: { children?: ReactNode }) => createElement(Children, props) }));
-vi.mock("react-native", () => ({ AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
+vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => createElement("button", { onClick: onPress }, children) }));
+vi.mock("react-native", () => ({ Keyboard: { dismiss: mocks.dismissKeyboard }, AppState: { addEventListener: (_event: string, listener: (state: string) => void) => {
   lifecycle.listeners.add(listener);
   return { remove: () => lifecycle.listeners.delete(listener) };
 } }, View: (props: { children?: ReactNode }) => createElement(Children, props), Pressable: (props: { children?: ReactNode }) => createElement(Children, props), ActivityIndicator: () => null, Alert: { alert: vi.fn() } }));
@@ -98,6 +98,7 @@ const result = (path: string, isDir = false) => ({ error: false, message: "Done.
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.projectId = "project-one";
+  mocks.dismissTo.mockClear(); mocks.dismissKeyboard.mockClear();
   mocks.filesVisible = true;
   mocks.readContent.mockReset().mockImplementation(async (_project: string, path: string) => ({ path, content: "server contents", size: 15 }));
   mocks.update.mockReset(); mocks.delete.mockReset(); mocks.create.mockReset();
@@ -109,11 +110,11 @@ beforeEach(async () => {
 });
 afterEach(() => { act(() => root.unmount()); client.clear(); });
 
-it("presents Files and Git as modals without reading an unselected file", () => {
+it("presents Files, Git, and Agent as modals without reading an unselected file", () => {
   expect(stackOptions).toMatchObject({ headerShown: false });
   expect(screenOptions.get("files")?.presentation).toBe("modal");
   expect(screenOptions.get("git")?.presentation).toBe("modal");
-  expect(screenOptions.get("agent")?.presentation).not.toBe("modal");
+  expect(screenOptions.get("agent")).toMatchObject({ presentation: "modal", headerShown: true });
   expect(mocks.readContent).not.toHaveBeenCalled();
 });
 
@@ -424,4 +425,16 @@ it("retains the browsed folder when Files is dismissed and reopened", async () =
   mocks.filesVisible = true;
   await render();
   expect(fileList.parentDirectory).toBe("");
+});
+
+it("configures Agent's native header and Done at the presenting navigator", () => {
+  const options = screenOptions.get("agent");
+  expect(options).toMatchObject({ title: "Agent", headerShown: true });
+  expect(options?.headerRight).toBeTypeOf("function");
+  act(() => root.render(options!.headerRight!()));
+  const done = [...container.querySelectorAll("button")].find((button) => button.textContent === "Done");
+  expect(done).toBeDefined();
+  act(() => done!.click());
+  expect(mocks.dismissKeyboard).toHaveBeenCalledOnce();
+  expect(mocks.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
 });

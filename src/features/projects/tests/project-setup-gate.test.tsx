@@ -100,19 +100,7 @@ it("provides an explicit home action while the workspace is loading", async () =
   expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
 });
 
-it.each(["agent"])("returns from %s to the current project's Code screen", async (section) => {
-  state.query.data = { name: "Example", setupStatus: "ready" };
-  state.segments = ["projects", "[projectId]", section];
-  await render();
-  act(() => root.render(state.headerOptions.headerLeft?.()));
-  const back = container.querySelector<HTMLButtonElement>('[aria-label="Back to Code"]');
-  expect(back?.querySelector('[data-icon="chevron-left"]')).not.toBeNull();
-  act(() => back!.click());
-  expect(state.dismissTo).toHaveBeenCalledExactlyOnceWith({ pathname: "/projects/[projectId]/code", params: { projectId: "project-one" } });
-  expect(state.navigate).not.toHaveBeenCalled();
-});
-
-it.each(["code", "files", "git"])("keeps the editor header stable behind %s and nested modal diffs", async (section) => {
+it.each(["code", "files", "git", "agent"])("keeps the editor header stable behind %s and nested modal diffs", async (section) => {
   state.query.data = { name: "Example", setupStatus: "ready" };
   state.segments = ["projects", "[projectId]", section];
   await render();

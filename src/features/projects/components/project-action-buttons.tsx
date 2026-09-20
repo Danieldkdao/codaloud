@@ -5,20 +5,16 @@ import { useRouter } from "expo-router";
 import { Icon } from "@/components/ui/icon";
 import { ProjectBranchSelect } from "@/features/projects/components/project-branch-select";
 import { ProjectOtherOptions } from "@/features/projects/components/project-other-options";
-import { ProjectWorkspaceSearch } from "@/features/projects/components/project-workspace-search";
 import { ProjectWorkspaceGitSearch } from "@/features/projects/components/project-workspace-git-search";
 import { ProjectCommitForm } from "@/features/projects/components/project-commit-form";
 import { ProjectCodeTools } from "@/features/projects/components/project-code-tools";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { useProjectWorkspaceChanges } from "@/features/projects/hooks/use-project-workspace-changes";
-import {
-  formatWorkspaceSearch,
-  formatWorkspaceTab,
-} from "@/features/projects/lib/formatters";
+import { formatWorkspaceTab } from "@/features/projects/lib/formatters";
 import type { ProjectWorkspaceTab } from "@/features/projects/types";
 
 type ProjectActionButtonsProps = {
-  tab: Exclude<ProjectWorkspaceTab, "files">;
+  tab: Extract<ProjectWorkspaceTab, "code" | "git">;
   branchPickerOpen?: boolean;
   onBranchPickerOpenChange?: (open: boolean) => void;
 };
@@ -72,22 +68,18 @@ export const ProjectActionButtonsLeft = ({
           <ProjectOtherOptions key={`other-${projectId}`} />
         </>
       );
-    case "agent":
-      return null;
     default:
       throw new Error(`Unsupported workspace tab: ${tab satisfies never}`);
   }
 };
 
 type ProjectActionButtonsRightProps = ProjectActionButtonsProps & {
-  dockRef: RefObject<View | null>;
   branchIndicatorRef: RefObject<View | null>;
   onGitSearchOpenChange: (open: boolean) => void;
 };
 
 export const ProjectActionButtonsRight = ({
   tab,
-  dockRef,
   branchIndicatorRef,
   onGitSearchOpenChange,
 }: ProjectActionButtonsRightProps) => {
@@ -138,14 +130,6 @@ export const ProjectActionButtonsRight = ({
             enabled={gitTab === "changes" && commitSelection.totalCount > 0}
           />
         </>
-      );
-    case "agent":
-      return (
-        <ProjectWorkspaceSearch
-          key={tab}
-          anchorRef={dockRef}
-          {...formatWorkspaceSearch(tab)}
-        />
       );
     default:
       throw new Error(`Unsupported workspace tab: ${tab satisfies never}`);

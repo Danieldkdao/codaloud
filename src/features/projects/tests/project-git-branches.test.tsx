@@ -123,7 +123,7 @@ const Workspace = () => (
       <ProjectWorkspaceChangesProvider>
         <GitScreen />
         <ProjectWorkspaceFileCreationProvider projectId="demo">
-          {activeTab !== "files" ? <ProjectWorkspaceDock /> : null}
+          {activeTab === "code" || activeTab === "git" ? <ProjectWorkspaceDock /> : null}
         </ProjectWorkspaceFileCreationProvider>
       </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
@@ -309,7 +309,7 @@ it("opens each supporting screen directly from Code without the workspace menu",
     expect(navigation.navigate).toHaveBeenLastCalledWith({ pathname: `/projects/[projectId]/${name}`, params: { projectId: live.projectId } });
     act(() => root.render(createElement(Workspace)));
     const dock = container.querySelector<HTMLElement>('[data-testid="project-workspace-dock"]');
-    if (name === "files") {
+    if (name === "files" || name === "agent") {
       expect(dock).toBeNull();
       continue;
     }
@@ -475,7 +475,7 @@ it("shows only the active screen's controls in the lower bar", () => {
   for (const tab of ["agent", "code"]) {
     activeTab = tab;
     act(() => root.render(createElement(Workspace)));
-    expect(labels()).toContain("Microphone");
+    expect(labels().includes("Microphone")).toBe(tab === "code");
     expect(container.textContent).not.toContain("Current branch:");
     if (tab === "code") {
       expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools", "Undo", "Redo"]));
@@ -483,7 +483,8 @@ it("shows only the active screen's controls in the lower bar", () => {
       expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
     } else {
-      expect(labels()).toContain("Search activity");
+      expect(labels()).not.toContain("Search activity");
+      expect(container.querySelector('[data-testid="project-workspace-dock"]')).toBeNull();
       expect(labels()).not.toContain("Previous file");
       expect(labels()).not.toContain("Undo");
       expect(container.querySelector('[data-branch="Folder"]')).toBeNull();

@@ -11,7 +11,17 @@ const actions: { label: string; icon: IconProps<"MaterialCommunityIcons">["name"
   { label: "Replace in file", icon: "find-replace" },
 ];
 
-export const ProjectCodeToolbar = (props: ComponentProps<typeof ProjectCodeStatus>) => {
+export const ProjectCodeToolbar = ({ onFind, onReplace, onFormat, onOrganize, disabled = false, ...props }: ComponentProps<typeof ProjectCodeStatus> & {
+  onFind?: () => void; onReplace?: () => void; onFormat?: () => void; onOrganize?: () => void; disabled?: boolean;
+}) => {
+  const run = (label: string) => {
+    switch (label) {
+      case "Find in file": onFind?.(); break;
+      case "Replace in file": onReplace?.(); break;
+      case "Format code": onFormat?.(); break;
+      case "Organize imports": onOrganize?.(); break;
+    }
+  };
   const [badgeHeight, setBadgeHeight] = useState(48);
 
   return (
@@ -30,10 +40,12 @@ export const ProjectCodeToolbar = (props: ComponentProps<typeof ProjectCodeStatu
       </View>
       {actions.map((action) => (
         <GlassSurface key={action.label} borderRadius={badgeHeight / 2}>
-          {/* Command buttons provide press feedback only until native tools are wired. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={action.label}
+            disabled={disabled}
+            accessibilityState={{ disabled }}
+            onPress={() => run(action.label)}
             className="items-center justify-center rounded-full active:opacity-60"
             style={{ width: badgeHeight, height: badgeHeight }}
           >

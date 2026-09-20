@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
+import type { EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
 import type { EditorCommand } from "@/features/editor/types";
 import { Alert, View } from "react-native";
@@ -58,6 +60,11 @@ const CodeScreen = () => {
     key?: string;
     value: CodeEditorAnalysis;
   }>();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<EditorSearchQuery>({ search: "" });
+  const [searchSummary, setSearchSummary] = useState<EditorSearchSummary>();
+  useEffect(() => { setSearchOpen(false); setSearchSummary(undefined); }, [documents.activeKey]);
   const keyboardFrame = useKeyboardFrame();
   const [interaction, setInteraction] = useState<
     CodeEditorInteraction & { key?: string }
@@ -166,6 +173,7 @@ const CodeScreen = () => {
           closingPath={closingPath}
         />
       ) : null}
+      {searchOpen ? <View className="px-3 py-2"><EditorSearchBar query={searchQuery} summary={searchSummary} replace={replaceOpen} onReplaceChange={setReplaceOpen} onChange={setSearchQuery} onClose={() => setSearchOpen(false)} onCommand={(command) => { if (documents.activeKey && !isWorkspaceBusy) editor.current?.searchCommand(command, searchQuery, documents.activeKey); }} /></View> : null}
       <View className="flex-1">
         {/* Warm the WebView before the first file read, then reuse it for every
             document. The empty editor stays hidden, read-only, and unfocused. */}
@@ -179,6 +187,8 @@ const CodeScreen = () => {
           <CodeEditor
             ref={editor}
             preferences={preferences}
+            searchQuery={searchOpen ? searchQuery : undefined}
+            onSearchSummary={async (summary, key) => { if (key === current.current.documents.activeKey) setSearchSummary(summary); }}
             onCommandError={async (message) => { Alert.alert("Couldn’t complete editor action", message); }}
             onReadClipboard={Clipboard.getStringAsync}
             onWriteClipboard={async (text) => { await Clipboard.setStringAsync(text); }}
@@ -240,7 +250,7 @@ const CodeScreen = () => {
           <CodeEditorLoading bottomInset={bottomInset} />
         ) : null}
       </View>
-      {files.activeFilePath && !keyboardFrame ? (
+      {files.activeFilePath && !keyboardFrame && !searchOpen ? (
         <View
           className="absolute left-4 right-4 items-center"
           style={{ bottom: dockHeight + 8 }}
@@ -250,6 +260,9 @@ const CodeScreen = () => {
           }
         >
           <ProjectCodeToolbar
+            disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
+            onFind={() => { setReplaceOpen(false); setSearchOpen(true); }}
+            onReplace={() => { setReplaceOpen(true); setSearchOpen(true); }}
             readError={!documents.activeKey && query.isError}
             status={
               !documents.activeKey && query.isError && !query.isFetching

@@ -28,3 +28,6 @@ export const formatEditorFontFamily = (font: EditorFont) => {
     case "IBM Plex Mono": return "IBMPlexMono";
   }
 };
+
+export const formatEditorSearchSummary = (summary?: import("../types").EditorSearchSummary) =>
+  summary?.error ?? (summary ? `${summary.active} / ${summary.total}` : "Searching…");

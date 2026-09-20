@@ -602,3 +602,14 @@ it("reconfigures editing preferences without losing text, selection or undo", as
   act(() => undo(view));
   expect(view.state.doc.toString()).toBe(props.initialValue);
 });
+
+it("routes native search commands to the active document and rejects stale tab commands", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onSearchSummary = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(createElement(CodeEditor, { ref, filename: "test.txt", documentKey: "active", initialValue: "x x", onSearchSummary })));
+  act(() => ref.current!.searchCommand("replace-all", { search: "x", replace: "y" }, "old"));
+  expect(editor().state.doc.toString()).toBe("x x");
+  act(() => ref.current!.searchCommand("replace-all", { search: "x", replace: "y" }, "active"));
+  expect(editor().state.doc.toString()).toBe("y y");
+  expect(onSearchSummary).toHaveBeenLastCalledWith(expect.objectContaining({ total: 0 }), "active");
+});

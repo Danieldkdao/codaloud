@@ -47,6 +47,8 @@ import {
   type CodeEditorMatchState,
 } from "./code-editor-matches";
 
+import { editorSearch, updateEditorSearch, runSearchCommand, getEditorSearchSummary } from "@/features/editor/search";
+import type { EditorSearchCommand, EditorSearchQuery, EditorSearchSummary } from "@/features/editor/types";
 import { getEditorCommandState, runEditorCommand } from "@/features/editor/commands";
 import type { EditorCommand, EditorCommandState } from "@/features/editor/types";
 import { editorConfiguration } from "@/features/editor/configuration";
@@ -59,6 +61,7 @@ import "@/global.css";
 import "@/styles/code-editor.css";
 
 export interface CodeEditorRef {
+  searchCommand(command: EditorSearchCommand, query: EditorSearchQuery, documentKey: string): void;
   command(command: EditorCommand, text: string, documentKey: string): void;
   flushChanges: () => Promise<void>;
   nextMatch: () => void;
@@ -73,6 +76,8 @@ export type CodeEditorInteraction = {
 };
 
 type CodeEditorProps = {
+  searchQuery?: EditorSearchQuery;
+  onSearchSummary?: (summary: EditorSearchSummary, documentKey?: string) => Promise<void>;
   onCommandError?: (message: string) => Promise<void>;
   onReadClipboard?: () => Promise<string>;
   onWriteClipboard?: (text: string) => Promise<void>;
@@ -166,6 +171,8 @@ const formatEditorThemeClassName = (
 
 const CodeEditor = ({
   preferences = defaultEditorPreferences,
+  searchQuery,
+  onSearchSummary,
   onCommandError,
   onReadClipboard,
   onWriteClipboard,
@@ -186,6 +193,9 @@ const CodeEditor = ({
   onRequestAnalysis,
   onAnalysis,
 }: CodeEditorProps) => {
+  const searchCallback = useRef(onSearchSummary);
+  searchCallback.current = onSearchSummary;
+  const searchQueryKey = JSON.stringify(searchQuery ?? { search: "" });
   const clipboard = useRef({ onReadClipboard, onWriteClipboard, onCommandError });
   clipboard.current = { onReadClipboard, onWriteClipboard, onCommandError };
   const activeDocument = useRef(documentKey);
@@ -255,6 +265,11 @@ const CodeEditor = ({
     // the narrower serializable command contract above.
     (ref ?? null) as Ref<DOMImperativeFactory>,
     () => ({
+      searchCommand: (command: EditorSearchCommand, query: EditorSearchQuery, key: string) => {
+        if (!view.current || key !== activeDocument.current) return;
+        updateEditorSearch(view.current, query);
+        runSearchCommand(view.current, command);
+      },
       command: (command: EditorCommand, text: string, key: string) => {
         const editor = view.current;
         if (!editor || (key !== undefined && key !== activeDocument.current)) return;
@@ -358,6 +373,7 @@ const CodeEditor = ({
       highlightActiveLine(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       codeEditorMatches,
+      editorSearch,
       editability.of([
         EditorState.readOnly.of(readOnlyRef.current),
         EditorView.editable.of(!readOnlyRef.current),
@@ -366,6 +382,7 @@ const CodeEditor = ({
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
+        void searchCallback.current?.(getEditorSearchSummary(update.view), documentKey).catch(() => {});
         if (update.focusChanged || update.selectionSet || update.docChanged || update.transactions.some((transaction) => transaction.effects.length)) {
           reportInteraction(update.view, documentKey);
         }
@@ -472,6 +489,10 @@ const CodeEditor = ({
     },
     [],
   );
+
+  useEffect(() => {
+    if (view.current) updateEditorSearch(view.current, JSON.parse(searchQueryKey));
+  }, [searchQueryKey, documentKey, filename, initialValue]);
 
   useEffect(() => {
     const editor = view.current;

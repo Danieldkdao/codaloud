@@ -54,7 +54,9 @@ const NewProjectScreen = () => {
         {/* Native sheets resize the first descendant ScrollView to the entire sheet.
             End that lookup here: our sibling scroll areas are sized by the form. */}
         <View collapsable={false} pointerEvents="none" />
-        <KeyboardSymbolsProvider local><CreateProjectForm /></KeyboardSymbolsProvider>
+        <KeyboardSymbolsProvider local>
+          <CreateProjectForm />
+        </KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </>
   );

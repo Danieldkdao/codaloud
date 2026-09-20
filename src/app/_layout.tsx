@@ -1,5 +1,6 @@
-import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import "../global.css";
+
+import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 
 import { QueryProvider } from "@/components/query-provider";
 import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
@@ -59,60 +60,60 @@ const RootNavigator = () => {
     <QueryProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <KeyboardSymbolsProvider fill>
-        <ProjectSearchOverlayProvider>
-          <SuccessFeedbackProvider>
-            <Stack
-              screenOptions={{
-                headerTitleStyle: {
-                  fontFamily: "Fraunces_400Regular",
-                  fontWeight: "400",
-                },
-                headerLargeTitleStyle: {
-                  fontFamily: "Fraunces_400Regular",
-                  fontWeight: "400",
-                },
-                headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
-              }}
-            >
-              <Stack.Protected guard={hasCompletedOnboarding}>
-                <Stack.Screen name="(main)" options={{ headerShown: false }} />
+          <ProjectSearchOverlayProvider>
+            <SuccessFeedbackProvider>
+              <Stack
+                screenOptions={{
+                  headerTitleStyle: {
+                    fontFamily: "Fraunces_400Regular",
+                    fontWeight: "400",
+                  },
+                  headerLargeTitleStyle: {
+                    fontFamily: "Fraunces_400Regular",
+                    fontWeight: "400",
+                  },
+                  headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
+                }}
+              >
+                <Stack.Protected guard={hasCompletedOnboarding}>
+                  <Stack.Screen name="(main)" options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name="projects/[projectId]"
+                    options={{ title: "Project" }}
+                  />
+                  <Stack.Screen
+                    name="new-project"
+                    options={{
+                      ...MODAL_SCREEN_OPTIONS,
+                      presentation: "formSheet",
+                      sheetAllowedDetents: "fitToContents",
+                      sheetInitialDetentIndex: 0,
+                      sheetGrabberVisible: true,
+                      sheetExpandsWhenScrolledToEdge: false,
+                    }}
+                  />
+                  <Stack.Screen
+                    name="edit-project"
+                    options={{
+                      ...MODAL_SCREEN_OPTIONS,
+                      presentation: "formSheet",
+                      sheetAllowedDetents: "fitToContents",
+                      sheetInitialDetentIndex: 0,
+                      sheetGrabberVisible: true,
+                      sheetExpandsWhenScrolledToEdge: false,
+                    }}
+                  />
+                </Stack.Protected>
+                <Stack.Protected guard={!hasCompletedOnboarding}>
+                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                </Stack.Protected>
                 <Stack.Screen
-                  name="projects/[projectId]"
-                  options={{ title: "Project" }}
+                  name="github-connect"
+                  options={{ headerShown: false }}
                 />
-                <Stack.Screen
-                  name="new-project"
-                  options={{
-                    ...MODAL_SCREEN_OPTIONS,
-                    presentation: "formSheet",
-                    sheetAllowedDetents: "fitToContents",
-                    sheetInitialDetentIndex: 0,
-                    sheetGrabberVisible: true,
-                    sheetExpandsWhenScrolledToEdge: false,
-                  }}
-                />
-                <Stack.Screen
-                  name="edit-project"
-                  options={{
-                    ...MODAL_SCREEN_OPTIONS,
-                    presentation: "formSheet",
-                    sheetAllowedDetents: "fitToContents",
-                    sheetInitialDetentIndex: 0,
-                    sheetGrabberVisible: true,
-                    sheetExpandsWhenScrolledToEdge: false,
-                  }}
-                />
-              </Stack.Protected>
-              <Stack.Protected guard={!hasCompletedOnboarding}>
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              </Stack.Protected>
-              <Stack.Screen
-                name="github-connect"
-                options={{ headerShown: false }}
-              />
-            </Stack>
-          </SuccessFeedbackProvider>
-        </ProjectSearchOverlayProvider>
+              </Stack>
+            </SuccessFeedbackProvider>
+          </ProjectSearchOverlayProvider>
         </KeyboardSymbolsProvider>
       </GestureHandlerRootView>
     </QueryProvider>

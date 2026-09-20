@@ -49,7 +49,9 @@ const EditProjectScreen = () => {
         {/* Keep native sheet sizing from expanding the form's nested ScrollView. */}
         <View collapsable={false} pointerEvents="none" />
         {/* Mount the query only with an ID, and reset the draft when the target changes. */}
-        <KeyboardSymbolsProvider local><EditProjectContent key={projectId} projectId={projectId} /></KeyboardSymbolsProvider>
+        <KeyboardSymbolsProvider local>
+          <EditProjectContent key={projectId} projectId={projectId} />
+        </KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </>
   );

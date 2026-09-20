@@ -61,44 +61,44 @@ export const ProjectFileCreateSheet = ({
         style={{ flex: 1 }}
       >
         <KeyboardSymbolsProvider local fill>
-        <View className="flex-1 justify-end">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Finish creating file or folder"
-            className="absolute inset-0 bg-foreground/10"
-            onPress={() => form.current?.submit()}
-          />
-          <View
-            accessibilityViewIsModal
-            onAccessibilityEscape={cancel}
-            className="rounded-t-3xl bg-card"
-            style={{ paddingBottom: Math.max(20, insets.bottom) }}
-          >
-            <View
-              {...swipe.panHandlers}
-              className="items-center gap-3 px-5 pb-2 pt-3"
-            >
-              <View className="h-1 w-10 rounded-full bg-muted-foreground/30" />
-              <PText
-                accessibilityRole="header"
-                className="text-xl font-semibold text-foreground"
-              >
-                {formatProjectFileKind(kind).createTitle}
-              </PText>
-            </View>
-            <ProjectFileNameRow
-              {...props}
-              ref={form}
-              kind={kind}
-              disabled={disabled}
-              mode="create"
-              presentation="sheet"
-              submitOnBlur={false}
-              onSubmit={onCreate}
-              onCancel={onCancel}
+          <View className="flex-1 justify-end">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Finish creating file or folder"
+              className="absolute inset-0 bg-foreground/10"
+              onPress={() => form.current?.submit()}
             />
+            <View
+              accessibilityViewIsModal
+              onAccessibilityEscape={cancel}
+              className="rounded-t-3xl bg-card"
+              style={{ paddingBottom: Math.max(20, insets.bottom) }}
+            >
+              <View
+                {...swipe.panHandlers}
+                className="items-center gap-3 px-5 pb-2 pt-3"
+              >
+                <View className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+                <PText
+                  accessibilityRole="header"
+                  className="text-xl font-semibold text-foreground"
+                >
+                  {formatProjectFileKind(kind).createTitle}
+                </PText>
+              </View>
+              <ProjectFileNameRow
+                {...props}
+                ref={form}
+                kind={kind}
+                disabled={disabled}
+                mode="create"
+                presentation="sheet"
+                submitOnBlur={false}
+                onSubmit={onCreate}
+                onCancel={onCancel}
+              />
+            </View>
           </View>
-        </View>
         </KeyboardSymbolsProvider>
       </KeyboardAvoidingView>
     </Modal>

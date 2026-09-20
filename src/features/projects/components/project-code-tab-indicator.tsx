@@ -10,7 +10,7 @@ export const ProjectCodeTabIndicator = ({
   // The selected tab owns its glass bounds. A separately positioned list header
   // can retain stale coordinates when virtualized cells move or disappear.
   <View testID="code-tab-indicator">
-    <GlassSurface borderRadius={24} shadow={false}>
+    <GlassSurface borderRadius={24}>
       {children}
     </GlassSurface>
   </View>

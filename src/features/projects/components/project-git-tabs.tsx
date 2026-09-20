@@ -59,7 +59,7 @@ export const ProjectGitTabs = ({ tab, onTabChange }: ProjectGitTabsProps) => {
             indicatorStyle,
           ]}
         >
-          <GlassSurface borderRadius={28} shadow={false}>
+          <GlassSurface borderRadius={28}>
             <View style={{ height: Math.max(0, layout.height - 8) }} />
           </GlassSurface>
         </Animated.View>

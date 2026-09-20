@@ -261,7 +261,7 @@ export const ProjectCodeTabs = ({
           }}
         />
         <View className="shrink-0 pl-1">
-          <GlassSurface borderRadius={24} shadow={false}>
+          <GlassSurface borderRadius={24}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open another file"
@@ -279,7 +279,7 @@ export const ProjectCodeTabs = ({
           </GlassSurface>
         </View>
         <View className="shrink-0 px-1">
-          <GlassSurface borderRadius={24} shadow={false}>
+          <GlassSurface borderRadius={24}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${formatProjectChangeCount(paths.length)} open. Show all files.`}

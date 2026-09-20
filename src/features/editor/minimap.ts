@@ -1,3 +1,5 @@
+import { highlightTree } from "@lezer/highlight";
+import { highlightingFor, syntaxTree } from "@codemirror/language";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 
 export const editorMinimap = [
@@ -11,7 +13,7 @@ export const editorMinimap = [
       constructor(readonly view: EditorView) {
         this.dom.className = "cm-minimap";
         this.viewport.className = "cm-minimap-viewport";
-        this.svg.setAttribute("viewBox", "0 0 100 600");
+        this.svg.setAttribute("viewBox", "0 0 180 3600");
         this.svg.setAttribute("preserveAspectRatio", "none");
         this.svg.setAttribute("aria-hidden", "true");
         this.slider.type = "range";
@@ -48,24 +50,29 @@ export const editorMinimap = [
         const count = Math.min(600, doc.lines);
         const nodes = [];
         for (let row = 0; row < count; row++) {
-          const line = doc.line(Math.floor((row * doc.lines) / count) + 1).text;
-          const indent = Math.min(80, line.length - line.trimStart().length);
-          const rect = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            "rect",
-          );
-          rect.setAttribute("x", String(indent));
-          rect.setAttribute("y", String((row * 600) / count));
-          rect.setAttribute(
-            "width",
-            String(Math.min(100 - indent, line.trim().length)),
-          );
-          rect.setAttribute(
-            "height",
-            String(Math.max(0.5, Math.min(3, 480 / count))),
-          );
-          nodes.push(rect);
+          const line = doc.line(Math.floor((row * doc.lines) / count) + 1);
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", "2");
+          text.setAttribute("y", String(row * 6 + 5));
+          text.setAttribute("xml:space", "preserve");
+          const end = Math.min(line.to, line.from + 100);
+          let position = line.from;
+          const append = (from: number, to: number, className?: string) => {
+            if (from >= to) return;
+            const span = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+            if (className) span.setAttribute("class", className);
+            span.textContent = doc.sliceString(from, to).replace(/\t/g, " ".repeat(this.view.state.tabSize));
+            text.append(span);
+          };
+          highlightTree(syntaxTree(this.view.state), { style: (tags) => highlightingFor(this.view.state, tags) }, (from, to, classes) => {
+            append(position, from);
+            append(from, to, classes);
+            position = to;
+          }, line.from, end);
+          append(position, end);
+          nodes.push(text);
         }
+        this.svg.setAttribute("viewBox", `0 0 180 ${Math.max(600, count * 6)}`);
         this.svg.replaceChildren(...nodes);
       };
       position = () => {
@@ -77,7 +84,7 @@ export const editorMinimap = [
         this.slider.value = String((first / Math.max(1, doc.lines - 1)) * 100);
       };
       update(update: ViewUpdate) {
-        if (update.docChanged) this.draw();
+        if (update.docChanged || syntaxTree(update.startState) !== syntaxTree(update.state) || update.startState.tabSize !== update.state.tabSize) this.draw();
         if (update.docChanged || update.viewportChanged) this.position();
       }
       destroy() {

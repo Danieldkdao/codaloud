@@ -220,7 +220,7 @@ body {
   width: 48px;
   overflow: hidden;
   background: var(--card);
-  color: var(--syntax-comment);
+  color: var(--foreground);
   border-left: 1px solid var(--border);
 }
 .code-editor-host .cm-minimap svg {
@@ -249,3 +249,11 @@ body {
 .code-editor-host .cm-minimap input:focus-visible {
   opacity: 1;
 }
+
+.code-editor-host .cm-minimap text {
+  font-family: var(--editor-font-regular), monospace;
+  font-size: 5px;
+  white-space: pre;
+  fill: currentColor;
+}
+.code-editor-host .cm-minimap tspan { fill: currentColor; }

@@ -18,7 +18,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ProjectSearchOverlayProvider } from "@/features/projects/components/project-search-overlay";
-import { authClient } from "@/services/auth/client";
+import { authClient } from "@/lib/auth/auth-client";
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 250, fade: true });

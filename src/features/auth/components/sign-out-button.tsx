@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
-import { authClient } from "@/services/auth/client";
+import { authClient } from "@/lib/auth/auth-client";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";

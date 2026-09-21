@@ -18,6 +18,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ProjectSearchOverlayProvider } from "@/features/projects/components/project-search-overlay";
+import { editorScreenOptions } from "@/features/settings/constants";
 import { authClient } from "@/lib/auth/auth-client";
 
 SplashScreen.preventAutoHideAsync();
@@ -118,10 +119,7 @@ const RootNavigator = () => {
                       sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
-                  <Stack.Screen
-                    name="editor"
-                    options={{ title: "Editor Settings" }}
-                  />
+                  <Stack.Screen name="editor" options={editorScreenOptions} />
                 </Stack.Protected>
                 <Stack.Protected guard={!session.data}>
                   <Stack.Screen

@@ -29,3 +29,10 @@ export const defaultEditorPreferences: EditorPreferences = {
   keepIndentation: true,
   closeBrackets: true,
 };
+
+export const editorScreenOptions = {
+  headerBackButtonDisplayMode: "minimal",
+  headerShadowVisible: false,
+  headerTransparent: true,
+  title: "",
+} as const;

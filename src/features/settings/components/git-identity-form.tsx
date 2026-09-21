@@ -39,7 +39,7 @@ export const GitIdentityForm = () => {
     },
   });
   return (
-    <View className="gap-3 rounded-2xl bg-card p-4">
+    <View className="gap-3">
       <PText
         accessibilityRole="header"
         className="text-xl font-semibold text-foreground"

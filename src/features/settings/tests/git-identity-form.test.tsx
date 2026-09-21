@@ -12,7 +12,7 @@ vi.mock("../git-identity", async (original) => ({
   readGitIdentity: mocks.read,
 }));
 vi.mock("expo-sqlite/kv-store", () => ({ default: {} }));
-vi.mock("react-native", () => ({ View: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
+vi.mock("react-native", () => ({ View: ({ children, className }: { children: ReactNode; className?: string }) => createElement("div", { "data-class": className }, children) }));
 vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children) }));
 const fields = new Map<string, { value: string; onChangeText: (value: string) => void }>();
 vi.mock("@/components/ui/input", () => ({ Input: (props: { accessibilityLabel: string; value: string; onChangeText: (value: string) => void }) => {
@@ -40,6 +40,11 @@ beforeEach(async () => {
 afterEach(() => { act(() => root.unmount()); client.clear(); });
 const edit = async (name: string, value: string) => act(async () => fields.get(name)!.onChangeText(value));
 const submit = async () => act(async () => { container.querySelector("button")!.click(); });
+
+it("renders inline with the surrounding editor settings", () => {
+  const form = container.firstElementChild;
+  expect(form?.getAttribute("data-class")).toBe("gap-3");
+});
 
 it("validates fields before calling persistence", async () => {
   await edit("Git author email", "invalid");

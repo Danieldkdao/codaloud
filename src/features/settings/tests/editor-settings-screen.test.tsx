@@ -3,6 +3,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { EditorSettingsScreen } from "@/features/settings/components/editor-settings-screen";
+import { editorScreenOptions } from "@/features/settings/constants";
 import { SettingsScreen } from "@/features/settings/components/settings-screen";
 
 const mocks = vi.hoisted(() => ({ push: vi.fn() }));
@@ -110,7 +111,14 @@ it("opens the dedicated editor settings screen from Preferences", async () => {
 it("renders the shared controls on the editor settings screen", async () => {
   const { container, root } = await render(createElement(EditorSettingsScreen));
 
+  expect(container.textContent).toContain("Editor Settings");
   expect(container.textContent).toContain("Shared editor settings");
+  expect(editorScreenOptions).toEqual({
+    headerBackButtonDisplayMode: "minimal",
+    headerShadowVisible: false,
+    headerTransparent: true,
+    title: "",
+  });
 
   await act(async () => root.unmount());
 });

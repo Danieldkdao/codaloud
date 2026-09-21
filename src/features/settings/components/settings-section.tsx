@@ -1,17 +1,19 @@
 import { Icon, type IconProps } from "@/components/ui/icon";
-import { PText } from "@/components/ui/text";
+import { HeadingText, PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
 type SettingsSectionProps = {
   title: string;
+  description?: string;
   children: ReactNode;
   destructive?: boolean;
 };
 
 export const SettingsSection = ({
   title,
+  description,
   children,
   destructive = false,
 }: SettingsSectionProps) => (
@@ -24,12 +26,12 @@ export const SettingsSection = ({
   >
     <View
       className={cn(
-        "mx-4 py-4",
+        "mx-4 py-4 flex-col gap-0.5",
         destructive ? "border-destructive/20" : "border-border",
       )}
       style={{ borderBottomWidth: 0.5 }}
     >
-      <PText
+      <HeadingText
         accessibilityRole="header"
         className={cn(
           "text-xl font-semibold",
@@ -37,7 +39,8 @@ export const SettingsSection = ({
         )}
       >
         {title}
-      </PText>
+      </HeadingText>
+      {description && <PText>{description}</PText>}
     </View>
     {children}
   </View>

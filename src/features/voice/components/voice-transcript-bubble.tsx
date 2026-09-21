@@ -54,7 +54,7 @@ export const VoiceTranscriptBubble = ({
               )}
             />
             <PText
-              className="flex-1 text-foreground font-sans-medium"
+              className="flex-1 text-foreground font-medium"
               accessibilityLiveRegion="polite"
             >
               {formatVoiceStatus(state)}
@@ -137,7 +137,7 @@ export const VoiceTranscriptBubble = ({
               >
                 <PText
                   className={cn(
-                    "font-sans-medium",
+                    "font-medium",
                     segment.role === "assistant" && "text-primary",
                   )}
                 >

@@ -9,6 +9,13 @@ const mocks = vi.hoisted(() => ({
   props: {} as Record<string, any>,
 }));
 vi.mock("react-native", () => ({
+  Text: ({
+    children,
+    className,
+  }: {
+    children?: ReactNode;
+    className?: string;
+  }) => createElement("span", { className }, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   View: ({ children }: { children?: ReactNode }) =>
     createElement("div", null, children),
@@ -29,13 +36,12 @@ vi.mock("@/components/ui/glass-surface", () => ({
   GlassSurface: ({ children }: { children?: ReactNode }) => children,
 }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
-vi.mock("@/components/ui/text", () => ({
-  PText: ({ children }: { children?: ReactNode }) =>
-    createElement("span", null, children),
-}));
-vi.mock("@/lib/utils", () => ({
-  cn: (...items: unknown[]) => items.filter(Boolean).join(" "),
-}));
+vi.mock("@/components/ui/text", () => import("@/components/ui/text/p-text"));
+vi.mock("@/lib/utils", async () => {
+  const { clsx } = await import("clsx");
+  const { twMerge } = await import("tailwind-merge");
+  return { cn: (...items: Parameters<typeof clsx>) => twMerge(clsx(...items)) };
+});
 vi.mock("react-native-reanimated", () => {
   const transition = {
     duration: () => transition,
@@ -83,6 +89,27 @@ beforeEach(() => {
   act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
 });
 afterEach(() => act(() => root.unmount()));
+it("keeps the Outfit family on voice status, errors, and speaker labels", () => {
+  const failed = {
+    ...conversation,
+    state: {
+      ...conversation.state,
+      connection: "error" as const,
+      error: "Voice could not connect.",
+    },
+  };
+  act(() => root.render(<VoiceTranscriptBubble conversation={failed} />));
+  for (const label of [
+    "Voice unavailable",
+    "Voice could not connect.",
+    "You",
+  ]) {
+    const text = Array.from(container.querySelectorAll("span")).find(
+      (node) => node.textContent === label,
+    )!;
+    expect(text.classList.contains("font-sans"), label).toBe(true);
+  }
+});
 it("follows streaming text until the user scrolls back, then offers jump to latest", () => {
   act(() => mocks.props.onContentSizeChange());
   expect(mocks.scroll).toHaveBeenCalledOnce();

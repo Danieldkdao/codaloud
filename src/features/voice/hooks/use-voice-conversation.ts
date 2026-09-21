@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppState } from "react-native";
+import { AppState, NativeModules } from "react-native";
 import { createVoiceController } from "../voice-controller";
 
 export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
   const [controller] = useState(() =>
     createVoiceController(async (...args) => {
+      // The SDK constructs native event emitters during import. Check the same
+      // native module names it uses before evaluating it in an older app binary.
+      if (
+        !NativeModules.WebRTCModule ||
+        !NativeModules.LivekitReactNativeModule
+      ) {
+        throw new Error(
+          "Voice is missing from this app build. Rebuild and reinstall the app to enable it.",
+        );
+      }
       // Expo discovers native routes when exporting API manifests. Load WebRTC
       // only on microphone activation, after the app is running on the device.
       const { connectNativeVoice } =

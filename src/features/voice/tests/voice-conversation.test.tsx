@@ -13,6 +13,7 @@ vi.mock("@/services/livekit/voice-native", () => ({
   connectNativeVoice: mocks.connect,
 }));
 vi.mock("react-native", () => ({
+  NativeModules: { WebRTCModule: {}, LivekitReactNativeModule: {} },
   AppState: {
     addEventListener: (_event: string, callback: (state: string) => void) => {
       mocks.background = callback;

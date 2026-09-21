@@ -13,6 +13,5 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/cloud/schema.ts",
   out: "./src/db/cloud/migrations",
-  tablesFilter: ["user", "session", "account", "verification"],
   dbCredentials: { url: databaseUrl },
 });

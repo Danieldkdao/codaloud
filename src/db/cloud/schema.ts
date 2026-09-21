@@ -1,1 +1,1 @@
-export * from "./schemas/new-user";
+export * from "./schemas/user";

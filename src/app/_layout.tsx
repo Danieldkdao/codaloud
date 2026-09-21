@@ -77,6 +77,7 @@ const RootNavigator = () => {
             <SuccessFeedbackProvider>
               <Stack
                 screenOptions={{
+                  headerBackButtonDisplayMode: "minimal",
                   headerTitleStyle: {
                     fontFamily: "Fraunces_400Regular",
                     fontWeight: "400",
@@ -85,7 +86,6 @@ const RootNavigator = () => {
                     fontFamily: "Fraunces_400Regular",
                     fontWeight: "400",
                   },
-                  headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
                 }}
               >
                 <Stack.Protected guard={Boolean(session.data)}>

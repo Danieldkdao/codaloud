@@ -1,6 +1,6 @@
 import { Icon } from "@/components/ui/icon";
 import { NativeSelect } from "@/components/ui/native-select";
-import { PText } from "@/components/ui/text";
+import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import {
   formatEditorFontSize,
@@ -12,24 +12,37 @@ import { editorFonts, editorThemes } from "../constants";
 import { useEditorPreferences } from "../hooks/use-editor-preferences";
 import type { EditorPreferences } from "../types";
 import { GitIdentityForm } from "./git-identity-form";
+import { SettingsSection } from "./settings-section";
 
 const EditorSettingsSection = ({
   title,
   children,
+  settings,
 }: {
   title: string;
   children: ReactNode;
-}) => (
-  <View>
-    <PText
-      accessibilityRole="header"
-      className="pb-2 text-xl font-semibold text-foreground"
-    >
-      {title}
-    </PText>
-    {children}
-  </View>
-);
+  settings: boolean;
+}) => {
+  if (settings) {
+    return (
+      <SettingsSection title={title}>
+        <View className="px-4">{children}</View>
+      </SettingsSection>
+    );
+  }
+
+  return (
+    <View>
+      <HeadingText
+        accessibilityRole="header"
+        className="pb-2 text-xl font-semibold text-foreground"
+      >
+        {title}
+      </HeadingText>
+      {children}
+    </View>
+  );
+};
 
 const EditorSettingRow = ({
   label,
@@ -40,12 +53,17 @@ const EditorSettingRow = ({
   description?: string;
   children: ReactNode;
 }) => (
-  <View className="gap-1 border-border py-3" style={{ borderBottomWidth: 0.5 }}>
-    <View className="min-h-11 flex-row items-center gap-3">
-      <PText className="min-w-0 flex-1 text-foreground">{label}</PText>
-      <View className="shrink-0">{children}</View>
+  <View
+    className="border-border py-3 min-h-11 flex-row items-center gap-3"
+    style={{ borderBottomWidth: 0.5 }}
+  >
+    <View className="flex-col gap-0.5 flex-1 min-w-0">
+      <PText className="min-w-0 text-foreground text-lg font-medium">
+        {label}
+      </PText>
+      {description && <PText>{description}</PText>}
     </View>
-    {description && <PText>{description}</PText>}
+    <View className="shrink-0">{children}</View>
   </View>
 );
 
@@ -172,7 +190,11 @@ const EditorSettingStepper = ({
   </View>
 );
 
-export const EditorSettings = () => {
+type EditorSettingsProps = {
+  settings?: boolean;
+};
+
+export const EditorSettings = ({ settings = false }: EditorSettingsProps) => {
   const { preferences, update, error } = useEditorPreferences();
   const [retrying, setRetrying] = useState(false);
   const {
@@ -214,7 +236,7 @@ export const EditorSettings = () => {
           <PText className="text-destructive">{error}</PText>
         </Pressable>
       ) : null}
-      <EditorSettingsSection title="Appearance">
+      <EditorSettingsSection title="Appearance" settings={settings}>
         <EditorSettingRow label="Theme">
           <EditorSettingSelect
             label="Theme"
@@ -264,7 +286,7 @@ export const EditorSettings = () => {
           description="Show a compact overview of the file beside the editor."
         />
       </EditorSettingsSection>
-      <EditorSettingsSection title="Editing">
+      <EditorSettingsSection title="Editing" settings={settings}>
         <EditorSettingRow label="Tab size">
           <EditorSettingStepper
             value={tabSize}
@@ -295,7 +317,7 @@ export const EditorSettings = () => {
           description="Insert matching brackets and quotes as you type."
         />
       </EditorSettingsSection>
-      <GitIdentityForm />
+      <GitIdentityForm settings={settings} />
     </View>
   );
 };

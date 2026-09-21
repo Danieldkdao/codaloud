@@ -12,7 +12,8 @@ export const EditorSettingsScreen = () => (
       >
         Editor Settings
       </HeadingText>
-      <EditorSettings />
+      <View className="h-px bg-border" />
+      <EditorSettings settings />
     </View>
   </AppWrapper>
 );

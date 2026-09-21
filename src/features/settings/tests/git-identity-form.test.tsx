@@ -7,19 +7,56 @@ import { GitIdentityForm } from "../components/git-identity-form";
 
 const mocks = vi.hoisted(() => ({ save: vi.fn(), read: vi.fn() }));
 vi.mock("../git-identity", async (original) => ({
-  ...await original<typeof import("../git-identity")>(),
+  ...(await original<typeof import("../git-identity")>()),
   saveGitIdentity: mocks.save,
   readGitIdentity: mocks.read,
 }));
 vi.mock("expo-sqlite/kv-store", () => ({ default: {} }));
-vi.mock("react-native", () => ({ View: ({ children, className }: { children: ReactNode; className?: string }) => createElement("div", { "data-class": className }, children) }));
-vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children) }));
-const fields = new Map<string, { value: string; onChangeText: (value: string) => void }>();
-vi.mock("@/components/ui/input", () => ({ Input: (props: { accessibilityLabel: string; value: string; onChangeText: (value: string) => void }) => {
-  fields.set(props.accessibilityLabel, props);
-  return null;
-} }));
-vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress, disabled }: { children: ReactNode; onPress: () => void; disabled: boolean }) => createElement("button", { onClick: onPress, disabled }, children) }));
+vi.mock("react-native", () => ({
+  View: ({
+    children,
+    className,
+  }: {
+    children: ReactNode;
+    className?: string;
+  }) => createElement("div", { "data-class": className }, children),
+}));
+vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/ui/text", () => ({
+  HeadingText: ({ children }: { children: ReactNode }) =>
+    createElement("h2", null, children),
+  PText: ({ children }: { children: ReactNode }) =>
+    createElement("span", null, children),
+}));
+vi.mock("@/lib/utils", () => ({
+  cn: (...values: Array<string | false | null | undefined>) =>
+    values.filter(Boolean).join(" "),
+}));
+const fields = new Map<
+  string,
+  { value: string; onChangeText: (value: string) => void }
+>();
+vi.mock("@/components/ui/input", () => ({
+  Input: (props: {
+    accessibilityLabel: string;
+    value: string;
+    onChangeText: (value: string) => void;
+  }) => {
+    fields.set(props.accessibilityLabel, props);
+    return null;
+  },
+}));
+vi.mock("@/components/ui/button", () => ({
+  Button: ({
+    children,
+    onPress,
+    disabled,
+  }: {
+    children: ReactNode;
+    onPress: () => void;
+    disabled: boolean;
+  }) => createElement("button", { onClick: onPress, disabled }, children),
+}));
 
 let root: Root;
 let container: HTMLDivElement;
@@ -31,15 +68,32 @@ beforeEach(async () => {
   fields.clear();
   mocks.save.mockReset().mockImplementation(async (input) => input);
   mocks.read.mockReset().mockResolvedValue(saved);
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
   client.setQueryData(key, saved);
   container = document.createElement("div");
   root = createRoot(container);
-  await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(GitIdentityForm))));
+  await act(async () =>
+    root.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(GitIdentityForm),
+      ),
+    ),
+  );
 });
-afterEach(() => { act(() => root.unmount()); client.clear(); });
-const edit = async (name: string, value: string) => act(async () => fields.get(name)!.onChangeText(value));
-const submit = async () => act(async () => { container.querySelector("button")!.click(); });
+afterEach(() => {
+  act(() => root.unmount());
+  client.clear();
+});
+const edit = async (name: string, value: string) =>
+  act(async () => fields.get(name)!.onChangeText(value));
+const submit = async () =>
+  act(async () => {
+    container.querySelector("button")!.click();
+  });
 
 it("renders inline with the surrounding editor settings", () => {
   const form = container.firstElementChild;
@@ -55,7 +109,10 @@ it("validates fields before calling persistence", async () => {
 
 it("preserves a draft when saved settings refresh", async () => {
   await edit("Git author name", "Draft author");
-  await act(async () => { client.setQueryData(key, { name: "Other", email: "other@example.com" }); await new Promise((resolve) => setTimeout(resolve, 10)); });
+  await act(async () => {
+    client.setQueryData(key, { name: "Other", email: "other@example.com" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
   expect(fields.get("Git author name")!.value).toBe("Draft author");
   expect(fields.get("Git author email")!.value).toBe("other@example.com");
 });
@@ -63,7 +120,10 @@ it("preserves a draft when saved settings refresh", async () => {
 it("saves normalized form values and reports storage failures without success", async () => {
   await edit("Git author name", "  New author  ");
   await submit();
-  expect(mocks.save).toHaveBeenCalledWith({ ...saved, name: "New author" }, expect.anything());
+  expect(mocks.save).toHaveBeenCalledWith(
+    { ...saved, name: "New author" },
+    expect.anything(),
+  );
   expect(fields.get("Git author name")!.value).toBe("New author");
   mocks.save.mockRejectedValue(new Error("Storage full"));
   await edit("Git author name", "Another author");

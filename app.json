@@ -20,16 +20,28 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.codaloud.development"
     },
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "platforms": ["ios", "android"],
     "web": {
       "output": "server"
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication",
+            "enableScreenShareService": false
+          }
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "Allow Codaloud to hear you during voice conversations."
+        }
+      ],
       [
         "expo-splash-screen",
         {

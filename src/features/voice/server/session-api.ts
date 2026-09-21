@@ -1,0 +1,84 @@
+import { randomUUID } from "node:crypto";
+import { auth } from "@/lib/auth/auth";
+import { serverEnv } from "@/data/env/server";
+import { createVoiceAccessToken, livekit } from "@/services/livekit/server";
+import { voiceAgentName } from "../constants";
+import { voiceSessionRequestSchema } from "../schemas";
+
+const respond = (body: unknown, status: number) =>
+  Response.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store" },
+  });
+
+export const handleVoiceSessionRequest = async (request: Request) => {
+  let allocatedRoom: string | undefined;
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) return respond({ message: "Sign in to use voice." }, 401);
+    if (request.method !== "POST" && request.method !== "DELETE") {
+      return respond({ message: "Method not allowed." }, 405);
+    }
+    const text = await request.text();
+    if (text.length > 1024)
+      return respond({ message: "Invalid voice request." }, 400);
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return respond({ message: "Invalid voice request." }, 400);
+    }
+    // Local projects are not cloud resources; every voice room is allocated by
+    // the server and owned by the authenticated account, never a client identity.
+    const prefix = `voice-${encodeURIComponent(session.user.id)}-`;
+    if (request.method === "DELETE") {
+      const roomName =
+        body && typeof body === "object" && "roomName" in body
+          ? body.roomName
+          : null;
+      if (
+        typeof roomName !== "string" ||
+        !roomName.startsWith(prefix) ||
+        !/^[0-9a-f-]{36}$/.test(roomName.slice(prefix.length))
+      ) {
+        return respond({ message: "This voice session is not yours." }, 403);
+      }
+      await livekit.room.deleteRoom(roomName);
+      return new Response(null, {
+        status: 204,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    const input = voiceSessionRequestSchema.safeParse(body);
+    if (!input.success) return respond({ message: "Invalid voice mode." }, 400);
+    const roomName = `${prefix}${randomUUID()}`;
+    await livekit.room.createRoom({
+      name: roomName,
+      maxParticipants: 2,
+      emptyTimeout: 60,
+      departureTimeout: 10,
+    });
+    allocatedRoom = roomName;
+    await livekit.agentDispatch.createDispatch(roomName, voiceAgentName, {
+      metadata: JSON.stringify({
+        participantIdentity: session.user.id,
+        mode: input.data.mode,
+      }),
+    });
+    const token = await createVoiceAccessToken(roomName, session.user.id);
+    return respond(
+      {
+        serverUrl: serverEnv.LIVEKIT_URL,
+        token,
+        roomName,
+        participantIdentity: session.user.id,
+        mode: input.data.mode,
+      },
+      200,
+    );
+  } catch {
+    if (allocatedRoom)
+      await livekit.room.deleteRoom(allocatedRoom).catch(() => undefined);
+    return respond({ message: "Voice is unavailable. Please try again." }, 503);
+  }
+};

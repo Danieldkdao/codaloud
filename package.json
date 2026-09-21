@@ -110,6 +110,7 @@
     "db:generate:cloud": "drizzle-kit generate --config drizzle-cloud.config.ts",
     "db:generate:local": "drizzle-kit generate --config drizzle-local.config.ts",
     "db:migrate:cloud": "drizzle-kit migrate --config drizzle-cloud.config.ts",
+    "db:auth": "pnpm dlx auth@latest generate --config ./src/lib/auth/auth.ts --output ./src/db/cloud/schemas/new-user.ts --yes",
     "generate:typescript": "node scripts/build-local-typescript.mjs",
     "prestart": "node scripts/build-local-typescript.mjs",
     "pretest": "node scripts/build-local-typescript.mjs && node scripts/build-local-workspace-host.mjs",

@@ -5,32 +5,50 @@ import { expect, it, vi } from "vitest";
 import Module from "node:module";
 import WelcomeScreen from "@/app/(auth)/index";
 
+const mocks = vi.hoisted(() => ({
+  replace: vi.fn(),
+  signIn: vi.fn(),
+}));
+
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) =>
     createElement("div", null, children),
 }));
-vi.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
+vi.mock("expo-router", () => ({
+  Stack: { Screen: () => null },
+  useRouter: () => ({ replace: mocks.replace }),
+}));
 vi.mock("@/components/ui/image", () => ({ Image: () => null }));
+vi.mock("@/components/ui/button", () => ({
+  Button: ({
+    children,
+    disabled,
+    onPress,
+  }: {
+    children: ReactNode;
+    disabled?: boolean;
+    onPress?: () => void;
+  }) =>
+    createElement("button", { disabled, onClick: onPress }, children),
+}));
+vi.mock("@/components/ui/icon", () => ({
+  Icon: ({ name }: { name: string }) =>
+    createElement("span", { "data-icon": name }),
+}));
 vi.mock("@/components/ui/text", () => ({
   HeadingText: ({ children }: { children: ReactNode }) =>
     createElement("h1", null, children),
   PText: ({ children }: { children: ReactNode }) =>
     createElement("p", null, children),
 }));
-vi.mock("@/features/auth/components/social-sign-in-buttons", () => ({
-  SocialSignInButtons: () =>
-    createElement("div", null, [
-      createElement("button", { key: "github" }, "Sign in with GitHub"),
-      createElement("button", { key: "google" }, "Sign in with Google"),
-      createElement(
-        "button",
-        { key: "apple", disabled: true },
-        "Sign in with Apple · Coming soon",
-      ),
-    ]),
+vi.mock("@/features/auth/components/google-icon", () => ({
+  GoogleIcon: () => createElement("span", { "data-icon": "google-color" }),
+}));
+vi.mock("@/lib/auth/auth-client", () => ({
+  authClient: { signIn: { social: mocks.signIn } },
 }));
 
-it("offers the enabled social providers and marks Apple as coming soon", async () => {
+it("offers Continue actions for GitHub, Google, and Apple", async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
     true;
   const loader = Module as unknown as {
@@ -50,11 +68,13 @@ it("offers the enabled social providers and marks Apple as coming soon", async (
       root.render(createElement(WelcomeScreen));
     });
     expect(container.textContent).toContain("Your voice. Your code.");
-    expect(container.textContent).toContain("Sign in with GitHub");
-    expect(container.textContent).toContain("Sign in with Google");
-    expect(container.textContent).toContain("Sign in with Apple · Coming soon");
+    expect(container.textContent).toContain("Continue with GitHub");
+    expect(container.textContent).toContain("Continue with Google");
+    expect(container.textContent).toContain("Continue with Apple");
+    expect(container.textContent).not.toContain("Coming soon");
     expect(container.querySelectorAll("button")).toHaveLength(3);
-    expect(container.querySelectorAll("button")[2]?.disabled).toBe(true);
+    expect(container.querySelectorAll("button")[2]?.disabled).toBe(false);
+    expect(container.querySelector('[data-icon="google-color"]')).not.toBeNull();
     expect(container.textContent).toContain(
       "Your projects and files stay on this device.",
     );

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import { authClient } from "@/lib/auth/auth-client";
+import { GoogleIcon } from "./google-icon";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
@@ -57,7 +58,7 @@ export const SocialSignInButtons = () => {
           className="text-background"
           accessible={false}
         />
-        Sign in with GitHub
+        Continue with GitHub
       </Button>
       <Button
         variant="outline"
@@ -67,22 +68,13 @@ export const SocialSignInButtons = () => {
         loading={pendingProvider === "google"}
         onPress={() => void signIn("google")}
       >
-        <Icon
-          family="FontAwesome6"
-          name="google"
-          brand
-          size={21}
-          className="text-info"
-          accessible={false}
-        />
-        Sign in with Google
+        <GoogleIcon />
+        Continue with Google
       </Button>
       <Button
         variant="secondary"
         size="lg"
         className="min-h-14"
-        disabled
-        accessibilityHint="Apple sign-in is coming later"
       >
         <Icon
           family="FontAwesome6"
@@ -92,7 +84,7 @@ export const SocialSignInButtons = () => {
           className="text-secondary-foreground"
           accessible={false}
         />
-        Sign in with Apple · Coming soon
+        Continue with Apple
       </Button>
       {error && (
         <PText accessibilityLiveRegion="polite" className="text-destructive">

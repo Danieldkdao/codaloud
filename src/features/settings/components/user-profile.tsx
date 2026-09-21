@@ -19,7 +19,7 @@ export const UserProfile = ({ name, email, image }: UserProfileProps) => (
           accessibilityLabel={`${name}'s profile picture`}
           className="bg-muted"
           contentFit="cover"
-          style={{ width: 64, height: 64, borderRadius: 32 }}
+          style={{ width: 52, height: 52, borderRadius: 32 }}
           transition={150}
         />
       ) : (
@@ -33,11 +33,13 @@ export const UserProfile = ({ name, email, image }: UserProfileProps) => (
           />
         </View>
       )}
-      <View className="min-w-0 flex-1 gap-1">
-        <HeadingText className="text-xl" numberOfLines={1}>
+      <View className="min-w-0 flex-1">
+        <HeadingText className="text-2xl font-medium" numberOfLines={1}>
           {name}
         </HeadingText>
-        <PText numberOfLines={1}>{email}</PText>
+        <PText numberOfLines={1} className="text-lg">
+          {email}
+        </PText>
       </View>
     </View>
   </SettingsSection>

@@ -17,6 +17,12 @@ export const auth = betterAuth({
   advanced: {
     database: { generateId: "uuid" },
   },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["github", "google"],
+    },
+  },
   socialProviders: {
     github: {
       clientId: serverEnv.GITHUB_CLIENT_ID,

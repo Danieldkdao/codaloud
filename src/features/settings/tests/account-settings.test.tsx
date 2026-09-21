@@ -3,12 +3,16 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AccountDangerZone } from "@/features/settings/components/account-danger-zone";
+import { LinkedAccounts } from "@/features/settings/components/linked-accounts";
 import { UserProfile } from "@/features/settings/components/user-profile";
 
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
+  linkSocial: vi.fn(),
+  listAccounts: vi.fn(),
   replace: vi.fn(),
   signOut: vi.fn(),
+  unlinkAccount: vi.fn(),
 }));
 
 vi.mock("react-native", () => ({
@@ -22,23 +26,33 @@ vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
     className,
+    contentClassName,
+    contentContainerClassName,
     disabled,
     onPress,
   }: {
     children: ReactNode;
     className?: string;
+    contentClassName?: string;
+    contentContainerClassName?: string;
     disabled?: boolean;
     onPress?: () => void;
   }) =>
     createElement(
       "button",
-      { className, disabled, onClick: onPress },
+      {
+        className,
+        disabled,
+        onClick: onPress,
+        "data-content-class": contentClassName,
+        "data-content-container-class": contentContainerClassName,
+      },
       children,
     ),
 }));
 vi.mock("@/components/ui/icon", () => ({
-  Icon: ({ name }: { name: string }) =>
-    createElement("span", { "data-icon": name }),
+  Icon: ({ className, name }: { className?: string; name: string }) =>
+    createElement("span", { className, "data-icon": name }),
 }));
 vi.mock("@/components/ui/image", () => ({
   Image: ({
@@ -62,8 +76,16 @@ vi.mock("@/components/ui/text", () => ({
   PText: ({ children }: { children: ReactNode }) =>
     createElement("p", null, children),
 }));
+vi.mock("@/features/auth/components/google-icon", () => ({
+  GoogleIcon: () => createElement("span", { "data-icon": "google" }),
+}));
 vi.mock("@/lib/auth/auth-client", () => ({
-  authClient: { signOut: mocks.signOut },
+  authClient: {
+    linkSocial: mocks.linkSocial,
+    listAccounts: mocks.listAccounts,
+    signOut: mocks.signOut,
+    unlinkAccount: mocks.unlinkAccount,
+  },
 }));
 vi.mock("@/lib/utils", () => ({
   alert: mocks.alert,
@@ -87,7 +109,13 @@ const render = async (element: ReactNode) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.linkSocial.mockResolvedValue({ data: {}, error: null });
+  mocks.listAccounts.mockResolvedValue({
+    data: [{ id: "github-account", providerId: "github" }],
+    error: null,
+  });
   mocks.signOut.mockResolvedValue({ data: {}, error: null });
+  mocks.unlinkAccount.mockResolvedValue({ data: {}, error: null });
 });
 
 it("shows the authenticated user's profile", async () => {
@@ -105,8 +133,8 @@ it("shows the authenticated user's profile", async () => {
   expect(container.querySelector("img")?.getAttribute("src")).toBe(
     "https://example.com/ada.png",
   );
-  expect(container.querySelector("img")?.style.width).toBe("64px");
-  expect(container.querySelector("img")?.style.height).toBe("64px");
+  expect(container.querySelector("img")?.style.width).toBe("52px");
+  expect(container.querySelector("img")?.style.height).toBe("52px");
 
   await act(async () => root.unmount());
 });
@@ -122,7 +150,16 @@ it("signs out while leaving delete account as an inert enabled action", async ()
   ]);
   expect(buttons.every((button) => !button.disabled)).toBe(true);
   expect(
-    buttons.every((button) => button.classList.contains("justify-start")),
+    buttons.every(
+      (button) =>
+        button.dataset.contentContainerClass === "w-full" &&
+        button.dataset.contentClass === "w-full justify-center",
+    ),
+  ).toBe(true);
+  expect(
+    Array.from(container.querySelectorAll("[data-icon]")).every((icon) =>
+      icon.classList.contains("absolute"),
+    ),
   ).toBe(true);
 
   await act(async () => buttons[1]?.click());
@@ -131,6 +168,48 @@ it("signs out while leaving delete account as an inert enabled action", async ()
   await act(async () => buttons[0]?.click());
   expect(mocks.signOut).toHaveBeenCalledOnce();
   expect(mocks.replace).toHaveBeenCalledWith("/");
+
+  await act(async () => root.unmount());
+});
+
+it("distinguishes linked sign-in accounts and manages supported providers", async () => {
+  const { container, root } = await render(createElement(LinkedAccounts));
+
+  await act(async () => Promise.resolve());
+
+  expect(container.textContent).toContain("Accounts");
+  expect(container.textContent).toContain(
+    "Use these accounts to sign in to Codaloud.",
+  );
+  expect(container.textContent).toContain(
+    "We only use your name, email, and profile photo.",
+  );
+  expect(container.textContent).toContain("GoogleNot connectedLink");
+  expect(container.textContent).toContain("GitHubConnectedUnlink");
+  expect(container.textContent).toContain("AppleNot connectedLink");
+
+  const buttons = Array.from(container.querySelectorAll("button"));
+  const googleButton = buttons.find((button) => button.textContent === "Link");
+  const githubButton = buttons.find(
+    (button) => button.textContent === "Unlink",
+  );
+  const appleButton = buttons.filter(
+    (button) => button.textContent === "Link",
+  )[1];
+
+  await act(async () => googleButton?.click());
+  expect(mocks.linkSocial).toHaveBeenCalledWith({
+    provider: "google",
+    callbackURL: "/account",
+  });
+
+  await act(async () => githubButton?.click());
+  expect(mocks.unlinkAccount).toHaveBeenCalledWith({
+    accountId: "github-account",
+  });
+
+  await act(async () => appleButton?.click());
+  expect(mocks.linkSocial).toHaveBeenCalledOnce();
 
   await act(async () => root.unmount());
 });

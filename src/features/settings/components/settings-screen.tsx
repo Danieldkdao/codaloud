@@ -11,6 +11,7 @@ import { Pressable, Switch, View } from "react-native";
 import { formatAppVersion } from "../lib/formatters";
 import { AppearanceSelector } from "./appearance-selector";
 import { AccountDangerZone } from "./account-danger-zone";
+import { LinkedAccounts } from "./linked-accounts";
 import { SettingsRow, SettingsSection } from "./settings-section";
 import { UserProfile } from "./user-profile";
 
@@ -24,7 +25,10 @@ export const SettingsScreen = () => {
   return (
     <AppWrapper tabBarShown>
       <View className="w-full max-w-xl gap-6 self-center">
-        <HeadingText accessibilityRole="header" className="text-4xl">
+        <HeadingText
+          accessibilityRole="header"
+          className="text-3xl font-semibold"
+        >
           Settings
         </HeadingText>
 
@@ -70,7 +74,12 @@ export const SettingsScreen = () => {
 
         <GitIdentityForm />
 
-        <SettingsSection title="Connections">
+        <LinkedAccounts />
+
+        <SettingsSection
+          title="Connections"
+          description="Connect services for repository imports and publishing."
+        >
           <View className="p-4">
             <GitHubConnection />
           </View>

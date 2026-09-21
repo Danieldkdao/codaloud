@@ -61,6 +61,8 @@ export type ButtonProps = ComponentPropsWithRef<typeof Pressable> &
     textClassName?: string;
     /** Styles the content row, including spacing between icons and text. */
     contentClassName?: string;
+    /** Styles the container that holds the content row and loading indicator. */
+    contentContainerClassName?: string;
     loading?: boolean;
   };
 
@@ -68,6 +70,7 @@ export const Button = ({
   className,
   textClassName,
   contentClassName,
+  contentContainerClassName,
   variant = "default",
   size = "default",
   disabled,
@@ -76,7 +79,8 @@ export const Button = ({
   children,
   ...props
 }: ButtonProps) => {
-  const isDisabled = loading || (disabled ?? accessibilityState?.disabled ?? false);
+  const isDisabled =
+    loading || (disabled ?? accessibilityState?.disabled ?? false);
 
   return (
     <Pressable
@@ -93,6 +97,7 @@ export const Button = ({
       {(state) => (
         <LoadingSwap
           isLoading={loading}
+          containerClassName={contentContainerClassName}
           className={cn(
             "gap-2",
             size === "xs" && "gap-1",

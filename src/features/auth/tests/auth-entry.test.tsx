@@ -6,6 +6,7 @@ import Module from "node:module";
 import WelcomeScreen from "@/app/(auth)/index";
 
 const mocks = vi.hoisted(() => ({
+  alert: vi.fn(),
   replace: vi.fn(),
   signIn: vi.fn(),
 }));
@@ -28,8 +29,7 @@ vi.mock("@/components/ui/button", () => ({
     children: ReactNode;
     disabled?: boolean;
     onPress?: () => void;
-  }) =>
-    createElement("button", { disabled, onClick: onPress }, children),
+  }) => createElement("button", { disabled, onClick: onPress }, children),
 }));
 vi.mock("@/components/ui/icon", () => ({
   Icon: ({ name }: { name: string }) =>
@@ -47,10 +47,12 @@ vi.mock("@/features/auth/components/google-icon", () => ({
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { signIn: { social: mocks.signIn } },
 }));
+vi.mock("@/lib/utils", () => ({ alert: mocks.alert }));
 
 it("offers Continue actions for GitHub, Google, and Apple", async () => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
   const loader = Module as unknown as {
     _load: (name: string, ...args: unknown[]) => unknown;
   };
@@ -74,9 +76,52 @@ it("offers Continue actions for GitHub, Google, and Apple", async () => {
     expect(container.textContent).not.toContain("Coming soon");
     expect(container.querySelectorAll("button")).toHaveLength(3);
     expect(container.querySelectorAll("button")[2]?.disabled).toBe(false);
-    expect(container.querySelector('[data-icon="google-color"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-icon="google-color"]'),
+    ).not.toBeNull();
     expect(container.textContent).toContain(
       "Your projects and files stay on this device.",
+    );
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    assetLoader.mockRestore();
+  }
+});
+
+it("shows an alert when social authentication fails", async () => {
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+  mocks.signIn.mockResolvedValueOnce({
+    error: new Error("Authentication failed"),
+  });
+  const loader = Module as unknown as {
+    _load: (name: string, ...args: unknown[]) => unknown;
+  };
+  const originalLoad = loader._load;
+  const assetLoader = vi
+    .spyOn(loader, "_load")
+    .mockImplementation((name, ...args) =>
+      name.startsWith("@/assets/") ? 1 : originalLoad(name, ...args),
+    );
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(createElement(WelcomeScreen));
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("button")?.click();
+    });
+
+    expect(mocks.alert).toHaveBeenCalledWith(
+      "Unable to sign in. Please try again.",
+    );
+    expect(container.textContent).not.toContain(
+      "Unable to sign in. Please try again.",
     );
   } finally {
     await act(async () => {

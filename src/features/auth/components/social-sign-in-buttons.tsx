@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { PText } from "@/components/ui/text";
 import { authClient } from "@/lib/auth/auth-client";
+import { alert } from "@/lib/utils";
 import { GoogleIcon } from "./google-icon";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -11,13 +11,12 @@ type SocialProvider = "github" | "google";
 
 export const SocialSignInButtons = () => {
   const router = useRouter();
-  const [pendingProvider, setPendingProvider] =
-    useState<SocialProvider | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<SocialProvider | null>(
+    null,
+  );
 
   const signIn = async (provider: SocialProvider) => {
     setPendingProvider(provider);
-    setError(null);
 
     try {
       const result = await authClient.signIn.social({
@@ -26,13 +25,13 @@ export const SocialSignInButtons = () => {
       });
 
       if (result.error) {
-        setError("Unable to sign in. Please try again.");
+        alert("Unable to sign in. Please try again.");
         return;
       }
 
       router.replace("/");
     } catch {
-      setError("Unable to sign in. Please try again.");
+      alert("Unable to sign in. Please try again.");
     } finally {
       setPendingProvider(null);
     }
@@ -45,7 +44,7 @@ export const SocialSignInButtons = () => {
       <Button
         size="lg"
         className="min-h-14 bg-foreground"
-        textClassName="text-background"
+        textClassName="text-background text-lg font-medium"
         disabled={isSigningIn}
         loading={pendingProvider === "github"}
         onPress={() => void signIn("github")}
@@ -61,9 +60,10 @@ export const SocialSignInButtons = () => {
         Continue with GitHub
       </Button>
       <Button
-        variant="outline"
+        variant="secondary"
         size="lg"
         className="min-h-14"
+        textClassName="text-lg font-medium"
         disabled={isSigningIn}
         loading={pendingProvider === "google"}
         onPress={() => void signIn("google")}
@@ -72,9 +72,10 @@ export const SocialSignInButtons = () => {
         Continue with Google
       </Button>
       <Button
-        variant="secondary"
+        variant="outline"
         size="lg"
         className="min-h-14"
+        textClassName="text-lg font-medium"
       >
         <Icon
           family="FontAwesome6"
@@ -86,11 +87,6 @@ export const SocialSignInButtons = () => {
         />
         Continue with Apple
       </Button>
-      {error && (
-        <PText accessibilityLiveRegion="polite" className="text-destructive">
-          {error}
-        </PText>
-      )}
     </View>
   );
 };

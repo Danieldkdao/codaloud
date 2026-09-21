@@ -21,13 +21,20 @@ vi.mock("expo-router", () => ({
 vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
+    className,
     disabled,
     onPress,
   }: {
     children: ReactNode;
+    className?: string;
     disabled?: boolean;
     onPress?: () => void;
-  }) => createElement("button", { disabled, onClick: onPress }, children),
+  }) =>
+    createElement(
+      "button",
+      { className, disabled, onClick: onPress },
+      children,
+    ),
 }));
 vi.mock("@/components/ui/icon", () => ({
   Icon: ({ name }: { name: string }) =>
@@ -37,13 +44,16 @@ vi.mock("@/components/ui/image", () => ({
   Image: ({
     accessibilityLabel,
     source,
+    style,
   }: {
     accessibilityLabel?: string;
     source: { default?: { uri?: string } };
+    style?: { width?: number; height?: number };
   }) =>
     createElement("img", {
       alt: accessibilityLabel,
       src: source.default?.uri,
+      style,
     }),
 }));
 vi.mock("@/components/ui/text", () => ({
@@ -95,6 +105,8 @@ it("shows the authenticated user's profile", async () => {
   expect(container.querySelector("img")?.getAttribute("src")).toBe(
     "https://example.com/ada.png",
   );
+  expect(container.querySelector("img")?.style.width).toBe("64px");
+  expect(container.querySelector("img")?.style.height).toBe("64px");
 
   await act(async () => root.unmount());
 });
@@ -109,6 +121,9 @@ it("signs out while leaving delete account as an inert enabled action", async ()
     "Delete account",
   ]);
   expect(buttons.every((button) => !button.disabled)).toBe(true);
+  expect(
+    buttons.every((button) => button.classList.contains("justify-start")),
+  ).toBe(true);
 
   await act(async () => buttons[1]?.click());
   expect(mocks.signOut).not.toHaveBeenCalled();

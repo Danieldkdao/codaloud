@@ -17,8 +17,9 @@ export const UserProfile = ({ name, email, image }: UserProfileProps) => (
         <Image
           source={{ default: { uri: image } }}
           accessibilityLabel={`${name}'s profile picture`}
-          className="size-16 rounded-full bg-muted"
+          className="bg-muted"
           contentFit="cover"
+          style={{ width: 64, height: 64, borderRadius: 32 }}
           transition={150}
         />
       ) : (

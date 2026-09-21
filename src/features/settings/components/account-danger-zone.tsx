@@ -35,6 +35,7 @@ export const AccountDangerZone = () => {
         <Button
           variant="destructive"
           size="lg"
+          className="justify-start"
           loading={isSigningOut}
           onPress={() => void signOut()}
         >
@@ -47,7 +48,7 @@ export const AccountDangerZone = () => {
           />
           Sign out
         </Button>
-        <Button variant="destructive" size="lg">
+        <Button variant="destructive" size="lg" className="justify-start">
           <Icon
             family="Feather"
             name="trash-2"

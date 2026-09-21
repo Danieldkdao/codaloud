@@ -9,9 +9,16 @@ const verifier = "v".repeat(64);
 
 beforeEach(async () => {
   vi.resetModules();
+  vi.stubEnv("DATABASE_URL", "postgresql://example.test/codaloud");
+  vi.stubEnv("BETTER_AUTH_SECRET", "test-secret-at-least-32-characters-long");
   vi.stubEnv("GITHUB_CLIENT_ID", "client-id");
   vi.stubEnv("GITHUB_CLIENT_SECRET", "server-secret");
+  vi.stubEnv("GOOGLE_CLIENT_ID", "google-client-id");
+  vi.stubEnv("GOOGLE_CLIENT_SECRET", "google-client-secret");
   vi.stubEnv("BETTER_AUTH_URL", "https://codaloud.test");
+  vi.stubEnv("TRIGGER_SECRET_KEY", "trigger-secret");
+  vi.stubEnv("DAYTONA_API_KEY", "daytona-key");
+  vi.stubEnv("DAYTONA_TARGET", "us");
   ({ handleGitHubOAuthRequest, redirectGitHubOAuthCallback } = await import("../server/oauth"));
 });
 

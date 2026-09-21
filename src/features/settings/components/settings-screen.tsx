@@ -4,6 +4,7 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import { GitHubConnection } from "@/services/github/components/github-connection";
 import { GitIdentityForm } from "@/features/settings/components/git-identity-form";
+import { SignOutButton } from "@/features/auth/components/sign-out-button";
 import Constants from "expo-constants";
 import { useState } from "react";
 import { Pressable, Switch, View } from "react-native";
@@ -62,6 +63,10 @@ export const SettingsScreen = () => {
           <View className="p-4">
             <GitHubConnection />
           </View>
+        </SettingsSection>
+
+        <SettingsSection title="Account">
+          <SignOutButton />
         </SettingsSection>
 
         <SettingsSection title="About & legal">

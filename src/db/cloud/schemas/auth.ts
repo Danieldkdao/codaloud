@@ -6,12 +6,13 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 export const UserTable = pgTable(
   "user",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").default(false).notNull(),
@@ -25,14 +26,14 @@ export const UserTable = pgTable(
 export const SessionTable = pgTable(
   "session",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").defaultRandom().primaryKey(),
     expiresAt: timestamp("expires_at").notNull(),
     token: text("token").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
-    userId: text("user_id")
+    userId: uuid("user_id")
       .notNull()
       .references(() => UserTable.id, { onDelete: "cascade" }),
   },
@@ -45,10 +46,10 @@ export const SessionTable = pgTable(
 export const AccountTable = pgTable(
   "account",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").defaultRandom().primaryKey(),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
-    userId: text("user_id")
+    userId: uuid("user_id")
       .notNull()
       .references(() => UserTable.id, { onDelete: "cascade" }),
     accessToken: text("access_token"),

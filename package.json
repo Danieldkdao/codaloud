@@ -109,7 +109,7 @@
     "check:icons": "node scripts/generate-material-icons.mjs --check",
     "db:generate:cloud": "drizzle-kit generate --config drizzle-cloud.config.ts",
     "db:generate:local": "drizzle-kit generate --config drizzle-local.config.ts",
-    "db:push:cloud": "drizzle-kit push --config drizzle-cloud.config.ts",
+    "db:migrate:cloud": "drizzle-kit migrate --config drizzle-cloud.config.ts",
     "generate:typescript": "node scripts/build-local-typescript.mjs",
     "prestart": "node scripts/build-local-typescript.mjs",
     "pretest": "node scripts/build-local-typescript.mjs && node scripts/build-local-workspace-host.mjs",

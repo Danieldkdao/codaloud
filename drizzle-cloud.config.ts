@@ -13,5 +13,6 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/cloud/schema.ts",
   out: "./drizzle/cloud",
+  tablesFilter: ["user", "session", "account", "verification"],
   dbCredentials: { url: databaseUrl },
 });

@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import { connectNativeVoice } from "@/services/livekit/voice-native";
 import { createVoiceController } from "../voice-controller";
 
 export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
   const [controller] = useState(() =>
-    createVoiceController(connectNativeVoice),
+    createVoiceController(async (...args) => {
+      // Expo discovers native routes when exporting API manifests. Load WebRTC
+      // only on microphone activation, after the app is running on the device.
+      const { connectNativeVoice } =
+        await import("@/services/livekit/voice-native");
+      return connectNativeVoice(...args);
+    }),
   );
   const state = useSyncExternalStore(
     controller.subscribe,

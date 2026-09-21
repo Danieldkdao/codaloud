@@ -124,3 +124,22 @@ it("cancellation during permission acquisition stops the temporary track", async
   expect(mocks.trackStop).toHaveBeenCalledOnce();
   expect(mocks.create).not.toHaveBeenCalled();
 });
+
+it("waits for a previous room to release native audio before starting another", async () => {
+  const first = await connectNativeVoice(
+    "hold",
+    new AbortController().signal,
+    events(),
+  );
+  const pending = connectNativeVoice(
+    "hands-free",
+    new AbortController().signal,
+    events(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.create).toHaveBeenCalledOnce();
+  await first.close();
+  const second = await pending;
+  expect(mocks.create).toHaveBeenCalledTimes(2);
+  await second.close();
+});

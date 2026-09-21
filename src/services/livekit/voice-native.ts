@@ -12,9 +12,13 @@ import { createVoiceTranscriptReceiver } from "./voice-transcripts";
 registerGlobals();
 
 // Permission prompts and native audio setup cannot be aborted halfway through.
-// Serialize setup so a cancelled attempt finishes cleanup before the next starts.
+// Keep a single native audio owner, including teardown, across mounted screens.
 let setupQueue = Promise.resolve();
 export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
+  let releaseAudio!: () => void;
+  const audioReleased = new Promise<void>((resolve) => {
+    releaseAudio = resolve;
+  });
   const result = setupQueue.then(async (): Promise<VoiceConnection> => {
     const checkCancelled = () => {
       if (signal.aborted) throw new Error("Voice connection cancelled.");
@@ -32,7 +36,10 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
       );
     }
     checkCancelled();
-    const room = new Room({ disconnectOnPageLeave: false });
+    const room = new Room({
+      disconnectOnPageLeave: false,
+      publishDefaults: { stopMicTrackOnMute: true },
+    });
     let roomName: string | undefined;
     let agentIdentity: string | undefined;
     let closed = false;
@@ -58,7 +65,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
         await room.disconnect().catch(() => {});
         await AudioSession.stopAudioSession().catch(() => {});
         if (roomName) await deleteVoiceSession(roomName);
-      })();
+      })().finally(releaseAudio);
       return closing;
     };
     const inspectAgent = () => {
@@ -189,7 +196,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
     }
   });
   setupQueue = result.then(
-    () => {},
+    () => audioReleased,
     () => {},
   );
   return result;

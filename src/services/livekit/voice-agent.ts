@@ -54,13 +54,16 @@ export default defineAgent({
       () => ctx.shutdown("Voice session time limit"),
       voiceSessionDurationMs,
     );
+    let joinTimer: ReturnType<typeof setTimeout> | undefined;
     ctx.addShutdownCallback(async () => {
       clearTimeout(timer);
+      clearTimeout(joinTimer);
       await session.close();
     });
     session.on(voice.AgentSessionEventTypes.Error, () => {
       void ctx.room.localParticipant
         ?.setAttributes({ "codaloud.voice.error": "unavailable" })
+        .catch(() => {})
         .finally(() => ctx.shutdown("Voice provider unavailable"));
     });
     session.on(voice.AgentSessionEventTypes.Close, () =>
@@ -94,5 +97,15 @@ export default defineAgent({
     await ctx.room.localParticipant!.setAttributes({
       "codaloud.voice.ready": "true",
     });
+    // A cancelled token request can allocate a room without delivering it to
+    // the phone. Do not keep that abandoned worker alive for the full session.
+    joinTimer = setTimeout(
+      () => ctx.shutdown("Voice participant did not join"),
+      30_000,
+    );
+    void ctx
+      .waitForParticipant(metadata.participantIdentity)
+      .then(() => clearTimeout(joinTimer))
+      .catch(() => ctx.shutdown("Voice participant unavailable"));
   },
 });

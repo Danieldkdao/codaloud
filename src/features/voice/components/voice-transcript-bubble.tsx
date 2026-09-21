@@ -39,8 +39,6 @@ export const VoiceTranscriptBubble = ({
       exiting={FadeOutDown.duration(180).reduceMotion(ReduceMotion.System)}
       layout={LinearTransition.duration(180).reduceMotion(ReduceMotion.System)}
       style={{
-        position: "absolute",
-        bottom: "100%",
         alignSelf: "center",
         width: Math.min(width - 32, 420),
         paddingBottom: 8,

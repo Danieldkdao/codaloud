@@ -56,10 +56,6 @@ export const ProjectWorkspaceDock = ({
     <View
       testID="project-workspace-dock"
       collapsable={false}
-      onLayout={(event) => {
-        const height = event.nativeEvent.layout.height;
-        if (height > 0) setDockHeight(height);
-      }}
       style={{
         position: "absolute",
         // Android resizes the screen above its keyboard; hide the voice dock
@@ -71,14 +67,27 @@ export const ProjectWorkspaceDock = ({
         left: 0,
         right: 0,
         pointerEvents: "box-none",
-        paddingLeft: horizontalPadding + insets.left,
-        paddingRight: horizontalPadding + insets.right,
-        paddingTop: 12,
-        paddingBottom: Math.max(insets.bottom, 12),
       }}
     >
       <VoiceTranscriptBubble conversation={conversation} />
-      <View className="w-full" style={{ gap: 10, pointerEvents: "box-none" }}>
+      <View
+        className="w-full"
+        collapsable={false}
+        onLayout={(event) => {
+          // Measure only the controls for editor padding. The transcript remains
+          // inside the outer dock's touch bounds so Android can scroll it.
+          const height = event.nativeEvent.layout.height;
+          if (height > 0) setDockHeight(height);
+        }}
+        style={{
+          gap: 10,
+          pointerEvents: "box-none",
+          paddingLeft: horizontalPadding + insets.left,
+          paddingRight: horizontalPadding + insets.right,
+          paddingTop: 12,
+          paddingBottom: Math.max(insets.bottom, 12),
+        }}
+      >
         {isGit ? (
           <View
             ref={branchIndicatorRef}

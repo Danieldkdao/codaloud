@@ -114,7 +114,7 @@
   "scripts": {
     "start": "expo start",
     "dev": "expo start -c",
-    "voice:dev": "node --env-file=.env --import tsx src/services/livekit/voice-worker.ts dev",
+    "voice:dev": "node --env-file=.env --import tsx src/services/livekit/voice-worker.ts start",
     "voice:start": "node --import tsx src/services/livekit/voice-worker.ts start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",

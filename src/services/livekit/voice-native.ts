@@ -5,7 +5,7 @@ import {
   createVoiceSession,
   deleteVoiceSession,
 } from "@/features/voice/actions";
-import { voiceControlMethod } from "@/features/voice/constants";
+import { voiceAgentName, voiceControlMethod } from "@/features/voice/constants";
 import type { ConnectVoice, VoiceConnection } from "@/features/voice/types";
 import { createVoiceTranscriptReceiver } from "./voice-transcripts";
 
@@ -141,10 +141,13 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
             reject(new Error("Voice connection cancelled."));
           };
           const timer = setTimeout(() => {
+            console.warn(
+              `[voice] Room connected, but agent readiness timed out. Check that the ${voiceAgentName} worker is running and registered in the same LiveKit project as the API.`,
+            );
             cleanup();
             reject(
               new Error(
-                "The voice agent is not available. Please try again shortly.",
+                "The voice room connected, but the agent did not start. The voice service may be offline. Please try again shortly.",
               ),
             );
           }, 20_000);

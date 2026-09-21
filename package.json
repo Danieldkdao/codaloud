@@ -113,7 +113,8 @@
   },
   "scripts": {
     "start": "expo start",
-    "dev": "expo start -c",
+    "dev": "node scripts/dev-with-voice.mjs",
+    "dev:app": "expo start -c",
     "voice:dev": "node --env-file=.env --import tsx src/services/livekit/voice-worker.ts start",
     "voice:start": "node --import tsx src/services/livekit/voice-worker.ts start",
     "reset-project": "node ./scripts/reset-project.js",

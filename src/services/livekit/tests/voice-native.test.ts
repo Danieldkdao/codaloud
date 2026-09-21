@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { connectNativeVoice } from "../voice-native";
 const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   remove: vi.fn(),
   order: [] as string[],
+  agentReady: true,
+  listeners: new Map<string, Set<(...args: any[]) => void>>(),
 }));
 vi.mock("@livekit/react-native", () => ({
   registerGlobals: vi.fn(),
@@ -30,25 +32,40 @@ vi.mock("@/features/voice/actions", () => ({
 vi.mock("livekit-client", () => ({
   RoomEvent: {
     ParticipantAttributesChanged: "attributes",
+    ParticipantConnected: "joined",
     ParticipantDisconnected: "left",
     Disconnected: "disconnected",
   },
   Room: class {
-    remoteParticipants = new Map([
-      [
-        "agent",
-        { identity: "agent", attributes: { "codaloud.voice.ready": "true" } },
-      ],
-    ]);
+    remoteParticipants = new Map(
+      mocks.agentReady
+        ? [
+            [
+              "agent",
+              {
+                identity: "agent",
+                attributes: { "codaloud.voice.ready": "true" },
+              },
+            ],
+          ]
+        : [],
+    );
     localParticipant = {
       setMicrophoneEnabled: mocks.microphone,
       performRpc: mocks.rpc,
     };
     connect = mocks.connect;
     disconnect = mocks.disconnect;
-    on = vi.fn().mockReturnThis();
-    off = vi.fn().mockReturnThis();
-    removeAllListeners = vi.fn();
+    on = (event: string, callback: (...args: any[]) => void) => {
+      if (!mocks.listeners.has(event)) mocks.listeners.set(event, new Set());
+      mocks.listeners.get(event)!.add(callback);
+      return this;
+    };
+    off = (event: string, callback: (...args: any[]) => void) => {
+      mocks.listeners.get(event)?.delete(callback);
+      return this;
+    };
+    removeAllListeners = () => mocks.listeners.clear();
     registerTextStreamHandler = vi.fn();
     unregisterTextStreamHandler = vi.fn();
   },
@@ -61,6 +78,8 @@ const events = () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.order = [];
+  mocks.agentReady = true;
+  mocks.listeners.clear();
   mocks.disconnect.mockResolvedValue(undefined);
   mocks.startAudio.mockResolvedValue(undefined);
   mocks.stopAudio.mockResolvedValue(undefined);
@@ -142,4 +161,34 @@ it("waits for a previous room to release native audio before starting another", 
   const second = await pending;
   expect(mocks.create).toHaveBeenCalledTimes(2);
   await second.close();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+it("reports an absent agent separately from a failed room connection", async () => {
+  vi.useFakeTimers();
+  mocks.agentReady = false;
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const callbacks = events();
+  const pending = connectNativeVoice(
+    "hands-free",
+    new AbortController().signal,
+    callbacks,
+  );
+  const rejected = pending.catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(await rejected).toEqual(
+    expect.objectContaining({
+      message: expect.stringMatching(/room connected.*agent.*offline/i),
+    }),
+  );
+  expect(mocks.connect).toHaveBeenCalledOnce();
+  expect(mocks.microphone).not.toHaveBeenCalled();
+  expect(mocks.remove).toHaveBeenCalledWith("room");
+  expect(callbacks.onError).not.toHaveBeenCalled();
+  expect(warning).toHaveBeenCalledWith(
+    expect.stringContaining("codaloud-voice"),
+  );
 });

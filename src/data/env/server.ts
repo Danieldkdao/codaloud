@@ -20,6 +20,7 @@ export const serverEnv = createEnv({
     LIVEKIT_API_SECRET: z.string().min(1),
     FIRECRAWL_API_KEY: z.string().min(1),
     ELEVENLABS_API_KEY: z.string().min(1),
+    ELEVENLABS_VOICE_ID: z.string().min(1).optional(),
   },
   emptyStringAsUndefined: true,
   runtimeEnv: {
@@ -40,5 +41,6 @@ export const serverEnv = createEnv({
     LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
     FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
+    ELEVENLABS_VOICE_ID: process.env.ELEVENLABS_VOICE_ID,
   },
 });

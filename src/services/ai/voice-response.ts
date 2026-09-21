@@ -5,6 +5,7 @@ import { voiceInstructions, voiceModel } from "@/features/voice/constants";
 export const createVoiceReply = (
   messages: ModelMessage[],
   sessionId: string,
+  signal?: AbortSignal,
 ): AsyncIterable<string> => ({
   [Symbol.asyncIterator]: () => {
     const controller = new AbortController();
@@ -22,6 +23,7 @@ export const createVoiceReply = (
       headers: { "X-Session-Id": sessionId },
       abortSignal: AbortSignal.any([
         controller.signal,
+        ...(signal ? [signal] : []),
         AbortSignal.timeout(45_000),
       ]),
     });

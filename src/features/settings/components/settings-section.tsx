@@ -1,22 +1,40 @@
 import { Icon, type IconProps } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
-type SettingsSectionProps = { title: string; children: ReactNode };
+type SettingsSectionProps = {
+  title: string;
+  children: ReactNode;
+  destructive?: boolean;
+};
 
-export const SettingsSection = ({ title, children }: SettingsSectionProps) => (
+export const SettingsSection = ({
+  title,
+  children,
+  destructive = false,
+}: SettingsSectionProps) => (
   <View
-    className="overflow-hidden rounded-2xl bg-card"
+    className={cn(
+      "overflow-hidden rounded-2xl",
+      destructive ? "bg-destructive/10" : "bg-card",
+    )}
     style={{ borderCurve: "continuous" }}
   >
     <View
-      className="mx-4 border-border py-4"
+      className={cn(
+        "mx-4 py-4",
+        destructive ? "border-destructive/20" : "border-border",
+      )}
       style={{ borderBottomWidth: 0.5 }}
     >
       <PText
         accessibilityRole="header"
-        className="text-xl font-semibold text-foreground"
+        className={cn(
+          "text-xl font-semibold",
+          destructive ? "text-destructive" : "text-foreground",
+        )}
       >
         {title}
       </PText>
@@ -48,18 +66,17 @@ export const SettingsRow = ({
       <Icon
         {...icon}
         size={20}
-        className={
-          destructive ? "text-destructive" : "text-secondary-foreground"
-        }
+        className={cn(
+          destructive ? "text-destructive" : "text-secondary-foreground",
+        )}
         accessible={false}
       />
     </View>
     <PText
-      className={
-        destructive
-          ? "min-w-0 flex-1 text-destructive"
-          : "min-w-0 flex-1 text-foreground"
-      }
+      className={cn(
+        "min-w-0 flex-1",
+        destructive ? "text-destructive" : "text-foreground",
+      )}
     >
       {label}
     </PText>

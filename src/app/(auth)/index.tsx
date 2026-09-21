@@ -1,12 +1,10 @@
-import { Button } from "@/components/ui/button";
-import { useOnboarding } from "@/features/settings/hooks/use-onboarding";
 import { Image } from "@/components/ui/image";
 import { HeadingText, PText } from "@/components/ui/text";
+import { SocialSignInButtons } from "@/features/auth/components/social-sign-in-buttons";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 
 const Index = () => {
-  const { complete, isCompleting, error } = useOnboarding();
   return (
     <>
       <Stack.Screen
@@ -38,25 +36,10 @@ const Index = () => {
           </View>
         </View>
         <View className="shrink-0 gap-3">
-          <Button
-            size="lg"
-            className="min-h-14"
-            loading={isCompleting}
-            onPress={() => void complete()}
-          >
-            Get started
-          </Button>
+          <SocialSignInButtons />
           <PText className="text-center">
-            No account needed. Connect GitHub whenever you need it.
+            Your projects and files stay on this device.
           </PText>
-          {error && (
-            <PText
-              accessibilityLiveRegion="polite"
-              className="text-destructive"
-            >
-              {error}
-            </PText>
-          )}
         </View>
       </View>
     </>

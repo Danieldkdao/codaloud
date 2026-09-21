@@ -18,6 +18,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ProjectSearchOverlayProvider } from "@/features/projects/components/project-search-overlay";
+import { editorScreenOptions } from "@/features/settings/constants";
+import { authClient } from "@/lib/auth/auth-client";
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 250, fade: true });
@@ -27,10 +29,10 @@ const RootNavigator = () => {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const {
     ready: isAppReady,
-    hasCompletedOnboarding,
     error,
     retry,
   } = useOnboarding();
+  const session = authClient.useSession();
 
   useEffect(subscribeToQueryLifecycle, []);
 
@@ -39,16 +41,26 @@ const RootNavigator = () => {
       console.error("Unable to load custom fonts", fontError);
     }
 
-    if ((fontsLoaded || fontError) && isAppReady && isThemeReady) {
+    if (
+      (fontsLoaded || fontError) &&
+      isAppReady &&
+      !session.isPending &&
+      isThemeReady
+    ) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, isAppReady, isThemeReady]);
+  }, [fontsLoaded, fontError, isAppReady, isThemeReady, session.isPending]);
 
-  if ((!fontsLoaded && !fontError) || !isAppReady || !isThemeReady) {
+  if (
+    (!fontsLoaded && !fontError) ||
+    !isAppReady ||
+    session.isPending ||
+    !isThemeReady
+  ) {
     return null;
   }
 
-  if (hasCompletedOnboarding === null) {
+  if (error) {
     return (
       <AppWrapper>
         <PText accessibilityLiveRegion="polite">{error}</PText>
@@ -65,6 +77,7 @@ const RootNavigator = () => {
             <SuccessFeedbackProvider>
               <Stack
                 screenOptions={{
+                  headerBackButtonDisplayMode: "minimal",
                   headerTitleStyle: {
                     fontFamily: "Fraunces_400Regular",
                     fontWeight: "400",
@@ -73,10 +86,9 @@ const RootNavigator = () => {
                     fontFamily: "Fraunces_400Regular",
                     fontWeight: "400",
                   },
-                  headerBackTitleStyle: { fontFamily: "Outfit_400Regular" },
                 }}
               >
-                <Stack.Protected guard={hasCompletedOnboarding}>
+                <Stack.Protected guard={Boolean(session.data)}>
                   <Stack.Screen
                     name="(main)"
                     options={{ headerShown: false }}
@@ -107,8 +119,9 @@ const RootNavigator = () => {
                       sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
+                  <Stack.Screen name="editor" options={editorScreenOptions} />
                 </Stack.Protected>
-                <Stack.Protected guard={!hasCompletedOnboarding}>
+                <Stack.Protected guard={!session.data}>
                   <Stack.Screen
                     name="(auth)"
                     options={{ headerShown: false }}

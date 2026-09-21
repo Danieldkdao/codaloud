@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { projectSetupStatuses } from "@/db/shared";
+import { projectSetupStatuses } from "@/db/local/shared";
 import { projectCursorTokenSchema } from "@/features/projects/lib/project-params";
 import type {
   ProjectPageData,

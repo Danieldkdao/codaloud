@@ -9,8 +9,11 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { db } from "@/db/db";
-import { ProjectTable, type ProjectInsertData } from "@/db/schemas/project";
+import { db } from "@/db/local/db";
+import {
+  ProjectTable,
+  type ProjectInsertData,
+} from "@/db/local/schemas/project";
 import {
   projectResponseSchema,
   updateProjectSchema,

@@ -26,15 +26,15 @@ export const GitHubConnection = ({
       <View className="flex-row items-center gap-3">
         <View className="size-6 items-center justify-center">
           <Icon
-            family="Feather"
+            family="FontAwesome6"
             name="github"
-            size={20}
-            className="text-secondary-foreground"
+            size={22}
+            className="text-foreground"
             accessible={false}
           />
         </View>
-        <View className="min-w-0 flex-1 gap-1">
-          <PText className="text-foreground">GitHub</PText>
+        <View className="min-w-0 flex-1">
+          <PText className="text-foreground font-medium">GitHub</PText>
           {isConnected && <PText>Connected</PText>}
         </View>
         <Button

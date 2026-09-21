@@ -7,6 +7,7 @@ export type LoadingSwapProps = {
   isLoading: boolean;
   children: ReactNode;
   className?: string;
+  containerClassName?: string;
   indicatorClassName?: string;
 };
 
@@ -14,9 +15,15 @@ export const LoadingSwap = ({
   isLoading,
   children,
   className,
+  containerClassName,
   indicatorClassName,
 }: LoadingSwapProps) => (
-  <View className="relative shrink items-center justify-center">
+  <View
+    className={cn(
+      "relative shrink items-center justify-center",
+      containerClassName,
+    )}
+  >
     {/* Opacity keeps the content's dimensions and accessible label intact. */}
     <View
       pointerEvents={isLoading ? "none" : "auto"}

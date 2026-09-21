@@ -5,15 +5,20 @@ import { View } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PText } from "@/components/ui/text";
+import { HeadingText, PText } from "@/components/ui/text";
 import { useGitIdentity } from "../hooks/use-git-identity";
 import {
   gitIdentitySchema,
   saveGitIdentity,
   type GitIdentitySchema,
 } from "../git-identity";
+import { SettingsSection } from "./settings-section";
 
-export const GitIdentityForm = () => {
+type GitIdentityFormProps = {
+  settings?: boolean;
+};
+
+export const GitIdentityForm = ({ settings = false }: GitIdentityFormProps) => {
   const identity = useGitIdentity();
   const client = useQueryClient();
   const {
@@ -38,17 +43,8 @@ export const GitIdentityForm = () => {
       client.setQueryData(["settings", "git-identity"], data);
     },
   });
-  return (
-    <View className="gap-3 rounded-2xl bg-card p-4">
-      <PText
-        accessibilityRole="header"
-        className="text-xl font-semibold text-foreground"
-      >
-        Git author
-      </PText>
-      <PText className="text-muted-foreground">
-        This name and email appear in your commits. No account is required.
-      </PText>
+  const fields = (
+    <>
       <Controller
         control={control}
         name="name"
@@ -67,6 +63,7 @@ export const GitIdentityForm = () => {
               invalid={!!error}
               accessibilityHint={error?.message}
               editable={!identity.isPending && !isSubmitting}
+              className="bg-background"
             />
             {error && (
               <PText accessibilityRole="alert" className="text-destructive">
@@ -96,6 +93,7 @@ export const GitIdentityForm = () => {
               invalid={!!error}
               accessibilityHint={error?.message}
               editable={!identity.isPending && !isSubmitting}
+              className="bg-background"
             />
             {error && (
               <PText accessibilityRole="alert" className="text-destructive">
@@ -130,6 +128,32 @@ export const GitIdentityForm = () => {
           Saved on this device.
         </PText>
       )}
+    </>
+  );
+
+  if (settings) {
+    return (
+      <SettingsSection
+        title="Git author"
+        description="This name and email appear in your commits. No account is required."
+      >
+        <View className="gap-3 p-4">{fields}</View>
+      </SettingsSection>
+    );
+  }
+
+  return (
+    <View className="gap-3">
+      <HeadingText
+        accessibilityRole="header"
+        className="text-xl font-semibold text-foreground"
+      >
+        Git author
+      </HeadingText>
+      <PText className="text-muted-foreground">
+        This name and email appear in your commits. No account is required.
+      </PText>
+      {fields}
     </View>
   );
 };

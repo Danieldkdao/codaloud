@@ -1,9 +1,9 @@
 import { redirectGitHubOAuthCallback } from "@/services/github/server/oauth";
+import { auth } from "@/lib/auth/auth";
 
-// Retain the registered GitHub OAuth callback URL without creating an app session.
-export const GET = (request: Request) =>
+const handleAuthRequest = (request: Request) =>
   redirectGitHubOAuthCallback(request) ??
-  Response.json(
-    { message: "This app does not require an account." },
-    { status: 404 },
-  );
+  auth.handler(request);
+
+export const GET = handleAuthRequest;
+export const POST = handleAuthRequest;

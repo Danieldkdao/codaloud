@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { migrateDatabase } from "@/db/migrate";
+import { migrateDatabase } from "@/db/local/migrate";
 import { createOnboardingState } from "../onboarding-state";
 import { onboardingStorage } from "../storage";
 

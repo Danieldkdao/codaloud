@@ -3,15 +3,21 @@ import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import { GitHubConnection } from "@/services/github/components/github-connection";
-import { GitIdentityForm } from "@/features/settings/components/git-identity-form";
+import { authClient } from "@/lib/auth/auth-client";
 import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Switch, View } from "react-native";
 import { formatAppVersion } from "../lib/formatters";
 import { AppearanceSelector } from "./appearance-selector";
+import { AccountDangerZone } from "./account-danger-zone";
+import { LinkedAccounts } from "./linked-accounts";
 import { SettingsRow, SettingsSection } from "./settings-section";
+import { UserProfile } from "./user-profile";
 
 export const SettingsScreen = () => {
+  const router = useRouter();
+  const session = authClient.useSession();
   const [voiceHints, setVoiceHints] = useState(true);
   const [taskNotifications, setTaskNotifications] = useState(false);
   const primary = useThemeColor("primary");
@@ -20,9 +26,20 @@ export const SettingsScreen = () => {
   return (
     <AppWrapper tabBarShown>
       <View className="w-full max-w-xl gap-6 self-center">
-        <HeadingText accessibilityRole="header" className="text-4xl">
+        <HeadingText
+          accessibilityRole="header"
+          className="text-3xl font-semibold"
+        >
           Settings
         </HeadingText>
+
+        {session.data?.user && (
+          <UserProfile
+            name={session.data.user.name}
+            email={session.data.user.email}
+            image={session.data.user.image}
+          />
+        )}
 
         <SettingsSection title="Appearance">
           <AppearanceSelector />
@@ -44,7 +61,6 @@ export const SettingsScreen = () => {
           <SettingsRow
             label="Task notifications"
             icon={{ family: "Feather", name: "bell" }}
-            last
           >
             <Switch
               accessibilityLabel="Task notifications"
@@ -54,11 +70,33 @@ export const SettingsScreen = () => {
               ios_backgroundColor={border}
             />
           </SettingsRow>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Editor Settings"
+            onPress={() => router.push("/editor")}
+          >
+            <SettingsRow
+              label="Editor Settings"
+              icon={{ family: "Feather", name: "code" }}
+              last
+            >
+              <Icon
+                family="Feather"
+                name="chevron-right"
+                size={18}
+                className="text-muted-foreground"
+                accessible={false}
+              />
+            </SettingsRow>
+          </Pressable>
         </SettingsSection>
 
-        <GitIdentityForm />
+        <LinkedAccounts />
 
-        <SettingsSection title="Connections">
+        <SettingsSection
+          title="Connections"
+          description="Connect services for repository imports and publishing."
+        >
           <View className="p-4">
             <GitHubConnection />
           </View>
@@ -105,6 +143,8 @@ export const SettingsScreen = () => {
             </SettingsRow>
           </Pressable>
         </SettingsSection>
+
+        <AccountDangerZone />
 
         <View className="items-center gap-1 pb-2">
           <HeadingText className="text-xl text-muted-foreground">

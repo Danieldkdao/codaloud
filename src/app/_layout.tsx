@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ProjectSearchOverlayProvider } from "@/features/projects/components/project-search-overlay";
 
 SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 250, fade: true });
 
 const RootNavigator = () => {
   const { isReady: isThemeReady } = useTheme();

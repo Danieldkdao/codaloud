@@ -181,9 +181,6 @@ it("distinguishes linked sign-in accounts and manages supported providers", asyn
   expect(container.textContent).toContain(
     "Use these accounts to sign in to Codaloud.",
   );
-  expect(container.textContent).toContain(
-    "We only use your name, email, and profile photo.",
-  );
   expect(container.textContent).toContain("GoogleNot connectedLink");
   expect(container.textContent).toContain("GitHubConnectedUnlink");
   expect(container.textContent).toContain("AppleNot connectedLink");

@@ -118,6 +118,10 @@ const RootNavigator = () => {
                       sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
+                  <Stack.Screen
+                    name="editor"
+                    options={{ title: "Editor Settings" }}
+                  />
                 </Stack.Protected>
                 <Stack.Protected guard={!session.data}>
                   <Stack.Screen

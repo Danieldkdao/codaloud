@@ -3,9 +3,9 @@ import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import { GitHubConnection } from "@/services/github/components/github-connection";
-import { GitIdentityForm } from "@/features/settings/components/git-identity-form";
 import { authClient } from "@/lib/auth/auth-client";
 import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Switch, View } from "react-native";
 import { formatAppVersion } from "../lib/formatters";
@@ -16,6 +16,7 @@ import { SettingsRow, SettingsSection } from "./settings-section";
 import { UserProfile } from "./user-profile";
 
 export const SettingsScreen = () => {
+  const router = useRouter();
   const session = authClient.useSession();
   const [voiceHints, setVoiceHints] = useState(true);
   const [taskNotifications, setTaskNotifications] = useState(false);
@@ -60,7 +61,6 @@ export const SettingsScreen = () => {
           <SettingsRow
             label="Task notifications"
             icon={{ family: "Feather", name: "bell" }}
-            last
           >
             <Switch
               accessibilityLabel="Task notifications"
@@ -70,9 +70,26 @@ export const SettingsScreen = () => {
               ios_backgroundColor={border}
             />
           </SettingsRow>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Editor Settings"
+            onPress={() => router.push("/editor")}
+          >
+            <SettingsRow
+              label="Editor Settings"
+              icon={{ family: "Feather", name: "code" }}
+              last
+            >
+              <Icon
+                family="Feather"
+                name="chevron-right"
+                size={18}
+                className="text-muted-foreground"
+                accessible={false}
+              />
+            </SettingsRow>
+          </Pressable>
         </SettingsSection>
-
-        <GitIdentityForm />
 
         <LinkedAccounts />
 

@@ -61,9 +61,10 @@ vi.mock("react-native", () => ({
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", { "data-glass": true }, children) }));
 vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
 vi.mock("@/components/ui/icon", () => ({ Icon: ({ name }: { name: string }) => createElement("span", { "data-icon": name }) }));
-vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children, onOpenChange }: { open: boolean; children: ReactNode; onOpenChange: (open: boolean) => void }) => open ? createElement("div", { role: "dialog" }, children, createElement("button", { "aria-label": "Dismiss sheet", onClick: () => onOpenChange(false) })) : null }));
+vi.mock("@/components/ui/content-sheet", () => ({ ContentSheet: ({ open, children, onOpenChange }: { open: boolean; children: ReactNode; onOpenChange: (open: boolean) => void }) => createElement("div", { role: open ? "dialog" : undefined, hidden: !open }, children, open ? createElement("button", { "aria-label": "Dismiss sheet", onClick: () => onOpenChange(false) }) : null) }));
 vi.mock("@/components/ui/text", () => ({ PText: ({ children }: { children: ReactNode }) => createElement("span", null, children), CodeText: ({ children }: { children: ReactNode }) => createElement("span", null, children), HeadingText: ({ children }: { children: ReactNode }) => createElement("h2", null, children) }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "theme-color" }));
+vi.mock("@/features/settings/components/git-identity-form", () => ({ GitIdentityForm: () => createElement("div", null, "Git author") }));
 
 let root: Root;
 let container: HTMLDivElement;
@@ -237,6 +238,7 @@ it("tracks mock preferences across sheet dismissal without showing command or sa
   for (const text of ["Preview", "Saving", "Autosave", "Find and navigate", "Code tools", "Format code", "Go to line", "Toggle comment"]) {
     expect(sheet.textContent).not.toContain(text);
   }
+  expect(sheet.textContent).toContain("Git author");
   for (const label of ["Theme", "Font"]) {
     const select = sheet.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
     expect(select.options.length).toBeGreaterThanOrEqual(3);

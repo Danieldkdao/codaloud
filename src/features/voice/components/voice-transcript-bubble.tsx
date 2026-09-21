@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import Animated, {
   FadeIn,
-  FadeInDown,
-  FadeOutDown,
   LinearTransition,
   ReduceMotion,
 } from "react-native-reanimated";
@@ -12,7 +10,14 @@ import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
+import { enterVoiceBubble, exitVoiceBubble } from "../lib/bubble-animations";
 import { formatVoiceStatus } from "../lib/formatters";
+
+const resizeBubble = LinearTransition.springify()
+  .damping(24)
+  .stiffness(280)
+  .reduceMotion(ReduceMotion.System);
+const revealContent = FadeIn.duration(220).reduceMotion(ReduceMotion.System);
 
 export const VoiceTranscriptBubble = ({
   conversation,
@@ -35,9 +40,9 @@ export const VoiceTranscriptBubble = ({
   if (!conversation.visible) return null;
   return (
     <Animated.View
-      entering={FadeInDown.duration(260).reduceMotion(ReduceMotion.System)}
-      exiting={FadeOutDown.duration(180).reduceMotion(ReduceMotion.System)}
-      layout={LinearTransition.duration(180).reduceMotion(ReduceMotion.System)}
+      entering={enterVoiceBubble}
+      exiting={exitVoiceBubble}
+      layout={resizeBubble}
       style={{
         alignSelf: "center",
         width: Math.min(width - 32, 420),
@@ -45,7 +50,7 @@ export const VoiceTranscriptBubble = ({
       }}
     >
       <GlassSurface borderRadius={28}>
-        <View className="p-4">
+        <Animated.View entering={revealContent} className="p-4">
           <View className="flex-row items-center gap-2">
             <View
               className={cn(
@@ -113,7 +118,9 @@ export const VoiceTranscriptBubble = ({
             }}
           >
             {state.error ? (
-              <PText className="pb-2 text-destructive">{state.error}</PText>
+              <PText selectable className="pb-2 text-destructive">
+                {state.error}
+              </PText>
             ) : null}
             {state.transcript.length === 0 && !state.error ? (
               <PText className="pb-2">
@@ -163,7 +170,7 @@ export const VoiceTranscriptBubble = ({
               <PText className="text-foreground">Jump to latest</PText>
             </Pressable>
           ) : null}
-        </View>
+        </Animated.View>
       </GlassSurface>
     </Animated.View>
   );

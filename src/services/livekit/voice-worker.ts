@@ -7,6 +7,9 @@ cli.runApp(
   new ServerOptions({
     agent: resolve("src/services/livekit/voice-agent.ts"),
     agentName: voiceAgentName,
+    // LiveKit's `start` mode otherwise takes Metro's default port 8081.
+    // Use a nonzero port: Agents 1.9 treats 0 as an unset production default.
+    port: 8089,
     wsURL: serverEnv.LIVEKIT_URL,
     apiKey: serverEnv.LIVEKIT_API_KEY,
     apiSecret: serverEnv.LIVEKIT_API_SECRET,

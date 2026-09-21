@@ -75,6 +75,10 @@ The worker uses Node 22+ and a supported native RTC/local-inference platform. Th
 
 ## Agent startup diagnostics
 
+Expo/Metro uses port **8081**. The voice worker's HTTP health server uses **8089**; it does not serve the mobile app or its JavaScript bundle. The worker needs this explicit nonzero port because LiveKit's `start` mode defaults to 8081 and Agents 1.9 replaces a port value of 0 with that production default. Its health probe is `http://localhost:8089/`. [LiveKit server options](https://docs.livekit.io/agents/server/options/), [Expo CLI ports](https://docs.expo.dev/more/expo-cli/#server-url).
+
+If the app displays only `not found` and stays on the splash screen, check `http://localhost:8081/status`: Metro returns `packager-status:running`. A LiveKit server responds with `404 not found`; `http://localhost:8081/worker` then identifies the process using the wrong port. Stop the old `pnpm dev` process with Ctrl+C, restart it after updating the worker configuration, and reload the app. Reloading alone does not restart the Node worker or release its old port. No native rebuild is needed for this port change.
+
 A successful mobile room connection does not imply that an agent worker is running. The API creates an explicit dispatch, and an independently running worker must accept it and publish `codaloud.voice.ready`. If readiness does not arrive within 20 seconds, the client intentionally leaves and deletes its room without publishing microphone audio. A client leave followed by WebSocket close code 1001 is not, by itself, evidence that a network failure caused the leave. Check the preceding readiness warning and worker terminal logs. [Agent dispatch](https://docs.livekit.io/agents/server/agent-dispatch/).
 
 If the readiness warning appears while the worker is registered, inspect that terminal for job acceptance, startup failures, and provider errors. Registration and the API must use the same project and agent name. Releasing a held microphone during setup, tapping Stop, navigating away, or backgrounding the app also intentionally cancels setup. Use hands-free mode when checking startup without holding the button.

@@ -16,7 +16,7 @@ import type {
   ProjectWorkspaceDiffData,
 } from "@/features/projects/types";
 import type { ProjectGitFileState } from "../actions/change-schemas";
-import type { ProjectSetupStatus } from "@/db/shared";
+import type { ProjectSetupStatus } from "@/db/local/shared";
 import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 import type { DiagnosticSeverity } from "@/features/projects/actions/code-intelligence-schemas";

@@ -1,6 +1,6 @@
-import { db } from "@/db/db";
-import { ProjectTable } from "@/db/schemas/project";
-import { migrateDatabase } from "@/db/migrate";
+import { db } from "@/db/local/db";
+import { migrateDatabase } from "@/db/local/migrate";
+import { ProjectTable } from "@/db/local/schemas/project";
 import {
   executeWorkspace,
   listArchivedWorkspaceIds,

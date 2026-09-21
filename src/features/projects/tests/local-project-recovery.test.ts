@@ -6,10 +6,10 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   archives: vi.fn(),
 }));
-vi.mock("@/db/db", () => ({
+vi.mock("@/db/local/db", () => ({
   db: { select: () => ({ from: () => ({ all: mocks.rows }) }) },
 }));
-vi.mock("@/db/migrate", () => ({ migrateDatabase: mocks.migrate }));
+vi.mock("@/db/local/migrate", () => ({ migrateDatabase: mocks.migrate }));
 vi.mock("../local/projects", () => ({ localProjectStore: {} }));
 vi.mock("@/services/local-workspace/execute", () => ({
   executeWorkspace: mocks.execute,

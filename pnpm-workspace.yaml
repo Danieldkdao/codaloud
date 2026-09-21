@@ -10,6 +10,7 @@ minimumReleaseAgeExclude:
   - expo@57.0.20
 
 allowBuilds:
+  bufferutil: false
   esbuild: false
   protobufjs: false
 

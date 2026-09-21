@@ -2,12 +2,12 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import type { SQLiteDatabase } from "expo-sqlite";
-import { projectsMigration } from "@/db/migrations";
-import * as schema from "@/db/schema";
+import { projectsMigration } from "@/db/local/migrations";
+import * as schema from "@/db/local/schema";
 import { localProjectStore } from "../local/projects";
 
-const database = vi.hoisted(() => ({ current: undefined as unknown as import("@/db/db").Db }));
-vi.mock("@/db/db", () => ({ get db() { return database.current; } }));
+const database = vi.hoisted(() => ({ current: undefined as unknown as import("@/db/local/db").Db }));
+vi.mock("@/db/local/db", () => ({ get db() { return database.current; } }));
 
 const timestamp = "2026-09-18T12:00:00.000Z";
 const project = (id: number, name: string) => ({

@@ -843,8 +843,3 @@ export const formatProjectRepositoryVisibility = (isPrivate: boolean) =>
           "Anyone can view this repository and its committed history.",
         icon: "globe" as const,
       };
-
-export const formatEditorFontSize = (size: number) => `${size} pt`;
-
-export const formatEditorTabSize = (size: number, useTabs = false) =>
-  `${size} ${useTabs ? (size === 1 ? "column" : "columns") : size === 1 ? "space" : "spaces"}`;

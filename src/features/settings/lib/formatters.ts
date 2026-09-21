@@ -1,5 +1,6 @@
 import type { IconProps } from "@/components/ui/icon";
 import type { ThemePreference } from "@/lib/types";
+import type { SupportedAccountProvider } from "../types";
 
 export const formatThemePreference = (
   preference: ThemePreference,
@@ -43,3 +44,19 @@ export const formatThemePreviewClassName = (
       return "theme-dark";
   }
 };
+
+export const formatAccountProvider = (
+  provider: SupportedAccountProvider,
+): string => {
+  switch (provider) {
+    case "github":
+      return "GitHub";
+    case "google":
+      return "Google";
+  }
+};
+
+export const formatEditorFontSize = (size: number) => `${size} pt`;
+
+export const formatEditorTabSize = (size: number, useTabs = false) =>
+  `${size} ${useTabs ? (size === 1 ? "column" : "columns") : size === 1 ? "space" : "spaces"}`;

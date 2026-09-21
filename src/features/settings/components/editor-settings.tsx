@@ -2,14 +2,11 @@ import { Icon } from "@/components/ui/icon";
 import { NativeSelect } from "@/components/ui/native-select";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
-import {
-  formatEditorFontSize,
-  formatEditorTabSize,
-} from "@/features/projects/lib/formatters";
 import { useState, type ReactNode } from "react";
 import { Pressable, Switch, View } from "react-native";
 import { editorFonts, editorThemes } from "../constants";
 import { useEditorPreferences } from "../hooks/use-editor-preferences";
+import { formatEditorFontSize, formatEditorTabSize } from "../lib/formatters";
 import type { EditorPreferences } from "../types";
 import { GitIdentityForm } from "./git-identity-form";
 import { SettingsSection } from "./settings-section";

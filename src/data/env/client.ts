@@ -4,7 +4,7 @@ import z from "zod";
 export const clientEnv = createEnv({
   clientPrefix: "EXPO_PUBLIC_",
   client: {
-    EXPO_PUBLIC_BETTER_AUTH_URL: z.url(),
+    EXPO_PUBLIC_BETTER_AUTH_URL: z.url().optional(),
   },
   emptyStringAsUndefined: true,
   runtimeEnv: {

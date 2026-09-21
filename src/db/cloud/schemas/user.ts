@@ -8,7 +8,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
-export const user = pgTable("user", {
+export const UserTable = pgTable("user", {
   id: uuid("id")
     .default(sql`pg_catalog.gen_random_uuid()`)
     .primaryKey(),
@@ -23,7 +23,7 @@ export const user = pgTable("user", {
     .notNull(),
 });
 
-export const session = pgTable(
+export const SessionTable = pgTable(
   "session",
   {
     id: uuid("id")
@@ -39,12 +39,12 @@ export const session = pgTable(
     userAgent: text("user_agent"),
     userId: uuid("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => UserTable.id, { onDelete: "cascade" }),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );
 
-export const account = pgTable(
+export const AccountTable = pgTable(
   "account",
   {
     id: uuid("id")
@@ -54,7 +54,7 @@ export const account = pgTable(
     providerId: text("provider_id").notNull(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => UserTable.id, { onDelete: "cascade" }),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
@@ -70,7 +70,7 @@ export const account = pgTable(
   (table) => [index("account_userId_idx").on(table.userId)],
 );
 
-export const verification = pgTable(
+export const VerificationTable = pgTable(
   "verification",
   {
     id: uuid("id")
@@ -88,21 +88,30 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
-export const userRelations = relations(user, ({ many }) => ({
-  sessions: many(session),
-  accounts: many(account),
+export const userRelations = relations(UserTable, ({ many }) => ({
+  sessions: many(SessionTable),
+  accounts: many(AccountTable),
 }));
 
-export const sessionRelations = relations(session, ({ one }) => ({
-  user: one(user, {
-    fields: [session.userId],
-    references: [user.id],
+export const sessionRelations = relations(SessionTable, ({ one }) => ({
+  user: one(UserTable, {
+    fields: [SessionTable.userId],
+    references: [UserTable.id],
   }),
 }));
 
-export const accountRelations = relations(account, ({ one }) => ({
-  user: one(user, {
-    fields: [account.userId],
-    references: [user.id],
+export const accountRelations = relations(AccountTable, ({ one }) => ({
+  user: one(UserTable, {
+    fields: [AccountTable.userId],
+    references: [UserTable.id],
   }),
 }));
+
+export type UserSelectData = typeof UserTable.$inferSelect;
+export type UserInsertData = typeof UserTable.$inferInsert;
+export type SessionSelectData = typeof SessionTable.$inferSelect;
+export type SessionInsertData = typeof SessionTable.$inferInsert;
+export type AccountSelectData = typeof AccountTable.$inferSelect;
+export type AccountInsertData = typeof AccountTable.$inferInsert;
+export type VerificationSelectData = typeof VerificationTable.$inferSelect;
+export type VerificationInsertData = typeof VerificationTable.$inferInsert;

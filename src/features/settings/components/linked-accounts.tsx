@@ -6,9 +6,9 @@ import { authClient } from "@/lib/auth/auth-client";
 import { alert } from "@/lib/utils";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
+import { formatAccountProvider } from "../lib/formatters";
+import type { SupportedAccountProvider } from "../types";
 import { SettingsSection } from "./settings-section";
-
-type SupportedAccountProvider = "github" | "google";
 
 type LinkedAccount = {
   id: string;
@@ -22,15 +22,6 @@ type AccountRowProps = {
   loading?: boolean;
   onPress?: () => void;
   last?: boolean;
-};
-
-const formatAccountProvider = (provider: SupportedAccountProvider) => {
-  switch (provider) {
-    case "github":
-      return "GitHub";
-    case "google":
-      return "Google";
-  }
 };
 
 const AccountRow = ({

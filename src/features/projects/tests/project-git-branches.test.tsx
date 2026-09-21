@@ -1,4 +1,9 @@
 // @vitest-environment happy-dom
+vi.mock("expo-sqlite/kv-store", () => ({ default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined) } }));
+// Native voice lifecycle is covered in the voice feature's own integration tests.
+vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({ useVoiceConversation: () => ({ visible: false }) }));
+vi.mock("@/features/voice/components/voice-microphone", () => ({ VoiceMicrophone: () => createElement("button", { "aria-label": "Microphone" }) }));
+vi.mock("@/features/voice/components/voice-transcript-bubble", () => ({ VoiceTranscriptBubble: () => null }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";

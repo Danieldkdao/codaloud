@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { usePathname } from "expo-router";
-import { Pressable, View, useWindowDimensions } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Icon } from "@/components/ui/icon";
 import { GlassSurface } from "@/components/ui/glass-surface";
+import { useVoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
+import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
+import { VoiceTranscriptBubble } from "@/features/voice/components/voice-transcript-bubble";
 
 import {
   ProjectActionButtonsLeft,
@@ -42,6 +44,10 @@ export const ProjectWorkspaceDock = ({
       : 0;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
+  const conversation = useVoiceConversation(
+    !isGit && !keyboardFrame,
+    `${branchSelection.projectId}:${pathname}`,
+  );
   useEffect(() => {
     setBranchPickerOpen(false);
   }, [branchSelection.projectId, activeTab]);
@@ -71,6 +77,7 @@ export const ProjectWorkspaceDock = ({
         paddingBottom: Math.max(insets.bottom, 12),
       }}
     >
+      <VoiceTranscriptBubble conversation={conversation} />
       <View className="w-full" style={{ gap: 10, pointerEvents: "box-none" }}>
         {isGit ? (
           <View
@@ -113,21 +120,7 @@ export const ProjectWorkspaceDock = ({
                     onBranchPickerOpenChange={setBranchPickerOpen}
                   />
                 </View>
-                {!isGit && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Microphone"
-                    className="size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90"
-                  >
-                    <Icon
-                      family="Feather"
-                      name="mic"
-                      size={24}
-                      accessible={false}
-                      className="text-primary-foreground"
-                    />
-                  </Pressable>
-                )}
+                {!isGit && <VoiceMicrophone conversation={conversation} />}
                 <View
                   style={{
                     flex: 1,

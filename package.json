@@ -26,6 +26,10 @@
     "@expo/vector-icons": "^15.1.1",
     "@hookform/resolvers": "^5.9.1",
     "@lezer/highlight": "^1.2.3",
+    "@livekit/agents": "1.9.0",
+    "@livekit/agents-plugin-deepgram": "1.9.0",
+    "@livekit/agents-plugin-elevenlabs": "1.9.0",
+    "@livekit/rtc-node": "0.13.35",
     "@neondatabase/serverless": "^1.1.0",
     "@noble/hashes": "2.4.0",
     "@octokit/core": "^7.0.8",
@@ -98,6 +102,7 @@
     "material-icon-theme": "^5.38.1",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^4.1.11"
   },

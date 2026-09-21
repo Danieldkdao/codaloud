@@ -12,6 +12,7 @@ minimumReleaseAgeExclude:
   - livekit-server-sdk@2.19.1
 
 allowBuilds:
+  '@livekit/local-inference': false
   bufferutil: false
   esbuild: false
   protobufjs: false

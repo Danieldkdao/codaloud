@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   scroll: vi.fn(),
   props: {} as Record<string, any>,
   bubbleProps: {} as Record<string, any>,
+  viewportProps: {} as Record<string, any>,
+  contentProps: {} as Record<string, any>,
 }));
 vi.mock("react-native", () => ({
   Text: ({
@@ -18,15 +20,27 @@ vi.mock("react-native", () => ({
     className?: string;
   }) => createElement("span", { className }, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
-  View: ({ children }: { children?: ReactNode }) =>
-    createElement("div", null, children),
+  View: ({ children, ...props }: any) => {
+    if (props.testID === "voice-transcript-content") mocks.contentProps = props;
+    return createElement("div", null, children);
+  },
   Pressable: ({
     children,
     onPress,
-  }: {
-    children?: ReactNode;
-    onPress: () => void;
-  }) => createElement("button", { onClick: onPress }, children),
+    accessibilityLabel,
+    accessibilityState,
+    className,
+  }: any) =>
+    createElement(
+      "button",
+      {
+        onClick: onPress,
+        "aria-label": accessibilityLabel,
+        "aria-expanded": accessibilityState?.expanded,
+        className,
+      },
+      children,
+    ),
   ScrollView: ({ ref, children, ...props }: any) => {
     mocks.props = props;
     useImperativeHandle(ref, () => ({ scrollToEnd: mocks.scroll }));
@@ -60,9 +74,19 @@ vi.mock("react-native-reanimated", () => {
     default: {
       View: ({ children, ...props }: any) => {
         if (props.style?.alignSelf === "center") mocks.bubbleProps = props;
-        return createElement("div", null, children);
+        if (props.testID === "voice-transcript-viewport")
+          mocks.viewportProps = props;
+        return createElement(
+          "div",
+          {
+            "data-testid": props.testID,
+            hidden: props.accessibilityElementsHidden,
+          },
+          children,
+        );
       },
     },
+    useAnimatedStyle: (factory: () => unknown) => factory(),
     withSpring: (value: number, config: object) => ({ value, config }),
     withTiming: (value: number, config: object) => ({ value, config }),
     FadeIn: transition,
@@ -222,7 +246,120 @@ it("shows a destructive failure after the transcript without a retry button", ()
   expect(text.indexOf(error)).toBeGreaterThan(
     text.findIndex((node) => node.textContent === "Hello"),
   );
-  expect(container.querySelectorAll("button")).toHaveLength(1);
+  expect(container.querySelectorAll("button")).toHaveLength(2);
+});
+
+it("collapses without stopping voice and reopens with text received while hidden", () => {
+  const toggle = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Collapse transcript"]',
+  )!;
+  expect(toggle).not.toBeNull();
+  expect(toggle.className).toContain("size-12");
+  act(() => toggle.click());
+  expect(
+    container.querySelector<HTMLDivElement>(
+      '[data-testid="voice-transcript-viewport"]',
+    )?.hidden,
+  ).toBe(true);
+  expect(container.querySelector('[aria-expanded="false"]')).not.toBeNull();
+  expect(conversation.stop).not.toHaveBeenCalled();
+  const next = {
+    ...conversation,
+    state: {
+      ...conversation.state,
+      transcript: [
+        ...conversation.state.transcript,
+        {
+          id: "reply",
+          role: "assistant" as const,
+          text: "New reply",
+          final: true,
+        },
+      ],
+    },
+  };
+  act(() => root.render(<VoiceTranscriptBubble conversation={next} />));
+  expect(
+    container.querySelector<HTMLDivElement>(
+      '[data-testid="voice-transcript-viewport"]',
+    )?.hidden,
+  ).toBe(true);
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Expand transcript"]')!
+      .click(),
+  );
+  expect(container.textContent).toContain("Hello");
+  expect(container.textContent).toContain("New reply");
+  expect(conversation.stop).not.toHaveBeenCalled();
+});
+
+it("animates measured transcript height through collapse, resize, and rapid reopening", () => {
+  expect(mocks.contentProps.onLayout).toBeTypeOf("function");
+  act(() =>
+    mocks.contentProps.onLayout({ nativeEvent: { layout: { height: 180 } } }),
+  );
+  const animatedHeight = () =>
+    mocks.viewportProps.style
+      .flat()
+      .find((style: any) => style?.height !== undefined).height;
+  expect(animatedHeight()).toMatchObject({
+    value: 180,
+    config: { reduceMotion: "system" },
+  });
+  const content = container.querySelector(
+    '[data-testid="voice-transcript-viewport"]',
+  )!.firstChild;
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Collapse transcript"]')!
+      .click(),
+  );
+  expect(animatedHeight()).toMatchObject({ value: 0 });
+  expect(mocks.viewportProps.pointerEvents).toBe("none");
+  expect(mocks.viewportProps.importantForAccessibility).toBe(
+    "no-hide-descendants",
+  );
+  act(() =>
+    mocks.contentProps.onLayout({ nativeEvent: { layout: { height: 220 } } }),
+  );
+  expect(animatedHeight()).toMatchObject({ value: 0 });
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Expand transcript"]')!
+      .click(),
+  );
+  expect(animatedHeight()).toMatchObject({ value: 220 });
+  expect(
+    container.querySelector('[data-testid="voice-transcript-viewport"]')!
+      .firstChild,
+  ).toBe(content);
+  expect(mocks.viewportProps.pointerEvents).toBe("auto");
+  expect(conversation.stop).not.toHaveBeenCalled();
+});
+
+it("keeps close available when collapsed and expands a new conversation", () => {
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Collapse transcript"]')!
+      .click(),
+  );
+  const close = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Close voice conversation"]',
+  )!;
+  expect(close.className).toContain("size-12");
+  act(() => close.click());
+  expect(conversation.stop).toHaveBeenCalledOnce();
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble
+        conversation={{ ...conversation, visible: false }}
+      />,
+    ),
+  );
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  expect(container.textContent).toContain("Hello");
+  expect(container.querySelector('[aria-expanded="true"]')).not.toBeNull();
 });
 
 it("groups consecutive speakers while replacing streamed partial text", () => {

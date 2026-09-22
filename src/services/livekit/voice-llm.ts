@@ -41,7 +41,13 @@ export class VoiceLanguageModel extends llm.LLM {
               description:
                 "Accept workspace or web work as a background task and return immediately. Completion arrives separately.",
               inputSchema: z.object({
-                instruction: z.string().min(1).max(4000),
+                instruction: z
+                  .string()
+                  .min(1)
+                  .max(4000)
+                  .describe(
+                    "Self-contained user-authorized workspace or web task, 1–4000 characters. Include relevant paths, requested content, constraints and explicitly requested Git operations; do not assume editor context or invent authorization.",
+                  ),
               }),
               execute: ({ instruction }, { toolCallId }) =>
                 (accepted ??= this.startTask!(instruction, toolCallId)),

@@ -12,6 +12,11 @@ const require = createRequire(import.meta.url);
  * @param {string[]} [expoArgs]
  */
 export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
+  // Native run commands already start Metro after building/installing the app.
+  // Forward them directly rather than treating them as `expo start` arguments.
+  const nativeBuild =
+    expoArgs[0] === "run:ios" || expoArgs[0] === "run:android";
+  const commandArgs = nativeBuild ? expoArgs : ["start", "-c", ...expoArgs];
   const children = new Set();
   let stopping = false;
   let finished = false;
@@ -48,8 +53,18 @@ export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
       children.add(child);
       const ended = (code) => {
         children.delete(child);
+        if (!stopping && nativeBuild && name === "Expo" && code === 0) {
+          // Expo can exit after installation when Metro is already running or
+          // --no-bundler is used. The voice worker still belongs to this terminal.
+          console.info(
+            "[dev] Native build finished. Keeping the voice worker running; Ctrl+C stops it.",
+          );
+          return;
+        }
         if (!stopping) {
-          console.error(`[dev] ${name} stopped; shutting down both services.`);
+          console.error(
+            `[dev] ${name} stopped with exit code ${code}; shutting down managed services.`,
+          );
           stop(code);
         }
         if (stopping && !children.size) finish();
@@ -76,11 +91,7 @@ export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
     ["ignore", "inherit", "inherit"],
   );
   if (!stopping)
-    start(
-      "Expo",
-      [require.resolve("expo/bin/cli"), "start", "-c", ...expoArgs],
-      "inherit",
-    );
+    start("Expo", [require.resolve("expo/bin/cli"), ...commandArgs], "inherit");
   return () => stop();
 };
 

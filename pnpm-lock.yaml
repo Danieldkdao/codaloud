@@ -166,6 +166,7 @@ overrides:
   lightningcss: 1.30.1
 
 patchedDependencies:
+  '@trigger.dev/core@4.6.3': e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7
   livekit-client@2.22.3: 90eeff8ce57ee32263784e264330188bfa0fba436d52e2beb6a95b4d1c8ba7a1
   react-native-keyboard-controller@1.21.9: 4e0169d85161f49fbd57c9cf9561965aab884d665b3832f149b0134f3bf3ff75
 
@@ -11557,7 +11558,7 @@ snapshots:
   '@trigger.dev/build@4.6.3(bufferutil@4.1.0)(magicast@0.3.5)(supports-color@10.2.2)(typescript@6.0.3)(zod@4.5.4)':
     dependencies:
       '@prisma/config': 6.19.3(magicast@0.3.5)
-      '@trigger.dev/core': 4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
+      '@trigger.dev/core': 4.6.3(patch_hash=e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
       mlly: 1.8.2
       pkg-types: 1.3.1
       tinyglobby: 0.2.17
@@ -11571,7 +11572,7 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@trigger.dev/core@4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)':
+  '@trigger.dev/core@4.6.3(patch_hash=e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)':
     dependencies:
       '@bugsnag/cuid': 3.2.2
       '@electric-sql/client': 1.0.14
@@ -11612,7 +11613,7 @@ snapshots:
   '@trigger.dev/schema-to-json@4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)':
     dependencies:
       '@sodaru/yup-to-json-schema': 2.0.1
-      '@trigger.dev/core': 4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
+      '@trigger.dev/core': 4.6.3(patch_hash=e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
       effect: 3.21.0
       zod: 4.5.4
       zod-to-json-schema: 3.25.2(zod@4.5.4)
@@ -11625,7 +11626,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/semantic-conventions': 1.41.1
-      '@trigger.dev/core': 4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
+      '@trigger.dev/core': 4.6.3(patch_hash=e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
       uncrypto: 0.1.3
       zod: 4.5.4
     optionalDependencies:
@@ -15712,7 +15713,7 @@ snapshots:
       '@opentelemetry/instrumentation': 0.219.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
       '@s2-dev/streamstore': 0.25.0(supports-color@10.2.2)
       '@trigger.dev/build': 4.6.3(bufferutil@4.1.0)(magicast@0.3.5)(supports-color@10.2.2)(typescript@6.0.3)(zod@4.5.4)
-      '@trigger.dev/core': 4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
+      '@trigger.dev/core': 4.6.3(patch_hash=e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7)(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
       '@trigger.dev/schema-to-json': 4.6.3(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.5.4)
       ansi-escapes: 7.3.0
       braces: 3.0.3

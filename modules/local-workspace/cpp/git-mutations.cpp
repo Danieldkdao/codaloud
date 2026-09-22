@@ -93,7 +93,8 @@ static Json stash(git_repository *repo, const std::string &operation,
 }
 
 static Json discardPreview(git_repository *repo, bool revisionOnly = false) {
-  if (!revisionOnly) requireMutableBranch(repo);
+  if (!revisionOnly)
+    requireMutableBranch(repo);
   const auto counts = gitCounts(repo);
   if (!revisionOnly && counts.at("headSha").is_null())
     throw WorkspaceError(

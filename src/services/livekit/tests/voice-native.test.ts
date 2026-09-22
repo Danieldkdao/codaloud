@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
+import { voiceAudioSession } from "../voice-track";
 vi.mock("@/features/agent/task-runtime", () => ({
   agentTasks: {
     getSnapshot: () => [],
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   trackStop: vi.fn(),
   startAudio: vi.fn(),
+  configureAudio: vi.fn(),
   stopAudio: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
@@ -36,7 +38,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@livekit/react-native", () => ({
   registerGlobals: vi.fn(),
+  setupIOSAudioManagement: vi.fn(),
   AudioSession: {
+    setAppleAudioConfiguration: mocks.configureAudio,
     startAudioSession: mocks.startAudio,
     stopAudioSession: mocks.stopAudio,
   },
@@ -84,6 +88,7 @@ vi.mock("livekit-client", () => ({
     };
     connect = mocks.connect;
     disconnect = mocks.disconnect;
+    registerRpcMethod = vi.fn();
     on = (event: string, callback: (...args: any[]) => void) => {
       if (!mocks.listeners.has(event)) mocks.listeners.set(event, new Set());
       mocks.listeners.get(event)!.add(callback);
@@ -117,6 +122,7 @@ beforeEach(() => {
   mocks.transcription = undefined;
   mocks.disconnect.mockResolvedValue(undefined);
   mocks.startAudio.mockResolvedValue(undefined);
+  mocks.configureAudio.mockResolvedValue(undefined);
   mocks.stopAudio.mockResolvedValue(undefined);
   mocks.permission.mockResolvedValue({
     getTracks: () => [{ stop: mocks.trackStop }],
@@ -158,6 +164,89 @@ it("denied microphone access never allocates a room", async () => {
     connectNativeVoice("hold", new AbortController().signal, events()),
   ).rejects.toThrow("Microphone permission");
   expect(mocks.create).not.toHaveBeenCalled();
+  expect(voiceAudioSession.getSnapshot()).toBe(false);
+});
+
+it("prepares native audio before activation or room playback can start", async () => {
+  let finish!: () => void;
+  mocks.configureAudio.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = connectNativeVoice(
+    "hold",
+    new AbortController().signal,
+    events(),
+  );
+  try {
+    await vi.waitFor(() => expect(mocks.configureAudio).toHaveBeenCalledOnce());
+    expect(mocks.startAudio).not.toHaveBeenCalled();
+    expect(mocks.connect).not.toHaveBeenCalled();
+    finish();
+    await pending;
+    expect(mocks.startAudio).toHaveBeenCalledOnce();
+    expect(mocks.connect).toHaveBeenCalledOnce();
+  } finally {
+    finish?.();
+    await (await pending).close();
+  }
+});
+
+it("claims audio before permission capture and waits for pending preview cleanup", async () => {
+  let finish!: () => void;
+  voiceAudioSession.set(false);
+  const releasing = voiceAudioSession.releasePreview(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await Promise.resolve();
+  const pending = connectNativeVoice(
+    "hold",
+    new AbortController().signal,
+    events(),
+  );
+  await Promise.resolve();
+  expect(voiceAudioSession.getSnapshot()).toBe(true);
+  expect(mocks.permission).not.toHaveBeenCalled();
+  mocks.permission.mockImplementationOnce(async () => {
+    expect(voiceAudioSession.getSnapshot()).toBe(true);
+    return { getTracks: () => [{ stop: mocks.trackStop }] };
+  });
+  finish();
+  await releasing;
+  const connection = await pending;
+  await connection.close();
+  expect(voiceAudioSession.getSnapshot()).toBe(false);
+});
+
+it("cancels while preview cleanup is pending without opening a microphone", async () => {
+  let finish!: () => void;
+  voiceAudioSession.set(false);
+  const releasing = voiceAudioSession.releasePreview(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await Promise.resolve();
+  const signal = new AbortController();
+  const pending = connectNativeVoice("hold", signal.signal, events()).catch(
+    (error: unknown) => error,
+  );
+  await Promise.resolve();
+  signal.abort();
+  finish();
+  await releasing;
+  expect(await pending).toEqual(
+    expect.objectContaining({ message: "Voice connection cancelled." }),
+  );
+  expect(mocks.permission).not.toHaveBeenCalled();
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(voiceAudioSession.getSnapshot()).toBe(false);
 });
 it("connection failure deletes the allocated room and stops audio", async () => {
   mocks.connect.mockRejectedValueOnce(new Error("network"));
@@ -178,6 +267,7 @@ it("cancellation during permission acquisition stops the temporary track", async
   ).rejects.toThrow();
   expect(mocks.trackStop).toHaveBeenCalledOnce();
   expect(mocks.create).not.toHaveBeenCalled();
+  expect(voiceAudioSession.getSnapshot()).toBe(false);
 });
 
 it("waits for a previous room to release native audio before starting another", async () => {
@@ -244,7 +334,8 @@ it("cancels a pending room connection and releases audio once", async () => {
     rejectConnect(new Error("cancelled")),
   );
   const signal = new AbortController();
-  const result = connectNativeVoice("hold", signal.signal, events()).catch(
+  const callbacks = events();
+  const result = connectNativeVoice("hold", signal.signal, callbacks).catch(
     (error: unknown) => error,
   );
   await vi.waitFor(() => expect(rejectConnect).toBeTypeOf("function"));
@@ -255,6 +346,7 @@ it("cancels a pending room connection and releases audio once", async () => {
   expect(mocks.disconnect).toHaveBeenCalledOnce();
   expect(mocks.stopAudio).toHaveBeenCalledOnce();
   expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("room");
+  expect(callbacks.onError).not.toHaveBeenCalled();
 });
 
 it("streams user text while holding and keeps receiving the assistant after release", async () => {
@@ -328,11 +420,57 @@ it("reports an absent agent separately from a failed room connection", async () 
   expect(mocks.connect).toHaveBeenCalledOnce();
   expect(mocks.microphone).not.toHaveBeenCalled();
   expect(mocks.remove).toHaveBeenCalledWith("room");
-  expect(callbacks.onError).not.toHaveBeenCalled();
+  expect(callbacks.onError).toHaveBeenCalledWith(
+    expect.stringMatching(/room connected.*agent.*offline/i),
+  );
   expect(warning).toHaveBeenCalledWith(
     expect.stringContaining("codaloud-voice"),
   );
 });
+
+it.each(["hold", "hands-free"] as const)(
+  "leaves Connecting after an absent agent times out in %s, even while room cleanup is pending",
+  async (mode) => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.agentReady = false;
+    let finishCleanup!: () => void;
+    mocks.remove.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCleanup = resolve;
+        }),
+    );
+    const controller = createVoiceController(connectNativeVoice);
+    const starting = controller.start(mode);
+    let retry: Promise<void> | undefined;
+    try {
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(mocks.disconnect).toHaveBeenCalledOnce();
+      expect(finishCleanup).toBeTypeOf("function");
+      expect(controller.getSnapshot()).toMatchObject({
+        connection: "error",
+        listening: false,
+        error: expect.stringMatching(/room connected.*agent.*offline/i),
+      });
+      mocks.agentReady = true;
+      retry = controller.start(mode);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.create).toHaveBeenCalledOnce();
+      finishCleanup();
+      await Promise.all([starting, retry]);
+      expect(controller.getSnapshot()).toMatchObject({
+        connection: "connected",
+        listening: true,
+        error: null,
+      });
+    } finally {
+      finishCleanup?.();
+      await Promise.all([starting, retry]);
+      await controller.stop();
+    }
+  },
+);
 
 it.each([
   { mode: "hold", responds: true },

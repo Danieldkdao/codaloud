@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { agentTasks } from "@/features/agent/task-runtime";
 import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
-import { AudioSession, registerGlobals } from "@livekit/react-native";
+import { AudioSession } from "@livekit/react-native";
 import { mediaDevices } from "@livekit/react-native-webrtc";
 import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 import {
@@ -12,8 +12,9 @@ import { voiceAgentName, voiceControlMethod } from "@/features/voice/constants";
 import type { ConnectVoice, VoiceConnection } from "@/features/voice/types";
 import { microphoneTrack, voiceAudioSession } from "./voice-track";
 import { createVoiceTranscriptReceiver } from "./voice-transcripts";
+import { configureVoiceAudio, prepareVoiceAudio } from "./voice-audio";
 
-registerGlobals();
+configureVoiceAudio();
 
 // Permission prompts and native audio setup cannot be aborted halfway through.
 // Keep a single native audio owner, including teardown, across mounted screens.
@@ -34,12 +35,17 @@ export const connectNativeVoice: ConnectVoice = (
     };
     checkCancelled();
     try {
+      await voiceAudioSession.acquire();
+      checkCancelled();
       const permission = await mediaDevices.getUserMedia({
         audio: true,
         video: false,
       });
       permission.getTracks().forEach((track) => track.stop());
+      checkCancelled();
     } catch {
+      voiceAudioSession.set(false);
+      checkCancelled();
       throw new Error(
         "Microphone permission is required. Enable it in Settings and try again.",
       );
@@ -125,31 +131,28 @@ export const connectNativeVoice: ConnectVoice = (
         );
       roomName = credentials.roomName;
       checkCancelled();
-      room.localParticipant.registerRpcMethod(
-        "codaloud.task.start",
-        async (data) => {
-          if (
-            !agentIdentity ||
-            data.callerIdentity !== agentIdentity ||
-            !options?.projectId ||
-            data.payload.length > 6000
-          )
-            throw new Error("Workspace unavailable.");
-          const input = z
-            .object({
-              instruction: z.string().min(1).max(4000),
-              id: z.string().min(1).max(256),
-            })
-            .parse(JSON.parse(data.payload));
-          return JSON.stringify(
-            await agentTasks.enqueue(
-              options.projectId,
-              input.instruction,
-              `${roomName}:${input.id}`,
-            ),
-          );
-        },
-      );
+      room.registerRpcMethod("codaloud.task.start", async (data) => {
+        if (
+          !agentIdentity ||
+          data.callerIdentity !== agentIdentity ||
+          !options?.projectId ||
+          data.payload.length > 6000
+        )
+          throw new Error("Workspace unavailable.");
+        const input = z
+          .object({
+            instruction: z.string().min(1).max(4000),
+            id: z.string().min(1).max(256),
+          })
+          .parse(JSON.parse(data.payload));
+        return JSON.stringify(
+          await agentTasks.enqueue(
+            options.projectId,
+            input.instruction,
+            `${roomName}:${input.id}`,
+          ),
+        );
+      });
       const receive = createVoiceTranscriptReceiver(
         credentials.participantIdentity,
         events.onSegment,
@@ -165,7 +168,8 @@ export const connectNativeVoice: ConnectVoice = (
           });
         },
       );
-      voiceAudioSession.set(true);
+      await prepareVoiceAudio();
+      checkCancelled();
       await AudioSession.startAudioSession();
       checkCancelled();
       connecting = true;
@@ -310,10 +314,16 @@ export const connectNativeVoice: ConnectVoice = (
         },
       };
     } catch (error) {
+      const failure =
+        error instanceof Error
+          ? error
+          : new Error("Voice could not connect. Try again.");
+      // Show startup failures before teardown: deleting the server room can
+      // stall independently of the native connection. Keep teardown serialized
+      // so a retry cannot acquire the microphone before this owner releases it.
+      if (!signal.aborted) events.onError(failure.message);
       await close();
-      throw error instanceof Error
-        ? error
-        : new Error("Voice could not connect. Try again.");
+      throw failure;
     } finally {
       clearTimeout(timeout);
     }

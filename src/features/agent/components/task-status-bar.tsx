@@ -8,10 +8,11 @@ import {
 } from "react-native";
 import Animated, {
   FadeInUp,
-  FadeOut,
+  FadeIn,
   LinearTransition,
   ReduceMotion,
 } from "react-native-reanimated";
+import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Icon } from "@/components/ui/icon";
@@ -35,9 +36,11 @@ export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
   return (
     <>
       <Animated.View
-        entering={FadeInUp.duration(240).reduceMotion(ReduceMotion.System)}
-        exiting={FadeOut.duration(160)}
-        layout={LinearTransition.duration(180)}
+        entering={enterGlassSurface}
+        exiting={exitGlassSurface}
+        layout={LinearTransition.duration(180).reduceMotion(
+          ReduceMotion.System,
+        )}
         style={{
           alignSelf: "center",
           width: Math.min(width - 32, 420),
@@ -45,40 +48,44 @@ export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
         }}
       >
         <GlassSurface borderRadius={24}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="View agent tasks"
-            onPress={() => setOpen(true)}
-            className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:opacity-60"
+          <Animated.View
+            entering={FadeIn.duration(240).reduceMotion(ReduceMotion.System)}
           >
-            {working ? (
-              <ActivityIndicator color={primary} />
-            ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View agent tasks"
+              onPress={() => setOpen(true)}
+              className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:opacity-60"
+            >
+              {working ? (
+                <ActivityIndicator color={primary} />
+              ) : (
+                <Icon
+                  family="Feather"
+                  name={
+                    tasks.some((task) => task.event.status === "failed")
+                      ? "alert-circle"
+                      : "check-circle"
+                  }
+                  size={20}
+                  className={cn(
+                    "text-success-foreground",
+                    tasks.some((task) => task.event.status === "failed") &&
+                      "text-destructive",
+                  )}
+                />
+              )}
+              <PText className="flex-1 text-foreground font-medium">
+                {formatTaskCounts(tasks)}
+              </PText>
               <Icon
                 family="Feather"
-                name={
-                  tasks.some((task) => task.event.status === "failed")
-                    ? "alert-circle"
-                    : "check-circle"
-                }
-                size={20}
-                className={cn(
-                  "text-success-foreground",
-                  tasks.some((task) => task.event.status === "failed") &&
-                    "text-destructive",
-                )}
+                name="chevron-up"
+                size={18}
+                className="text-muted-foreground"
               />
-            )}
-            <PText className="flex-1 text-foreground font-medium">
-              {formatTaskCounts(tasks)}
-            </PText>
-            <Icon
-              family="Feather"
-              name="chevron-up"
-              size={18}
-              className="text-muted-foreground"
-            />
-          </Pressable>
+            </Pressable>
+          </Animated.View>
         </GlassSurface>
       </Animated.View>
       <ContentSheet open={open} onOpenChange={setOpen}>

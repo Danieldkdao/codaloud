@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppState, Pressable, Switch, View } from "react-native";
+import { AppState, Platform, Pressable, Switch, View } from "react-native";
 import type { AudioPlayer } from "expo-audio";
 import { HeadingText, PText } from "@/components/ui/text";
 import { Icon } from "@/components/ui/icon";
@@ -30,6 +30,7 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
   const primary = useThemeColor("primary");
   const border = useThemeColor("border");
   const player = useRef<AudioPlayer | null>(null);
+  const deactivatePreview = useRef<(() => Promise<void>) | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const previewVersion = useRef(0);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +41,12 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
   const stopPreview = () => {
     previewVersion.current++;
     clearTimeout(timer.current);
-    player.current?.remove();
+    const previous = player.current;
     player.current = null;
+    previous?.pause();
+    previous?.remove();
+    if (previous && deactivatePreview.current)
+      void voiceAudioSession.releasePreview(deactivatePreview.current);
   };
   useEffect(() => {
     const unsubscribe = voiceAudioSession.subscribe(() => {
@@ -64,15 +69,31 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
     if (voiceAudioSession.getSnapshot()) return;
     const version = previewVersion.current;
     try {
-      const { createAudioPlayer } = await import("expo-audio");
+      const { createAudioPlayer, setIsAudioActiveAsync } =
+        await import("expo-audio");
+      await voiceAudioSession.waitForPreviewCleanup();
       if (version !== previewVersion.current || voiceAudioSession.getSnapshot())
         return;
       // Bundled provider samples never call the synthesis API or consume credits.
-      player.current = createAudioPlayer(previewSource(id));
+      // Android's setter disables all future Expo playback until re-enabled;
+      // only iOS needs this explicit release of the shared AVAudioSession.
+      deactivatePreview.current =
+        Platform.OS === "ios" ? () => setIsAudioActiveAsync(false) : null;
+      // Expo's automatic completion cleanup runs later and cannot see WebRTC.
+      // Release explicitly through the shared audio owner instead.
+      player.current = createAudioPlayer(previewSource(id), {
+        keepAudioSessionActive: true,
+      });
       player.current.play();
       timer.current = setTimeout(stopPreview, 6000);
     } catch {
-      setError("Voice saved. The preview couldn’t play.");
+      if (
+        version === previewVersion.current &&
+        !voiceAudioSession.getSnapshot()
+      ) {
+        stopPreview();
+        setError("Voice saved. The preview couldn’t play.");
+      }
     }
   };
   const content = (
@@ -110,6 +131,7 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
               }}
               className={cn(
                 "min-h-16 flex-row items-center gap-3 rounded-2xl border border-border p-3 active:opacity-60",
+                !settings && "bg-background",
                 preferences.voiceId === voice.id &&
                   "border-primary bg-primary/10",
               )}

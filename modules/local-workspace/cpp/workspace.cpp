@@ -150,9 +150,11 @@ std::string execute(const std::string &base, const std::string &request) {
                              "This project is not available on the device.");
       // Check while holding the same project mutex as the eventual operation.
       if (input.contains("expectedRevision") &&
-          input.at("expectedRevision") != gitOperation(root, "git/revision", Json::object()))
-        throw WorkspaceError("WORKSPACE_CHANGED",
-                             "The workspace changed after this task started. Please try again.");
+          input.at("expectedRevision") !=
+              gitOperation(root, "git/revision", Json::object()))
+        throw WorkspaceError(
+            "WORKSPACE_CHANGED",
+            "The workspace changed after this task started. Please try again.");
       data = operation.rfind("git/", 0) == 0
                  ? gitOperation(root, operation, args)
                  : fileOperation(root, operation, args);

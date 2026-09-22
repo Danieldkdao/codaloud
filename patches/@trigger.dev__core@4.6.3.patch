@@ -1,0 +1,156 @@
+diff --git a/dist/commonjs/v3/streams/asyncIterableStream.js b/dist/commonjs/v3/streams/asyncIterableStream.js
+index a4c363c1b4955204185cdea5ce4357ac189a00f0..846b931691601eea85cd8567050d5bd8cf216b48 100644
+--- a/dist/commonjs/v3/streams/asyncIterableStream.js
++++ b/dist/commonjs/v3/streams/asyncIterableStream.js
+@@ -20,24 +20,58 @@ function createAsyncIterableStream(source, transformer) {
+     return transformedStream;
+ }
+ function createAsyncIterableReadable(source, transformer, signal) {
++    let reader;
++    let finished = false;
++    let removeAbortListener = () => {};
++    const cancelReader = async (reason) => {
++        try {
++            await reader?.cancel(reason);
++        } catch {
++            // Cancellation is terminal; do not leak a rejection from teardown.
++        }
++    };
+     return new ReadableStream({
+-        async start(controller) {
++        start(controller) {
+             const transformedStream = source.pipeThrough(new TransformStream(transformer));
+-            const reader = transformedStream.getReader();
+-            signal.addEventListener("abort", () => {
+-                queueMicrotask(() => {
+-                    reader.cancel();
+-                    controller.close();
+-                });
+-            });
+-            while (true) {
+-                const { done, value } = await reader.read();
+-                if (done) {
+-                    controller.close();
+-                    break;
++            reader = transformedStream.getReader();
++            const abort = () => {
++                if (finished) return;
++                finished = true;
++                removeAbortListener();
++                controller.close();
++                void cancelReader(signal.reason);
++            };
++            removeAbortListener = () => signal.removeEventListener("abort", abort);
++            signal.addEventListener("abort", abort, { once: true });
++            if (signal.aborted) abort();
++            void (async () => {
++                try {
++                    while (!finished) {
++                        const { done, value } = await reader.read();
++                        // An abort or consumer cancellation may win while read awaits.
++                        if (finished) break;
++                        if (done) {
++                            finished = true;
++                            controller.close();
++                            break;
++                        }
++                        controller.enqueue(value);
++                    }
++                } catch (error) {
++                    if (!finished) {
++                        finished = true;
++                        controller.error(error);
++                    }
++                } finally {
++                    removeAbortListener();
++                    reader.releaseLock();
+                 }
+-                controller.enqueue(value);
+-            }
++            })();
++        },
++        cancel(reason) {
++            finished = true;
++            removeAbortListener();
++            return cancelReader(reason);
+         },
+     });
+ }
+diff --git a/dist/esm/v3/streams/asyncIterableStream.js b/dist/esm/v3/streams/asyncIterableStream.js
+index 9df0dc3e1987c71015d095d87e8194a013a75bc6..df37870209951d6c437fea7f316050ce8c34b4d7 100644
+--- a/dist/esm/v3/streams/asyncIterableStream.js
++++ b/dist/esm/v3/streams/asyncIterableStream.js
+@@ -12,24 +12,58 @@ export function createAsyncIterableStream(source, transformer) {
+     return transformedStream;
+ }
+ export function createAsyncIterableReadable(source, transformer, signal) {
++    let reader;
++    let finished = false;
++    let removeAbortListener = () => {};
++    const cancelReader = async (reason) => {
++        try {
++            await reader?.cancel(reason);
++        } catch {
++            // Cancellation is terminal; do not leak a rejection from teardown.
++        }
++    };
+     return new ReadableStream({
+-        async start(controller) {
++        start(controller) {
+             const transformedStream = source.pipeThrough(new TransformStream(transformer));
+-            const reader = transformedStream.getReader();
+-            signal.addEventListener("abort", () => {
+-                queueMicrotask(() => {
+-                    reader.cancel();
+-                    controller.close();
+-                });
+-            });
+-            while (true) {
+-                const { done, value } = await reader.read();
+-                if (done) {
+-                    controller.close();
+-                    break;
++            reader = transformedStream.getReader();
++            const abort = () => {
++                if (finished) return;
++                finished = true;
++                removeAbortListener();
++                controller.close();
++                void cancelReader(signal.reason);
++            };
++            removeAbortListener = () => signal.removeEventListener("abort", abort);
++            signal.addEventListener("abort", abort, { once: true });
++            if (signal.aborted) abort();
++            void (async () => {
++                try {
++                    while (!finished) {
++                        const { done, value } = await reader.read();
++                        // An abort or consumer cancellation may win while read awaits.
++                        if (finished) break;
++                        if (done) {
++                            finished = true;
++                            controller.close();
++                            break;
++                        }
++                        controller.enqueue(value);
++                    }
++                } catch (error) {
++                    if (!finished) {
++                        finished = true;
++                        controller.error(error);
++                    }
++                } finally {
++                    removeAbortListener();
++                    reader.releaseLock();
+                 }
+-                controller.enqueue(value);
+-            }
++            })();
++        },
++        cancel(reason) {
++            finished = true;
++            removeAbortListener();
++            return cancelReader(reason);
+         },
+     });
+ }

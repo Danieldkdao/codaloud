@@ -39,74 +39,182 @@ beforeEach(() => {
   mocks.metadata.clear();
   mocks.wait.mockReset();
 });
-it("runs the real AI SDK tool loop through a validated device acknowledgement", async () => {
-  let count = 0;
-  mocks.model.mockReturnValue(
-    new MockLanguageModelV4({
-      doStream: async () => ({
-        stream: new ReadableStream({
-          start(c) {
-            c.enqueue({ type: "stream-start", warnings: [] });
-            if (++count === 1) {
-              c.enqueue({
-                type: "tool-call",
-                toolCallId: "read-one",
-                toolName: "readFile",
-                input: JSON.stringify({
-                  path: "README.md",
-                  startLine: 1,
-                  lineCount: 20,
-                }),
-              });
-              c.enqueue({
+it.each([
+  { requestedCalls: 24, batched: false },
+  { requestedCalls: 25, batched: false },
+  { requestedCalls: 25, batched: true },
+])(
+  "allows 24 calls but never dispatches call 25: $requestedCalls requested, batched=$batched",
+  async ({ requestedCalls, batched }) => {
+    let steps = 0;
+    mocks.wait.mockResolvedValue({
+      ok: true,
+      output: { ok: true, text: "Workspace status" },
+    });
+    mocks.model.mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: "stream-start", warnings: [] });
+              const toolStep = ++steps <= (batched ? 1 : requestedCalls);
+              if (toolStep) {
+                for (
+                  let index = 0;
+                  index < (batched ? requestedCalls : 1);
+                  index++
+                ) {
+                  controller.enqueue({
+                    type: "tool-call",
+                    toolCallId: `status-${steps}-${index}`,
+                    toolName: "gitStatus",
+                    input: "{}",
+                  });
+                }
+              } else {
+                controller.enqueue({ type: "text-start", id: "summary" });
+                controller.enqueue({
+                  type: "text-delta",
+                  id: "summary",
+                  delta: "Finished all 24 checks.",
+                });
+                controller.enqueue({ type: "text-end", id: "summary" });
+              }
+              controller.enqueue({
                 type: "finish",
-                finishReason: { unified: "tool-calls", raw: "tool_calls" },
+                finishReason: toolStep
+                  ? { unified: "tool-calls", raw: "tool_calls" }
+                  : { unified: "stop", raw: "stop" },
                 usage,
               });
-            } else {
-              c.enqueue({ type: "text-start", id: "summary" });
-              c.enqueue({
-                type: "text-delta",
-                id: "summary",
-                delta: "The README describes your project.",
-              });
-              c.enqueue({ type: "text-end", id: "summary" });
-              c.enqueue({
-                type: "finish",
-                finishReason: { unified: "stop", raw: "stop" },
-                usage,
-              });
-            }
-            c.close();
-          },
+              controller.close();
+            },
+          }),
         }),
       }),
-    }),
-  );
-  mocks.wait.mockImplementation(async () => {
-    expect(mocks.metadata.get("command")).toMatchObject({
-      name: "readFile",
-      revision: "a".repeat(64),
-      args: { path: "README.md" },
-    });
-    return {
-      ok: true,
-      output: {
-        ok: true,
-        text: "Project documentation",
+    );
+    const result = run(
+      { instruction: "Inspect workspace status", revision: "a".repeat(64) },
+      { signal: new AbortController().signal },
+    );
+    if (requestedCalls === 24) {
+      await expect(result).resolves.toEqual({
+        summary: "Finished all 24 checks.",
+      });
+      expect(steps).toBe(25);
+    } else {
+      await expect(result).rejects.toMatchObject({
+        message:
+          "A tool failed (gitStatus). Review completed steps before trying again.",
+        cause: { message: "Task tool limit reached." },
+      });
+    }
+    expect(mocks.wait).toHaveBeenCalledTimes(24);
+    expect(mocks.metadata.has("command")).toBe(false);
+  },
+);
+it.each([
+  {
+    toolName: "readFile",
+    input: { path: "README.md", startLine: 1, lineCount: 20 },
+    path: "README.md",
+  },
+  { toolName: "listFiles", input: { path: "" }, path: "" },
+  { toolName: "listFiles", input: {}, path: "" },
+  { toolName: "listFiles", input: { path: "." }, path: "" },
+  { toolName: "listFiles", input: { path: "./" }, path: "" },
+  { toolName: "listFiles", input: { path: "src" }, path: "src" },
+  { toolName: "listFiles", input: { path: ".." }, path: null },
+  { toolName: "listFiles", input: { path: "../private" }, path: null },
+  { toolName: "listFiles", input: { path: "/" }, path: null },
+  { toolName: "listFiles", input: { path: "src/../private" }, path: null },
+  { toolName: "listFiles", input: { path: "./src" }, path: null },
+  { toolName: "listFiles", input: { path: ".", extra: true }, path: null },
+  { toolName: "listFiles", input: { path: 42 }, path: null },
+  { toolName: "listFiles", input: null, path: null },
+  { toolName: "listFiles", input: "not an object", path: null },
+  { toolName: "readFile", input: { path: "." }, path: null },
+  {
+    toolName: "createFile",
+    input: { parentPath: ".", name: "test", kind: "folder" },
+    path: null,
+  },
+])(
+  "validates $toolName input $input before dispatching to the device",
+  async ({ toolName, input, path }) => {
+    let count = 0;
+    mocks.model.mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: "stream-start", warnings: [] });
+              if (++count === 1) {
+                c.enqueue({
+                  type: "tool-call",
+                  toolCallId: "read-one",
+                  toolName,
+                  input: JSON.stringify(input),
+                });
+                c.enqueue({
+                  type: "finish",
+                  finishReason: { unified: "tool-calls", raw: "tool_calls" },
+                  usage,
+                });
+              } else {
+                c.enqueue({ type: "text-start", id: "summary" });
+                c.enqueue({
+                  type: "text-delta",
+                  id: "summary",
+                  delta: "The README describes your project.",
+                });
+                c.enqueue({ type: "text-end", id: "summary" });
+                c.enqueue({
+                  type: "finish",
+                  finishReason: { unified: "stop", raw: "stop" },
+                  usage,
+                });
+              }
+              c.close();
+            },
+          }),
+        }),
+      }),
+    );
+    mocks.wait.mockImplementation(async () => {
+      expect(mocks.metadata.get("command")).toMatchObject({
+        id: "read-one",
+        name: toolName,
         revision: "a".repeat(64),
-      },
-    };
-  });
-  expect(
-    await run(
+        args: { path },
+      });
+      return {
+        ok: true,
+        output: {
+          ok: true,
+          text: "Project documentation",
+          revision: "a".repeat(64),
+        },
+      };
+    });
+    const result = run(
       { instruction: "Read the readme", revision: "a".repeat(64) },
       { signal: new AbortController().signal },
-    ),
-  ).toEqual({ summary: "The README describes your project." });
-  expect(mocks.metadata.has("command")).toBe(false);
-  expect(mocks.wait).toHaveBeenCalledOnce();
-});
+    );
+    if (path === null) {
+      await expect(result).rejects.toThrow(`A tool failed (${toolName})`);
+      expect(mocks.wait).not.toHaveBeenCalled();
+      expect(count).toBe(1);
+    } else {
+      await expect(result).resolves.toEqual({
+        summary: "The README describes your project.",
+      });
+      expect(mocks.wait).toHaveBeenCalledOnce();
+      expect(count).toBe(2);
+    }
+    expect(mocks.metadata.has("command")).toBe(false);
+  },
+);
 it("fails instead of reporting success when the device wait expires", async () => {
   mocks.model.mockReturnValue(
     new MockLanguageModelV4({
@@ -143,3 +251,123 @@ it("fails instead of reporting success when the device wait expires", async () =
   ).rejects.toThrow();
   expect(mocks.metadata.has("command")).toBe(false);
 });
+
+it.each([
+  "success",
+  "mutation",
+  "device-failure",
+  "timeout",
+  "aborted",
+  "aborted-during-wait",
+  "web-failure",
+])(
+  "serializes parallel tool calls through %s without abandoning a device wait",
+  async (outcome) => {
+    let steps = 0;
+    let active = 0;
+    let maximumActive = 0;
+    const abort = new AbortController();
+    const acknowledged: string[] = [];
+    const revisions: string[] = [];
+    const firstTool = outcome === "mutation" ? "createFile" : "listFiles";
+    mocks.search.mockRejectedValue(new Error("Diagnostic provider failure"));
+    mocks.model.mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: "stream-start", warnings: [] });
+              if (++steps === 1) {
+                for (const name of [
+                  firstTool,
+                  outcome === "web-failure" ? "searchWeb" : "gitStatus",
+                ]) {
+                  controller.enqueue({
+                    type: "tool-call",
+                    toolCallId: name,
+                    toolName: name,
+                    input: JSON.stringify(
+                      name === "createFile"
+                        ? { parentPath: "", name: "diagnostic", kind: "folder" }
+                        : name === "listFiles"
+                          ? { path: "" }
+                          : name === "searchWeb"
+                            ? { query: "diagnostic fixture" }
+                            : {},
+                    ),
+                  });
+                }
+                controller.enqueue({
+                  type: "finish",
+                  finishReason: { unified: "tool-calls", raw: "tool_calls" },
+                  usage,
+                });
+              } else {
+                controller.enqueue({ type: "text-start", id: "summary" });
+                controller.enqueue({
+                  type: "text-delta",
+                  id: "summary",
+                  delta: "Inspected the folder and Git status.",
+                });
+                controller.enqueue({ type: "text-end", id: "summary" });
+                controller.enqueue({
+                  type: "finish",
+                  finishReason: { unified: "stop", raw: "stop" },
+                  usage,
+                });
+              }
+              controller.close();
+            },
+          }),
+        }),
+      }),
+    );
+    mocks.wait.mockImplementation(async () => {
+      active++;
+      maximumActive = Math.max(maximumActive, active);
+      const command = mocks.metadata.get("command") as {
+        name: string;
+        revision: string;
+      };
+      revisions.push(command.revision);
+      if (outcome === "aborted-during-wait") setTimeout(() => abort.abort(), 1);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(mocks.metadata.get("command")).toBe(command);
+      acknowledged.push(command.name);
+      active--;
+      if (outcome === "aborted") abort.abort();
+      if (outcome === "timeout") return { ok: false, error: "timeout" };
+      return {
+        ok: true,
+        output: {
+          ok: outcome !== "device-failure",
+          text: "Diagnostic fixture",
+          revision: (outcome === "mutation" ? "b" : "a").repeat(64),
+        },
+      };
+    });
+    const result = run(
+      {
+        instruction: "Inspect the folder and Git status",
+        revision: "a".repeat(64),
+      },
+      { signal: abort.signal },
+    );
+    if (outcome === "success" || outcome === "mutation") {
+      await expect(result).resolves.toEqual({
+        summary: "Inspected the folder and Git status.",
+      });
+      expect(acknowledged).toEqual([firstTool, "gitStatus"]);
+      expect(revisions).toEqual([
+        "a".repeat(64),
+        (outcome === "mutation" ? "b" : "a").repeat(64),
+      ]);
+    } else {
+      await expect(result).rejects.toThrow();
+      expect(acknowledged).toEqual(["listFiles"]);
+    }
+    expect(maximumActive).toBe(1);
+    expect(active).toBe(0);
+    expect(mocks.metadata.has("command")).toBe(false);
+  },
+);

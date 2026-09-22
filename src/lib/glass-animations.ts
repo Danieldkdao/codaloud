@@ -9,7 +9,7 @@ import {
 
 // GlassView cannot render reliably beneath an ancestor animated from opacity 0.
 // Move and reshape the surface instead; only its text children may fade.
-export const enterVoiceBubble = (
+export const enterGlassSurface = (
   values: EntryAnimationsValues,
 ): LayoutAnimation => {
   "worklet";
@@ -22,7 +22,7 @@ export const enterVoiceBubble = (
   return {
     initialValues: {
       transform: [
-        // Offset the compressed height so it expands upward from the microphone.
+        // Offset the compressed height so it expands upward from its bottom edge.
         { translateY: values.targetHeight * 0.34 + 8 },
         { scaleX: 0.72 },
         { scaleY: 0.32 },
@@ -38,7 +38,7 @@ export const enterVoiceBubble = (
   };
 };
 
-export const exitVoiceBubble = (
+export const exitGlassSurface = (
   values: ExitAnimationsValues,
 ): LayoutAnimation => {
   "worklet";

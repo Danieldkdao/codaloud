@@ -19,6 +19,8 @@ allowBuilds:
   protobufjs: false
 
 patchedDependencies:
+  # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.
+  '@trigger.dev/core@4.6.3': patches/@trigger.dev__core@4.6.3.patch
   # Signal/track lifecycle fixes in SDK source and both published JS builds.
   # Recheck voice-sdk-lifecycle.test.ts before removing this on an SDK upgrade.
   livekit-client@2.22.3: patches/livekit-client@2.22.3.patch

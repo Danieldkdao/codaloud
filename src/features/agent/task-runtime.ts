@@ -91,6 +91,10 @@ const resume = (record: AgentTaskRecord) => {
         });
         await persist();
       }
+      // Realtime metadata can repeat a pending command after its acknowledgement.
+      // Skip it within this connection, but replay the durable receipt after a
+      // reconnect when delivery may be uncertain.
+      const acknowledged = new Set<string>();
       for await (const event of subscribeAgentTask(
         record.event.id,
         controller.signal,
@@ -100,17 +104,19 @@ const resume = (record: AgentTaskRecord) => {
           throw new Error("Unexpected task update.");
         update(record, { event, connectionError: undefined });
         await persist();
-        if (event.command) {
+        if (event.command && !acknowledged.has(event.command.tokenId)) {
           // The receipt is durable before acknowledgement, so reconnecting never
           // reruns a completed commit, push, deletion, or file write.
           const output = await execute(event.id, event.command);
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             await completeAgentCommand(
               event.id,
               event.command.tokenId,
               output,
               controller.signal,
             );
+            acknowledged.add(event.command.tokenId);
+          }
         }
       }
     } catch (error) {

@@ -30,7 +30,9 @@ const request = async (
         ...(body ? { body: JSON.stringify(body) } : {}),
       },
     );
-    if (!response.ok)
+    // PATCH 409 means this authenticated run has already advanced past the
+    // command. A replayed durable receipt needs no retry or connection warning.
+    if (!response.ok && !(method === "PATCH" && response.status === 409))
       throw new Error(
         response.status === 401
           ? "Sign in to reconnect to your tasks."

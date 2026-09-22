@@ -3,6 +3,8 @@ const mocks = vi.hoisted(() => ({
   disk: new Map<string, string>(),
   create: vi.fn(),
   execute: vi.fn(),
+  complete: vi.fn(),
+  subscribe: vi.fn(),
   uuid: 0,
 }));
 vi.mock("expo-sqlite/kv-store", () => ({
@@ -19,16 +21,16 @@ vi.mock("expo-crypto", () => ({
 }));
 vi.mock("../actions", () => ({
   createAgentTask: mocks.create,
-  completeAgentCommand: vi.fn(),
-  subscribeAgentTask: async function* () {
-    /* disconnected */
-  },
+  completeAgentCommand: mocks.complete,
+  subscribeAgentTask: mocks.subscribe,
 }));
 vi.mock("../tools/device-tools", () => ({
   executeDeviceTool: mocks.execute,
   readWorkspaceRevision: async () => "a".repeat(64),
 }));
-vi.mock("../workspace-access", () => ({ flushAgentWorkspace: async () => {} }));
+vi.mock("../workspace-access", () => ({
+  flushAgentWorkspace: async () => {},
+}));
 const projectId = "00000000-0000-4000-8000-000000000099";
 let runtime: typeof import("../task-runtime").agentTasks;
 beforeEach(async () => {
@@ -36,8 +38,41 @@ beforeEach(async () => {
   vi.useFakeTimers();
   mocks.disk.clear();
   mocks.create.mockReset().mockResolvedValue({ id: "run_test" });
+  mocks.complete.mockReset().mockResolvedValue(undefined);
+  mocks.execute.mockReset().mockResolvedValue({ ok: true, text: "done" });
+  mocks.subscribe.mockReset().mockImplementation(async function* () {});
   runtime = (await import("../task-runtime")).agentTasks;
   runtime.setSession("user-a", true);
+});
+it("does not show a reconnect warning for repeated snapshots of an acknowledged command", async () => {
+  const event = {
+    id: "run_test",
+    status: "waiting",
+    logs: ["Running: Check Git status"],
+    command: {
+      id: "status-one",
+      name: "gitStatus",
+      args: {},
+      revision: "a".repeat(64),
+      tokenId: "token-one",
+    },
+  };
+  mocks.subscribe.mockImplementation(async function* () {
+    yield event;
+    yield { ...event, logs: [...event.logs, "Completed Check Git status"] };
+    yield { ...event, status: "completed", command: null, summary: "Done" };
+  });
+  mocks.complete
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValue(
+      new Error("Couldn’t connect to the task service. Reconnecting…"),
+    );
+  await runtime.enqueue(projectId, "Check status", "call-one");
+  await vi.advanceTimersByTimeAsync(1);
+  expect(runtime.getSnapshot()[0].connectionError).toBeUndefined();
+  expect(runtime.getSnapshot()[0].event.status).toBe("completed");
+  expect(mocks.complete).toHaveBeenCalledOnce();
+  expect(mocks.execute).toHaveBeenCalledOnce();
 });
 afterEach(() => {
   runtime.setSession(null, false);

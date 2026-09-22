@@ -7,7 +7,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import Animated, {
-  FadeInUp,
   FadeIn,
   LinearTransition,
   ReduceMotion,
@@ -20,7 +19,8 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { useAgentTasks } from "../hooks/use-agent-tasks";
-import { formatTaskCounts, formatTaskStatus } from "../lib/formatters";
+import { formatTaskCounts } from "../lib/formatters";
+import { TaskActivityCard } from "./task-activity-card";
 
 export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
   const tasks = useAgentTasks().filter(
@@ -109,56 +109,9 @@ export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
             </Pressable>
           </View>
           <ScrollView style={{ maxHeight: height * 0.6 }}>
-            {tasks.map((task) => {
-              const status = formatTaskStatus(task.event.status);
-              return (
-                <Animated.View
-                  key={task.request.requestId}
-                  entering={FadeInUp.duration(180)}
-                  className="gap-3 border-b border-border py-4"
-                >
-                  <View className="flex-row items-center gap-3">
-                    {["running", "waiting"].includes(task.event.status) ? (
-                      <ActivityIndicator color={primary} />
-                    ) : (
-                      <Icon
-                        family="Feather"
-                        name={status.icon}
-                        size={22}
-                        className={status.className}
-                      />
-                    )}
-                    <PText
-                      className={cn("font-medium flex-1", status.className)}
-                    >
-                      {status.label}
-                    </PText>
-                  </View>
-                  <PText className="text-foreground" numberOfLines={3}>
-                    {task.request.instruction}
-                  </PText>
-                  {task.event.logs.map((entry, index) => (
-                    <PText key={`${index}:${entry}`}>{entry}</PText>
-                  ))}
-                  {task.event.summary ? (
-                    <PText
-                      selectable
-                      className={cn(
-                        "text-foreground",
-                        task.event.status === "failed" && "text-destructive",
-                      )}
-                    >
-                      {task.event.summary}
-                    </PText>
-                  ) : null}
-                  {task.connectionError ? (
-                    <PText className="text-warning">
-                      {task.connectionError}
-                    </PText>
-                  ) : null}
-                </Animated.View>
-              );
-            })}
+            {tasks.map((task) => (
+              <TaskActivityCard key={task.request.requestId} task={task} />
+            ))}
           </ScrollView>
         </View>
       </ContentSheet>

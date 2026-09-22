@@ -17,13 +17,21 @@ vi.mock("../hooks/use-agent-tasks", () => ({
         projectId: "project",
         requestId: "request",
         instruction: "Read files",
+        title: "Explore project",
       },
-      event: { status: "running", logs: [] },
+      event: {
+        status: "running",
+        logs: ["Running: Read file", "Completed Read file"],
+        summary: "**Files reviewed**",
+      },
     },
   ],
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "inherit" }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/markdown-text", () => ({
+  MarkdownText: ({ text }: any) => createElement("article", null, text),
+}));
 vi.mock("@/components/ui/text", () => ({
   PText: ({ children }: any) => createElement("span", null, children),
   HeadingText: ({ children }: any) => createElement("span", null, children),
@@ -40,7 +48,8 @@ vi.mock("react-native", () => ({
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   ActivityIndicator: () => null,
   View: ({ children }: any) => createElement("div", null, children),
-  ScrollView: ({ children }: any) => createElement("div", null, children),
+  ScrollView: ({ children, testID, style }: any) =>
+    createElement("div", { "data-testid": testID, style }, children),
   Pressable: ({ children, onPress, accessibilityLabel }: any) =>
     createElement(
       "button",
@@ -96,8 +105,26 @@ it("keeps glass ancestors opaque during entry and exit and still opens task deta
         .click(),
     );
     expect(container.querySelector("aside")?.textContent).toContain(
-      "Read files",
+      "Explore project",
     );
+    expect(container.textContent).not.toContain("Read files");
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Expand Explore project"]',
+        )!
+        .click(),
+    );
+    expect(
+      Array.from(container.querySelectorAll("article")).map(
+        (entry) => entry.textContent,
+      ),
+    ).toEqual(["**Files reviewed**", "Read files"]);
+    const activity = container.querySelector<HTMLElement>(
+      '[data-testid="task-activity-list"]',
+    )!;
+    expect(activity.style.maxHeight).toBe("220px");
+    expect(activity.textContent).toBe("Read fileCompleted");
   } finally {
     act(() => root.unmount());
   }

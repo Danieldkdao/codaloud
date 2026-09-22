@@ -41,6 +41,7 @@ export const executeProjectGit = async (
     case "stashes":
       return readLocalStashes(project.id, command.args);
     case "git/initialize":
+    case "git/revision":
     case "git/counts":
     case "git/changes":
     case "git/discard-preview":

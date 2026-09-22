@@ -46,6 +46,7 @@ export type WorkspaceArguments = {
   "delete-file": DeleteProjectFileSchema;
   "git/initialize": undefined;
   "git/counts": undefined;
+  "git/revision": undefined;
   "git/changes": undefined;
   "git/branches": { source: ProjectBranchSource };
   "git/history": {

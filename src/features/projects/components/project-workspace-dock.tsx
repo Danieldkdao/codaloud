@@ -4,6 +4,7 @@ import { usePathname } from "expo-router";
 import { View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { TaskStatusBar } from "@/features/agent/components/task-status-bar";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { useVoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
 import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
@@ -47,6 +48,7 @@ export const ProjectWorkspaceDock = ({
   const conversation = useVoiceConversation(
     !isGit && !keyboardFrame,
     `${branchSelection.projectId}:${pathname}`,
+    branchSelection.projectId,
   );
   useEffect(() => {
     setBranchPickerOpen(false);
@@ -69,6 +71,7 @@ export const ProjectWorkspaceDock = ({
         pointerEvents: "box-none",
       }}
     >
+      <TaskStatusBar projectId={branchSelection.projectId} />
       <VoiceTranscriptBubble conversation={conversation} />
       <View
         className="w-full"

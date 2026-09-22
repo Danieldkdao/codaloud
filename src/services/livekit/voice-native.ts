@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { agentTasks } from "@/features/agent/task-runtime";
 import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
 import { AudioSession, registerGlobals } from "@livekit/react-native";
 import { mediaDevices } from "@livekit/react-native-webrtc";
@@ -8,7 +10,7 @@ import {
 } from "@/features/voice/actions";
 import { voiceAgentName, voiceControlMethod } from "@/features/voice/constants";
 import type { ConnectVoice, VoiceConnection } from "@/features/voice/types";
-import { microphoneTrack } from "./voice-track";
+import { microphoneTrack, voiceAudioSession } from "./voice-track";
 import { createVoiceTranscriptReceiver } from "./voice-transcripts";
 
 registerGlobals();
@@ -16,7 +18,12 @@ registerGlobals();
 // Permission prompts and native audio setup cannot be aborted halfway through.
 // Keep a single native audio owner, including teardown, across mounted screens.
 let setupQueue = Promise.resolve();
-export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
+export const connectNativeVoice: ConnectVoice = (
+  mode,
+  signal,
+  events,
+  options,
+) => {
   let releaseAudio!: () => void;
   const audioReleased = new Promise<void>((resolve) => {
     releaseAudio = resolve;
@@ -45,6 +52,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
     let roomName: string | undefined;
     let agentIdentity: string | undefined;
     let closed = false;
+    let unsubscribeTasks: (() => void) | undefined;
     let unsubscribePreferences: (() => void) | undefined;
     let closing: Promise<void> | undefined;
     let connecting = false;
@@ -65,6 +73,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
       if (closing) return closing;
       closed = true;
       unsubscribePreferences?.();
+      unsubscribeTasks?.();
       microphoneTrack.set(undefined);
       signal.removeEventListener("abort", abort);
       room.removeAllListeners();
@@ -74,6 +83,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
         // A publish already in flight must finish before releasing native audio.
         await disconnect();
         await AudioSession.stopAudioSession().catch(() => {});
+        voiceAudioSession.set(false);
         if (roomName) await deleteVoiceSession(roomName);
       })().finally(releaseAudio);
       return closing;
@@ -115,6 +125,31 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
         );
       roomName = credentials.roomName;
       checkCancelled();
+      room.localParticipant.registerRpcMethod(
+        "codaloud.task.start",
+        async (data) => {
+          if (
+            !agentIdentity ||
+            data.callerIdentity !== agentIdentity ||
+            !options?.projectId ||
+            data.payload.length > 6000
+          )
+            throw new Error("Workspace unavailable.");
+          const input = z
+            .object({
+              instruction: z.string().min(1).max(4000),
+              id: z.string().min(1).max(256),
+            })
+            .parse(JSON.parse(data.payload));
+          return JSON.stringify(
+            await agentTasks.enqueue(
+              options.projectId,
+              input.instruction,
+              `${roomName}:${input.id}`,
+            ),
+          );
+        },
+      );
       const receive = createVoiceTranscriptReceiver(
         credentials.participantIdentity,
         events.onSegment,
@@ -130,6 +165,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
           });
         },
       );
+      voiceAudioSession.set(true);
       await AudioSession.startAudioSession();
       checkCancelled();
       connecting = true;
@@ -209,6 +245,36 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
         editorPreferencesStore.subscribe(syncPreferences);
       room.on(RoomEvent.TrackPublished, syncPreferences);
       syncPreferences();
+      const announced = new Set<string>();
+      const existing = new Set(
+        agentTasks.getSnapshot().map((record) => record.event.id),
+      );
+      const announceTasks = () => {
+        for (const record of agentTasks.getSnapshot()) {
+          if (
+            record.request.projectId !== options?.projectId ||
+            existing.has(record.event.id) ||
+            announced.has(record.event.id) ||
+            !["completed", "failed"].includes(record.event.status) ||
+            !record.event.summary
+          )
+            continue;
+          announced.add(record.event.id);
+          void room.localParticipant
+            .performRpc({
+              destinationIdentity: agentIdentity!,
+              method: "codaloud.task.complete",
+              payload: JSON.stringify({
+                id: record.event.id,
+                summary: record.event.summary,
+              }),
+            })
+            .catch(() => {
+              announced.delete(record.event.id);
+            });
+        }
+      };
+      unsubscribeTasks = agentTasks.subscribe(announceTasks);
       return {
         close,
         control: (action) => {

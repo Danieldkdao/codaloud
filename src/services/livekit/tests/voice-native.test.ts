@@ -1,6 +1,21 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
+vi.mock("@/features/agent/task-runtime", () => ({
+  agentTasks: {
+    getSnapshot: () => [],
+    subscribe: () => () => {},
+    enqueue: vi.fn(),
+  },
+}));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  editorPreferencesStore: {
+    getSnapshot: () => ({
+      preferences: { speechEnabled: true, voiceId: "JBFqnCBsd6RMkjVDRZzb" },
+    }),
+    subscribe: () => () => {},
+  },
+}));
 const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   trackStop: vi.fn(),
@@ -34,6 +49,7 @@ vi.mock("@/features/voice/actions", () => ({
   deleteVoiceSession: mocks.remove,
 }));
 vi.mock("livekit-client", () => ({
+  Track: { Source: { Microphone: "microphone" }, Kind: { Audio: "audio" } },
   RoomEvent: {
     ParticipantAttributesChanged: "attributes",
     ParticipantConnected: "joined",
@@ -48,6 +64,7 @@ vi.mock("livekit-client", () => ({
               "agent",
               {
                 identity: "agent",
+                audioTrackPublications: new Map(),
                 get attributes() {
                   return {
                     "codaloud.voice.ready": "true",
@@ -62,6 +79,8 @@ vi.mock("livekit-client", () => ({
     localParticipant = {
       setMicrophoneEnabled: mocks.microphone,
       performRpc: mocks.rpc,
+      registerRpcMethod: vi.fn(),
+      getTrackPublication: () => undefined,
     };
     connect = mocks.connect;
     disconnect = mocks.disconnect;
@@ -113,7 +132,8 @@ beforeEach(() => {
     mocks.order.push(`mic:${enabled}`);
   });
   mocks.rpc.mockImplementation(async ({ payload }) => {
-    mocks.order.push(JSON.parse(payload).action);
+    const action = JSON.parse(payload).action;
+    if (action) mocks.order.push(action);
   });
 });
 it("authorizes the agent before publishing and mutes before committing", async () => {
@@ -348,7 +368,9 @@ it.each([
       },
     );
     mocks.rpc.mockImplementation((params) =>
-      sdkRoom.localParticipant.performRpc(params),
+      params.method === "codaloud.voice.preferences"
+        ? Promise.resolve("ok")
+        : sdkRoom.localParticipant.performRpc(params),
     );
     const controller = createVoiceController(connectNativeVoice);
     try {

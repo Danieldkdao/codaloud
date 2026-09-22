@@ -1,6 +1,7 @@
 import { streamText, stepCountIs, type ToolSet, type ModelMessage } from "ai";
 import { openrouter } from "./server";
-import { voiceInstructions, voiceModel } from "@/features/voice/constants";
+import { voiceModel } from "@/features/voice/constants";
+import { voiceInstructions } from "./prompts";
 
 export const createVoiceReply = (
   messages: ModelMessage[],

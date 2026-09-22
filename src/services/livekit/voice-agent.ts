@@ -5,9 +5,9 @@ import { z } from "zod";
 import { serverEnv } from "@/data/env/server";
 import {
   voiceControlMethod,
-  voiceInstructions,
   voiceSessionDurationMs,
 } from "@/features/voice/constants";
+import { voiceInstructions } from "@/services/ai/prompts";
 import { voicePreferencesSchema, voiceModes } from "@/features/voice/schemas";
 import { createVoiceControlHandler } from "./voice-controls";
 import { VoiceLanguageModel } from "./voice-llm";

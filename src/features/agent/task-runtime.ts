@@ -188,7 +188,12 @@ export const agentTasks = {
       })
       .catch(() => {});
   },
-  enqueue: (projectId: string, instruction: string, requestKey: string) => {
+  enqueue: (
+    projectId: string,
+    instruction: string,
+    requestKey: string,
+    title = "Workspace task",
+  ) => {
     const requestedOwner = userId;
     const admission = admissions.then(async () => {
       if (requestedOwner !== userId) throw new Error("Your session changed.");
@@ -218,6 +223,7 @@ export const agentTasks = {
         deviceId,
         revision,
         instruction,
+        title,
       });
       const record: AgentTaskRecord = {
         request: input,

@@ -86,6 +86,16 @@ it("deduplicates concurrent deliveries of the same voice tool call", async () =>
   expect(mocks.create).toHaveBeenCalledTimes(1);
   expect(runtime.getSnapshot()).toHaveLength(1);
 });
+it("persists the task title and sends it with the accepted request", async () => {
+  await runtime.enqueue(
+    projectId,
+    "Read every project file",
+    "title-call",
+    "Explore project",
+  );
+  expect(runtime.getSnapshot()[0].request.title).toBe("Explore project");
+  expect(mocks.create.mock.calls[0][0].title).toBe("Explore project");
+});
 it("does not reconnect an old user's task after changing accounts", async () => {
   await runtime.enqueue(projectId, "Read private files", "call-one");
   await vi.advanceTimersByTimeAsync(1);

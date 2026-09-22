@@ -95,7 +95,7 @@ it("scopes submission identity and queue ownership to the authenticated user", a
   );
   expect(mocks.trigger).toHaveBeenCalledWith(
     "workspace-task",
-    { ...input, userId: "owner" },
+    { ...input, title: "Workspace task", userId: "owner" },
     expect.objectContaining({
       idempotencyKey: "stable-key",
       maxAttempts: 1,

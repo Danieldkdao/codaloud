@@ -11,6 +11,7 @@ export class VoiceLanguageModel extends llm.LLM {
     private readonly startTask?: (
       instruction: string,
       id: string,
+      title: string,
     ) => Promise<unknown>,
   ) {
     super();
@@ -41,6 +42,14 @@ export class VoiceLanguageModel extends llm.LLM {
               description:
                 "Accept workspace or web work as a background task and return immediately. Completion arrives separately.",
               inputSchema: z.object({
+                title: z
+                  .string()
+                  .trim()
+                  .min(1)
+                  .max(80)
+                  .describe(
+                    "Short action title for the task list, 1–80 characters, such as 'Create settings screen'. Describe the requested outcome, not its status.",
+                  ),
                 instruction: z
                   .string()
                   .min(1)
@@ -49,8 +58,8 @@ export class VoiceLanguageModel extends llm.LLM {
                     "Self-contained user-authorized workspace or web task, 1–4000 characters. Include relevant paths, requested content, constraints and explicitly requested Git operations; do not assume editor context or invent authorization.",
                   ),
               }),
-              execute: ({ instruction }, { toolCallId }) =>
-                (accepted ??= this.startTask!(instruction, toolCallId)),
+              execute: ({ instruction, title }, { toolCallId }) =>
+                (accepted ??= this.startTask!(instruction, toolCallId, title)),
             }),
           }
         : undefined,

@@ -38,12 +38,12 @@ export default defineAgent({
       }),
       llm: new VoiceLanguageModel(
         ctx.room.name ?? ctx.job.id,
-        async (instruction, id) => {
+        async (instruction, id, title) => {
           try {
             const response = await ctx.room.localParticipant!.performRpc({
               destinationIdentity: metadata.participantIdentity,
               method: "codaloud.task.start",
-              payload: JSON.stringify({ instruction, id }),
+              payload: JSON.stringify({ instruction, id, title }),
             });
             return JSON.parse(response);
           } catch {

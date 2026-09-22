@@ -6,6 +6,39 @@ vi.mock("@/services/ai/voice-response", () => ({
   createVoiceReply: mocks.reply,
 }));
 initializeLogger({ pretty: false, level: "silent" });
+it("passes a concise title with the instruction and accepts each turn only once", async () => {
+  const start = vi.fn().mockResolvedValue({ accepted: true });
+  mocks.reply.mockImplementation((_messages, _id, _signal, tools) =>
+    (async function* () {
+      await tools.startTask.execute(
+        {
+          instruction: "List the files in the project root",
+          title: "Browse project",
+        },
+        { toolCallId: "call-one" },
+      );
+      await tools.startTask.execute(
+        { instruction: "List files again", title: "Another title" },
+        { toolCallId: "call-two" },
+      );
+      yield "Started";
+    })(),
+  );
+  const context = new llm.ChatContext();
+  context.addMessage({ role: "user", content: "Show my files" });
+  const stream = new VoiceLanguageModel("room", start).chat({
+    chatCtx: context,
+  });
+  for await (const _ of stream) {
+    /* Drain the generated reply. */
+  }
+  expect(start).toHaveBeenCalledExactlyOnceWith(
+    "List the files in the project root",
+    "call-one",
+    "Browse project",
+  );
+  stream.close();
+});
 it("adapts a committed text conversation to LiveKit response chunks", async () => {
   mocks.reply.mockReturnValue(
     (async function* () {

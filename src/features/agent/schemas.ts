@@ -13,6 +13,8 @@ export const agentTaskRequestSchema = z.strictObject({
   deviceId: z.uuid(),
   revision: z.string().regex(/^[a-f0-9]{64}$/),
   instruction: z.string().trim().min(1).max(4000),
+  // Older persisted tasks can still be opened after updating the app.
+  title: z.string().trim().min(1).max(80).default("Workspace task"),
 });
 export type AgentTaskRequestSchema = z.infer<typeof agentTaskRequestSchema>;
 export const agentTaskPayloadSchema = agentTaskRequestSchema.extend({
@@ -40,7 +42,7 @@ export type AgentCommandSchema = z.infer<typeof agentCommandSchema>;
 export const agentTaskEventSchema = z.object({
   id: z.string().min(1).max(256),
   status: z.enum(agentTaskStatuses),
-  logs: z.array(z.string().max(300)).max(40),
+  logs: z.array(z.string().max(300)).max(64),
   summary: z.string().max(3000).optional(),
   command: agentCommandSchema.nullable().default(null),
 });

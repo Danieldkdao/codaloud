@@ -142,6 +142,7 @@ export const connectNativeVoice: ConnectVoice = (
         const input = z
           .object({
             instruction: z.string().min(1).max(4000),
+            title: z.string().trim().min(1).max(80),
             id: z.string().min(1).max(256),
           })
           .parse(JSON.parse(data.payload));
@@ -150,6 +151,7 @@ export const connectNativeVoice: ConnectVoice = (
             options.projectId,
             input.instruction,
             `${roomName}:${input.id}`,
+            input.title,
           ),
         );
       });

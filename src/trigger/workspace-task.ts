@@ -60,7 +60,7 @@ export const workspaceTask = schemaTask({
     const logs: string[] = [];
     const log = async (text: string) => {
       logs.push(text.slice(0, 300));
-      metadata.set("logs", logs.slice(-40));
+      metadata.set("logs", logs.slice(-64));
       await metadata.flush();
     };
     const tools: ToolSet = {};

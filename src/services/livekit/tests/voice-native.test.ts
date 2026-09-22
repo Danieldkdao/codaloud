@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
 import { voiceAudioSession } from "../voice-track";
+import { agentTasks } from "@/features/agent/task-runtime";
 vi.mock("@/features/agent/task-runtime", () => ({
   agentTasks: {
     getSnapshot: () => [],
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   disconnect: vi.fn(),
   microphone: vi.fn(),
   rpc: vi.fn(),
+  register: vi.fn(),
   create: vi.fn(),
   remove: vi.fn(),
   order: [] as string[],
@@ -88,7 +90,7 @@ vi.mock("livekit-client", () => ({
     };
     connect = mocks.connect;
     disconnect = mocks.disconnect;
-    registerRpcMethod = vi.fn();
+    registerRpcMethod = mocks.register;
     on = (event: string, callback: (...args: any[]) => void) => {
       if (!mocks.listeners.has(event)) mocks.listeners.set(event, new Set());
       mocks.listeners.get(event)!.add(callback);
@@ -157,6 +159,33 @@ it("authorizes the agent before publishing and mutes before committing", async (
   await connection.close();
   expect(mocks.stopAudio).toHaveBeenCalledOnce();
   expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("room");
+});
+it("carries the authorized agent's task title into the workspace runtime", async () => {
+  const connection = await connectNativeVoice(
+    "hold",
+    new AbortController().signal,
+    events(),
+    { projectId: "project" },
+  );
+  const handler = mocks.register.mock.calls.find(
+    ([name]) => name === "codaloud.task.start",
+  )![1];
+  const payload = JSON.stringify({
+    instruction: "Read the root folder",
+    id: "call",
+    title: "Explore project",
+  });
+  await expect(
+    handler({ callerIdentity: "intruder", payload }),
+  ).rejects.toThrow("Workspace unavailable");
+  await handler({ callerIdentity: "agent", payload });
+  expect(agentTasks.enqueue).toHaveBeenCalledExactlyOnceWith(
+    "project",
+    "Read the root folder",
+    "room:call",
+    "Explore project",
+  );
+  await connection.close();
 });
 it("denied microphone access never allocates a room", async () => {
   mocks.permission.mockRejectedValueOnce(new Error("denied"));

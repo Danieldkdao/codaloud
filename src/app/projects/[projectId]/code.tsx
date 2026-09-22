@@ -1,3 +1,4 @@
+import { registerAgentWorkspace } from "@/features/agent/workspace-access";
 import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -60,6 +61,15 @@ const CodeScreen = () => {
   useEffect(() => () => editorFlush.dispose(), [editorFlush]);
   const current = useRef({ files, documents });
   current.current = { files, documents };
+  useEffect(
+    () =>
+      registerAgentWorkspace(projectId, async () => {
+        if (current.current.files.activeFilePath) await editorFlush.flush();
+        for (const path of current.current.files.openFilePaths)
+          await current.current.documents.flushFile(path);
+      }),
+    [projectId, editorFlush],
+  );
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;

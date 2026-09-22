@@ -1,4 +1,5 @@
 import { EditorControlsProvider } from "@/features/editor/use-editor-controls";
+import { AgentWorkspaceBridge } from "@/features/agent/hooks/use-agent-workspace";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -56,6 +57,7 @@ const ProjectLayout = () => {
           <ProjectWorkspaceChangesProvider>
             <ProjectSetupGate>
               <ProjectFileSaveRegistryProvider projectId={projectId}>
+                <AgentWorkspaceBridge />
                 <ProjectWorkspaceFileSearchProvider key={projectId}>
                   <Stack
                     key={projectId}

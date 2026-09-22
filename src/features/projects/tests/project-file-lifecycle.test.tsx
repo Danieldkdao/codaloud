@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+vi.mock("@/features/agent/hooks/use-agent-workspace", () => ({ AgentWorkspaceBridge: () => null }));
 vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: () => null }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 vi.mock("@/features/projects/components/project-code-keyboard-accessory", () => ({ ProjectCodeKeyboardAccessory: () => null }));

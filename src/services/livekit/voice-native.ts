@@ -1,12 +1,14 @@
+import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
 import { AudioSession, registerGlobals } from "@livekit/react-native";
 import { mediaDevices } from "@livekit/react-native-webrtc";
-import { Room, RoomEvent, type RemoteParticipant } from "livekit-client";
+import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 import {
   createVoiceSession,
   deleteVoiceSession,
 } from "@/features/voice/actions";
 import { voiceAgentName, voiceControlMethod } from "@/features/voice/constants";
 import type { ConnectVoice, VoiceConnection } from "@/features/voice/types";
+import { microphoneTrack } from "./voice-track";
 import { createVoiceTranscriptReceiver } from "./voice-transcripts";
 
 registerGlobals();
@@ -43,6 +45,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
     let roomName: string | undefined;
     let agentIdentity: string | undefined;
     let closed = false;
+    let unsubscribePreferences: (() => void) | undefined;
     let closing: Promise<void> | undefined;
     let connecting = false;
     let disconnecting: Promise<void> | undefined;
@@ -61,6 +64,8 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
     const close = () => {
       if (closing) return closing;
       closed = true;
+      unsubscribePreferences?.();
+      microphoneTrack.set(undefined);
       signal.removeEventListener("abort", abort);
       room.removeAllListeners();
       room.unregisterTextStreamHandler("lk.transcription");
@@ -174,14 +179,46 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
           else ready();
         });
       checkCancelled();
+      let lastPreferences = "";
+      const syncPreferences = () => {
+        const { speechEnabled, voiceId } =
+          editorPreferencesStore.getSnapshot().preferences;
+        const payload = JSON.stringify({ speechEnabled, voiceId });
+        // Unsubscribe immediately when muted, including speech already buffered.
+        for (const participant of room.remoteParticipants.values())
+          for (const publication of participant.audioTrackPublications.values())
+            publication.setSubscribed(speechEnabled);
+        if (payload === lastPreferences) return;
+        lastPreferences = payload;
+        controls = controls
+          .catch(() => {})
+          .then(async () => {
+            if (closed || signal.aborted) return;
+            await room.localParticipant.performRpc({
+              destinationIdentity: agentIdentity!,
+              method: "codaloud.voice.preferences",
+              payload,
+            });
+          });
+        void controls.catch(() => {
+          if (!closed && !signal.aborted)
+            events.onError("Couldn’t update voice settings. Please reconnect.");
+        });
+      };
+      unsubscribePreferences =
+        editorPreferencesStore.subscribe(syncPreferences);
+      room.on(RoomEvent.TrackPublished, syncPreferences);
+      syncPreferences();
       return {
         close,
         control: (action) => {
           controls = controls.then(async () => {
             if (closed || signal.aborted) return;
             const enable = action === "start" || action === "hands-free";
-            if (!enable)
+            if (!enable) {
+              microphoneTrack.set(undefined);
               await room.localParticipant.setMicrophoneEnabled(false);
+            }
             if (closed || signal.aborted) return;
             await room.localParticipant.performRpc({
               destinationIdentity: agentIdentity!,
@@ -189,12 +226,19 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
               payload: JSON.stringify({ action }),
               // Keep the SDK's 15-second default. JS RPC timeouts use milliseconds.
             });
-            if (enable && !closed && !signal.aborted)
+            if (enable && !closed && !signal.aborted) {
               await room.localParticipant.setMicrophoneEnabled(true, {
                 echoCancellation: true,
                 noiseSuppression: true,
                 autoGainControl: true,
               });
+              if (!closed && !signal.aborted)
+                microphoneTrack.set(
+                  room.localParticipant.getTrackPublication(
+                    Track.Source.Microphone,
+                  )?.audioTrack,
+                );
+            }
           });
           return controls;
         },

@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import Animated, {
   FadeIn,
@@ -13,6 +20,11 @@ import type { VoiceConversation } from "../hooks/use-voice-conversation";
 import { enterVoiceBubble, exitVoiceBubble } from "../lib/bubble-animations";
 import { formatVoiceStatus, formatVoiceTranscript } from "../lib/formatters";
 
+import { microphoneTrack } from "@/services/livekit/voice-track";
+
+// Evaluate the native SDK only after a real microphone track exists.
+const VoiceFrequencyBars = lazy(() => import("./voice-frequency-bars"));
+
 const resizeBubble = LinearTransition.springify()
   .damping(24)
   .stiffness(280)
@@ -24,6 +36,10 @@ export const VoiceTranscriptBubble = ({
 }: {
   conversation: VoiceConversation;
 }) => {
+  const track = useSyncExternalStore(
+    microphoneTrack.subscribe,
+    microphoneTrack.getSnapshot,
+  );
   const { width, height } = useWindowDimensions();
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
@@ -78,6 +94,11 @@ export const VoiceTranscriptBubble = ({
               />
             </Pressable>
           </View>
+          {state.listening && track ? (
+            <Suspense fallback={null}>
+              <VoiceFrequencyBars track={track} />
+            </Suspense>
+          ) : null}
           <ScrollView
             ref={scroll}
             style={{ maxHeight: Math.min(240, height * 0.28) }}

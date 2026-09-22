@@ -42,6 +42,7 @@
     "@t3-oss/env-core": "^0.13.11",
     "@tanstack/react-pacer": "^0.23.0",
     "@tanstack/react-query": "^5.102.8",
+    "@trigger.dev/sdk": "4.6.3",
     "ai": "7.0.107",
     "better-auth": "^1.7.5",
     "class-variance-authority": "^0.7.1",
@@ -50,6 +51,7 @@
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "expo": "~57.0.23",
+    "expo-audio": "~57.0.5",
     "expo-auth-session": "~57.0.12",
     "expo-build-properties": "~57.0.20",
     "expo-clipboard": "~57.0.2",
@@ -97,6 +99,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@trigger.dev/build": "4.6.3",
     "@types/react": "~19.2.2",
     "@types/react-dom": "^19.2.7",
     "@types/ws": "^8.18.1",
@@ -107,6 +110,7 @@
     "material-icon-theme": "^5.38.1",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
+    "trigger.dev": "4.6.3",
     "tsx": "4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^4.1.11"

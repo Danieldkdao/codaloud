@@ -59,11 +59,36 @@ const invoke = async (
         projectId,
         workspaceTools.searchFiles.schema.parse(args),
       );
-    case "saveFile":
-      return file.saveProjectFileContentAction(
+    case "saveFile": {
+      const input = workspaceTools.saveFile.schema.parse(args);
+      const existing = await file.readProjectFileContentAction(
         projectId,
-        workspaceTools.saveFile.schema.parse(args),
+        input.path,
       );
+      if (!existing) throw new Error("Read the file before replacing it.");
+      if (existing.content.length > 8000)
+        throw new Error(
+          "Use editFile for this file so unread content is preserved.",
+        );
+      return file.saveProjectFileContentAction(projectId, input);
+    }
+    case "editFile": {
+      const { path, oldText, newText, expectedContentHash } =
+        workspaceTools.editFile.schema.parse(args);
+      const existing = await file.readProjectFileContentAction(projectId, path);
+      if (!existing) throw new Error("The file could not be read.");
+      const start = existing.content.indexOf(oldText);
+      if (start < 0 || start !== existing.content.lastIndexOf(oldText))
+        throw new Error("Choose a unique exact excerpt from the current file.");
+      return file.saveProjectFileContentAction(projectId, {
+        path,
+        expectedContentHash,
+        content:
+          existing.content.slice(0, start) +
+          newText +
+          existing.content.slice(start + oldText.length),
+      });
+    }
     case "createFile":
       return file.createProjectFileAction(
         projectId,

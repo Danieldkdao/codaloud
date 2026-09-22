@@ -1,7 +1,12 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ save: vi.fn(), guard: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  save: vi.fn(),
+  read: vi.fn(),
+  guard: vi.fn(),
+}));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   saveProjectFileContentAction: mocks.save,
+  readProjectFileContentAction: mocks.read,
 }));
 vi.mock("@/features/projects/actions/git-actions", () => ({}));
 vi.mock("@/features/projects/actions/publish-actions", () => ({}));
@@ -11,10 +16,73 @@ vi.mock("@/services/local-workspace/execute", () => ({
 }));
 import { executeDeviceTool } from "../tools/device-tools";
 beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.read.mockResolvedValue({ content: "Old", path: "readme.md", size: 3 });
   mocks.guard.mockImplementation(async (_id, _revision, action) => {
     const result = await action();
     throw new Error("Missing native revision");
   });
+});
+it("edits one exact excerpt while preserving the rest of a large file", async () => {
+  const content = "before\n" + "unchanged\n".repeat(1500) + "after\n";
+  mocks.read.mockResolvedValue({ content });
+  mocks.save.mockResolvedValue({ error: false, data: { path: "file.ts" } });
+  mocks.guard.mockImplementation(async (_id, revision, action) => ({
+    result: await action(),
+    revision,
+  }));
+  await executeDeviceTool("project", {
+    id: "edit",
+    tokenId: "token",
+    name: "editFile",
+    revision: "a".repeat(64),
+    args: {
+      path: "file.ts",
+      oldText: "before\n",
+      newText: "new\n",
+      expectedContentHash: "b".repeat(64),
+    },
+  });
+  expect(mocks.save).toHaveBeenCalledWith("project", {
+    path: "file.ts",
+    content: "new\n" + content.slice(7),
+    expectedContentHash: "b".repeat(64),
+  });
+});
+it("rejects ambiguous replacements without saving", async () => {
+  mocks.read.mockResolvedValue({ content: "same same" });
+  await expect(
+    executeDeviceTool("project", {
+      id: "edit",
+      tokenId: "token",
+      name: "editFile",
+      revision: "a".repeat(64),
+      args: {
+        path: "file.ts",
+        oldText: "same",
+        newText: "new",
+        expectedContentHash: "b".repeat(64),
+      },
+    }),
+  ).rejects.toThrow("unique");
+  expect(mocks.save).not.toHaveBeenCalled();
+});
+it("rejects whole-file replacement of a file larger than the excerpt budget", async () => {
+  mocks.read.mockResolvedValue({ content: "x".repeat(8001) });
+  await expect(
+    executeDeviceTool("project", {
+      id: "edit",
+      tokenId: "token",
+      name: "saveFile",
+      revision: "a".repeat(64),
+      args: {
+        path: "file.ts",
+        content: "small excerpt",
+        expectedContentHash: "b".repeat(64),
+      },
+    }),
+  ).rejects.toThrow("editFile");
+  expect(mocks.save).not.toHaveBeenCalled();
 });
 it("preserves an action's conflict message before checking its success revision", async () => {
   mocks.save.mockResolvedValue({

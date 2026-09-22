@@ -1,4 +1,4 @@
-import { streamText, type ModelMessage } from "ai";
+import { streamText, stepCountIs, type ToolSet, type ModelMessage } from "ai";
 import { openrouter } from "./server";
 import { voiceInstructions, voiceModel } from "@/features/voice/constants";
 
@@ -6,12 +6,14 @@ export const createVoiceReply = (
   messages: ModelMessage[],
   sessionId: string,
   signal?: AbortSignal,
+  tools?: ToolSet,
 ): AsyncIterable<string> => ({
   [Symbol.asyncIterator]: () => {
     const controller = new AbortController();
     const result = streamText({
       model: openrouter.chat(voiceModel),
       system: voiceInstructions,
+      ...(tools ? { tools, stopWhen: stepCountIs(2) } : {}),
       messages: messages.slice(-12).map((message): ModelMessage => {
         if (message.role !== "tool" && typeof message.content === "string") {
           return { ...message, content: message.content.slice(-4000) };

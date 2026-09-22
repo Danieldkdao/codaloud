@@ -9,13 +9,19 @@ const mocks = vi.hoisted(() => ({
   shutdown: vi.fn(),
   wait: vi.fn(),
   register: vi.fn(),
+  outputAudio: vi.fn(),
+  updateVoice: vi.fn(),
 }));
 vi.mock("@/data/env/server", () => ({
   serverEnv: { DEEPGRAM_API_KEY: "test", ELEVENLABS_API_KEY: "test" },
 }));
 vi.mock("../voice-llm", () => ({ VoiceLanguageModel: class {} }));
 vi.mock("@livekit/agents-plugin-deepgram", () => ({ STT: class {} }));
-vi.mock("@livekit/agents-plugin-elevenlabs", () => ({ TTS: class {} }));
+vi.mock("@livekit/agents-plugin-elevenlabs", () => ({
+  TTS: class {
+    updateOptions = mocks.updateVoice;
+  },
+}));
 vi.mock("@livekit/agents", () => ({
   defineAgent: (definition: unknown) => definition,
   voice: {
@@ -27,6 +33,7 @@ vi.mock("@livekit/agents", () => ({
         mocks.options(options);
       }
       input = { setAudioEnabled: mocks.audio };
+      output = { setAudioEnabled: mocks.outputAudio };
       on = vi.fn();
       start = mocks.start;
       close = mocks.close;
@@ -62,6 +69,41 @@ beforeEach(() => {
   mocks.attributes.mockResolvedValue(undefined);
   mocks.wait.mockResolvedValue({ identity: "owner" });
 });
+it("starts text-only without disabling transcription and authenticates live preference changes", async () => {
+  const ctx = context();
+  ctx.job.metadata = JSON.stringify({
+    participantIdentity: "owner",
+    mode: "hold",
+    speechEnabled: false,
+    voiceId: "EXAVITQu4vr4xnSDxMaL",
+  });
+  await agent.entry(ctx);
+  expect(mocks.start).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outputOptions: expect.objectContaining({
+        audioEnabled: false,
+        transcriptionEnabled: true,
+      }),
+    }),
+  );
+  const handler = mocks.register.mock.calls.find(
+    ([method]) => method === "codaloud.voice.preferences",
+  )![1];
+  const payload = JSON.stringify({
+    speechEnabled: true,
+    voiceId: "JBFqnCBsd6RMkjVDRZzb",
+  });
+  await expect(
+    handler({ callerIdentity: "intruder", payload }),
+  ).rejects.toThrow("Unauthorized");
+  expect(mocks.outputAudio).not.toHaveBeenCalled();
+  await handler({ callerIdentity: "owner", payload });
+  expect(mocks.outputAudio).toHaveBeenCalledWith(true);
+  expect(mocks.updateVoice).toHaveBeenCalledWith({
+    voiceId: "JBFqnCBsd6RMkjVDRZzb",
+  });
+  await cleanup();
+});
 afterEach(() => vi.useRealTimers());
 it("starts a non-recording pipeline with automatic speculation disabled, then advertises readiness", async () => {
   await agent.entry(context());
@@ -80,7 +122,11 @@ it("starts a non-recording pipeline with automatic speculation disabled, then ad
         textEnabled: false,
         participantIdentity: "owner",
       }),
-      outputOptions: { transcriptionEnabled: true, syncTranscription: false },
+      outputOptions: {
+        audioEnabled: true,
+        transcriptionEnabled: true,
+        syncTranscription: false,
+      },
     }),
   );
   expect(mocks.audio).toHaveBeenLastCalledWith(false);

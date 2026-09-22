@@ -26,6 +26,7 @@ it("adapts a committed text conversation to LiveKit response chunks", async () =
     [{ role: "user", content: "Hi" }],
     "room",
     expect.any(AbortSignal),
+    undefined,
   );
   stream.close();
 });

@@ -36,7 +36,25 @@ export default defineAgent({
         endpointing: 500,
         utteranceEndMs: 1000,
       }),
-      llm: new VoiceLanguageModel(ctx.room.name ?? ctx.job.id),
+      llm: new VoiceLanguageModel(
+        ctx.room.name ?? ctx.job.id,
+        async (instruction, id) => {
+          try {
+            const response = await ctx.room.localParticipant!.performRpc({
+              destinationIdentity: metadata.participantIdentity,
+              method: "codaloud.task.start",
+              payload: JSON.stringify({ instruction, id }),
+            });
+            return JSON.parse(response);
+          } catch {
+            return {
+              accepted: false,
+              message:
+                "Task acceptance could not be confirmed. Check the task panel; do not resubmit automatically.",
+            };
+          }
+        },
+      ),
       tts,
       // Local Silero VAD is the Agents 1.9 default. No paid turn detector is used.
       turnHandling: {
@@ -56,6 +74,26 @@ export default defineAgent({
         maxUnrecoverableErrors: 1,
       },
     });
+    const completions: string[] = [];
+    const reported = new Set<string>();
+    const announce = () => {
+      if (
+        !completions.length ||
+        session.agentState !== "listening" ||
+        session.userState === "speaking"
+      )
+        return;
+      const text = completions.shift()!;
+      // The durable task already generated a short validated summary. Speak it
+      // directly, without another model call for every completion or progress tick.
+      try {
+        session.say(text, { addToChatCtx: true, allowInterruptions: true });
+      } catch {
+        /* The session may be closing. Results remain in the task panel. */
+      }
+    };
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, announce);
+    session.on(voice.AgentSessionEventTypes.UserStateChanged, announce);
     const timer = setTimeout(
       () => ctx.shutdown("Voice session time limit"),
       voiceSessionDurationMs,
@@ -117,6 +155,28 @@ export default defineAgent({
         );
         session.output.setAudioEnabled(preferences.speechEnabled);
         tts.updateOptions({ voiceId: preferences.voiceId });
+        return "ok";
+      },
+    );
+    ctx.room.localParticipant!.registerRpcMethod(
+      "codaloud.task.complete",
+      async (data) => {
+        if (
+          data.callerIdentity !== metadata.participantIdentity ||
+          data.payload.length > 6000
+        )
+          throw new Error("Unauthorized task completion");
+        const result = z
+          .object({
+            id: z.string().max(256),
+            summary: z.string().min(1).max(3000),
+          })
+          .parse(JSON.parse(data.payload));
+        if (!reported.has(result.id)) {
+          reported.add(result.id);
+          completions.push(result.summary);
+          announce();
+        }
         return "ok";
       },
     );

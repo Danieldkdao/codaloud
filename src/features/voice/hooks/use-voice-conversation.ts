@@ -6,9 +6,15 @@ import {
 } from "react-native";
 import { createVoiceController } from "../voice-controller";
 
-export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
+export const useVoiceConversation = (
+  enabled: boolean,
+  scopeKey: string,
+  projectId?: string,
+) => {
+  const project = useRef(projectId);
+  project.current = projectId;
   const [controller] = useState(() =>
-    createVoiceController(async (...args) => {
+    createVoiceController(async (mode, signal, events) => {
       // The SDK constructs native event emitters during import. Check the same
       // native module names it uses before evaluating it in an older app binary.
       if (
@@ -23,7 +29,12 @@ export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
       // only on microphone activation, after the app is running on the device.
       const { connectNativeVoice } =
         await import("@/services/livekit/voice-native");
-      return connectNativeVoice(...args);
+      return connectNativeVoice(
+        mode,
+        signal,
+        events,
+        project.current ? { projectId: project.current } : undefined,
+      );
     }),
   );
   const state = useSyncExternalStore(

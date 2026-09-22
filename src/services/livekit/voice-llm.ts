@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_API_CONNECT_OPTIONS, llm } from "@livekit/agents";
-import type { ModelMessage } from "ai";
+import { tool, type ModelMessage, type ToolSet } from "ai";
+import { z } from "zod";
 import { voiceModel } from "@/features/voice/constants";
 import { createVoiceReply } from "@/services/ai/voice-response";
 
 export class VoiceLanguageModel extends llm.LLM {
-  constructor(private readonly sessionId: string) {
+  constructor(
+    private readonly sessionId: string,
+    private readonly startTask?: (
+      instruction: string,
+      id: string,
+    ) => Promise<unknown>,
+  ) {
     super();
   }
   label = () => "codaloud.openrouter";
@@ -15,8 +22,9 @@ export class VoiceLanguageModel extends llm.LLM {
   get provider() {
     return "openrouter";
   }
-  chat = (options: Parameters<llm.LLM["chat"]>[0]) =>
-    new VoiceLanguageModelStream(
+  chat = (options: Parameters<llm.LLM["chat"]>[0]) => {
+    let accepted: Promise<unknown> | undefined;
+    return new VoiceLanguageModelStream(
       this,
       {
         ...options,
@@ -27,7 +35,21 @@ export class VoiceLanguageModel extends llm.LLM {
         },
       },
       this.sessionId,
+      this.startTask
+        ? {
+            startTask: tool({
+              description:
+                "Accept workspace or web work as a background task and return immediately. Completion arrives separately.",
+              inputSchema: z.object({
+                instruction: z.string().min(1).max(4000),
+              }),
+              execute: ({ instruction }, { toolCallId }) =>
+                (accepted ??= this.startTask!(instruction, toolCallId)),
+            }),
+          }
+        : undefined,
     );
+  };
 }
 
 class VoiceLanguageModelStream extends llm.LLMStream {
@@ -35,6 +57,7 @@ class VoiceLanguageModelStream extends llm.LLMStream {
     model: llm.LLM,
     options: ConstructorParameters<typeof llm.LLMStream>[1],
     private readonly sessionId: string,
+    private readonly tools?: ToolSet,
   ) {
     super(model, options);
   }
@@ -55,6 +78,7 @@ class VoiceLanguageModelStream extends llm.LLMStream {
         messages,
         this.sessionId,
         this.abortController.signal,
+        this.tools,
       )) {
         if (this.abortController.signal.aborted) break;
         this.queue.put({ id, delta: { role: "assistant", content } });

@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   stream: vi.fn(),
   model: vi.fn(),
 }));
-vi.mock("ai", () => ({ streamText: mocks.stream }));
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
+  streamText: mocks.stream,
+}));
 vi.mock("../server", () => ({ openrouter: { chat: mocks.model } }));
 beforeEach(() => {
   mocks.stream.mockReset();
@@ -182,4 +185,25 @@ it("rejects a completed but empty text response", async () => {
     }
   };
   await expect(consume()).rejects.toThrow("empty response");
+});
+
+it("exposes background tools only when supplied and bounds the acknowledgement loop", async () => {
+  mocks.stream.mockReturnValue({
+    stream: (async function* () {
+      yield { type: "text-delta", text: "Working on it." };
+    })(),
+  });
+  const tools = {
+    startTask: { description: "Start a task", inputSchema: {} },
+  } as unknown as import("ai").ToolSet;
+  for await (const _text of createVoiceReply(
+    [{ role: "user", content: "Read the readme" }],
+    "room",
+    undefined,
+    tools,
+  )) {
+    /* consume */
+  }
+  expect(mocks.stream.mock.calls[0][0].tools).toBe(tools);
+  expect(mocks.stream.mock.calls[0][0].stopWhen).toBeDefined();
 });

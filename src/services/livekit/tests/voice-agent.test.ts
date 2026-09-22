@@ -69,7 +69,7 @@ beforeEach(() => {
   mocks.attributes.mockResolvedValue(undefined);
   mocks.wait.mockResolvedValue({ identity: "owner" });
 });
-it("starts text-only without disabling transcription and authenticates live preference changes", async () => {
+it("starts muted with an audio output that can be enabled without reconnecting", async () => {
   const ctx = context();
   ctx.job.metadata = JSON.stringify({
     participantIdentity: "owner",
@@ -81,11 +81,13 @@ it("starts text-only without disabling transcription and authenticates live pref
   expect(mocks.start).toHaveBeenCalledWith(
     expect.objectContaining({
       outputOptions: expect.objectContaining({
-        audioEnabled: false,
+        audioEnabled: true,
         transcriptionEnabled: true,
       }),
     }),
   );
+  expect(mocks.outputAudio).toHaveBeenLastCalledWith(false);
+  mocks.outputAudio.mockClear();
   const handler = mocks.register.mock.calls.find(
     ([method]) => method === "codaloud.voice.preferences",
   )![1];
@@ -99,6 +101,20 @@ it("starts text-only without disabling transcription and authenticates live pref
   expect(mocks.outputAudio).not.toHaveBeenCalled();
   await handler({ callerIdentity: "owner", payload });
   expect(mocks.outputAudio).toHaveBeenCalledWith(true);
+  await handler({
+    callerIdentity: "owner",
+    payload: JSON.stringify({
+      speechEnabled: false,
+      voiceId: "JBFqnCBsd6RMkjVDRZzb",
+    }),
+  });
+  await handler({ callerIdentity: "owner", payload });
+  expect(mocks.outputAudio.mock.calls.map(([enabled]) => enabled)).toEqual([
+    true,
+    false,
+    true,
+  ]);
+  expect(mocks.start).toHaveBeenCalledOnce();
   expect(mocks.updateVoice).toHaveBeenCalledWith({
     voiceId: "JBFqnCBsd6RMkjVDRZzb",
   });

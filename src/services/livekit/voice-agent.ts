@@ -119,6 +119,9 @@ export default defineAgent({
         if (!message.textContent?.trim()) throw new voice.StopResponse();
       },
     });
+    // RoomIO must create its sink even for a muted start. Disabling the
+    // startup output removes it entirely, so later toggles cannot restore it.
+    session.output.setAudioEnabled(metadata.speechEnabled);
     await session.start({
       agent,
       room: ctx.room,
@@ -127,7 +130,7 @@ export default defineAgent({
         participantIdentity: metadata.participantIdentity,
       },
       outputOptions: {
-        audioEnabled: metadata.speechEnabled,
+        audioEnabled: true,
         transcriptionEnabled: true,
         syncTranscription: false,
       },

@@ -34,6 +34,7 @@ vi.mock("react-native-reanimated", () => {
   };
 });
 vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   Switch: ({ value, disabled, accessibilityLabel, onValueChange }: { value: boolean; disabled?: boolean; accessibilityLabel: string; onValueChange?: (value: boolean) => void }) => createElement("button", { role: "switch", "aria-checked": value, disabled, "aria-label": accessibilityLabel, onClick: () => onValueChange?.(!value) }),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   View: ({ children, testID, onLayout, className }: { children: ReactNode; testID?: string; onLayout?: (event: never) => void; className?: string }) => {

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppState, Pressable, Switch, View } from "react-native";
-import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import type { AudioPlayer } from "expo-audio";
 import { HeadingText, PText } from "@/components/ui/text";
 import { Icon } from "@/components/ui/icon";
 import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
+import { voiceAudioSession } from "@/services/livekit/voice-track";
 import { voicePresets } from "../constants";
 import { useEditorPreferences } from "../hooks/use-editor-preferences";
 import { SettingsSection } from "./settings-section";
@@ -30,26 +31,42 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
   const border = useThemeColor("border");
   const player = useRef<AudioPlayer | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const previewVersion = useRef(0);
   const [error, setError] = useState<string | null>(null);
+  const inConversation = useSyncExternalStore(
+    voiceAudioSession.subscribe,
+    voiceAudioSession.getSnapshot,
+  );
   const stopPreview = () => {
+    previewVersion.current++;
     clearTimeout(timer.current);
     player.current?.remove();
     player.current = null;
   };
   useEffect(() => {
+    const unsubscribe = voiceAudioSession.subscribe(() => {
+      if (voiceAudioSession.getSnapshot()) stopPreview();
+    });
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") stopPreview();
     });
     return () => {
       stopPreview();
       subscription.remove();
+      unsubscribe();
     };
   }, []);
-  const select = (id: string) => {
+  const select = async (id: string) => {
     void update({ voiceId: id });
     stopPreview();
     setError(null);
+    // A preview player must not take the audio session away from WebRTC.
+    if (voiceAudioSession.getSnapshot()) return;
+    const version = previewVersion.current;
     try {
+      const { createAudioPlayer } = await import("expo-audio");
+      if (version !== previewVersion.current || voiceAudioSession.getSnapshot())
+        return;
       // Bundled provider samples never call the synthesis API or consume credits.
       player.current = createAudioPlayer(previewSource(id));
       player.current.play();
@@ -88,7 +105,9 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
               accessibilityRole="radio"
               accessibilityState={{ checked: preferences.voiceId === voice.id }}
               accessibilityLabel={`${voice.name}, ${voice.description}`}
-              onPress={() => select(voice.id)}
+              onPress={() => {
+                void select(voice.id);
+              }}
               className={cn(
                 "min-h-16 flex-row items-center gap-3 rounded-2xl border border-border p-3 active:opacity-60",
                 preferences.voiceId === voice.id &&
@@ -117,7 +136,11 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
               ) : null}
             </Pressable>
           ))}
-          <PText>Select a voice to hear a short preview.</PText>
+          <PText>
+            {inConversation
+              ? "Your selection applies to this conversation. Close it to preview voices."
+              : "Select a voice to hear a short preview."}
+          </PText>
         </View>
       ) : null}
       {error ? <PText className="text-destructive">{error}</PText> : null}

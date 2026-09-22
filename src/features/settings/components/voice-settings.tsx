@@ -8,22 +8,8 @@ import { cn } from "@/lib/utils";
 import { voiceAudioSession } from "@/services/livekit/voice-track";
 import { voicePresets } from "../constants";
 import { useEditorPreferences } from "../hooks/use-editor-preferences";
+import { formatVoicePreviewSource } from "../lib/formatters";
 import { SettingsSection } from "./settings-section";
-
-const previewSource = (id: string) => {
-  switch (id) {
-    case "JBFqnCBsd6RMkjVDRZzb":
-      return require("../../../../assets/voices/george.mp3");
-    case "EXAVITQu4vr4xnSDxMaL":
-      return require("../../../../assets/voices/sarah.mp3");
-    case "IKne3meq5aSn9XLyUdCD":
-      return require("../../../../assets/voices/charlie.mp3");
-    case "SAz9YHcvj6GT2YYXdXww":
-      return require("../../../../assets/voices/river.mp3");
-    case "pFZP5JQG7iQjIQuC4Bku":
-      return require("../../../../assets/voices/lily.mp3");
-  }
-};
 
 export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
   const { preferences, update } = useEditorPreferences();
@@ -81,7 +67,7 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
         Platform.OS === "ios" ? () => setIsAudioActiveAsync(false) : null;
       // Expo's automatic completion cleanup runs later and cannot see WebRTC.
       // Release explicitly through the shared audio owner instead.
-      player.current = createAudioPlayer(previewSource(id), {
+      player.current = createAudioPlayer(formatVoicePreviewSource(id), {
         keepAudioSessionActive: true,
       });
       player.current.play();

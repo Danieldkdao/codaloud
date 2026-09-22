@@ -18,6 +18,13 @@ beforeEach(async () => {
   vi.stubEnv("BETTER_AUTH_URL", "https://codaloud.test");
   vi.stubEnv("TRIGGER_SECRET_KEY", "trigger-secret");
   vi.stubEnv("DAYTONA_API_KEY", "daytona-key");
+  vi.stubEnv("DEEPGRAM_API_KEY", "test");
+  vi.stubEnv("OPENROUTER_API_KEY", "test");
+  vi.stubEnv("LIVEKIT_URL", "wss://livekit.test");
+  vi.stubEnv("LIVEKIT_API_KEY", "test");
+  vi.stubEnv("LIVEKIT_API_SECRET", "test");
+  vi.stubEnv("FIRECRAWL_API_KEY", "test");
+  vi.stubEnv("ELEVENLABS_API_KEY", "test");
   vi.stubEnv("DAYTONA_TARGET", "us");
   ({ handleGitHubOAuthRequest, redirectGitHubOAuthCallback } = await import("../server/oauth"));
 });

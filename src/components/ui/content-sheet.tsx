@@ -7,7 +7,8 @@ export type ContentSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDismiss?: () => void;
-  backgroundColor: ColorValue;
+  // Omit to retain the native sheet material, including Liquid Glass on iOS.
+  backgroundColor?: ColorValue;
   children: ReactNode;
 };
 
@@ -30,7 +31,7 @@ export const ContentSheet = ({
       index={-1}
       enableDynamicSizing
       enablePanDownToClose
-      backgroundStyle={{ backgroundColor }}
+      backgroundStyle={backgroundColor ? { backgroundColor } : undefined}
       onChange={(index) => onOpenChange(index >= 0)}
       onClose={() => {
         onOpenChange(false);

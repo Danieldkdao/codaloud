@@ -2,6 +2,7 @@ import "../global.css";
 
 import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 
+import { AgentTaskRuntime } from "@/features/agent/hooks/use-agent-tasks";
 import { QueryProvider } from "@/components/query-provider";
 import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
 import { SuccessFeedbackProvider } from "@/hooks/use-success-feedback";
@@ -27,11 +28,7 @@ SplashScreen.setOptions({ duration: 250, fade: true });
 const RootNavigator = () => {
   const { isReady: isThemeReady } = useTheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
-  const {
-    ready: isAppReady,
-    error,
-    retry,
-  } = useOnboarding();
+  const { ready: isAppReady, error, retry } = useOnboarding();
   const session = authClient.useSession();
 
   useEffect(subscribeToQueryLifecycle, []);
@@ -71,6 +68,7 @@ const RootNavigator = () => {
 
   return (
     <QueryProvider>
+      <AgentTaskRuntime />
       <GestureHandlerRootView style={{ flex: 1 }}>
         <KeyboardSymbolsProvider fill>
           <ProjectSearchOverlayProvider>

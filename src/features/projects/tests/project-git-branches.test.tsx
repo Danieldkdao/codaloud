@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => null }));
 vi.mock("expo-sqlite/kv-store", () => ({ default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined) } }));
 // Native voice lifecycle is covered in the voice feature's own integration tests.
 vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({ useVoiceConversation: () => ({ visible: false }) }));
@@ -203,6 +204,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   Switch: ({ value, disabled, accessibilityLabel }: { value: boolean; disabled?: boolean; accessibilityLabel: string }) => createElement("button", { role: "switch", "aria-checked": value, disabled, "aria-label": accessibilityLabel }),
   Alert: { alert: workspaceFiles.alert, prompt: workspaceFiles.alert },
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),

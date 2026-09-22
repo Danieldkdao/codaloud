@@ -16,6 +16,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { GlassSurface } from "@/components/ui/glass-surface";
+import { MarkdownText } from "@/components/markdown-text";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
@@ -238,9 +239,10 @@ export const VoiceTranscriptBubble = ({
                     >
                       {segment.role === "user" ? "You" : "Codaloud"}
                     </PText>
-                    <PText selectable className="text-foreground">
-                      {segment.text}
-                    </PText>
+                    <MarkdownText
+                      text={segment.text}
+                      streaming={!segment.final}
+                    />
                   </Animated.View>
                 ))}
                 {state.error ? (

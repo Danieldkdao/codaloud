@@ -52,6 +52,10 @@ vi.mock("@/components/ui/glass-surface", () => ({
     createElement("section", { "data-glass-surface": true }, children),
 }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/markdown-text", () => ({
+  MarkdownText: ({ text, streaming }: any) =>
+    createElement("article", { "data-streaming": streaming }, text),
+}));
 vi.mock("@/components/ui/text", () => import("@/components/ui/text/p-text"));
 vi.mock("@/lib/utils", async () => {
   const { clsx } = await import("clsx");
@@ -126,6 +130,34 @@ beforeEach(() => {
   act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
 });
 afterEach(() => act(() => root.unmount()));
+it("renders both speakers as Markdown and marks unfinished replies as streaming", () => {
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble
+        conversation={{
+          ...conversation,
+          state: {
+            ...conversation.state,
+            transcript: [
+              { id: "user", role: "user", text: "**Hello**", final: true },
+              {
+                id: "agent",
+                role: "assistant",
+                text: "**Welcome",
+                final: false,
+              },
+            ],
+          },
+        }}
+      />,
+    ),
+  );
+  const messages = container.querySelectorAll("article");
+  expect(messages).toHaveLength(2);
+  expect(messages[0].textContent).toBe("**Hello**");
+  expect(messages[0].getAttribute("data-streaming")).toBe("false");
+  expect(messages[1].getAttribute("data-streaming")).toBe("true");
+});
 it("keeps the Outfit family on voice status, errors, and speaker labels", () => {
   const failed = {
     ...conversation,

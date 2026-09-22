@@ -17,6 +17,7 @@ allowBuilds:
   bufferutil: false
   esbuild: false
   protobufjs: false
+  react-native-enriched-markdown: true
 
 patchedDependencies:
   # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.

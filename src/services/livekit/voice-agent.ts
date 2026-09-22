@@ -8,11 +8,11 @@ import {
   voiceInstructions,
   voiceSessionDurationMs,
 } from "@/features/voice/constants";
-import { voiceModes } from "@/features/voice/schemas";
+import { voicePreferencesSchema, voiceModes } from "@/features/voice/schemas";
 import { createVoiceControlHandler } from "./voice-controls";
 import { VoiceLanguageModel } from "./voice-llm";
 
-const voiceDispatchSchema = z.object({
+const voiceDispatchSchema = voicePreferencesSchema.extend({
   participantIdentity: z.string().min(1),
   mode: z.enum(voiceModes),
 });
@@ -21,6 +21,12 @@ export type VoiceDispatchSchema = z.infer<typeof voiceDispatchSchema>;
 export default defineAgent({
   entry: async (ctx) => {
     const metadata = voiceDispatchSchema.parse(JSON.parse(ctx.job.metadata));
+    const tts = new elevenlabs.TTS({
+      apiKey: serverEnv.ELEVENLABS_API_KEY,
+      voiceId: metadata.voiceId,
+      model: "eleven_flash_v2_5",
+      encoding: "pcm_22050",
+    });
     const session = new voice.AgentSession({
       stt: new deepgram.STT({
         apiKey: serverEnv.DEEPGRAM_API_KEY,
@@ -31,12 +37,7 @@ export default defineAgent({
         utteranceEndMs: 1000,
       }),
       llm: new VoiceLanguageModel(ctx.room.name ?? ctx.job.id),
-      tts: new elevenlabs.TTS({
-        apiKey: serverEnv.ELEVENLABS_API_KEY,
-        voiceId: serverEnv.ELEVENLABS_VOICE_ID,
-        model: "eleven_flash_v2_5",
-        encoding: "pcm_22050",
-      }),
+      tts,
       // Local Silero VAD is the Agents 1.9 default. No paid turn detector is used.
       turnHandling: {
         turnDetection: "manual",
@@ -87,7 +88,11 @@ export default defineAgent({
         textEnabled: false,
         participantIdentity: metadata.participantIdentity,
       },
-      outputOptions: { transcriptionEnabled: true, syncTranscription: false },
+      outputOptions: {
+        audioEnabled: metadata.speechEnabled,
+        transcriptionEnabled: true,
+        syncTranscription: false,
+      },
       record: false,
     });
     session.input.setAudioEnabled(false);
@@ -98,6 +103,22 @@ export default defineAgent({
     );
     ctx.room.localParticipant!.registerRpcMethod(voiceControlMethod, (data) =>
       handleControl(data.callerIdentity, data.payload),
+    );
+    ctx.room.localParticipant!.registerRpcMethod(
+      "codaloud.voice.preferences",
+      async (data) => {
+        if (
+          data.callerIdentity !== metadata.participantIdentity ||
+          data.payload.length > 256
+        )
+          throw new Error("Unauthorized voice settings");
+        const preferences = voicePreferencesSchema.parse(
+          JSON.parse(data.payload),
+        );
+        session.output.setAudioEnabled(preferences.speechEnabled);
+        tts.updateOptions({ voiceId: preferences.voiceId });
+        return "ok";
+      },
     );
     await ctx.room.localParticipant!.setAttributes({
       "codaloud.voice.ready": "true",

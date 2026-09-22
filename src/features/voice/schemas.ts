@@ -1,8 +1,23 @@
 import { z } from "zod";
+import {
+  defaultEditorPreferences,
+  voicePresets,
+} from "@/features/settings/constants";
+
+export const voicePreferencesSchema = z.object({
+  speechEnabled: z.boolean().default(true),
+  voiceId: z
+    .string()
+    .refine((id) => voicePresets.some((voice) => voice.id === id))
+    .default(defaultEditorPreferences.voiceId),
+});
+export type VoicePreferencesSchema = z.infer<typeof voicePreferencesSchema>;
 
 export const voiceModes = ["hold", "hands-free"] as const;
 export type VoiceMode = (typeof voiceModes)[number];
-export const voiceSessionRequestSchema = z.object({ mode: z.enum(voiceModes) });
+export const voiceSessionRequestSchema = voicePreferencesSchema.extend({
+  mode: z.enum(voiceModes),
+});
 export type VoiceSessionRequestSchema = z.infer<
   typeof voiceSessionRequestSchema
 >;

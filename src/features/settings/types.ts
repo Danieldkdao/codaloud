@@ -14,6 +14,8 @@ export type EditorTheme = (typeof import("./constants").editorThemes)[number];
 export type EditorFont = (typeof import("./constants").editorFonts)[number];
 export type SupportedAccountProvider = "github" | "google";
 export type EditorPreferences = {
+  speechEnabled: boolean;
+  voiceId: string;
   theme: EditorTheme;
   font: EditorFont;
   fontSize: number;

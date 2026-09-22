@@ -64,6 +64,8 @@ it("creates a private room, dispatches the agent, and signs only the server iden
   expect(mocks.dispatch).toHaveBeenCalledWith(data.roomName, "codaloud-voice", {
     metadata: JSON.stringify({
       participantIdentity: "user-one",
+      speechEnabled: true,
+      voiceId: "JBFqnCBsd6RMkjVDRZzb",
       mode: "hands-free",
     }),
   });
@@ -103,4 +105,27 @@ it("only allows closing rooms owned by the current user", async () => {
     ).status,
   ).toBe(403);
   expect(mocks.deleteRoom).not.toHaveBeenCalled();
+});
+it("dispatches validated user speech preferences and rejects unlisted voices", async () => {
+  const response = await handleVoiceSessionRequest(
+    request({
+      mode: "hold",
+      speechEnabled: false,
+      voiceId: "SAz9YHcvj6GT2YYXdXww",
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(JSON.parse(mocks.dispatch.mock.calls[0][2].metadata)).toMatchObject({
+    speechEnabled: false,
+    voiceId: "SAz9YHcvj6GT2YYXdXww",
+  });
+  mocks.createRoom.mockClear();
+  expect(
+    (
+      await handleVoiceSessionRequest(
+        request({ mode: "hold", voiceId: "unlisted" }),
+      )
+    ).status,
+  ).toBe(400);
+  expect(mocks.createRoom).not.toHaveBeenCalled();
 });

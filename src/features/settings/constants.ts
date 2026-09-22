@@ -18,6 +18,8 @@ export const editorFonts = [
   "IBM Plex Mono",
 ] as const;
 export const defaultEditorPreferences: EditorPreferences = {
+  speechEnabled: true,
+  voiceId: "JBFqnCBsd6RMkjVDRZzb",
   theme: "Codaloud",
   font: "JetBrains Mono",
   fontSize: 16,
@@ -36,3 +38,33 @@ export const editorScreenOptions = {
   headerTransparent: true,
   title: "",
 } as const;
+
+// Public premade catalog verified September 2026. These legacy IDs retire on
+// December 31, 2026; replace the catalog before then without changing stored IDs silently.
+export const voicePresets = [
+  {
+    id: "JBFqnCBsd6RMkjVDRZzb",
+    name: "George",
+    description: "Warm British storyteller",
+  },
+  {
+    id: "EXAVITQu4vr4xnSDxMaL",
+    name: "Sarah",
+    description: "Reassuring American voice",
+  },
+  {
+    id: "IKne3meq5aSn9XLyUdCD",
+    name: "Charlie",
+    description: "Energetic Australian voice",
+  },
+  {
+    id: "SAz9YHcvj6GT2YYXdXww",
+    name: "River",
+    description: "Relaxed, neutral American voice",
+  },
+  {
+    id: "pFZP5JQG7iQjIQuC4Bku",
+    name: "Lily",
+    description: "Velvety British storyteller",
+  },
+] as const;

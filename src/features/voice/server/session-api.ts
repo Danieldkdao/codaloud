@@ -62,7 +62,7 @@ export const handleVoiceSessionRequest = async (request: Request) => {
     await livekit.agentDispatch.createDispatch(roomName, voiceAgentName, {
       metadata: JSON.stringify({
         participantIdentity: session.user.id,
-        mode: input.data.mode,
+        ...input.data,
       }),
     });
     const token = await createVoiceAccessToken(roomName, session.user.id);

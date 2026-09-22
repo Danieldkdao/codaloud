@@ -1,3 +1,4 @@
+import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
 import { authClient } from "@/lib/auth/auth-client";
 import { fetchBase } from "@/lib/utils";
 import { voiceSessionResponseSchema, type VoiceMode } from "./schemas";
@@ -7,6 +8,7 @@ export const createVoiceSession = async (
   signal: AbortSignal,
 ) => {
   try {
+    await editorPreferencesStore.load();
     const cookie = await authClient.getCookie();
     if (signal.aborted) return null;
     const response = await fetchBase("/api/voice/session", {
@@ -14,7 +16,12 @@ export const createVoiceSession = async (
       credentials: "omit",
       signal,
       headers: { "Content-Type": "application/json", Cookie: cookie ?? "" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({
+        mode,
+        speechEnabled:
+          editorPreferencesStore.getSnapshot().preferences.speechEnabled,
+        voiceId: editorPreferencesStore.getSnapshot().preferences.voiceId,
+      }),
     });
     if (!response.ok) return null;
     const parsed = voiceSessionResponseSchema.safeParse(await response.json());

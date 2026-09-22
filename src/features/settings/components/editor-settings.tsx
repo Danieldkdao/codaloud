@@ -9,6 +9,7 @@ import { useEditorPreferences } from "../hooks/use-editor-preferences";
 import { formatEditorFontSize, formatEditorTabSize } from "../lib/formatters";
 import type { EditorPreferences } from "../types";
 import { GitIdentityForm } from "./git-identity-form";
+import { VoiceSettings } from "./voice-settings";
 import { SettingsSection } from "./settings-section";
 
 const EditorSettingsSection = ({
@@ -315,6 +316,7 @@ export const EditorSettings = ({ settings = false }: EditorSettingsProps) => {
         />
       </EditorSettingsSection>
       <GitIdentityForm settings={settings} />
+      <VoiceSettings settings={settings} />
     </View>
   );
 };

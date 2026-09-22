@@ -13,6 +13,7 @@ export const createVoiceControlHandler = (
   participantIdentity: string,
 ) => {
   let holding = false;
+  let handsFree = false;
   return async (callerIdentity: string, payload: string) => {
     if (callerIdentity !== participantIdentity || payload.length > 256)
       throw new Error("Unauthorized voice control");
@@ -24,6 +25,7 @@ export const createVoiceControlHandler = (
         session.clearUserTurn();
         session.updateOptions({ turnHandling: { turnDetection: "manual" } });
         holding = true;
+        handsFree = false;
         session.input.setAudioEnabled(true);
         break;
       case "commit":
@@ -34,13 +36,22 @@ export const createVoiceControlHandler = (
         break;
       case "hands-free":
         holding = false;
+        handsFree = true;
         session.clearUserTurn();
         session.updateOptions({ turnHandling: { turnDetection: "stt" } });
         session.input.setAudioEnabled(true);
         break;
-      case "cancel":
       case "stop":
+        if (!holding && !handsFree) break;
         holding = false;
+        handsFree = false;
+        session.input.setAudioEnabled(false);
+        // Stop capture, not the reply: flush any speech awaiting STT endpointing.
+        session.commitUserTurn();
+        break;
+      case "cancel":
+        holding = false;
+        handsFree = false;
         session.input.setAudioEnabled(false);
         session.interrupt({ force: true });
         session.clearUserTurn();

@@ -1,4 +1,4 @@
-import type { VoiceState } from "../types";
+import type { VoiceSegment, VoiceState } from "../types";
 
 export const formatVoiceStatus = (state: VoiceState): string => {
   switch (state.connection) {
@@ -22,4 +22,23 @@ export const formatVoiceStatus = (state: VoiceState): string => {
             : "Hold to speak again";
       }
   }
+};
+
+// Group only for display; original segment IDs must survive interim STT updates.
+export const formatVoiceTranscript = (
+  segments: VoiceSegment[],
+): VoiceSegment[] => {
+  const groups: VoiceSegment[] = [];
+  for (const segment of segments) {
+    const text = segment.text.trim();
+    if (!text) continue;
+    const previous = groups.at(-1);
+    if (previous?.role === segment.role) {
+      previous.text += " " + text;
+      previous.final = previous.final && segment.final;
+    } else {
+      groups.push({ ...segment, text });
+    }
+  }
+  return groups;
 };

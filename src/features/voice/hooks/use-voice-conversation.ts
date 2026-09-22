@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AppState, NativeModules } from "react-native";
+import {
+  AppState,
+  NativeModules,
+  type GestureResponderEvent,
+} from "react-native";
 import { createVoiceController } from "../voice-controller";
 
 export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
@@ -27,20 +31,29 @@ export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
     controller.getSnapshot,
     controller.getSnapshot,
   );
-  const [hint, setHint] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const held = useRef(false);
   const suppressTap = useRef(false);
   const previousTap = useRef(0);
   const stop = () => {
     held.current = false;
+    setPressed(false);
     previousTap.current = 0;
-    setHint(false);
+    setOpen(false);
     void controller.stop();
+  };
+  const pause = () => {
+    held.current = false;
+    setPressed(false);
+    previousTap.current = 0;
+    setOpen(true);
+    void controller.pause();
   };
   useEffect(() => {
     if (!enabled) {
+      setPressed(false);
       void controller.stop();
-      setHint(false);
     }
     return () => {
       void controller.stop();
@@ -50,25 +63,37 @@ export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
     const subscription = AppState.addEventListener("change", (next) => {
       // iOS becomes inactive while presenting the microphone permission prompt.
       if (next === "background") {
+        setPressed(false);
         void controller.stop();
-        setHint(false);
       }
     });
     return () => subscription.remove();
   }, [controller]);
 
+  const endTouch = () => {
+    setPressed(false);
+    if (held.current) {
+      held.current = false;
+      void controller.release();
+    }
+  };
+
   return {
     state,
-    visible: enabled && (hint || state.connection !== "idle"),
+    pressed,
+    visible: enabled && (open || state.connection !== "idle"),
     stop,
+    pause,
     startHandsFree: () => {
       if (enabled) {
-        setHint(false);
+        setOpen(true);
         void controller.start("hands-free");
       }
     },
-    onPressIn: () => {
-      held.current = false;
+    onTouchStart: () => {
+      setPressed(true);
+      // Pressability may reactivate while the same finger is still down.
+      if (held.current) return;
       suppressTap.current = false;
     },
     onLongPress: () => {
@@ -76,16 +101,17 @@ export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
       held.current = true;
       suppressTap.current = true;
       previousTap.current = 0;
-      setHint(false);
+      setOpen(true);
       void controller.start("hold");
     },
-    onPressOut: () => {
-      if (held.current) {
-        held.current = false;
-        void controller.release();
-      }
+    onTouchEnd: endTouch,
+    onPressOut: (event: GestureResponderEvent) => {
+      // Responder release survives child/layout changes that can lose a raw
+      // touch-end. Leaving the press rectangle with a finger down is not release.
+      if (event.nativeEvent.touches.length === 0) endTouch();
     },
     onTouchCancel: () => {
+      setPressed(false);
       held.current = false;
       suppressTap.current = true;
       void controller.release(true);
@@ -93,17 +119,17 @@ export const useVoiceConversation = (enabled: boolean, scopeKey: string) => {
     onPress: () => {
       if (!enabled || suppressTap.current) return;
       if (controller.getSnapshot().mode === "hands-free") {
-        stop();
+        pause();
         return;
       }
       const now = Date.now();
       if (previousTap.current && now - previousTap.current <= 300) {
         previousTap.current = 0;
-        setHint(false);
+        setOpen(true);
         void controller.start("hands-free");
       } else {
         previousTap.current = now;
-        setHint(true);
+        setOpen(true);
       }
     },
   };

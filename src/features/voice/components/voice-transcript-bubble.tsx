@@ -11,7 +11,7 @@ import { PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
 import { enterVoiceBubble, exitVoiceBubble } from "../lib/bubble-animations";
-import { formatVoiceStatus } from "../lib/formatters";
+import { formatVoiceStatus, formatVoiceTranscript } from "../lib/formatters";
 
 const resizeBubble = LinearTransition.springify()
   .damping(24)
@@ -91,7 +91,9 @@ export const VoiceTranscriptBubble = ({
               reviewing.current = false;
             }}
             onMomentumScrollBegin={() => {
-              reviewing.current = true;
+              // scrollToEnd also emits momentum events; only a user drag
+              // may opt out of following the latest transcript.
+              reviewing.current = !follow.current;
             }}
             onMomentumScrollEnd={() => {
               reviewing.current = false;
@@ -117,21 +119,16 @@ export const VoiceTranscriptBubble = ({
                 scroll.current?.scrollToEnd({ animated: false });
             }}
           >
-            {state.error ? (
-              <PText selectable className="pb-2 text-destructive">
-                {state.error}
-              </PText>
-            ) : null}
             {state.transcript.length === 0 && !state.error ? (
               <PText className="pb-2">
                 {state.connection === "connecting"
                   ? state.mode === "hold"
                     ? "Getting ready. Keep holding, or release to cancel."
                     : "Getting ready. Tap the microphone to cancel."
-                  : "Your words and the AI’s reply appear here as you speak."}
+                  : "Your words and the Codaloud’s reply appear here as you speak."}
               </PText>
             ) : null}
-            {state.transcript.map((segment) => (
+            {formatVoiceTranscript(state.transcript).map((segment) => (
               <Animated.View
                 key={segment.id}
                 entering={FadeIn.duration(180).reduceMotion(
@@ -152,15 +149,20 @@ export const VoiceTranscriptBubble = ({
                 </PText>
                 <PText selectable className="text-foreground">
                   {segment.text}
-                  {segment.final ? "" : " ▍"}
                 </PText>
               </Animated.View>
             ))}
+            {state.error ? (
+              <PText selectable className="pb-2 text-destructive">
+                {state.error}
+              </PText>
+            ) : null}
           </ScrollView>
           {showLatest ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => {
+                reviewing.current = false;
                 follow.current = true;
                 setShowLatest(false);
                 scroll.current?.scrollToEnd({ animated: true });

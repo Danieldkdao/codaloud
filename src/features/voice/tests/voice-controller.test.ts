@@ -72,3 +72,24 @@ it("ignores old room events after stop", async () => {
   events.onSegment({ id: "old", role: "user", text: "late", final: true });
   expect(controller.getSnapshot().transcript).toEqual([]);
 });
+
+it("pauses capture while preserving the transcript and session for resuming", async () => {
+  const { controller, connection, connect } = setup();
+  await controller.start("hands-free");
+  const events = connect.mock.calls[0]![2];
+  const segment = { id: "one", role: "user", text: "Hello", final: true };
+  events.onSegment(segment);
+  await controller.pause();
+  expect(connection.control).toHaveBeenLastCalledWith("stop");
+  expect(connection.close).not.toHaveBeenCalled();
+  expect(controller.getSnapshot()).toMatchObject({
+    connection: "connected",
+    mode: null,
+    listening: false,
+    transcript: [segment],
+  });
+  await controller.start("hands-free");
+  expect(connect).toHaveBeenCalledOnce();
+  expect(controller.getSnapshot().transcript).toEqual([segment]);
+  await controller.stop();
+});

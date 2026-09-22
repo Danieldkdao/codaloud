@@ -118,6 +118,27 @@ export const createVoiceController = (connect: ConnectVoice) => {
       await fail("Voice connection was interrupted. Try again.", current);
     }
   };
+  const pause = async () => {
+    if (state.connection === "connecting") {
+      await stop();
+      return;
+    }
+    const active = connection;
+    if (!active) return;
+    const current = generation;
+    update({ mode: null, listening: false });
+    operations = operations.then(async () => {
+      if (current !== generation) return;
+      await active.control("stop");
+      if (current === generation) update({ listening: false });
+    });
+    try {
+      await operations;
+    } catch {
+      operations = Promise.resolve();
+      await fail("Voice connection was interrupted. Try again.", current);
+    }
+  };
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => {
@@ -128,6 +149,7 @@ export const createVoiceController = (connect: ConnectVoice) => {
     },
     start,
     release,
+    pause,
     stop,
   };
 };

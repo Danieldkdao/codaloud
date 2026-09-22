@@ -203,3 +203,81 @@ it.each(["connecting", "error", "connected"] as const)(
     }
   },
 );
+
+it("shows a destructive failure after the transcript without a retry button", () => {
+  const message = "Failed to generate response. Please try again.";
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble
+        conversation={{
+          ...conversation,
+          state: { ...conversation.state, connection: "error", error: message },
+        }}
+      />,
+    ),
+  );
+  const text = Array.from(container.querySelectorAll("span"));
+  const error = text.find((node) => node.textContent === message)!;
+  expect(error.classList.contains("text-destructive")).toBe(true);
+  expect(text.indexOf(error)).toBeGreaterThan(
+    text.findIndex((node) => node.textContent === "Hello"),
+  );
+  expect(container.querySelectorAll("button")).toHaveLength(1);
+});
+
+it("groups consecutive speakers while replacing streamed partial text", () => {
+  const transcript = [
+    { id: "one", role: "user" as const, text: "Hello.", final: true },
+    { id: "two", role: "user" as const, text: "How", final: false },
+    { id: "three", role: "assistant" as const, text: "Good.", final: true },
+    { id: "four", role: "assistant" as const, text: "Thank you.", final: true },
+    { id: "five", role: "user" as const, text: "Great.", final: true },
+  ];
+  const render = () =>
+    act(() =>
+      root.render(
+        <VoiceTranscriptBubble
+          conversation={{
+            ...conversation,
+            state: { ...conversation.state, transcript },
+          }}
+        />,
+      ),
+    );
+  render();
+  expect(container.textContent).toContain("Hello. How");
+  expect(container.textContent).not.toContain("▍");
+  expect(container.textContent).toContain("Good. Thank you.");
+  transcript[1] = { ...transcript[1]!, text: "How are you?", final: true };
+  render();
+  expect(container.textContent).toContain("Hello. How are you?");
+  expect(container.textContent).not.toContain("Hello. How How");
+  const labels = Array.from(container.querySelectorAll("span"))
+    .map((node) => node.textContent)
+    .filter((text) => text === "You" || text === "Codaloud");
+  expect(labels).toEqual(["You", "Codaloud", "You"]);
+});
+
+it("keeps jump-to-latest hidden through programmatic momentum until a new drag", () => {
+  act(() => {
+    mocks.props.onScrollBeginDrag();
+    mocks.props.onScroll(scrollEvent);
+  });
+  const latest = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Jump to latest",
+  )!;
+  act(() => latest.click());
+  act(() => {
+    mocks.props.onMomentumScrollBegin();
+    mocks.props.onScroll(scrollEvent);
+  });
+  expect(container.textContent).not.toContain("Jump to latest");
+  act(() => mocks.props.onContentSizeChange());
+  expect(mocks.scroll).toHaveBeenCalledTimes(2);
+  act(() => {
+    mocks.props.onMomentumScrollEnd();
+    mocks.props.onScrollBeginDrag();
+    mocks.props.onScroll(scrollEvent);
+  });
+  expect(container.textContent).toContain("Jump to latest");
+});

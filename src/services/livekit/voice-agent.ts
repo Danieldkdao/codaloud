@@ -41,7 +41,12 @@ export default defineAgent({
       turnHandling: {
         turnDetection: "manual",
         preemptiveGeneration: { enabled: false },
-        interruption: { enabled: true, mode: "vad" },
+        interruption: {
+          enabled: true,
+          mode: "vad",
+          // An interruption ends the old reply instead of pausing it to resume.
+          resumeFalseInterruption: false,
+        },
       },
       connOptions: {
         sttConnOptions: { maxRetry: 0 },

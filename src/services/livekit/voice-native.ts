@@ -44,11 +44,17 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
     let agentIdentity: string | undefined;
     let closed = false;
     let closing: Promise<void> | undefined;
+    let connecting = false;
+    let disconnecting: Promise<void> | undefined;
+    const disconnect = () =>
+      (disconnecting ??= room.disconnect().catch(() => {}));
     let controls = Promise.resolve();
     const request = new AbortController();
     const abort = () => {
       request.abort();
-      void room.disconnect().catch(() => {});
+      // A pending connect needs cancellation immediately. Once connected,
+      // close owns teardown so it can drain any microphone publication first.
+      if (connecting) void disconnect();
     };
     signal.addEventListener("abort", abort);
     const timeout = setTimeout(() => request.abort(), 30_000);
@@ -59,10 +65,9 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
       room.removeAllListeners();
       room.unregisterTextStreamHandler("lk.transcription");
       closing = (async () => {
-        await room.disconnect().catch(() => {});
         await controls.catch(() => {});
         // A publish already in flight must finish before releasing native audio.
-        await room.disconnect().catch(() => {});
+        await disconnect();
         await AudioSession.stopAudioSession().catch(() => {});
         if (roomName) await deleteVoiceSession(roomName);
       })().finally(releaseAudio);
@@ -74,7 +79,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
           agentIdentity = participant.identity;
         if (participant.identity !== agentIdentity) continue;
         if (participant.attributes["codaloud.voice.error"])
-          events.onError("A voice provider is unavailable. Please try again.");
+          events.onError("Failed to generate response. Please try again.");
         const state = participant.attributes["lk.agent.state"];
         if (
           state === "listening" ||
@@ -122,9 +127,14 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
       );
       await AudioSession.startAudioSession();
       checkCancelled();
-      await room.connect(credentials.serverUrl, credentials.token, {
-        autoSubscribe: true,
-      });
+      connecting = true;
+      try {
+        await room.connect(credentials.serverUrl, credentials.token, {
+          autoSubscribe: true,
+        });
+      } finally {
+        connecting = false;
+      }
       checkCancelled();
       inspectAgent();
       if (!agentIdentity)
@@ -177,7 +187,7 @@ export const connectNativeVoice: ConnectVoice = (mode, signal, events) => {
               destinationIdentity: agentIdentity!,
               method: voiceControlMethod,
               payload: JSON.stringify({ action }),
-              responseTimeout: 5,
+              // Keep the SDK's 15-second default. JS RPC timeouts use milliseconds.
             });
             if (enable && !closed && !signal.aborted)
               await room.localParticipant.setMicrophoneEnabled(true, {

@@ -23,16 +23,19 @@ it("holds a manual turn until release and ignores duplicate releases", async () 
   expect(session.input.setAudioEnabled).toHaveBeenLastCalledWith(false);
   expect(session.commitUserTurn).toHaveBeenCalledOnce();
 });
-it("hands-free enables automatic turns and stop disables audio", async () => {
+it("hands-free stop submits pending speech without cancelling the reply", async () => {
   const { session, handle } = setup();
   await handle("owner", JSON.stringify({ action: "hands-free" }));
   expect(session.updateOptions).toHaveBeenLastCalledWith({
     turnHandling: { turnDetection: "stt" },
   });
+  session.clearUserTurn.mockClear();
+  await handle("owner", JSON.stringify({ action: "stop" }));
   await handle("owner", JSON.stringify({ action: "stop" }));
   expect(session.input.setAudioEnabled).toHaveBeenLastCalledWith(false);
-  expect(session.clearUserTurn).toHaveBeenCalled();
-  expect(session.commitUserTurn).not.toHaveBeenCalled();
+  expect(session.clearUserTurn).not.toHaveBeenCalled();
+  expect(session.interrupt).not.toHaveBeenCalled();
+  expect(session.commitUserTurn).toHaveBeenCalledOnce();
 });
 it("rejects another participant and malformed controls without touching the session", async () => {
   const { session, handle } = setup();

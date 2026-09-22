@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ActivityIndicator, Pressable } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import Animated, {
   ReduceMotion,
   useAnimatedStyle,
@@ -16,16 +16,16 @@ export const VoiceMicrophone = ({
 }: {
   conversation: VoiceConversation;
 }) => {
-  const { state } = conversation;
+  const { state, pressed } = conversation;
   const foreground = useThemeColor("primary-foreground");
   const scale = useSharedValue(1);
   useEffect(() => {
-    scale.value = withSpring(state.listening ? 1.08 : 1, {
+    scale.value = withSpring(pressed ? 0.94 : state.listening ? 1.08 : 1, {
       damping: 16,
       stiffness: 260,
       reduceMotion: ReduceMotion.System,
     });
-  }, [scale, state.listening]);
+  }, [scale, pressed, state.listening]);
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
@@ -34,7 +34,7 @@ export const VoiceMicrophone = ({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
-          state.mode === "hands-free" ? "Stop voice conversation" : "Microphone"
+          state.mode === "hands-free" ? "Stop listening" : "Microphone"
         }
         accessibilityHint="Hold to talk and release to send. Double-tap for hands-free."
         accessibilityState={{
@@ -43,35 +43,39 @@ export const VoiceMicrophone = ({
         }}
         accessibilityActions={[
           { name: "start-voice", label: "Start hands-free conversation" },
-          { name: "stop-voice", label: "Stop voice conversation" },
+          { name: "stop-voice", label: "Stop listening" },
         ]}
         onAccessibilityAction={({ nativeEvent }) => {
           if (nativeEvent.actionName === "start-voice")
             conversation.startHandsFree();
-          if (nativeEvent.actionName === "stop-voice") conversation.stop();
+          if (nativeEvent.actionName === "stop-voice") conversation.pause();
         }}
         delayLongPress={300}
-        onPressIn={conversation.onPressIn}
+        onTouchStart={conversation.onTouchStart}
+        onPressIn={conversation.onTouchStart}
         onLongPress={conversation.onLongPress}
         onPressOut={conversation.onPressOut}
+        onTouchEnd={conversation.onTouchEnd}
         onTouchCancel={conversation.onTouchCancel}
         onPress={conversation.onPress}
         className={cn(
           "size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90",
-          state.listening && "border-2 border-primary-foreground",
+          (pressed || state.listening) && "border-2 border-primary-foreground",
         )}
       >
-        {state.connection === "connecting" ? (
-          <ActivityIndicator color={foreground} />
-        ) : (
-          <Icon
-            family="Feather"
-            name={state.mode === "hands-free" ? "square" : "mic"}
-            size={24}
-            accessible={false}
-            className="text-primary-foreground"
-          />
-        )}
+        <View pointerEvents="none">
+          {state.connection === "connecting" ? (
+            <ActivityIndicator color={foreground} />
+          ) : (
+            <Icon
+              family="Feather"
+              name={state.mode === "hands-free" ? "square" : "mic"}
+              size={24}
+              accessible={false}
+              className="text-primary-foreground"
+            />
+          )}
+        </View>
       </Pressable>
     </Animated.View>
   );

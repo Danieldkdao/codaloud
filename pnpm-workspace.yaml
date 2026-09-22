@@ -2,20 +2,23 @@ overrides:
   lightningcss: 1.30.1
 
 minimumReleaseAgeExclude:
-  - '@expo/cli@57.0.22'
-  - '@expo/ui@57.0.16'
+  - "@expo/cli@57.0.22"
+  - "@expo/ui@57.0.16"
   - expo-modules-core@57.0.16
   - expo-modules-jsi@57.0.8
   - expo-router@57.0.19
   - expo@57.0.20
-  - '@deepgram/sdk@5.12.0'
+  - "@deepgram/sdk@5.12.0"
   - livekit-server-sdk@2.19.1
 
 allowBuilds:
-  '@livekit/local-inference': false
+  "@livekit/local-inference": false
   bufferutil: false
   esbuild: false
   protobufjs: false
 
 patchedDependencies:
+  # Signal/track lifecycle fixes in SDK source and both published JS builds.
+  # Recheck voice-sdk-lifecycle.test.ts before removing this on an SDK upgrade.
+  livekit-client@2.22.3: patches/livekit-client@2.22.3.patch
   react-native-keyboard-controller@1.21.9: patches/react-native-keyboard-controller@1.21.9.patch

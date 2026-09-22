@@ -1,4 +1,6 @@
 import { expect, it, vi } from "vitest";
+import { createVoiceController } from "@/features/voice/voice-controller";
+import { formatVoiceTranscript } from "@/features/voice/lib/formatters";
 import { createVoiceTranscriptReceiver } from "../voice-transcripts";
 const reader = (id: string, chunks: string[], final = false) => ({
   info: {
@@ -52,4 +54,75 @@ it("does not let an older slow interim overwrite a final segment", async () => {
   expect(update).not.toHaveBeenCalledWith(
     expect.objectContaining({ text: "old" }),
   );
+});
+
+it("does not replace a finalized user turn with a delayed interim snapshot", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+  await receive(reader("u", ["This is actually complete."], true), {
+    identity: "user",
+  });
+  update.mockClear();
+  await receive(reader("u", ["This is actually"]), { identity: "user" });
+  expect(update).not.toHaveBeenCalled();
+});
+
+it("publishes user snapshots atomically instead of truncating the previous text per chunk", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+  await receive(reader("u", ["This is actually"]), { identity: "user" });
+  update.mockClear();
+  await receive(reader("u", ["This ", "is actually complete."], true), {
+    identity: "user",
+  });
+  expect(update).toHaveBeenCalledExactlyOnceWith({
+    id: "u",
+    role: "user",
+    text: "This is actually complete.",
+    final: true,
+  });
+});
+
+it.each([false, true])(
+  "keeps user-agent-user turns separate when the first user segment is final=%s",
+  async (firstFinal) => {
+    let receive!: ReturnType<typeof createVoiceTranscriptReceiver>;
+    const controller = createVoiceController(async (_mode, _signal, events) => {
+      receive = createVoiceTranscriptReceiver("user", events.onSegment);
+      return { control: async () => {}, close: async () => {} };
+    });
+    await controller.start("hands-free");
+    await receive(reader("u", ["First question"], firstFinal), {
+      identity: "user",
+    });
+    await receive(reader("a1", ["First answer"]), { identity: "agent" });
+    await receive(reader("u", ["Second"]), { identity: "user" });
+    await receive(reader("u", ["Second question"], true), { identity: "user" });
+    await receive(reader("a2", ["Second answer"]), { identity: "agent" });
+    expect(
+      formatVoiceTranscript(controller.getSnapshot().transcript).map(
+        ({ role, text }) => ({ role, text }),
+      ),
+    ).toEqual([
+      { role: "user", text: "First question" },
+      { role: "assistant", text: "First answer" },
+      { role: "user", text: "Second question" },
+      { role: "assistant", text: "Second answer" },
+    ]);
+    await controller.stop();
+  },
+);
+
+it("allows a delayed final to finish its original user row after an agent reply", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+  await receive(reader("u", ["First"]), { identity: "user" });
+  await receive(reader("a", ["Answer"]), { identity: "agent" });
+  await receive(reader("u", ["First question"], true), { identity: "user" });
+  expect(update).toHaveBeenLastCalledWith({
+    id: "u",
+    role: "user",
+    text: "First question",
+    final: true,
+  });
 });

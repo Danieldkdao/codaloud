@@ -20,6 +20,13 @@ export const createVoiceReply = (
       }),
       maxOutputTokens: 512,
       maxRetries: 0,
+      providerOptions: { openrouter: { reasoning: { enabled: false } } },
+      onError: ({ error }) => {
+        // AI SDK logs stream errors by default, including an intentional close.
+        // Keep timeouts/provider failures visible; only consumer cancellation is expected.
+        if (!controller.signal.aborted && !signal?.aborted)
+          console.error("[voice] Model stream failed", error);
+      },
       headers: { "X-Session-Id": sessionId },
       abortSignal: AbortSignal.any([
         controller.signal,
@@ -27,9 +34,32 @@ export const createVoiceReply = (
         AbortSignal.timeout(45_000),
       ]),
     });
-    const iterator = result.textStream[Symbol.asyncIterator]();
+    // textStream drops error events in AI SDK 7; consume the typed stream so
+    // failed or empty generations reach LiveKit's provider-error channel.
+    const iterator = result.stream[Symbol.asyncIterator]();
+    let hasText = false;
     return {
-      next: () => iterator.next(),
+      next: async () => {
+        while (true) {
+          const part = await iterator.next();
+          if (part.done) {
+            if (!hasText && !controller.signal.aborted && !signal?.aborted)
+              throw new Error("Model returned an empty response.");
+            return { done: true as const, value: undefined };
+          }
+          if (part.value.type === "error") throw part.value.error;
+          if (
+            part.value.type === "abort" &&
+            !controller.signal.aborted &&
+            !signal?.aborted
+          )
+            throw new Error("Model response timed out.");
+          if (part.value.type === "text-delta") {
+            hasText ||= part.value.text.trim().length > 0;
+            return { done: false as const, value: part.value.text };
+          }
+        }
+      },
       // Abort immediately, even if a provider chunk is still pending.
       return: async () => {
         controller.abort();

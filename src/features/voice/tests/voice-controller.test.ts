@@ -93,3 +93,21 @@ it("pauses capture while preserving the transcript and session for resuming", as
   expect(controller.getSnapshot().transcript).toEqual([segment]);
   await controller.stop();
 });
+it("captures the request before connecting and ignores capture completion after stop", async () => {
+  let finish!: () => void;
+  const capture = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const connect = vi.fn();
+  const controller = createVoiceController(connect, capture);
+  const started = controller.start("hold");
+  expect(capture).toHaveBeenCalledOnce();
+  expect(connect).not.toHaveBeenCalled();
+  await controller.stop();
+  finish();
+  await started;
+  expect(connect).not.toHaveBeenCalled();
+});

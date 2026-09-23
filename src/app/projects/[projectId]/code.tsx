@@ -1,4 +1,5 @@
 import { registerAgentWorkspace } from "@/features/agent/workspace-access";
+import { useVoiceEditor } from "@/features/voice/hooks/use-voice-editor";
 import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -47,10 +48,21 @@ const CodeScreen = () => {
   const query = useProjectFile(projectId, files.activeFilePath);
   const documents = useProjectEditorDocuments(files, query.data?.content);
   const { dockHeight } = useProjectWorkspaceDockHeight();
-  const { isWorkspaceBusy } = useProjectWorkspaceBranch();
+  const { isWorkspaceBusy, branch } = useProjectWorkspaceBranch();
   const { isDarkMode } = useTheme();
   const { preferences } = useEditorPreferences();
   const editor = useRef<CodeEditorRef>(null);
+  const voiceEditor = useVoiceEditor({
+    projectId,
+    branch,
+    busy: isWorkspaceBusy,
+    activePath: files.activeFilePath,
+    documentKey: documents.activeKey,
+    editor,
+    getOpenFiles: documents.getOpenFiles,
+  });
+  const voiceEditorRef = useRef(voiceEditor);
+  voiceEditorRef.current = voiceEditor;
   const [editorFlush] = useState(() =>
     createEditorFlush((requestId) => {
       if (!editor.current?.flushChanges) throw new Error("Editor not ready");
@@ -100,6 +112,7 @@ const CodeScreen = () => {
   >();
   const onInteractionChange = useCallback(
     async (state: CodeEditorInteraction, key?: string) => {
+      voiceEditorRef.current.onInteraction(state, key);
       if (key === current.current.documents.activeKey)
         setInteraction({ ...state, key });
     },
@@ -262,6 +275,9 @@ const CodeScreen = () => {
           importantForAccessibility={isReady ? "auto" : "no-hide-descendants"}
         >
           <CodeEditor
+            onContext={voiceEditor.onContext}
+            onSuggestionAction={voiceEditor.onSuggestionAction}
+            onSuggestionApplied={voiceEditor.onSuggestionApplied}
             ref={editor}
             preferences={preferences}
             searchQuery={searchOpen ? searchQuery : undefined}

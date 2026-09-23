@@ -1,7 +1,10 @@
 import type { VoiceMode } from "./schemas";
 import type { ConnectVoice, VoiceConnection, VoiceState } from "./types";
 
-export const createVoiceController = (connect: ConnectVoice) => {
+export const createVoiceController = (
+  connect: ConnectVoice,
+  beforeStart?: () => Promise<unknown>,
+) => {
   let state: VoiceState = {
     connection: "idle",
     mode: null,
@@ -41,6 +44,11 @@ export const createVoiceController = (connect: ConnectVoice) => {
     const current = ++generation;
     update({ mode, listening: false, error: null });
     try {
+      if (beforeStart) {
+        if (!connection) update({ connection: "connecting" });
+        await beforeStart();
+        if (current !== generation) return;
+      }
       if (!connection) {
         lifetime = new AbortController();
         const signal = lifetime.signal;

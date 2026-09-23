@@ -11,6 +11,13 @@ import { AudioSession } from "@livekit/react-native";
 import { mediaDevices } from "@livekit/react-native-webrtc";
 import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 import { z } from "zod";
+import { inlineSession } from "@/features/voice/inline-session";
+import { inlineEventSchema } from "@/features/voice/schemas";
+import {
+  encodeVoicePayload,
+  getVoiceContext,
+  readVoiceWorkspace,
+} from "@/features/voice/voice-workspace";
 import { configureVoiceAudio, prepareVoiceAudio } from "./voice-audio";
 import { microphoneTrack, voiceAudioSession } from "./voice-track";
 import { createVoiceTranscriptReceiver } from "./voice-transcripts";
@@ -79,6 +86,8 @@ export const connectNativeVoice: ConnectVoice = (
     const close = () => {
       if (closing) return closing;
       closed = true;
+      if (inlineSession.getSnapshot()?.projectId === options?.projectId)
+        inlineSession.cancel();
       unsubscribePreferences?.();
       unsubscribeTasks?.();
       microphoneTrack.set(undefined);
@@ -132,6 +141,55 @@ export const connectNativeVoice: ConnectVoice = (
         );
       roomName = credentials.roomName;
       checkCancelled();
+      const authorizeWorkspace = (data: {
+        callerIdentity: string;
+        payload: string;
+      }) => {
+        if (
+          closed ||
+          signal.aborted ||
+          !agentIdentity ||
+          data.callerIdentity !== agentIdentity ||
+          !options?.projectId ||
+          data.payload.length > 12000
+        )
+          throw new Error("Workspace unavailable.");
+        return options.projectId;
+      };
+      let beginning: Promise<unknown> | undefined;
+      room.registerRpcMethod("codaloud.voice.context", async (data) => {
+        const projectId = authorizeWorkspace(data);
+        const current = inlineSession.getSnapshot();
+        if (
+          !current ||
+          current.projectId !== projectId ||
+          ["answered", "accepted", "error"].includes(current.status)
+        ) {
+          beginning ??= inlineSession.begin(projectId).finally(() => {
+            beginning = undefined;
+          });
+          await beginning;
+        }
+        const request = inlineSession.getSnapshot();
+        if (!request || request.status !== "listening")
+          throw new Error("Finish or cancel the current suggestion first.");
+        return encodeVoicePayload(getVoiceContext(request));
+      });
+      room.registerRpcMethod("codaloud.voice.read", async (data) =>
+        encodeVoicePayload(
+          await readVoiceWorkspace(
+            authorizeWorkspace(data),
+            JSON.parse(data.payload),
+          ),
+        ),
+      );
+      room.registerRpcMethod("codaloud.voice.suggestion", async (data) => {
+        authorizeWorkspace(data);
+        const event = inlineEventSchema.parse(JSON.parse(data.payload));
+        if (!inlineSession.receive(event))
+          throw new Error("Request cancelled or already completed.");
+        return JSON.stringify({ ok: true });
+      });
       room.registerRpcMethod("codaloud.plan.propose", async (data) => {
         if (
           !agentIdentity ||
@@ -158,7 +216,10 @@ export const connectNativeVoice: ConnectVoice = (
       });
       const receive = createVoiceTranscriptReceiver(
         credentials.participantIdentity,
-        events.onSegment,
+        (segment) => {
+          if (segment.role === "user") inlineSession.transcript(segment.text);
+          events.onSegment(segment);
+        },
       );
       room.registerTextStreamHandler(
         "lk.transcription",
@@ -288,6 +349,14 @@ export const connectNativeVoice: ConnectVoice = (
           controls = controls.then(async () => {
             if (closed || signal.aborted) return;
             const enable = action === "start" || action === "hands-free";
+            if (
+              enable &&
+              options?.projectId &&
+              inlineSession.getSnapshot()?.status !== "listening"
+            )
+              await inlineSession.begin(options.projectId);
+            if (action === "cancel" || action === "stop")
+              inlineSession.cancel();
             if (!enable) {
               microphoneTrack.set(undefined);
               await room.localParticipant.setMicrophoneEnabled(false);

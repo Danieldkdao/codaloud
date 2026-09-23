@@ -169,5 +169,16 @@ export const useProjectEditorDocuments = (
     flushFile,
     retry,
     getPath: (key: string) => entries.get(key)?.path,
+    getOpenFiles: () =>
+      [...entries.values()]
+        .filter(
+          (item) =>
+            files.openFilePaths.has(item.path) &&
+            files.getFileVersion(item.path) === item.version,
+        )
+        .map((item) => ({
+          path: item.path,
+          content: item.document.getContent(),
+        })),
   };
 };

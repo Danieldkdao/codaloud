@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   sheets: {} as Record<string, any>,
   scroll: {} as any,
   animations: {} as Record<string, any>,
+  views: {} as Record<string, any>,
   tasks: [] as any[],
   scrollToEnd: vi.fn(),
   scrollTo: vi.fn(),
@@ -18,6 +19,13 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   taskSearch: {} as any,
   projectId: "project",
+  touch: {} as any,
+  swipe: {} as any,
+  buttons: {} as Record<string, any>,
+  review: vi.fn(),
+  remove: vi.fn(),
+  confirm: vi.fn(),
+  alert: vi.fn(),
 }));
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: mocks.projectId }),
@@ -36,8 +44,40 @@ vi.mock("@/components/ui/keyboard-aware-view", () => ({
 vi.mock("@/lib/utils", async () => {
   const { clsx } = await import("clsx");
   const { twMerge } = await import("tailwind-merge");
-  return { cn: (...items: Parameters<typeof clsx>) => twMerge(clsx(...items)) };
+  return {
+    cn: (...items: Parameters<typeof clsx>) => twMerge(clsx(...items)),
+    confirmAction: mocks.confirm,
+    alert: mocks.alert,
+  };
 });
+vi.mock("../task-runtime", () => ({
+  agentTasks: { setReviewed: mocks.review, removeHistory: mocks.remove },
+}));
+vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  default: (props: any) => {
+    mocks.swipe = props;
+    return createElement(
+      "div",
+      null,
+      props.children,
+      props.renderRightActions?.(),
+    );
+  },
+}));
+vi.mock("@/components/ui/button", () => ({
+  Button: (props: any) => {
+    mocks.buttons[props.accessibilityLabel] = props;
+    return createElement(
+      "button",
+      {
+        "aria-label": props.accessibilityLabel,
+        onClick: props.onPress,
+        disabled: props.disabled || props.loading,
+      },
+      props.children,
+    );
+  },
+}));
 vi.mock("../hooks/use-agent-tasks", () => ({
   useAgentTasks: () => mocks.tasks,
 }));
@@ -108,8 +148,11 @@ vi.mock("react-native", () => ({
           )
         : ListEmptyComponent,
     ),
-  View: ({ children, testID }: any) =>
-    createElement("div", { "data-testid": testID }, children),
+  View: ({ children, testID, ...props }: any) => {
+    if (props.onTouchStart) mocks.touch = props;
+    if (testID) mocks.views[testID] = props;
+    return createElement("div", { "data-testid": testID }, children);
+  },
   ScrollView: ({ children, testID, ref, ...props }: any) => {
     useImperativeHandle(ref, () => ({
       scrollToEnd: mocks.scrollToEnd,
@@ -118,17 +161,22 @@ vi.mock("react-native", () => ({
     if (testID === "task-activity-list") mocks.scroll = props;
     return createElement("div", { "data-testid": testID }, children);
   },
-  Pressable: ({ children, onPress, accessibilityLabel }: any) =>
-    createElement(
+  Pressable: ({ children, onPress, accessibilityLabel, ...props }: any) => {
+    mocks.buttons[accessibilityLabel] = props;
+    return createElement(
       "button",
       { onClick: onPress, "aria-label": accessibilityLabel },
       children,
-    ),
+    );
+  },
 }));
-vi.mock("react-native-reanimated", () => {
+vi.mock("react-native-reanimated", async () => {
+  const { FlatList } = await import("react-native");
   const transition = {
     duration: () => transition,
     reduceMotion: () => transition,
+    springify: () => transition,
+    dampingRatio: () => transition,
     build: () => () => ({
       initialValues: { opacity: 0 },
       animations: { opacity: 0 },
@@ -136,7 +184,9 @@ vi.mock("react-native-reanimated", () => {
   };
   return {
     default: {
+      FlatList,
       View: ({ children, ...props }: any) => {
+        if (props.onTouchStart) mocks.touch = props;
         if (props.style?.alignSelf === "center") mocks.surface = props;
         if (props.testID) mocks.animations[props.testID] = props;
         return createElement("div", { "data-testid": props.testID }, children);
@@ -190,17 +240,348 @@ beforeEach(() => {
   ];
   mocks.sheets = {};
   mocks.animations = {};
+  mocks.views = {};
   mocks.scrollToEnd.mockClear();
   mocks.scrollTo.mockClear();
   mocks.search = {};
   mocks.reducedMotion = false;
   mocks.navigate.mockClear();
   mocks.projectId = "project";
+  mocks.touch = {};
+  mocks.buttons = {};
+  mocks.review.mockReset().mockResolvedValue(undefined);
+  mocks.remove.mockReset().mockResolvedValue(undefined);
+  mocks.confirm.mockReset();
+  mocks.alert.mockReset();
   container = document.createElement("div");
   root = createRoot(container);
   render();
 });
 afterEach(() => act(() => root.unmount()));
+
+it("animates the entire swipe row on entry and exit, without losing its touch guard", () => {
+  const row = mocks.animations["task-history-row"];
+  expect(row?.entering).toBeDefined();
+  expect(row?.exiting).toBeDefined();
+  expect(row?.onTouchStart).toBeTypeOf("function");
+});
+
+it("keeps both swipe actions square and full-height", () => {
+  for (const label of [
+    "Mark reviewed: Explore project",
+    "Delete history: Explore project",
+  ]) {
+    const props = mocks.buttons[label];
+    expect(props.className).toContain("h-full");
+    expect(props.className).toContain("aspect-square");
+    expect(props.className).not.toMatch(/\bw-16\b/);
+  }
+});
+
+it("squares only the card's action-side corners until the swipe fully closes", () => {
+  const cardClasses = () => mocks.animations["task-activity-card"].className;
+  expect(cardClasses()).toContain("rounded-2xl");
+  expect(cardClasses()).not.toContain("rounded-r-none");
+
+  act(() => mocks.swipe.onSwipeableOpenStartDrag());
+  expect(cardClasses()).toContain("rounded-r-none");
+  act(() => {
+    mocks.swipe.onSwipeableWillOpen();
+    mocks.swipe.onSwipeableOpen();
+  });
+  expect(cardClasses()).toContain("rounded-2xl");
+  expect(cardClasses()).toContain("rounded-r-none");
+
+  act(() => mocks.swipe.onSwipeableWillClose());
+  expect(cardClasses()).toContain("rounded-r-none");
+  act(() => mocks.swipe.onSwipeableClose());
+  expect(cardClasses()).not.toContain("rounded-r-none");
+
+  // A short drag that snaps back must restore the closed appearance too.
+  act(() => mocks.swipe.onSwipeableOpenStartDrag());
+  expect(cardClasses()).toContain("rounded-r-none");
+  act(() => {
+    mocks.swipe.onSwipeableWillClose();
+    mocks.swipe.onSwipeableClose();
+  });
+  expect(cardClasses()).not.toContain("rounded-r-none");
+});
+
+it("hides reviewed tasks from the status bar but keeps them in history, and restores unreviewed tasks", () => {
+  mocks.tasks[0] = { ...mocks.tasks[0], reviewed: true };
+  act(() => root.render(<TaskStatusBar projectId="project" />));
+  expect(container.textContent).toBe("");
+  render();
+  expect(container.textContent).toContain("Explore project");
+  expect(
+    container.querySelector('[data-testid="task-reviewed-overlay"]'),
+  ).not.toBeNull();
+  expect(container.textContent).not.toContain("Reviewed");
+  mocks.tasks[0] = { ...mocks.tasks[0], reviewed: false };
+  act(() => root.render(<TaskStatusBar projectId="project" />));
+  expect(container.textContent).toContain("1 in progress");
+});
+
+it("uses a non-interactive reviewed overlay without disabling the card or swipe actions", async () => {
+  expect(
+    container.querySelector('[data-testid="task-reviewed-overlay"]'),
+  ).toBeNull();
+  mocks.tasks[0] = { ...mocks.tasks[0], reviewed: true };
+  render();
+  const overlay = mocks.views["task-reviewed-overlay"];
+  expect(overlay).toMatchObject({
+    pointerEvents: "none",
+    accessible: false,
+    accessibilityElementsHidden: true,
+    importantForAccessibility: "no-hide-descendants",
+  });
+  expect(overlay.className).toContain("absolute inset-0");
+  expect(mocks.buttons["Expand Explore project"].accessibilityValue).toEqual({
+    text: "Reviewed",
+  });
+  expect(
+    mocks.buttons["Expand Explore project"].accessibilityState.disabled,
+  ).not.toBe(true);
+  click("Expand Explore project");
+  expect(
+    container.querySelector('[data-testid="task-card-details"]'),
+  ).not.toBeNull();
+  click("View Agent Activity");
+  expect(detail().open).toBe(true);
+  await act(async () => click("Mark unreviewed: Explore project"));
+  expect(mocks.review).toHaveBeenCalledWith("request", false);
+  mocks.tasks[0] = { ...mocks.tasks[0], reviewed: false };
+  render();
+  expect(
+    container.querySelector('[data-testid="task-reviewed-overlay"]'),
+  ).toBeNull();
+  expect(
+    mocks.buttons["Collapse Explore project"].accessibilityValue,
+  ).toBeUndefined();
+});
+
+const touchRow = (phase: string, x = 200, y = 40) =>
+  act(() => mocks.touch[phase]?.({ nativeEvent: { pageX: x, pageY: y } }));
+
+it.each([
+  [false, "Open", false],
+  [false, "Open", true],
+  [true, "Open", false],
+  [true, "Open", true],
+  [false, "Close", false],
+  [false, "Close", true],
+])(
+  "accepts the first review tap during %s/%s settling, finished before release=%s",
+  async (reviewed, direction, finishBeforePress) => {
+    mocks.tasks[0] = { ...mocks.tasks[0], reviewed };
+    render();
+    touchRow("onTouchStart");
+    act(() => mocks.swipe.onSwipeableOpenStartDrag());
+    act(() => mocks.swipe[`onSwipeableWill${direction}`]());
+    touchRow("onTouchEnd");
+    touchRow("onTouchStart");
+    if (finishBeforePress) act(() => mocks.swipe[`onSwipeable${direction}`]());
+    touchRow("onTouchEnd");
+    await act(async () =>
+      click(`Mark ${reviewed ? "unreviewed" : "reviewed"}: Explore project`),
+    );
+    expect(mocks.review).toHaveBeenCalledExactlyOnceWith("request", !reviewed);
+  },
+);
+
+it("does not let a late animation callback invalidate a new review touch", async () => {
+  touchRow("onTouchStart");
+  act(() => mocks.swipe.onSwipeableOpenStartDrag());
+  touchRow("onTouchEnd");
+  touchRow("onTouchStart");
+  act(() => mocks.swipe.onSwipeableWillOpen());
+  touchRow("onTouchEnd");
+  await act(async () => click("Mark reviewed: Explore project"));
+  expect(mocks.review).toHaveBeenCalledExactlyOnceWith("request", true);
+});
+
+it("accepts the first delete tap during settling but still requires confirmation", () => {
+  mocks.tasks[0] = {
+    ...mocks.tasks[0],
+    event: { ...mocks.tasks[0].event, status: "completed" },
+  };
+  render();
+  touchRow("onTouchStart");
+  act(() => {
+    mocks.swipe.onSwipeableOpenStartDrag();
+    mocks.swipe.onSwipeableWillOpen();
+  });
+  touchRow("onTouchEnd");
+  click("Delete history: Explore project");
+  expect(mocks.confirm).not.toHaveBeenCalled();
+  touchRow("onTouchStart");
+  click("Delete history: Explore project");
+  expect(mocks.confirm).toHaveBeenCalledOnce();
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it.each(["Open", "Close"])(
+  "still suppresses the original %s drag release after snapping finishes",
+  (direction) => {
+    touchRow("onTouchStart");
+    act(() => mocks.swipe[`onSwipeable${direction}StartDrag`]());
+    touchRow("onTouchEnd");
+    act(() => {
+      mocks.swipe[`onSwipeableWill${direction}`]();
+      mocks.swipe[`onSwipeable${direction}`]();
+    });
+    click("Mark reviewed: Explore project");
+    expect(mocks.review).not.toHaveBeenCalled();
+  },
+);
+
+it("ignores repeated review presses while the first write is pending", async () => {
+  let finish!: () => void;
+  mocks.review.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  touchRow("onTouchStart");
+  click("Mark reviewed: Explore project");
+  touchRow("onTouchStart");
+  click("Mark reviewed: Explore project");
+  expect(mocks.review).toHaveBeenCalledOnce();
+  await act(async () => finish());
+});
+
+it.each([
+  [9, 0],
+  [-9, 0],
+  [0, 9],
+  [0, -9],
+  [10, 0],
+  [-10, 0],
+  [0, 10],
+  [0, -10],
+])("accepts a first review tap with small drift %s,%s", async (x, y) => {
+  touchRow("onTouchStart");
+  touchRow("onTouchMove", 200 + x, 40 + y);
+  touchRow("onTouchEnd");
+  await act(async () => click("Mark reviewed: Explore project"));
+  expect(mocks.review).toHaveBeenCalledExactlyOnceWith("request", true);
+});
+
+it.each([
+  [11, 0],
+  [-11, 0],
+  [0, 11],
+  [0, -11],
+])(
+  "still blocks review after dragging %s,%s, even if the finger returns",
+  async (x, y) => {
+    touchRow("onTouchStart");
+    touchRow("onTouchMove", 200 + x, 40 + y);
+    touchRow("onTouchMove", 200, 40);
+    touchRow("onTouchEnd");
+    click("Mark reviewed: Explore project");
+    expect(mocks.review).not.toHaveBeenCalled();
+    touchRow("onTouchStart");
+    await act(async () => click("Mark reviewed: Explore project"));
+    expect(mocks.review).toHaveBeenCalledExactlyOnceWith("request", true);
+  },
+);
+
+it("keeps cancelled action touches suppressed after animation completion", () => {
+  touchRow("onTouchStart");
+  touchRow("onTouchCancel");
+  act(() => mocks.swipe.onSwipeableOpen());
+  click("Mark reviewed: Explore project");
+  expect(mocks.review).not.toHaveBeenCalled();
+});
+
+it("does not expand a card or open its logs when releasing a swipe", () => {
+  touchRow("onTouchStart");
+  touchRow("onTouchMove", 100);
+  act(() => {
+    mocks.swipe.onSwipeableWillOpen?.();
+    mocks.swipe.onSwipeableOpen?.();
+  });
+  click("Expand Explore project");
+  expect(
+    container.querySelector('[data-testid="task-card-details"]'),
+  ).toBeNull();
+  touchRow("onTouchStart");
+  click("Expand Explore project");
+  touchRow("onTouchStart");
+  touchRow("onTouchMove", 200, 80);
+  click("View Agent Activity");
+  expect(mocks.sheets["task-activity-detail"]).toBeUndefined();
+  touchRow("onTouchStart");
+  click("View Agent Activity");
+  expect(detail().open).toBe(true);
+});
+
+it("guards review/delete releases, toggles review, and confirms deletion", async () => {
+  mocks.tasks[0] = {
+    ...mocks.tasks[0],
+    event: { ...mocks.tasks[0].event, status: "completed" },
+  };
+  render();
+  touchRow("onTouchStart");
+  touchRow("onTouchMove", 100);
+  click("Mark reviewed: Explore project");
+  click("Delete history: Explore project");
+  expect(mocks.review).not.toHaveBeenCalled();
+  expect(mocks.confirm).not.toHaveBeenCalled();
+  touchRow("onTouchStart");
+  await act(async () => click("Mark reviewed: Explore project"));
+  expect(mocks.review).toHaveBeenCalledWith("request", true);
+  mocks.tasks[0] = { ...mocks.tasks[0], reviewed: true };
+  render();
+  touchRow("onTouchStart");
+  await act(async () => click("Mark unreviewed: Explore project"));
+  expect(mocks.review).toHaveBeenLastCalledWith("request", false);
+  touchRow("onTouchStart");
+  click("Delete history: Explore project");
+  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(mocks.confirm).toHaveBeenCalledOnce();
+  await act(async () => mocks.confirm.mock.calls[0][2].onConfirmPress());
+  expect(mocks.remove).toHaveBeenCalledWith("request");
+  expect(mocks.buttons["Delete history: Explore project"].className).toContain(
+    "h-full",
+  );
+  expect(mocks.buttons["Delete history: Explore project"].className).toContain(
+    "rounded-r-2xl",
+  );
+});
+
+it("keeps active history undeletable and reports persistence errors", async () => {
+  click("Delete history: Explore project");
+  expect(mocks.confirm).not.toHaveBeenCalled();
+  mocks.review.mockRejectedValueOnce(new Error("Disk full"));
+  await act(async () => click("Mark reviewed: Explore project"));
+  expect(mocks.alert).toHaveBeenCalledWith("Disk full");
+});
+
+it("exposes accessible review/delete actions even after a suppressed touch", async () => {
+  mocks.tasks[0] = {
+    ...mocks.tasks[0],
+    event: { ...mocks.tasks[0].event, status: "failed" },
+  };
+  render();
+  touchRow("onTouchStart");
+  touchRow("onTouchMove", 100);
+  const props = mocks.buttons["Expand Explore project"];
+  expect(props.accessibilityActions).toContainEqual({
+    name: "review",
+    label: "Mark reviewed",
+  });
+  await act(async () =>
+    props.onAccessibilityAction({ nativeEvent: { actionName: "review" } }),
+  );
+  expect(mocks.review).toHaveBeenCalledWith("request", true);
+  act(() =>
+    props.onAccessibilityAction({ nativeEvent: { actionName: "delete" } }),
+  );
+  expect(mocks.confirm).toHaveBeenCalledOnce();
+});
 
 it("keeps glass opaque and replaces the inline list with stats and an animated disclosure", () => {
   act(() => root.render(<TaskStatusBar projectId="project" />));

@@ -40,17 +40,59 @@ const publish = () => {
 };
 const persist = () => {
   const owner = userId;
-  const data = JSON.stringify(records);
+  const currentRecords = records;
   if (!owner) return Promise.resolve();
   const next = writes
     .catch(() => {})
-    .then(() => Storage.setItem(`codaloud.agent.tasks.${owner}`, data));
+    // Read at write time so a queued event save cannot undo a history edit.
+    .then(() =>
+      Storage.setItem(
+        `codaloud.agent.tasks.${owner}`,
+        JSON.stringify(currentRecords),
+      ),
+    );
   writes = next;
   return next;
 };
 const update = (record: AgentTaskRecord, patch: Partial<AgentTaskRecord>) => {
   Object.assign(record, patch);
   publish();
+};
+const editHistory = async (requestId: string, reviewed: boolean | null) => {
+  const owner = userId;
+  const current = generation;
+  await hydrated;
+  const next = writes
+    .catch(() => {})
+    .then(async () => {
+      if (!owner || owner !== userId || current !== generation)
+        throw new Error("Your session changed. Please try again.");
+      const record = records.find(
+        (entry) => entry.request.requestId === requestId,
+      );
+      if (!record) throw new Error("This task is no longer in your history.");
+      if (reviewed === null && !finished(record))
+        throw new Error("Only finished tasks can be removed from history.");
+      const saved = records.flatMap((entry) =>
+        entry !== record
+          ? [entry]
+          : reviewed === null
+            ? []
+            : [{ ...entry, reviewed }],
+      );
+      // Commit before publishing: a failed disk write must not hide a task or
+      // show a review state that will be lost when the app restarts.
+      await Storage.setItem(
+        `codaloud.agent.tasks.${owner}`,
+        JSON.stringify(saved),
+      );
+      if (owner !== userId || !records.includes(record)) return;
+      if (reviewed === null) records.splice(records.indexOf(record), 1);
+      else record.reviewed = reviewed;
+      publish();
+    });
+  writes = next;
+  return next;
 };
 const waitForTurn = (record: AgentTaskRecord, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -245,6 +287,9 @@ const resume = (record: AgentTaskRecord) => {
   })();
 };
 export const agentTasks = {
+  setReviewed: (requestId: string, reviewed: boolean) =>
+    editHistory(requestId, reviewed),
+  removeHistory: (requestId: string) => editHistory(requestId, null),
   getSnapshot: () => snapshot,
   subscribe: (listener: () => void) => {
     listeners.add(listener);
@@ -266,6 +311,7 @@ export const agentTasks = {
       const current = generation;
       hydrated = (async () => {
         if (!owner) return;
+        await writes.catch(() => {});
         const saved = await Storage.getItem(`codaloud.agent.tasks.${owner}`);
         if (current !== generation || owner !== userId) return;
         const schema = z
@@ -275,6 +321,7 @@ export const agentTasks = {
               requestKey: z.string(),
               event: agentTaskEventSchema,
               accepted: z.boolean(),
+              reviewed: z.boolean().default(false),
               execution: z
                 .object({
                   started: z.boolean(),
@@ -338,6 +385,7 @@ export const agentTasks = {
         request: input,
         requestKey,
         accepted: false,
+        reviewed: false,
         execution: { started: false, revision },
         event: {
           id: input.requestId,

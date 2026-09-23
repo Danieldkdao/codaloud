@@ -20,7 +20,7 @@ import { formatTaskCounts } from "../lib/formatters";
 
 export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
   const tasks = useAgentTasks().filter(
-    (task) => task.request.projectId === projectId,
+    (task) => task.request.projectId === projectId && !task.reviewed,
   );
   const router = useRouter();
   const { width } = useWindowDimensions();

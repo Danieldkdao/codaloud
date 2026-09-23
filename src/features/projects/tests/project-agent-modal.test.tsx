@@ -14,11 +14,43 @@ vi.mock("@/lib/auth/utils", () => ({
 const state = vi.hoisted(() => ({
   dismissKeyboard: vi.fn(),
   tasks: [] as AgentTaskRecord[],
+  animatedList: undefined as any,
   metrics: undefined as
     | { screenY: number; screenX: number; height: number; width: number }
     | undefined,
   listeners: new Map<string, Set<(event: unknown) => void>>(),
 }));
+vi.mock("react-native-reanimated", async () => {
+  const { FlatList } = await import("react-native");
+  const transition = {
+    springify: () => transition,
+    duration: (duration: number) => {
+      transition.durationMs = duration;
+      return transition;
+    },
+    dampingRatio: (ratio: number) => {
+      transition.ratio = ratio;
+      return transition;
+    },
+    reduceMotion: (mode: string) => {
+      transition.motion = mode;
+      return transition;
+    },
+    durationMs: 0,
+    ratio: 0,
+    motion: "",
+  };
+  return {
+    default: {
+      FlatList: (props: any) => {
+        state.animatedList = props;
+        return createElement(FlatList, props);
+      },
+    },
+    LinearTransition: transition,
+    ReduceMotion: { System: "system" },
+  };
+});
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: "project" }),
 }));
@@ -226,6 +258,7 @@ beforeEach(() => {
     },
   ] as AgentTaskRecord[];
   state.metrics = undefined;
+  state.animatedList = undefined;
   state.dismissKeyboard.mockClear();
   container = document.createElement("div");
   root = createRoot(container);
@@ -233,6 +266,78 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   vi.unstubAllEnvs();
+});
+it("animates keyed rows through insertion and review sorting with system reduced-motion support", () => {
+  render();
+  expect(state.animatedList?.itemLayoutAnimation).toMatchObject({
+    durationMs: 280,
+    ratio: 1,
+    motion: "system",
+  });
+  expect(state.animatedList.removeClippedSubviews).toBe(false);
+  const key = state.animatedList.keyExtractor(state.tasks[0]);
+  state.tasks = state.tasks.map((task, index) =>
+    index === 0 ? { ...task, reviewed: true } : task,
+  );
+  state.tasks.push({
+    ...state.tasks[1],
+    request: { ...state.tasks[1].request, requestId: "new", title: "Newest" },
+  });
+  render();
+  expect(state.animatedList.keyExtractor(state.tasks[0])).toBe(key);
+  expect(
+    state.animatedList.data.map(
+      (task: AgentTaskRecord) => task.request.requestId,
+    ),
+  ).toEqual(["new", "three", "two", "one"]);
+});
+it("shows newest unreviewed tasks first, then newest reviewed tasks, without changing store order", () => {
+  const base = state.tasks[0];
+  state.tasks = [false, true, false, true, false].map((reviewed, index) => ({
+    ...base,
+    reviewed,
+    request: {
+      ...base.request,
+      requestId: String(index),
+      title: `Task ${index}`,
+    },
+  }));
+  const order = () =>
+    [...container.querySelectorAll("[data-activity]")].map((row) =>
+      row.getAttribute("data-activity"),
+    );
+  const storeOrder = [...state.tasks];
+  render();
+  expect(order()).toEqual(["4", "2", "0", "3", "1"]);
+  expect(state.tasks).toEqual(storeOrder);
+
+  // Reviewing an older task must not make it the newest reviewed task.
+  state.tasks = state.tasks.map((task) =>
+    task.request.requestId === "2" ? { ...task, reviewed: true } : task,
+  );
+  render();
+  expect(order()).toEqual(["4", "0", "3", "2", "1"]);
+  state.tasks = state.tasks.map((task) =>
+    task.request.requestId === "3" ? { ...task, reviewed: false } : task,
+  );
+  render();
+  expect(order()).toEqual(["4", "3", "0", "2", "1"]);
+  search("Task");
+  expect(order()).toEqual(["4", "3", "0", "2", "1"]);
+  search("Task 2");
+  expect(order()).toEqual(["2"]);
+});
+
+it("shows legacy history newest first and retains newest-first order when everything is reviewed", () => {
+  render();
+  const order = () =>
+    [...container.querySelectorAll("[data-activity]")].map((row) =>
+      row.getAttribute("data-activity"),
+    );
+  expect(order()).toEqual(["three", "two", "one"]);
+  state.tasks = state.tasks.map((task) => ({ ...task, reviewed: true }));
+  render();
+  expect(order()).toEqual(["three", "two", "one"]);
 });
 it("keeps a permanent glass search below the existing activity list", () => {
   render();
@@ -320,14 +425,12 @@ it("keeps the search above changing keyboard frames and restores the viewport af
     );
   expect(inset()).toBe(320);
   act(() =>
-    state.listeners
-      .get("keyboardWillChangeFrame")
-      ?.forEach((listener) =>
-        listener({
-          endCoordinates: { screenY: 590, height: 366 },
-          duration: 250,
-        }),
-      ),
+    state.listeners.get("keyboardWillChangeFrame")?.forEach((listener) =>
+      listener({
+        endCoordinates: { screenY: 590, height: 366 },
+        duration: 250,
+      }),
+    ),
   );
   expect(inset()).toBe(366);
   // The modal's true window origin is 62pt even if Fabric measures it as zero.

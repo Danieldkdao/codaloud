@@ -298,3 +298,8 @@ export const formatTaskCounts = (records: readonly AgentTaskRecord[]) => {
     .filter(Boolean)
     .join(" · ");
 };
+
+export const formatTaskReviewAction = (reviewed: boolean) =>
+  reviewed
+    ? { label: "Mark unreviewed", icon: "square" as const }
+    : { label: "Mark reviewed", icon: "check-square" as const };

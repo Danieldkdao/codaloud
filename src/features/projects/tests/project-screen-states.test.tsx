@@ -14,10 +14,11 @@ import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
 const selection = vi.hoisted(() => ({ activeFilePath: null as string | null, version: 0, openFile: vi.fn(), closeFile: vi.fn(), getFileVersion: () => 0, get openFilePaths() { return new Set(selection.activeFilePath ? [selection.activeFilePath] : []); }, refreshFile: vi.fn() }));
-vi.mock("react-native-reanimated", () => {
-  const transition = { duration: () => transition, reduceMotion: () => transition };
+vi.mock("react-native-reanimated", async () => {
+  const { FlatList } = await import("react-native");
+  const transition = { duration: () => transition, reduceMotion: () => transition, springify: () => transition, dampingRatio: () => transition };
   return {
-    default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+    default: { FlatList, View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
     LinearTransition: transition, FadeIn: transition, FadeOut: transition,
     ReduceMotion: { System: "system" },
   };

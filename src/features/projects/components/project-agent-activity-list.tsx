@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { FlatList, Keyboard, View } from "react-native";
+import { Keyboard, View } from "react-native";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
@@ -7,6 +11,11 @@ import { TaskActivityCard } from "@/features/agent/components/task-activity-card
 import { TaskActivitySheet } from "@/features/agent/components/task-activity-sheet";
 import { formatTaskStatus } from "@/features/agent/lib/formatters";
 import type { AgentTaskRecord } from "@/features/agent/types";
+
+const taskRowTransition = LinearTransition.springify()
+  .duration(280)
+  .dampingRatio(1)
+  .reduceMotion(ReduceMotion.System);
 
 type ProjectAgentActivityListProps = {
   tasks: AgentTaskRecord[];
@@ -32,6 +41,13 @@ export const ProjectAgentActivityList = ({
         ...task.event.logs,
       ].some((value) => value.toLowerCase().includes(term)),
   );
+  // The persisted task store is append-ordered by creation. Reverse only this
+  // filtered copy: presentation order must never reorder the execution queue.
+  const latestTasks = filteredTasks.reverse();
+  const orderedTasks = [
+    ...latestTasks.filter((task) => !task.reviewed),
+    ...latestTasks.filter((task) => task.reviewed),
+  ];
   // Read the selected task from the live store snapshot, not a stale card copy.
   const selectedTask = tasks.find(
     (task) => task.request.requestId === selectedId,
@@ -39,9 +55,12 @@ export const ProjectAgentActivityList = ({
 
   return (
     <>
-      <FlatList
+      <Animated.FlatList
         className="flex-1 bg-background"
-        data={filteredTasks}
+        data={orderedTasks}
+        itemLayoutAnimation={taskRowTransition}
+        // Android clipping can detach a row while it crosses into its new slot.
+        removeClippedSubviews={false}
         keyExtractor={(task) => task.request.requestId}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"

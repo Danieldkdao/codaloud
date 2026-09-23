@@ -18,11 +18,13 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(),
   revision: "a".repeat(64),
   uuid: 0,
+  write: vi.fn(),
 }));
 vi.mock("expo-sqlite/kv-store", () => ({
   default: {
     getItem: async (key: string) => mocks.disk.get(key) ?? null,
     setItem: async (key: string, value: string) => {
+      await mocks.write(key, value);
       mocks.disk.set(key, value);
     },
   },
@@ -57,6 +59,7 @@ beforeEach(async () => {
   vi.resetModules();
   vi.useFakeTimers();
   mocks.disk.clear();
+  mocks.write.mockReset().mockResolvedValue(undefined);
   mocks.revision = "a".repeat(64);
   mocks.create.mockReset().mockResolvedValue({ id: "run_test" });
   mocks.complete.mockReset().mockResolvedValue(undefined);
@@ -69,6 +72,145 @@ beforeEach(async () => {
   mocks.subscribe.mockReset().mockImplementation(async function* () {});
   runtime = (await import("../task-runtime")).agentTasks;
   runtime.setSession("user-a", true);
+});
+
+it("persists review/unreview and restores legacy history as unreviewed", async () => {
+  mocks.subscribe.mockImplementation(async function* () {
+    yield {
+      id: "run_test",
+      status: "completed",
+      logs: ["Done"],
+      command: null,
+    };
+  });
+  await runtime.enqueue(projectId, "Create file", "review-me");
+  await vi.advanceTimersByTimeAsync(1);
+  const id = runtime.getSnapshot()[0].request.requestId;
+  expect(runtime.getSnapshot()[0].reviewed).toBe(false);
+  await runtime.setReviewed(id, true);
+  expect(runtime.getSnapshot()[0].reviewed).toBe(true);
+  runtime.setSession(null, false);
+  runtime.setSession("user-a", true);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(runtime.getSnapshot()[0].reviewed).toBe(true);
+  await runtime.setReviewed(id, false);
+  expect(
+    JSON.parse(mocks.disk.get("codaloud.agent.tasks.user-a")!)[0].reviewed,
+  ).toBe(false);
+  const legacy = JSON.parse(mocks.disk.get("codaloud.agent.tasks.user-a")!);
+  delete legacy[0].reviewed;
+  mocks.disk.set("codaloud.agent.tasks.user-a", JSON.stringify(legacy));
+  runtime.setSession(null, false);
+  runtime.setSession("user-a", true);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(runtime.getSnapshot()[0].reviewed).toBe(false);
+});
+
+it.each(["completed", "failed"])(
+  "deletes only the selected %s history and persists removal",
+  async (status) => {
+    mocks.subscribe.mockImplementation(async function* () {
+      yield { id: "run_test", status, logs: [], command: null };
+    });
+    await runtime.enqueue(projectId, "First", "first-delete");
+    await vi.advanceTimersByTimeAsync(1);
+    await runtime.enqueue(projectId, "Second", "second-delete");
+    await vi.advanceTimersByTimeAsync(1);
+    await runtime.removeHistory(runtime.getSnapshot()[0].request.requestId);
+    expect(
+      runtime.getSnapshot().map((task) => task.request.instruction),
+    ).toEqual(["Second"]);
+    runtime.setSession(null, false);
+    runtime.setSession("user-a", true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(runtime.getSnapshot()).toHaveLength(1);
+    expect(mocks.execute).not.toHaveBeenCalled();
+  },
+);
+
+it("rejects deletion of unfinished work and does not lose history on storage failure", async () => {
+  await runtime.enqueue(projectId, "Running", "active-delete");
+  await vi.advanceTimersByTimeAsync(1);
+  const id = runtime.getSnapshot()[0].request.requestId;
+  await expect(runtime.removeHistory(id)).rejects.toThrow("finished");
+  mocks.write.mockRejectedValueOnce(new Error("Disk full"));
+  await expect(runtime.setReviewed(id, true)).rejects.toThrow("Disk full");
+  expect(runtime.getSnapshot()[0].reviewed).toBe(false);
+  await runtime.setReviewed(id, true);
+  expect(runtime.getSnapshot()[0].reviewed).toBe(true);
+});
+
+it("does not apply a queued history action to a different account", async () => {
+  await runtime.enqueue(projectId, "First", "account-change");
+  const pending = runtime.setReviewed(
+    runtime.getSnapshot()[0].request.requestId,
+    true,
+  );
+  runtime.setSession("user-b", true);
+  await expect(pending).rejects.toThrow("session");
+  expect(runtime.getSnapshot()).toEqual([]);
+});
+
+it("keeps finished history when deletion cannot be saved", async () => {
+  mocks.subscribe.mockImplementation(async function* () {
+    yield {
+      id: "run_test",
+      status: "completed",
+      logs: ["Done"],
+      command: null,
+    };
+  });
+  await runtime.enqueue(projectId, "Keep me", "disk-failure");
+  await vi.advanceTimersByTimeAsync(1);
+  const id = runtime.getSnapshot()[0].request.requestId;
+  mocks.write.mockRejectedValueOnce(new Error("Disk full"));
+  await expect(runtime.removeHistory(id)).rejects.toThrow("Disk full");
+  expect(runtime.getSnapshot()).toHaveLength(1);
+  expect(
+    JSON.parse(mocks.disk.get("codaloud.agent.tasks.user-a")!),
+  ).toHaveLength(1);
+});
+
+it("preserves review changes when a live task event queues another save", async () => {
+  let complete!: () => void;
+  const eventReady = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  mocks.subscribe.mockImplementation(async function* () {
+    await eventReady;
+    yield {
+      id: "run_test",
+      status: "completed",
+      logs: ["Done"],
+      command: null,
+    };
+  });
+  await runtime.enqueue(projectId, "Complete later", "live-review");
+  await vi.advanceTimersByTimeAsync(1);
+  let save!: () => void;
+  mocks.write.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        save = resolve;
+      }),
+  );
+  const pending = runtime.setReviewed(
+    runtime.getSnapshot()[0].request.requestId,
+    true,
+  );
+  await vi.advanceTimersByTimeAsync(1);
+  complete();
+  await vi.advanceTimersByTimeAsync(1);
+  save();
+  await pending;
+  await vi.advanceTimersByTimeAsync(1);
+  expect(runtime.getSnapshot()[0]).toMatchObject({
+    reviewed: true,
+    event: { status: "completed" },
+  });
+  expect(
+    JSON.parse(mocks.disk.get("codaloud.agent.tasks.user-a")!)[0],
+  ).toMatchObject({ reviewed: true, event: { status: "completed" } });
 });
 it("does not show a reconnect warning for repeated snapshots of an acknowledged command", async () => {
   const event = {

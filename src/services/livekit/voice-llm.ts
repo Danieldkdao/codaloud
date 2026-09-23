@@ -14,6 +14,7 @@ export class VoiceLanguageModel extends llm.LLM {
       instruction: string,
       id: string,
       title: string,
+      contextId?: string,
     ) => Promise<unknown>,
     private readonly workspace?: {
       context: () => Promise<unknown>;
@@ -31,6 +32,7 @@ export class VoiceLanguageModel extends llm.LLM {
   }
   chat = (options: Parameters<llm.LLM["chat"]>[0]) => {
     let accepted: Promise<unknown> | undefined;
+    let contextId: string | undefined;
     // Provider call IDs can repeat in later turns. Our deduplication identity
     // belongs to this turn, and stays stable for repeated calls within it.
     const requestId = randomUUID();
@@ -67,12 +69,30 @@ export class VoiceLanguageModel extends llm.LLM {
                     "Self-contained Markdown plan, 1–3000 characters. Use short headings and bullets for the intended outcome, exact file paths in backticks, requested changes, and constraints. Preserve the user's requested content and explicitly requested Git operations. Expose uncertain names or assumptions for review; never invent editor context, files inspected, or authorization. This exact plan will become the implementation instruction after approval.",
                   ),
               }),
-              execute: ({ instruction, title }) =>
-                (accepted ??= this.proposePlan!(instruction, requestId, title)),
+              execute: ({ instruction, title }, options) => {
+                if (options.abortSignal?.aborted)
+                  throw new Error("Request cancelled.");
+                if (this.workspace && !contextId)
+                  throw new Error("Workspace context is unavailable.");
+                return (accepted ??= contextId
+                  ? this.proposePlan!(instruction, requestId, title, contextId)
+                  : this.proposePlan!(instruction, requestId, title));
+              },
             }),
           }
         : undefined,
-      this.workspace,
+      this.workspace
+        ? {
+            ...this.workspace,
+            context: async () => {
+              const captured = voiceContextSchema.parse(
+                await this.workspace!.context(),
+              );
+              contextId = captured.id;
+              return captured;
+            },
+          }
+        : undefined,
     );
   };
 }

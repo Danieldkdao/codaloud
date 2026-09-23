@@ -117,3 +117,39 @@ it("closes the upstream generation on interruption", async () => {
   stream.close();
   expect(mocks.reply.mock.calls[0]![2].aborted).toBe(true);
 });
+it("binds implementation plans to the frozen native request", async () => {
+  const propose = vi.fn(async () => ({ reviewRequired: true }));
+  mocks.reply.mockImplementation((_messages, _id, _signal, tools) =>
+    (async function* () {
+      await tools.proposePlan.execute(
+        { instruction: "Build settings", title: "Settings" },
+        {},
+      );
+      yield "Review the plan";
+    })(),
+  );
+  const context = new llm.ChatContext();
+  context.addMessage({ role: "user", content: "Build settings" });
+  const stream = new VoiceLanguageModel("room", propose, {
+    context: async () => ({
+      id: "frozen",
+      projectId: "p",
+      branch: "main",
+      mode: "agent",
+      activeFile: null,
+      openFiles: [],
+      openFilesTruncated: false,
+    }),
+    rpc: async () => ({ ok: true }),
+  }).chat({ chatCtx: context });
+  for await (const _ of stream) {
+    /* Drain response. */
+  }
+  expect(propose).toHaveBeenCalledWith(
+    "Build settings",
+    expect.any(String),
+    "Settings",
+    "frozen",
+  );
+  stream.close();
+});

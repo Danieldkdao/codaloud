@@ -180,10 +180,12 @@ it("presents the authorized agent's plan without starting a task", async () => {
   const handler = mocks.register.mock.calls.find(
     ([name]) => name === "codaloud.plan.propose",
   )![1];
+  const request = await inlineSession.begin("project");
   const payload = JSON.stringify({
     instruction: "Read the root folder",
     id: "call",
     title: "Explore project",
+    requestId: request.id,
   });
   await expect(
     handler({ callerIdentity: "intruder", payload }),
@@ -201,6 +203,11 @@ it("presents the authorized agent's plan without starting a task", async () => {
     "room:call",
     "Explore project",
   );
+  inlineSession.cancel();
+  await expect(handler({ callerIdentity: "agent", payload })).rejects.toThrow(
+    /cancel/i,
+  );
+  expect(agentPlans.propose).toHaveBeenCalledOnce();
   await connection.close();
 });
 it("denied microphone access never allocates a room", async () => {

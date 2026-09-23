@@ -201,6 +201,7 @@ export const connectNativeVoice: ConnectVoice = (
         return JSON.stringify({ ok: true });
       });
       room.registerRpcMethod("codaloud.plan.propose", async (data) => {
+        authorizeWorkspace(data);
         if (
           !agentIdentity ||
           data.callerIdentity !== agentIdentity ||
@@ -213,8 +214,16 @@ export const connectNativeVoice: ConnectVoice = (
             instruction: z.string().trim().min(1).max(3000),
             title: z.string().trim().min(1).max(80),
             id: z.string().min(1).max(256),
+            requestId: z.string().min(1).max(256),
           })
           .parse(JSON.parse(data.payload));
+        const request = inlineSession.getSnapshot();
+        if (
+          request?.id !== input.requestId ||
+          request.projectId !== options.projectId ||
+          request.status !== "listening"
+        )
+          throw new Error("Request cancelled or already completed.");
         return JSON.stringify(
           await agentPlans.propose(
             options.projectId,

@@ -21,7 +21,8 @@ export const createVoiceReply = (
         }
         return message;
       }),
-      maxOutputTokens: 512,
+      // Leave room for the structured Markdown plan as well as a short spoken reply.
+      maxOutputTokens: 1600,
       maxRetries: 0,
       providerOptions: { openrouter: { reasoning: { enabled: false } } },
       onError: ({ error }) => {

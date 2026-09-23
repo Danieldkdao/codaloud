@@ -10,14 +10,15 @@ it("passes a concise title with the instruction and accepts each turn only once"
   const start = vi.fn().mockResolvedValue({ accepted: true });
   mocks.reply.mockImplementation((_messages, _id, _signal, tools) =>
     (async function* () {
-      await tools.startTask.execute(
+      expect(tools.startTask).toBeUndefined();
+      await tools.proposePlan.execute(
         {
           instruction: "List the files in the project root",
           title: "Browse project",
         },
         { toolCallId: "call-one" },
       );
-      await tools.startTask.execute(
+      await tools.proposePlan.execute(
         { instruction: "List files again", title: "Another title" },
         { toolCallId: "call-two" },
       );
@@ -47,7 +48,7 @@ it("assigns different request IDs to separate turns even if the provider reuses 
   });
   mocks.reply.mockImplementation((messages, _id, _signal, tools) =>
     (async function* () {
-      await tools.startTask.execute(
+      await tools.proposePlan.execute(
         { instruction: messages.at(-1).content, title: "Create file" },
         { toolCallId: "call_0" },
       );

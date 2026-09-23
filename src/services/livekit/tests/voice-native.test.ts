@@ -3,6 +3,14 @@ import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
 import { voiceAudioSession } from "../voice-track";
 import { agentTasks } from "@/features/agent/task-runtime";
+import { agentPlans } from "@/features/agent/plan-runtime";
+vi.mock("@/features/agent/plan-runtime", () => ({
+  agentPlans: {
+    propose: vi
+      .fn()
+      .mockResolvedValue({ reviewRequired: true, accepted: false }),
+  },
+}));
 vi.mock("@/features/agent/task-runtime", () => ({
   agentTasks: {
     getSnapshot: () => [],
@@ -160,7 +168,7 @@ it("authorizes the agent before publishing and mutes before committing", async (
   expect(mocks.stopAudio).toHaveBeenCalledOnce();
   expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("room");
 });
-it("carries the authorized agent's task title into the workspace runtime", async () => {
+it("presents the authorized agent's plan without starting a task", async () => {
   const connection = await connectNativeVoice(
     "hold",
     new AbortController().signal,
@@ -168,7 +176,7 @@ it("carries the authorized agent's task title into the workspace runtime", async
     { projectId: "project" },
   );
   const handler = mocks.register.mock.calls.find(
-    ([name]) => name === "codaloud.task.start",
+    ([name]) => name === "codaloud.plan.propose",
   )![1];
   const payload = JSON.stringify({
     instruction: "Read the root folder",
@@ -178,8 +186,14 @@ it("carries the authorized agent's task title into the workspace runtime", async
   await expect(
     handler({ callerIdentity: "intruder", payload }),
   ).rejects.toThrow("Workspace unavailable");
-  await handler({ callerIdentity: "agent", payload });
-  expect(agentTasks.enqueue).toHaveBeenCalledExactlyOnceWith(
+  expect(
+    JSON.parse(await handler({ callerIdentity: "agent", payload })),
+  ).toEqual({ reviewRequired: true, accepted: false });
+  expect(agentTasks.enqueue).not.toHaveBeenCalled();
+  expect(
+    mocks.register.mock.calls.some(([name]) => name === "codaloud.task.start"),
+  ).toBe(false);
+  expect(agentPlans.propose).toHaveBeenCalledExactlyOnceWith(
     "project",
     "Read the root folder",
     "room:call",

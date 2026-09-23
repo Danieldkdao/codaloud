@@ -8,7 +8,7 @@ import { createVoiceReply } from "@/services/ai/voice-response";
 export class VoiceLanguageModel extends llm.LLM {
   constructor(
     private readonly sessionId: string,
-    private readonly startTask?: (
+    private readonly proposePlan?: (
       instruction: string,
       id: string,
       title: string,
@@ -39,11 +39,11 @@ export class VoiceLanguageModel extends llm.LLM {
         },
       },
       this.sessionId,
-      this.startTask
+      this.proposePlan
         ? {
-            startTask: tool({
+            proposePlan: tool({
               description:
-                "Accept workspace or web work as a background task and return immediately. Completion arrives separately.",
+                "Present a Markdown implementation plan for the user to review. This does not start work. Only the app's approval button can dispatch the task.",
               inputSchema: z.object({
                 title: z
                   .string()
@@ -56,13 +56,13 @@ export class VoiceLanguageModel extends llm.LLM {
                 instruction: z
                   .string()
                   .min(1)
-                  .max(4000)
+                  .max(3000)
                   .describe(
-                    "Self-contained user-authorized workspace or web task, 1–4000 characters. Include relevant paths, requested content, constraints and explicitly requested Git operations; do not assume editor context or invent authorization.",
+                    "Self-contained Markdown plan, 1–3000 characters. Use short headings and bullets for the intended outcome, exact file paths in backticks, requested changes, and constraints. Preserve the user's requested content and explicitly requested Git operations. Expose uncertain names or assumptions for review; never invent editor context, files inspected, or authorization. This exact plan will become the implementation instruction after approval.",
                   ),
               }),
               execute: ({ instruction, title }) =>
-                (accepted ??= this.startTask!(instruction, requestId, title)),
+                (accepted ??= this.proposePlan!(instruction, requestId, title)),
             }),
           }
         : undefined,

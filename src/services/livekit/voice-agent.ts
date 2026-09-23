@@ -42,7 +42,7 @@ export default defineAgent({
           try {
             const response = await ctx.room.localParticipant!.performRpc({
               destinationIdentity: metadata.participantIdentity,
-              method: "codaloud.task.start",
+              method: "codaloud.plan.propose",
               payload: JSON.stringify({ instruction, id, title }),
             });
             return JSON.parse(response);
@@ -50,7 +50,7 @@ export default defineAgent({
             return {
               accepted: false,
               message:
-                "Task acceptance could not be confirmed. Check the task panel; do not resubmit automatically.",
+                "Plan delivery could not be confirmed. Check the plan panel; no task has been started by this tool. Do not resubmit automatically.",
             };
           }
         },

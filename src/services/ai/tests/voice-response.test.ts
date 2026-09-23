@@ -37,7 +37,7 @@ it("streams one configured model call with bounded history and no tools or retri
   expect(options.messages.at(-1).content).toBe("message-29");
   expect(options).toMatchObject({
     maxRetries: 0,
-    maxOutputTokens: 512,
+    maxOutputTokens: 1600,
     headers: { "X-Session-Id": "room-one" },
     providerOptions: { openrouter: { reasoning: { enabled: false } } },
   });

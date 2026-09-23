@@ -1,4 +1,5 @@
 import { agentTasks } from "@/features/agent/task-runtime";
+import { agentPlans } from "@/features/agent/plan-runtime";
 import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
 import {
   createVoiceSession,
@@ -131,7 +132,7 @@ export const connectNativeVoice: ConnectVoice = (
         );
       roomName = credentials.roomName;
       checkCancelled();
-      room.registerRpcMethod("codaloud.task.start", async (data) => {
+      room.registerRpcMethod("codaloud.plan.propose", async (data) => {
         if (
           !agentIdentity ||
           data.callerIdentity !== agentIdentity ||
@@ -141,13 +142,13 @@ export const connectNativeVoice: ConnectVoice = (
           throw new Error("Workspace unavailable.");
         const input = z
           .object({
-            instruction: z.string().min(1).max(4000),
+            instruction: z.string().trim().min(1).max(3000),
             title: z.string().trim().min(1).max(80),
             id: z.string().min(1).max(256),
           })
           .parse(JSON.parse(data.payload));
         return JSON.stringify(
-          await agentTasks.enqueue(
+          await agentPlans.propose(
             options.projectId,
             input.instruction,
             `${roomName}:${input.id}`,

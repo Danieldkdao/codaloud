@@ -4,6 +4,8 @@ import { tool, type ModelMessage, type ToolSet } from "ai";
 import { z } from "zod";
 import { voiceModel } from "@/features/voice/constants";
 import { createVoiceReply } from "@/services/ai/voice-response";
+import { createInlineVoiceTools } from "@/services/ai/inline-voice-tools";
+import { voiceContextSchema } from "@/features/voice/schemas";
 
 export class VoiceLanguageModel extends llm.LLM {
   constructor(
@@ -13,6 +15,10 @@ export class VoiceLanguageModel extends llm.LLM {
       id: string,
       title: string,
     ) => Promise<unknown>,
+    private readonly workspace?: {
+      context: () => Promise<unknown>;
+      rpc: (method: string, payload: unknown) => Promise<unknown>;
+    },
   ) {
     super();
   }
@@ -66,6 +72,7 @@ export class VoiceLanguageModel extends llm.LLM {
             }),
           }
         : undefined,
+      this.workspace,
     );
   };
 }
@@ -76,6 +83,10 @@ class VoiceLanguageModelStream extends llm.LLMStream {
     options: ConstructorParameters<typeof llm.LLMStream>[1],
     private readonly sessionId: string,
     private readonly tools?: ToolSet,
+    private readonly workspace?: {
+      context: () => Promise<unknown>;
+      rpc: (method: string, payload: unknown) => Promise<unknown>;
+    },
   ) {
     super(model, options);
   }
@@ -91,17 +102,51 @@ class VoiceLanguageModelStream extends llm.LLMStream {
       }
     }
     const id = randomUUID();
+    const context = this.workspace
+      ? voiceContextSchema.parse(await this.workspace.context())
+      : undefined;
+    const tools =
+      context && this.workspace
+        ? {
+            ...this.tools,
+            ...createInlineVoiceTools(context, async (method, payload) => {
+              if (this.abortController.signal.aborted)
+                throw new Error("Request cancelled.");
+              return this.workspace!.rpc(method, payload);
+            }),
+          }
+        : this.tools;
     try {
-      for await (const content of createVoiceReply(
-        messages,
-        this.sessionId,
-        this.abortController.signal,
-        this.tools,
-      )) {
+      const reply = context
+        ? createVoiceReply(
+            messages,
+            this.sessionId,
+            this.abortController.signal,
+            tools,
+            context,
+          )
+        : createVoiceReply(
+            messages,
+            this.sessionId,
+            this.abortController.signal,
+            tools,
+          );
+      for await (const content of reply) {
         if (this.abortController.signal.aborted) break;
         this.queue.put({ id, delta: { role: "assistant", content } });
       }
+      if (context && !this.abortController.signal.aborted)
+        await this.workspace!.rpc("codaloud.voice.suggestion", {
+          id: context.id,
+          type: "answer",
+        }).catch(() => {});
     } catch (error) {
+      if (context)
+        await this.workspace!.rpc("codaloud.voice.suggestion", {
+          id: context.id,
+          type: "error",
+          message: "Response interrupted. Cancel and try again.",
+        }).catch(() => {});
       if (!this.abortController.signal.aborted) throw error;
     }
   };

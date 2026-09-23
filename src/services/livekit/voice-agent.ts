@@ -21,6 +21,15 @@ export type VoiceDispatchSchema = z.infer<typeof voiceDispatchSchema>;
 export default defineAgent({
   entry: async (ctx) => {
     const metadata = voiceDispatchSchema.parse(JSON.parse(ctx.job.metadata));
+    const rpc = async (method: string, payload: unknown) =>
+      JSON.parse(
+        await ctx.room.localParticipant!.performRpc({
+          destinationIdentity: metadata.participantIdentity,
+          method,
+          payload: JSON.stringify(payload),
+        }),
+      );
+    let turnContext: Promise<unknown> | undefined;
     const tts = new elevenlabs.TTS({
       apiKey: serverEnv.ELEVENLABS_API_KEY,
       voiceId: metadata.voiceId,
@@ -53,6 +62,10 @@ export default defineAgent({
                 "Plan delivery could not be confirmed. Check the plan panel; no task has been started by this tool. Do not resubmit automatically.",
             };
           }
+        },
+        {
+          context: () => turnContext ?? rpc("codaloud.voice.context", {}),
+          rpc,
         },
       ),
       tts,
@@ -94,6 +107,14 @@ export default defineAgent({
     };
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, announce);
     session.on(voice.AgentSessionEventTypes.UserStateChanged, announce);
+    session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
+      // Capture at speech onset, before endpointing or model inference can yield
+      // to a tab/focus change. A manually started turn already owns its snapshot.
+      if (event.newState === "speaking") {
+        turnContext = rpc("codaloud.voice.context", {});
+        void turnContext.catch(() => {});
+      }
+    });
     const timer = setTimeout(
       () => ctx.shutdown("Voice session time limit"),
       voiceSessionDurationMs,

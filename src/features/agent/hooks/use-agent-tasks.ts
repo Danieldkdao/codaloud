@@ -3,6 +3,7 @@ import { AppState } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth/auth-client";
 import { agentTasks } from "../task-runtime";
+import { agentPlans } from "../plan-runtime";
 
 export const useAgentTasks = () =>
   useSyncExternalStore(agentTasks.subscribe, agentTasks.getSnapshot);
@@ -21,7 +22,11 @@ export const AgentTaskRuntime = () => {
   }, []);
   useEffect(() => {
     agentTasks.setSession(session.data?.user.id ?? null, foreground);
-    return () => agentTasks.setSession(null, false);
+    agentPlans.setSession(session.data?.user.id ?? null, foreground);
+    return () => {
+      agentTasks.setSession(null, false);
+      agentPlans.setSession(null, false);
+    };
   }, [session.data?.user.id, foreground]);
   useEffect(
     () =>

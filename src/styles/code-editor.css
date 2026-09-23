@@ -263,3 +263,62 @@ body {
 .code-editor-host .cm-minimap tspan {
   fill: currentColor;
 }
+.cm-voice-suggestion {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: top;
+  max-width: min(80vw, 640px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  padding: 10px;
+  margin: 4px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 16px;
+}
+.cm-voice-label,
+.cm-voice-transcript {
+  font-family: EditorUI, sans-serif;
+}
+.cm-voice-label {
+  color: var(--primary);
+}
+.cm-voice-transcript {
+  max-height: 64px;
+  overflow: auto;
+}
+.cm-voice-code {
+  color: var(--primary);
+  opacity: 0.75;
+  animation: voice-reveal 140ms ease-out;
+}
+.cm-voice-original {
+  background: var(--muted);
+}
+.cm-voice-actions {
+  display: flex;
+  gap: 8px;
+}
+.cm-voice-actions button {
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--foreground);
+  background: var(--muted);
+  border-radius: 8px;
+  font-family: EditorUI, sans-serif;
+}
+@keyframes voice-reveal {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.75;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-voice-code {
+    animation: none;
+  }
+}

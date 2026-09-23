@@ -14,6 +14,24 @@ export type EditorCommand =
   | "select-all"
   | "undo"
   | "redo";
+
+export type EditorSnapshot = {
+  documentKey: string;
+  revision: number;
+  content: string;
+  from: number;
+  to: number;
+  focused: boolean;
+};
+export type InlineSuggestion = {
+  id: string;
+  from: number;
+  to: number;
+  text: string;
+  transcript: string;
+  status: "listening" | "generating" | "ready";
+};
+export type InlineSuggestionAction = "accept" | "decline" | "cancel";
 export type EditorCommandState = {
   fold: "fold" | "unfold" | "unavailable";
   canUndo: boolean;

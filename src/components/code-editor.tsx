@@ -71,6 +71,16 @@ import type {
   EditorCommandState,
 } from "@/features/editor/types";
 import { editorConfiguration } from "@/features/editor/configuration";
+import {
+  inlineSuggestion,
+  setInlineSuggestion,
+  acceptInlineSuggestion,
+} from "@/features/editor/inline-suggestion";
+import type {
+  EditorSnapshot,
+  InlineSuggestion,
+  InlineSuggestionAction,
+} from "@/features/editor/types";
 import { defaultEditorPreferences } from "@/features/settings/constants";
 import type { EditorPreferences } from "@/features/settings/types";
 import {
@@ -83,6 +93,13 @@ import "@/global.css";
 import "@/styles/code-editor.css";
 
 export type CodeEditorRef = {
+  captureContext(requestId: string): void;
+  previewSuggestion(
+    value: InlineSuggestion | null,
+    key: string,
+    revision: number,
+  ): void;
+  acceptSuggestion(id: string, key: string, revision: number): void;
   revealDiagnostic(
     from: number,
     to: number,
@@ -106,9 +123,19 @@ export type CodeEditorInteraction = {
   focused: boolean;
   hasSelection: boolean;
   commands?: EditorCommandState;
+  revision?: number;
 };
 
 type CodeEditorProps = {
+  onContext?: (
+    requestId: string,
+    snapshot: EditorSnapshot | null,
+  ) => Promise<void>;
+  onSuggestionAction?: (
+    id: string,
+    action: InlineSuggestionAction,
+  ) => Promise<void>;
+  onSuggestionApplied?: (id: string, applied: boolean) => Promise<void>;
   searchQuery?: EditorSearchQuery;
   onSearchSummary?: (
     summary: EditorSearchSummary,
@@ -211,6 +238,9 @@ const formatEditorThemeClassName = (
 };
 
 const CodeEditor = ({
+  onContext,
+  onSuggestionAction,
+  onSuggestionApplied,
   preferences = defaultEditorPreferences,
   searchQuery,
   onSearchSummary,
@@ -250,6 +280,16 @@ const CodeEditor = ({
   const activeFilename = useRef(filename);
   activeFilename.current = filename;
   const revision = useRef(0);
+  const suggestionCallbacks = useRef({
+    onContext,
+    onSuggestionAction,
+    onSuggestionApplied,
+  });
+  suggestionCallbacks.current = {
+    onContext,
+    onSuggestionAction,
+    onSuggestionApplied,
+  };
   const transformPending = useRef(false);
   const activeDocument = useRef(documentKey);
   activeDocument.current = documentKey;
@@ -319,6 +359,58 @@ const CodeEditor = ({
     (ref ?? null) as Ref<DOMImperativeFactory>,
     () =>
       ({
+        captureContext: (id: string) => {
+          const editor = view.current;
+          const key = activeDocument.current;
+          void suggestionCallbacks.current
+            .onContext?.(
+              id,
+              editor && key
+                ? {
+                    documentKey: key,
+                    revision: revision.current,
+                    content: editor.state.doc.toString(),
+                    from: editor.state.selection.main.from,
+                    to: editor.state.selection.main.to,
+                    focused: editor.hasFocus,
+                  }
+                : null,
+            )
+            .catch(() => {});
+        },
+        previewSuggestion: (
+          value: InlineSuggestion | null,
+          key: string,
+          expectedRevision: number,
+        ) => {
+          const editor = view.current;
+          if (!editor || key !== activeDocument.current) return;
+          if (
+            value &&
+            (expectedRevision !== revision.current ||
+              value.from < 0 ||
+              value.to > editor.state.doc.length ||
+              value.to < value.from)
+          )
+            return;
+          editor.dispatch({ effects: setInlineSuggestion.of(value) });
+        },
+        acceptSuggestion: (
+          id: string,
+          key: string,
+          expectedRevision: number,
+        ) => {
+          const editor = view.current;
+          const applied = Boolean(
+            editor &&
+            key === activeDocument.current &&
+            expectedRevision === revision.current &&
+            acceptInlineSuggestion(editor, id),
+          );
+          void suggestionCallbacks.current
+            .onSuggestionApplied?.(id, applied)
+            .catch(() => {});
+        },
         revealDiagnostic: (
           from: number,
           to: number,
@@ -449,6 +541,7 @@ const CodeEditor = ({
 
   const reportInteraction = (editor: EditorView, key?: string) => {
     const state = {
+      revision: revision.current,
       commands: getEditorCommandState(editor),
       focused: editor.hasFocus,
       hasSelection: !editor.state.selection.main.empty,
@@ -457,6 +550,7 @@ const CodeEditor = ({
     if (
       previous &&
       previous.key === key &&
+      previous.revision === state.revision &&
       JSON.stringify(previous.commands) === JSON.stringify(state.commands) &&
       previous.focused === state.focused &&
       previous.hasSelection === state.hasSelection
@@ -505,6 +599,18 @@ const CodeEditor = ({
       configuration.of(editorConfiguration(preferencesRef.current)),
       highlightSpecialChars(),
       history(),
+      inlineSuggestion,
+      EditorView.domEventHandlers({
+        "codaloud-suggestion": (event) => {
+          const { id, action } = (
+            event as CustomEvent<{ id: string; action: InlineSuggestionAction }>
+          ).detail;
+          void suggestionCallbacks.current
+            .onSuggestionAction?.(id, action)
+            .catch(() => {});
+          return true;
+        },
+      }),
       codeFolding(),
       drawSelection(),
       dropCursor(),
@@ -534,6 +640,7 @@ const CodeEditor = ({
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
+        if (update.docChanged) revision.current++;
         const searchSummary = getEditorSearchSummary(update.view);
         const searchSignature = JSON.stringify([documentKey, searchSummary]);
         if (lastSearchSummary.current !== searchSignature) {
@@ -556,7 +663,6 @@ const CodeEditor = ({
         )
           reportMatches(update.view);
         if (update.docChanged) {
-          revision.current++;
           const pending = documentKey
             ? changeCallback.current?.(update.state.sliceDoc(), documentKey)
             : changeCallback.current?.(update.state.sliceDoc());
@@ -584,6 +690,8 @@ const CodeEditor = ({
       EditorView.scrollMargins.of(() => ({ bottom: inset.current })),
     ];
     const buffer = documentKey ? buffers.current.get(documentKey) : undefined;
+    // Switching documents invalidates pending cross-bridge responses, including a switch back.
+    revision.current++;
     const state = buffer
       ? buffer.state.update({
           effects: [
@@ -642,7 +750,8 @@ const CodeEditor = ({
         (!openKeys.current || openKeys.current.includes(documentKey))
       ) {
         buffers.current.set(documentKey, {
-          state: editor.state,
+          state: editor.state.update({ effects: setInlineSuggestion.of(null) })
+            .state,
           top: editor.scrollDOM.scrollTop,
           left: editor.scrollDOM.scrollLeft,
         });

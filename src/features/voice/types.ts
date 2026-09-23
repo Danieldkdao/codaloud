@@ -1,4 +1,44 @@
 import type { VoiceControlAction, VoiceMode } from "./schemas";
+import type { EditorSnapshot, InlineSuggestion } from "@/features/editor/types";
+
+export type VoiceEditorContext = {
+  projectId: string;
+  branch: string;
+  activeFile: (EditorSnapshot & { path: string }) | null;
+  openFiles: { path: string; content: string }[];
+};
+export type InlineEvent =
+  | { id: string; type: "start" | "complete" | "answer" }
+  | { id: string; type: "delta"; offset: number; text: string }
+  | { id: string; type: "error"; message: string };
+export type InlineRequest = {
+  id: string;
+  projectId: string;
+  context: VoiceEditorContext | null;
+  mode: "agent" | "quick-edit";
+  status:
+    | "listening"
+    | "generating"
+    | "ready"
+    | "applying"
+    | "answered"
+    | "accepted"
+    | "error";
+  text: string;
+  transcript: string;
+  error?: string;
+};
+export type VoiceEditorBridge = {
+  capture: () => Promise<VoiceEditorContext>;
+  preview: (
+    value: InlineSuggestion | null,
+    context: VoiceEditorContext,
+  ) => void;
+  apply: (
+    value: InlineSuggestion,
+    context: VoiceEditorContext,
+  ) => Promise<boolean>;
+};
 
 export type VoiceSegment = {
   id: string;

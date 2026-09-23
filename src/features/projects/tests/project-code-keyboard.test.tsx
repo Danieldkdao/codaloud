@@ -182,3 +182,30 @@ it("routes all four cursor controls through a scrollable action row without dism
   expect(actions.querySelector('[aria-label="Hide keyboard"]')).toBeNull();
   expect(state.dismissKeyboard).not.toHaveBeenCalled();
 });
+it("keeps the voice button fixed outside the horizontally scrolling actions and feedback above the strip", () => {
+  act(() =>
+    root.render(
+      createElement(ProjectCodeKeyboardAccessory, {
+        frame: { screenY: 544, screenX: 0, height: 300, width: 390 },
+        onDismissKeyboard: state.dismissKeyboard,
+        voice: createElement("button", { "data-voice": true }, "Microphone"),
+        feedback: createElement("div", { "data-feedback": true }, "Listening"),
+      }),
+    ),
+  );
+  expect(
+    container.querySelector(
+      '[data-testid="editor-keyboard-actions"] [data-voice]',
+    ),
+  ).not.toBeNull();
+  expect(
+    container.querySelector(
+      '[data-testid="editor-keyboard-action-scroll"] [data-voice]',
+    ),
+  ).toBeNull();
+  expect(
+    container.querySelector(
+      '[data-testid="editor-keyboard-strip"] [data-feedback]',
+    ),
+  ).not.toBeNull();
+});

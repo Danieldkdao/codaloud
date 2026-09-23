@@ -27,6 +27,20 @@ export const streamQuickEdit = async (
     onError: () => {},
   });
   let offset = 0;
+  let pending = "";
+  let lastSent = 0;
+  const flush = async () => {
+    // Coalesce provider tokens into short frames rather than paying an RPC
+    // round trip for every token. The first token is still delivered immediately.
+    while (pending.length) {
+      check();
+      const text = pending.slice(0, 1000);
+      pending = pending.slice(text.length);
+      await send({ id, type: "delta", offset, text });
+      offset += text.length;
+    }
+    lastSent = Date.now();
+  };
   let finished = false;
   for await (const part of result.stream) {
     check();
@@ -40,19 +54,17 @@ export const streamQuickEdit = async (
       finished = true;
     }
     if (part.type === "text-delta") {
-      if (offset + part.text.length > 24000)
+      if (offset + pending.length + part.text.length > 24000)
         throw new Error("Request a smaller edit.");
-      // RPC payloads are UTF-8 limited; bound each chunk even for escaped Unicode.
-      for (let start = 0; start < part.text.length; start += 1000) {
-        check();
-        const text = part.text.slice(start, start + 1000);
-        await send({ id, type: "delta", offset, text });
-        offset += text.length;
-      }
+      pending += part.text;
+      if (offset === 0 || pending.length >= 512 || Date.now() - lastSent >= 50)
+        await flush();
     }
   }
   check();
   if (!finished)
     throw new Error("The suggestion is incomplete. Please try again.");
+  await flush();
+  check();
   await send({ id, type: "complete" });
 };

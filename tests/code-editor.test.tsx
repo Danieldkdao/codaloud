@@ -642,3 +642,64 @@ it("automatically formats the active file after changing indentation preferences
   act(() => undo(editor()));
   expect(editor().state.sliceDoc()).toBe(props.initialValue);
 });
+it("captures exact live selection and accepts only the completed rendered preview at the captured revision", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onContext = vi.fn().mockResolvedValue(undefined);
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  const onSuggestionApplied = vi.fn().mockResolvedValue(undefined);
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, {
+        ref,
+        filename: "test.txt",
+        documentKey: "doc",
+        initialValue: "hello",
+        onContext,
+        onChange,
+        onSuggestionApplied,
+      }),
+    ),
+  );
+  act(() => editor().dispatch({ selection: { anchor: 1, head: 4 } }));
+  act(() => ref.current!.captureContext("capture"));
+  const captured = onContext.mock.lastCall![1];
+  expect(captured).toMatchObject({
+    content: "hello",
+    from: 1,
+    to: 4,
+    documentKey: "doc",
+  });
+  const preview = {
+    id: "p",
+    from: 1,
+    to: 4,
+    status: "generating" as const,
+    text: "i",
+    transcript: "replace this",
+  };
+  act(() => ref.current!.previewSuggestion(preview, "doc", captured.revision));
+  expect(container.querySelector(".cm-voice-code")!.textContent).toBe("i");
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => ref.current!.acceptSuggestion("p", "doc", captured.revision));
+  expect(onSuggestionApplied).toHaveBeenLastCalledWith("p", false);
+  act(() =>
+    ref.current!.previewSuggestion(
+      { ...preview, status: "ready" },
+      "doc",
+      captured.revision,
+    ),
+  );
+  act(() => ref.current!.acceptSuggestion("p", "doc", captured.revision));
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("hio", "doc");
+  expect(onSuggestionApplied).toHaveBeenLastCalledWith("p", true);
+  act(() => undo(editor()));
+  expect(editor().state.doc.toString()).toBe("hello");
+  act(() =>
+    ref.current!.previewSuggestion(
+      { ...preview, status: "ready" },
+      "doc",
+      captured.revision,
+    ),
+  );
+  expect(container.querySelector(".cm-voice-suggestion")).toBeNull();
+});

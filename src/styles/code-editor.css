@@ -292,6 +292,8 @@ body {
 .cm-voice-code {
   color: var(--primary);
   opacity: 0.75;
+}
+.cm-voice-delta {
   animation: voice-reveal 140ms ease-out;
 }
 .cm-voice-original {
@@ -318,7 +320,7 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cm-voice-code {
+  .cm-voice-delta {
     animation: none;
   }
 }

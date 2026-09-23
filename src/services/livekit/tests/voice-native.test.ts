@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createRequire } from "node:module";
+import { inlineSession } from "@/features/voice/inline-session";
 import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
 import { voiceAudioSession } from "../voice-track";
@@ -600,4 +602,77 @@ it("delivers provider failure to the visible conversation while preserving its t
     }),
   );
   await controller.stop();
+});
+it("binds authenticated suggestion RPCs to a frozen turn and rejects late updates using native cancellation", async () => {
+  const nativeRequire = createRequire(
+    import.meta.resolve("react-native/package.json"),
+  );
+  const { AbortController: NativeAbortController } = nativeRequire(
+    "abort-controller",
+  ) as { AbortController: typeof AbortController };
+  const abort = new NativeAbortController();
+  const capture = vi.fn(async () => ({
+    projectId: "project",
+    branch: "main",
+    openFiles: [],
+    activeFile: {
+      path: "a.ts",
+      documentKey: "doc",
+      revision: 1,
+      content: "hello",
+      from: 0,
+      to: 5,
+      focused: true,
+    },
+  }));
+  const unregister = inlineSession.register("project", {
+    capture,
+    preview: () => {},
+    apply: async () => true,
+  });
+  const connection = await connectNativeVoice("hold", abort.signal, events(), {
+    projectId: "project",
+  });
+  try {
+    await connection.control("start");
+    const handler = (method: string) =>
+      mocks.register.mock.calls.find(([name]) => name === method)![1];
+    await expect(
+      handler("codaloud.voice.context")({
+        callerIdentity: "intruder",
+        payload: "{}",
+      }),
+    ).rejects.toThrow();
+    const context = JSON.parse(
+      await handler("codaloud.voice.context")({
+        callerIdentity: "agent",
+        payload: "{}",
+      }),
+    );
+    expect(capture).toHaveBeenCalledOnce();
+    const send = (event: unknown) =>
+      handler("codaloud.voice.suggestion")({
+        callerIdentity: "agent",
+        payload: JSON.stringify(event),
+      });
+    await send({ id: context.id, type: "start" });
+    expect(mocks.microphone).toHaveBeenLastCalledWith(false);
+    await send({ id: context.id, type: "delta", offset: 0, text: "world" });
+    await expect(
+      send({ id: context.id, type: "delta", offset: 0, text: "duplicate" }),
+    ).rejects.toThrow(/order/);
+    inlineSession.cancel();
+    await expect(send({ id: context.id, type: "complete" })).rejects.toThrow(
+      /cancel/i,
+    );
+    await connection.control("start");
+    expect(inlineSession.getSnapshot()?.id).not.toBe(context.id);
+    abort.abort();
+    await expect(
+      send({ id: inlineSession.getSnapshot()!.id, type: "start" }),
+    ).rejects.toThrow();
+  } finally {
+    await connection.close();
+    unregister();
+  }
 });

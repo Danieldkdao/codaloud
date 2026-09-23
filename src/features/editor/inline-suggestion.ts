@@ -16,6 +16,8 @@ class SuggestionWidget extends WidgetType {
     const { id, text, status, transcript, from, to } = this.suggestion;
     const panel = document.createElement("span");
     panel.className = "cm-voice-suggestion";
+    panel.dataset.requestId = id;
+    panel.dataset.status = status;
     panel.contentEditable = "false";
     const label = document.createElement("span");
     label.className = "cm-voice-label";
@@ -64,6 +66,25 @@ class SuggestionWidget extends WidgetType {
     return panel;
   };
   ignoreEvent = () => true;
+  updateDOM = (panel: HTMLElement) => {
+    const { id, status, text, transcript } = this.suggestion;
+    if (panel.dataset.requestId !== id || panel.dataset.status !== status)
+      return false;
+    const code = panel.querySelector<HTMLElement>(".cm-voice-code");
+    const words = panel.querySelector<HTMLElement>(".cm-voice-transcript");
+    if (!code || Boolean(words) !== Boolean(transcript)) return false;
+    if (words) words.textContent = transcript;
+    const previous = code.textContent ?? "";
+    if (!text.startsWith(previous)) return false;
+    if (text.length > previous.length) {
+      if (code.childNodes.length > 100) code.textContent = previous;
+      const added = document.createElement("span");
+      added.className = "cm-voice-delta";
+      added.textContent = text.slice(previous.length);
+      code.append(added);
+    }
+    return true;
+  };
 }
 
 export const inlineSuggestion = StateField.define<InlineSuggestion | null>({

@@ -68,3 +68,27 @@ it("stops forwarding chunks after cancellation and propagates provider failures"
     streamQuickEdit([], "add", "two", send, new AbortController().signal),
   ).rejects.toThrow("provider failed");
 });
+it("coalesces a burst of tiny tokens while keeping the first chunk immediate and the final preview exact", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(100);
+  mocks.stream.mockReturnValue({
+    stream: (async function* () {
+      for (let i = 0; i < 2000; i++) yield { type: "text-delta", text: "x" };
+      yield { type: "finish", finishReason: "stop" };
+    })(),
+  });
+  const events: { type: string; text?: string }[] = [];
+  await streamQuickEdit(
+    [],
+    "insert",
+    "burst",
+    async (event) => {
+      events.push(event);
+    },
+    new AbortController().signal,
+  );
+  const chunks = events.filter((event) => event.type === "delta");
+  expect(chunks.length).toBeLessThan(10);
+  expect(chunks[0].text).toBe("x");
+  expect(chunks.map((event) => event.text).join("")).toBe("x".repeat(2000));
+  expect(events.at(-1)?.type).toBe("complete");
+});

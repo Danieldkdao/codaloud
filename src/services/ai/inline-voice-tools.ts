@@ -2,6 +2,7 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import {
   inlineReadSchema,
+  inlineSearchSchema,
   type VoiceContextSchema,
 } from "@/features/voice/schemas";
 import { workspaceTools } from "@/features/agent/tools/workspace-tools";
@@ -22,7 +23,7 @@ export const createInlineVoiceTools = (
     searchFiles: tool({
       description:
         "Find project file names or content references. Search open unsaved buffers as well as saved files. Use readFile to inspect results.",
-      inputSchema: workspaceTools.searchFiles.schema,
+      inputSchema: inlineSearchSchema,
       execute: (args) =>
         rpc("codaloud.voice.read", {
           id: context.id,

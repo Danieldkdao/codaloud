@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
+import { projectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
 import {
   defaultEditorPreferences,
   voicePresets,
@@ -75,6 +76,12 @@ export const inlineReadSchema = z.object({
   length: z.number().int().min(1).max(1200).default(1200),
 });
 export type InlineReadSchema = z.infer<typeof inlineReadSchema>;
+export const inlineSearchSchema = projectFileSearchQuerySchema.pick({
+  search: true,
+  scope: true,
+  path: true,
+});
+export type InlineSearchSchema = z.infer<typeof inlineSearchSchema>;
 export const inlineEventKinds = ["start", "complete", "answer"] as const;
 export type InlineEventKind = (typeof inlineEventKinds)[number];
 export const inlineEventSchema = z.union([

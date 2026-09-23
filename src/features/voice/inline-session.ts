@@ -1,5 +1,7 @@
 import type { InlineEvent, InlineRequest, VoiceEditorBridge } from "./types";
 import type { InlineSuggestion } from "@/features/editor/types";
+import { mergeFileActivity } from "@/features/agent/file-activity";
+import type { FileActivitySchema } from "@/features/agent/schemas";
 
 export const createInlineSession = () => {
   const editors = new Map<string, VoiceEditorBridge>();
@@ -59,7 +61,7 @@ export const createInlineSession = () => {
         throw new Error(
           "Accept, decline, or cancel the current suggestion first.",
         );
-      cancel();
+      clearPreview();
       const id = `${Date.now()}-${++sequence}`;
       owner = editors.get(projectId);
       const bridge = owner;
@@ -99,6 +101,17 @@ export const createInlineSession = () => {
       if (request!.mode === "quick-edit")
         owner?.preview(suggestion(request!), request!.context!);
     },
+    activity: (id: string, value: FileActivitySchema | string | null) => {
+      if (request?.id !== id) return;
+      publish(
+        typeof value === "string" || value === null
+          ? { ...request, toolActivity: value ?? undefined }
+          : {
+              ...request,
+              files: mergeFileActivity(request.files ?? [], value),
+            },
+      );
+    },
     receive: (event: InlineEvent) => {
       if (
         request?.id !== event.id ||
@@ -109,7 +122,14 @@ export const createInlineSession = () => {
         case "start":
           if (request.mode !== "quick-edit" || request.status !== "listening")
             return false;
-          publish({ ...request, status: "generating" });
+          publish({
+            ...request,
+            status: "generating",
+            files: mergeFileActivity(request.files ?? [], {
+              path: request.context!.activeFile!.path,
+              status: "proposed",
+            }),
+          });
           break;
         case "delta":
           if (
@@ -128,7 +148,7 @@ export const createInlineSession = () => {
         case "answer":
           if (request.status !== "listening") return false;
           clearPreview();
-          publish({ ...request, status: "answered" });
+          publish({ ...request, status: "answered", toolActivity: undefined });
           return true;
         case "error":
           fail(event.id, event.message);
@@ -142,6 +162,7 @@ export const createInlineSession = () => {
       const file = request?.context?.activeFile;
       if (
         file &&
+        request?.mode === "quick-edit" &&
         request &&
         ["listening", "generating", "ready"].includes(request.status) &&
         (file.documentKey !== documentKey || file.revision !== revision)
@@ -179,7 +200,14 @@ export const createInlineSession = () => {
           throw new Error("The visible suggestion changed. Start again.");
         if (request?.id === id) {
           clearPreview();
-          publish({ ...request, status: "accepted" });
+          publish({
+            ...request,
+            status: "accepted",
+            files: mergeFileActivity(request.files ?? [], {
+              path: original.context!.activeFile!.path,
+              status: "changed",
+            }),
+          });
         }
       } catch (error) {
         fail(

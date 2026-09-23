@@ -26,6 +26,10 @@ import { formatVoiceStatus, formatVoiceTranscript } from "../lib/formatters";
 
 import { microphoneTrack } from "@/services/livekit/voice-track";
 import { inlineSession } from "../inline-session";
+const FileActivity = lazy(async () => ({
+  default: (await import("@/features/agent/components/file-activity"))
+    .FileActivity,
+}));
 
 // Evaluate the native SDK only after a real microphone track exists.
 const VoiceFrequencyBars = lazy(() => import("./voice-frequency-bars"));
@@ -227,6 +231,22 @@ export const VoiceTranscriptBubble = ({
                     scroll.current?.scrollToEnd({ animated: false });
                 }}
               >
+                {inline?.toolActivity ? (
+                  <PText
+                    accessibilityLiveRegion="polite"
+                    className="pb-2 text-muted-foreground"
+                  >
+                    {inline.toolActivity}
+                  </PText>
+                ) : null}
+                {inline?.files?.length ? (
+                  <Suspense fallback={null}>
+                    <FileActivity
+                      projectId={inline.projectId}
+                      files={inline.files}
+                    />
+                  </Suspense>
+                ) : null}
                 {state.transcript.length === 0 && !state.error ? (
                   <PText className="pb-2">
                     {state.connection === "connecting"

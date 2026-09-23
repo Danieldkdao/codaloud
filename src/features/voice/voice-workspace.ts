@@ -87,6 +87,7 @@ export const readVoiceWorkspace = async (
   switch (input.name) {
     case "readFile": {
       const args = inlineReadSchema.parse(input.args);
+      inlineSession.activity(input.id, { path: args.path, status: "reading" });
       const active = request!.context?.activeFile;
       const buffer =
         active?.path === args.path
@@ -96,6 +97,7 @@ export const readVoiceWorkspace = async (
         buffer ?? (await readProjectFileContentAction(projectId, args.path));
       check();
       if (!file) throw new Error("The file could not be read.");
+      inlineSession.activity(input.id, { path: args.path, status: "read" });
       const content = file.content.replace(/\r\n/g, "\n");
       const excerpt = content.slice(args.offset, args.offset + args.length);
       return {
@@ -111,6 +113,7 @@ export const readVoiceWorkspace = async (
       };
     }
     case "searchFiles": {
+      inlineSession.activity(input.id, "Finding references…");
       const args = workspaceTools.searchFiles.schema.parse(input.args);
       const result = await readProjectFilesAction(projectId, {
         ...args,
@@ -118,6 +121,7 @@ export const readVoiceWorkspace = async (
       });
       check();
       if (!result) throw new Error("Search failed.");
+      inlineSession.activity(input.id, null);
       const buffers = request!.context?.openFiles ?? [];
       const search = args.search.toLowerCase();
       const openMatches = buffers.filter(
@@ -143,10 +147,12 @@ export const readVoiceWorkspace = async (
       };
     }
     case "listFiles": {
+      inlineSession.activity(input.id, "Browsing files…");
       const args = workspaceTools.listFiles.schema.parse(input.args);
       const files = await readProjectFilesAction(projectId, args);
       check();
       if (!files) throw new Error("The folder could not be read.");
+      inlineSession.activity(input.id, null);
       return {
         files: files.slice(0, 30).map(({ path, isDir }) => ({ path, isDir })),
         truncated: files.length > 30,

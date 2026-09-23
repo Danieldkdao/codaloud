@@ -1,4 +1,18 @@
-import type { AgentTaskStatus } from "../schemas";
+import type { AgentTaskStatus, FileActivityStatus } from "../schemas";
+export const formatFileActivity = (status: FileActivityStatus) => {
+  switch (status) {
+    case "reading":
+      return { label: "Reading…", icon: "file-text" as const };
+    case "read":
+      return { label: "Read", icon: "file-text" as const };
+    case "proposed":
+      return { label: "Proposed edit", icon: "edit-3" as const };
+    case "changed":
+      return { label: "Changed", icon: "check-circle" as const };
+    case "failed":
+      return { label: "Not completed", icon: "alert-circle" as const };
+  }
+};
 import type { IconProps } from "@/components/ui/icon";
 import type { AgentTaskRecord } from "../types";
 import {

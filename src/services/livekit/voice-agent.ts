@@ -64,7 +64,11 @@ export default defineAgent({
           }
         },
         {
-          context: () => turnContext ?? rpc("codaloud.voice.context", {}),
+          context: () => {
+            const captured = turnContext ?? rpc("codaloud.voice.context", {});
+            turnContext = undefined;
+            return captured;
+          },
           rpc,
         },
       ),
@@ -110,7 +114,7 @@ export default defineAgent({
     session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
       // Capture at speech onset, before endpointing or model inference can yield
       // to a tab/focus change. A manually started turn already owns its snapshot.
-      if (event.newState === "speaking") {
+      if (event.newState === "speaking" && !turnContext) {
         turnContext = rpc("codaloud.voice.context", {});
         void turnContext.catch(() => {});
       }

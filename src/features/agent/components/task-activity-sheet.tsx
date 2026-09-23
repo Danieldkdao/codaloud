@@ -26,6 +26,7 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { formatTaskActivity, formatTaskActivityState } from "../lib/formatters";
 import type { AgentTaskRecord } from "../types";
+import { FileActivity } from "./file-activity";
 
 type TaskActivitySheetProps = Pick<
   ContentSheetProps,
@@ -151,6 +152,13 @@ export const TaskActivitySheet = ({
             }}
           >
             <View className="gap-1">
+              {task.files?.length ? (
+                <FileActivity
+                  projectId={task.request.projectId}
+                  files={task.files}
+                  onNavigate={() => onOpenChange(false)}
+                />
+              ) : null}
               {!filteredActivity.length ? (
                 <PText className="text-muted-foreground">
                   {query

@@ -1,5 +1,6 @@
 import type { VoiceControlAction, VoiceMode } from "./schemas";
 import type { EditorSnapshot, InlineSuggestion } from "@/features/editor/types";
+import type { FileActivitySchema } from "@/features/agent/schemas";
 
 export type VoiceEditorContext = {
   projectId: string;
@@ -27,6 +28,8 @@ export type InlineRequest = {
   text: string;
   transcript: string;
   error?: string;
+  files?: FileActivitySchema[];
+  toolActivity?: string;
 };
 export type VoiceEditorBridge = {
   capture: () => Promise<VoiceEditorContext>;

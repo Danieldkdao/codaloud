@@ -67,6 +67,7 @@ export const connectNativeVoice: ConnectVoice = (
     let agentIdentity: string | undefined;
     let closed = false;
     let ownedRequestId: string | undefined;
+    let turnClaimed = false;
     let unsubscribeTasks: (() => void) | undefined;
     let unsubscribePreferences: (() => void) | undefined;
     let closing: Promise<void> | undefined;
@@ -160,8 +161,10 @@ export const connectNativeVoice: ConnectVoice = (
       let beginning: Promise<unknown> | undefined;
       room.registerRpcMethod("codaloud.voice.context", async (data) => {
         const projectId = authorizeWorkspace(data);
+        if (beginning) await beginning;
         const current = inlineSession.getSnapshot();
         if (
+          turnClaimed ||
           !current ||
           current.projectId !== projectId ||
           ["answered", "accepted", "error"].includes(current.status)
@@ -175,6 +178,7 @@ export const connectNativeVoice: ConnectVoice = (
         if (!request || request.status !== "listening")
           throw new Error("Finish or cancel the current suggestion first.");
         ownedRequestId = request.id;
+        turnClaimed = true;
         return encodeVoicePayload(getVoiceContext(request));
       });
       room.registerRpcMethod("codaloud.voice.read", async (data) =>
@@ -361,7 +365,10 @@ export const connectNativeVoice: ConnectVoice = (
               inlineSession.getSnapshot()?.status !== "listening"
             )
               await inlineSession.begin(options.projectId);
-            if (enable) ownedRequestId = inlineSession.getSnapshot()?.id;
+            if (enable) {
+              ownedRequestId = inlineSession.getSnapshot()?.id;
+              turnClaimed = false;
+            }
             if (
               action === "cancel" &&
               ownedRequestId === inlineSession.getSnapshot()?.id

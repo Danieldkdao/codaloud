@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => null }));
+vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => createElement("div", { "data-testid": "task-status-bar" }) }));
 vi.mock("expo-sqlite/kv-store", () => ({ default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined) } }));
 // Native voice lifecycle is covered in the voice feature's own integration tests.
 vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({ useVoiceConversation: () => ({ visible: false }) }));
@@ -124,14 +124,14 @@ vi.mock("@/components/ui/button", () => ({
     createElement("button", { onClick: onPress, disabled, "aria-label": accessibilityLabel }, children),
 }));
 vi.mock("@expo/vector-icons", () => ({ Feather: {}, Ionicons: {} }));
-const Workspace = () => (
+const Workspace = ({ dockTab }: { dockTab?: "code" | "git" } = {}) => (
   <QueryClientProvider client={queryClient}>
   <ProjectWorkspaceDockHeightProvider>
     <ProjectWorkspaceBranchProvider>
       <ProjectWorkspaceChangesProvider>
         <GitScreen />
         <ProjectWorkspaceFileCreationProvider projectId="demo">
-          {activeTab === "code" || activeTab === "git" ? <ProjectWorkspaceDock /> : null}
+          {activeTab === "code" || activeTab === "git" ? <ProjectWorkspaceDock tab={dockTab} /> : null}
         </ProjectWorkspaceFileCreationProvider>
       </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
@@ -314,6 +314,17 @@ beforeEach(() => {
   act(() => root.render(createElement(Workspace)));
 });
 afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); });
+
+it.each([
+  { route: "git", dockTab: undefined, visible: false },
+  { route: "code", dockTab: undefined, visible: true },
+  { route: "code", dockTab: "git" as const, visible: false },
+  { route: "git", dockTab: "code" as const, visible: true },
+])("only shows task status in the Code dock with route $route and tab $dockTab", ({ route, dockTab, visible }) => {
+  activeTab = route;
+  act(() => root.render(<Workspace dockTab={dockTab} />));
+  expect(container.querySelector('[data-testid="task-status-bar"]') !== null).toBe(visible);
+});
 
 it("opens each supporting screen directly from Code without the workspace menu", () => {
   for (const [name, label] of [["files", "Files"], ["git", "Git"], ["agent", "Agent log"]]) {

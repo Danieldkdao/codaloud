@@ -6,6 +6,7 @@ import * as git from "@/features/projects/actions/git-actions";
 import * as publish from "@/features/projects/actions/publish-actions";
 import {
   executeWorkspace,
+  LocalWorkspaceError,
   withWorkspaceRevision,
 } from "@/services/local-workspace/execute";
 import { workspaceTools, type WorkspaceToolName } from "./workspace-tools";
@@ -49,11 +50,23 @@ const invoke = async (
           .slice(0, 8000),
       };
     }
-    case "listFiles":
-      return file.readProjectFilesAction(
+    case "listFiles": {
+      let failure: Error | undefined;
+      const result = await file.readProjectFilesAction(
         projectId,
         workspaceTools.listFiles.schema.parse(args),
+        undefined,
+        undefined,
+        (_status, _retryAfter, code, message) => {
+          failure = new LocalWorkspaceError(
+            code ?? "FILE_LIST_FAILED",
+            message ?? "Unable to list this folder.",
+          );
+        },
       );
+      if (failure) throw failure;
+      return result;
+    }
     case "searchFiles":
       return file.readProjectFilesAction(
         projectId,
@@ -216,7 +229,10 @@ export const executeDeviceTool = async (
       result === undefined ||
       (typeof result === "object" && "error" in result && result.error)
     )
-      throw new Error(
+      throw new LocalWorkspaceError(
+        result && "code" in result && typeof result.code === "string"
+          ? result.code
+          : "WORKSPACE_ACTION_FAILED",
         result && "message" in result
           ? String(result.message)
           : "The workspace action could not be completed.",

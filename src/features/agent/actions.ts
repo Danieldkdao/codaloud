@@ -1,6 +1,6 @@
-import { fetch } from "expo/fetch";
 import { authClient } from "@/lib/auth/auth-client";
 import { getBaseURL } from "@/lib/auth/utils";
+import { fetch } from "expo/fetch";
 import { z } from "zod";
 import type { AgentTaskRequestSchema, AgentToolResultSchema } from "./schemas";
 import { readTaskEvents } from "./task-stream";

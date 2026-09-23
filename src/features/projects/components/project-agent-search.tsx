@@ -4,23 +4,32 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
+import { cn } from "@/lib/utils";
 
 type ProjectAgentSearchProps = {
   query: string;
   onQueryChange: (query: string) => void;
+  floating?: boolean;
 };
 
 export const ProjectAgentSearch = ({
   query,
   onQueryChange,
+  floating = false,
 }: ProjectAgentSearchProps) => {
   const insets = useSafeAreaInsets();
   const presentation = formatWorkspaceSearch("agent");
 
   return (
     <View
-      className="bg-background"
+      testID="agent-activity-search"
+      pointerEvents="box-none"
+      className={cn(!floating && "bg-background")}
       style={{
+        position: floating ? "absolute" : undefined,
+        bottom: floating ? 0 : undefined,
+        left: floating ? 0 : undefined,
+        right: floating ? 0 : undefined,
         paddingTop: 8,
         paddingBottom: Math.max(insets.bottom, 12),
         paddingLeft: 16 + insets.left,

@@ -44,6 +44,11 @@ export const createDeviceExecutor = (dependencies: {
               ? error.message.slice(0, 1000)
               : "The action failed.",
           truncated: false,
+          ...(error instanceof Error &&
+          "code" in error &&
+          typeof error.code === "string"
+            ? { code: error.code.slice(0, 100) }
+            : {}),
         };
       }
       await dependencies.write(

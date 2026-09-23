@@ -34,10 +34,42 @@ it("passes a concise title with the instruction and accepts each turn only once"
   }
   expect(start).toHaveBeenCalledExactlyOnceWith(
     "List the files in the project root",
-    "call-one",
+    expect.stringMatching(/^[a-f0-9-]{36}$/),
     "Browse project",
   );
   stream.close();
+});
+it("assigns different request IDs to separate turns even if the provider reuses a tool-call ID", async () => {
+  const requests = new Map<string, string>();
+  const start = vi.fn(async (instruction: string, id: string) => {
+    if (!requests.has(id)) requests.set(id, instruction);
+    return { accepted: true, id };
+  });
+  mocks.reply.mockImplementation((messages, _id, _signal, tools) =>
+    (async function* () {
+      await tools.startTask.execute(
+        { instruction: messages.at(-1).content, title: "Create file" },
+        { toolCallId: "call_0" },
+      );
+      yield "Started";
+    })(),
+  );
+  const model = new VoiceLanguageModel("same-room", start);
+  const context = new llm.ChatContext();
+  for (const instruction of ["Create first.ts", "Create second.ts"]) {
+    context.addMessage({ role: "user", content: instruction });
+    const stream = model.chat({ chatCtx: context });
+    for await (const _ of stream) {
+      /* drain this turn */
+    }
+    stream.close();
+    context.addMessage({ role: "assistant", content: "Started" });
+  }
+  expect([...requests.values()]).toEqual([
+    "Create first.ts",
+    "Create second.ts",
+  ]);
+  expect(start.mock.calls[0][1]).not.toBe(start.mock.calls[1][1]);
 });
 it("adapts a committed text conversation to LiveKit response chunks", async () => {
   mocks.reply.mockReturnValue(

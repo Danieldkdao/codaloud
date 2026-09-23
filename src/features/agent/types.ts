@@ -4,5 +4,7 @@ export type AgentTaskRecord = {
   requestKey: string;
   event: AgentTaskEventSchema;
   accepted: boolean;
+  // Only untouched queued tasks may inherit confirmed preceding agent writes.
+  execution?: { started: boolean; revision: string };
   connectionError?: string;
 };

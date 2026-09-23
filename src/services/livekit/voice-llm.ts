@@ -25,6 +25,9 @@ export class VoiceLanguageModel extends llm.LLM {
   }
   chat = (options: Parameters<llm.LLM["chat"]>[0]) => {
     let accepted: Promise<unknown> | undefined;
+    // Provider call IDs can repeat in later turns. Our deduplication identity
+    // belongs to this turn, and stays stable for repeated calls within it.
+    const requestId = randomUUID();
     return new VoiceLanguageModelStream(
       this,
       {
@@ -58,8 +61,8 @@ export class VoiceLanguageModel extends llm.LLM {
                     "Self-contained user-authorized workspace or web task, 1–4000 characters. Include relevant paths, requested content, constraints and explicitly requested Git operations; do not assume editor context or invent authorization.",
                   ),
               }),
-              execute: ({ instruction, title }, { toolCallId }) =>
-                (accepted ??= this.startTask!(instruction, toolCallId, title)),
+              execute: ({ instruction, title }) =>
+                (accepted ??= this.startTask!(instruction, requestId, title)),
             }),
           }
         : undefined,

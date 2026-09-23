@@ -1,3 +1,9 @@
+import { MarkdownText } from "@/components/markdown-text";
+import { GlassSurface } from "@/components/ui/glass-surface";
+import { Icon } from "@/components/ui/icon";
+import { PText } from "@/components/ui/text";
+import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
+import { cn } from "@/lib/utils";
 import {
   lazy,
   Suspense,
@@ -6,7 +12,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import Animated, {
   FadeIn,
   LinearTransition,
@@ -15,13 +21,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { GlassSurface } from "@/components/ui/glass-surface";
-import { MarkdownText } from "@/components/markdown-text";
-import { Icon } from "@/components/ui/icon";
-import { PText } from "@/components/ui/text";
-import { cn } from "@/lib/utils";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
-import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
 import { formatVoiceStatus, formatVoiceTranscript } from "../lib/formatters";
 
 import { microphoneTrack } from "@/services/livekit/voice-track";

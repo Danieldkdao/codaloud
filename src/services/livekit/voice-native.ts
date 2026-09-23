@@ -1,18 +1,18 @@
-import { z } from "zod";
 import { agentTasks } from "@/features/agent/task-runtime";
 import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
-import { AudioSession } from "@livekit/react-native";
-import { mediaDevices } from "@livekit/react-native-webrtc";
-import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 import {
   createVoiceSession,
   deleteVoiceSession,
 } from "@/features/voice/actions";
 import { voiceAgentName, voiceControlMethod } from "@/features/voice/constants";
 import type { ConnectVoice, VoiceConnection } from "@/features/voice/types";
+import { AudioSession } from "@livekit/react-native";
+import { mediaDevices } from "@livekit/react-native-webrtc";
+import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
+import { z } from "zod";
+import { configureVoiceAudio, prepareVoiceAudio } from "./voice-audio";
 import { microphoneTrack, voiceAudioSession } from "./voice-track";
 import { createVoiceTranscriptReceiver } from "./voice-transcripts";
-import { configureVoiceAudio, prepareVoiceAudio } from "./voice-audio";
 
 configureVoiceAudio();
 

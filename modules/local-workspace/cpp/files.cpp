@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cerrno>
 #include <fcntl.h>
-#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <unistd.h>
@@ -110,6 +109,18 @@ static Json entry(const fs::path &root, const fs::path &path) {
           {"size", directory ? 0 : fs::file_size(path)}};
 }
 
+static void requireDirectory(const fs::path &path) {
+  const auto status = fs::status(path);
+  if (!fs::exists(status))
+    throw WorkspaceError(
+        "DIRECTORY_NOT_FOUND",
+        "This folder does not exist. Create its parent folders first.");
+  if (!fs::is_directory(status))
+    throw WorkspaceError(
+        "NOT_A_DIRECTORY",
+        "This path is a file, not a folder. Choose an existing folder.");
+}
+
 static std::string filename(const Json &args, const std::string &key) {
   const auto name = args.at(key).get<std::string>();
   if (name.empty() || name.size() > 255 ||
@@ -166,6 +177,7 @@ Json fileOperation(const fs::path &root, const std::string &operation,
                    const Json &args) {
   if (operation == "list-files") {
     const auto path = checkedPath(root, args.value("path", ""), true);
+    requireDirectory(path);
     Json files = Json::array();
     for (const auto &item : fs::directory_iterator(path)) {
       if (item.path().filename() == ".git" || item.is_symlink() ||
@@ -206,6 +218,7 @@ Json fileOperation(const fs::path &root, const std::string &operation,
   if (operation == "create-file" || operation == "rename-file" ||
       operation == "delete-file") {
     const auto parent = checkedPath(root, args.value("parentPath", ""), true);
+    requireDirectory(parent);
     const auto path = checkedPath(
         root, (parent.lexically_relative(root) / filename(args, "name"))
                   .lexically_normal()

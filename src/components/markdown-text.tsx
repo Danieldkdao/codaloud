@@ -1,3 +1,4 @@
+import { useThemeColor } from "@/hooks/use-theme";
 import { memo, useMemo } from "react";
 import { Alert, Linking } from "react-native";
 import {
@@ -5,7 +6,6 @@ import {
   type MarkdownStyle,
 } from "react-native-enriched-markdown";
 import remend from "remend";
-import { useThemeColor } from "@/hooks/use-theme";
 
 type MarkdownTextProps = { text: string; streaming?: boolean };
 

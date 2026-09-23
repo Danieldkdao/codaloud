@@ -1,13 +1,4 @@
-import { schemaTask, metadata, wait } from "@trigger.dev/sdk";
-import {
-  streamText,
-  dynamicTool,
-  tool,
-  stepCountIs,
-  InvalidToolInputError,
-  type ToolSet,
-} from "ai";
-import { z } from "zod";
+import { formatWorkspaceAction } from "@/features/agent/lib/formatters";
 import {
   agentTaskPayloadSchema,
   agentToolResultSchema,
@@ -16,11 +7,20 @@ import {
   workspaceTools,
   type WorkspaceToolName,
 } from "@/features/agent/tools/workspace-tools";
-import { formatWorkspaceAction } from "@/features/agent/lib/formatters";
-import { searchWeb, scrapePage } from "@/services/firecrawl/tools";
-import { openrouter } from "@/services/ai/server";
 import { voiceModel } from "@/features/voice/constants";
 import { workspaceInstructions } from "@/services/ai/prompts";
+import { openrouter } from "@/services/ai/server";
+import { scrapePage, searchWeb } from "@/services/firecrawl/tools";
+import { metadata, schemaTask, wait } from "@trigger.dev/sdk";
+import {
+  dynamicTool,
+  InvalidToolInputError,
+  stepCountIs,
+  streamText,
+  tool,
+  type ToolSet,
+} from "ai";
+import { z } from "zod";
 
 export const workspaceTask = schemaTask({
   id: "workspace-task",
@@ -92,7 +92,20 @@ export const workspaceTask = schemaTask({
                   "The device did not finish the action in time. Reopen the app and review the workspace.",
                 );
               const result = agentToolResultSchema.parse(completed.output);
-              if (!result.ok) throw new Error(result.text);
+              if (!result.ok) {
+                await log(
+                  `Failed ${formatWorkspaceAction(name as WorkspaceToolName)}: ${result.code ? `${result.code}: ` : ""}${result.text}`,
+                );
+                // A confirmed missing-folder read has no side effects. Let the
+                // model inspect the parent and create the requested path. Never
+                // recover writes, stale revisions, or unknown device failures.
+                if (
+                  name === "listFiles" &&
+                  result.code === "DIRECTORY_NOT_FOUND"
+                )
+                  return { ok: false, code: result.code, text: result.text };
+                throw new Error(result.text);
+              }
               if (definition.mutation) {
                 if (!result.revision)
                   throw new Error(
@@ -150,6 +163,37 @@ export const workspaceTask = schemaTask({
           return result;
         }),
     });
+    // Queue concurrency is released at durable waits. Acquire the device's
+    // per-project turn before the model sees files or plans any mutations.
+    // Queue time must not consume an individual action's five-minute timeout.
+    await log("Waiting for workspace");
+    const startToken = await wait.createToken({ timeout: "24h" });
+    try {
+      metadata.set("command", {
+        id: "begin-task",
+        tokenId: startToken.id,
+        name: "beginTask",
+        args: {},
+        revision,
+      });
+      await metadata.flush();
+      const started = await wait.forToken(startToken.id);
+      if (!started.ok)
+        throw new Error(
+          "The task could not start. Reopen the app and try again.",
+        );
+      const result = agentToolResultSchema.parse(started.output);
+      if (!result.ok) throw new Error(result.text);
+      if (!result.revision)
+        throw new Error(
+          "The device did not confirm the starting workspace revision.",
+        );
+      revision = result.revision;
+      signal.throwIfAborted();
+    } finally {
+      metadata.del("command");
+      await metadata.flush();
+    }
     await log("Working on your request");
     const response = streamText({
       model: openrouter.chat(voiceModel, { parallelToolCalls: false }),

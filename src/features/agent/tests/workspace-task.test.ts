@@ -3,6 +3,7 @@ import { MockLanguageModelV4 } from "ai/test";
 const mocks = vi.hoisted(() => ({
   model: vi.fn(),
   wait: vi.fn(),
+  begin: vi.fn(),
   search: vi.fn(),
   metadata: new Map<string, unknown>(),
 }));
@@ -15,7 +16,13 @@ vi.mock("@trigger.dev/sdk", () => ({
     del: (key: string) => mocks.metadata.delete(key),
     flush: async () => {},
   },
-  wait: { createToken: async () => ({ id: "token" }), forToken: mocks.wait },
+  wait: {
+    createToken: async () => ({ id: "token" }),
+    forToken: (...args: unknown[]) =>
+      (mocks.metadata.get("command") as { name?: string })?.name === "beginTask"
+        ? mocks.begin(...args)
+        : mocks.wait(...args),
+  },
 }));
 vi.mock("@/services/ai/server", () => ({ openrouter: { chat: mocks.model } }));
 vi.mock("@/services/firecrawl/tools", () => ({
@@ -38,6 +45,25 @@ const usage = {
 beforeEach(() => {
   mocks.metadata.clear();
   mocks.wait.mockReset();
+  mocks.begin.mockReset().mockResolvedValue({
+    ok: true,
+    output: { ok: true, text: "Ready", revision: "a".repeat(64) },
+  });
+});
+it("waits for the device's task turn before asking the model to plan", async () => {
+  mocks.begin.mockResolvedValue({
+    ok: true,
+    output: { ok: false, text: "Workspace changed manually." },
+  });
+  mocks.model.mockClear();
+  await expect(
+    run(
+      { instruction: "Create a file", revision: "a".repeat(64) },
+      { signal: new AbortController().signal },
+    ),
+  ).rejects.toThrow("Workspace changed manually.");
+  expect(mocks.model).not.toHaveBeenCalled();
+  expect(mocks.metadata.has("command")).toBe(false);
 });
 it.each([
   { requestedCalls: 24, batched: false },
@@ -142,6 +168,14 @@ it.each([
 ])(
   "validates $toolName input $input before dispatching to the device",
   async ({ toolName, input, path }) => {
+    mocks.begin.mockResolvedValue({
+      ok: true,
+      output: {
+        ok: true,
+        text: "Ready after earlier task",
+        revision: "b".repeat(64),
+      },
+    });
     let count = 0;
     mocks.model.mockReturnValue(
       new MockLanguageModelV4({
@@ -185,7 +219,7 @@ it.each([
       expect(mocks.metadata.get("command")).toMatchObject({
         id: "read-one",
         name: toolName,
-        revision: "a".repeat(64),
+        revision: "b".repeat(64),
         args: { path },
       });
       return {
@@ -250,6 +284,106 @@ it("fails instead of reporting success when the device wait expires", async () =
     ),
   ).rejects.toThrow();
   expect(mocks.metadata.has("command")).toBe(false);
+});
+
+it.each([
+  "DIRECTORY_NOT_FOUND",
+  "FILE_WRITE_FAILED",
+  "WORKSPACE_CHANGED",
+  "unknown",
+  "mutation",
+])("handles a folder probe failure safely: %s", async (failureCode) => {
+  let step = 0;
+  const firstTool = failureCode === "mutation" ? "createFile" : "listFiles";
+  const commands: { name: string; args: unknown; revision: string }[] = [];
+  const model = new MockLanguageModelV4({
+    doStream: async ({ prompt }) => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          step++;
+          if (step === 2) {
+            expect(JSON.stringify(prompt)).toContain("DIRECTORY_NOT_FOUND");
+            expect(JSON.stringify(prompt)).toContain("folder does not exist");
+          }
+          if (step <= 3) {
+            controller.enqueue({
+              type: "tool-call",
+              toolCallId: `step-${step}`,
+              toolName: step === 1 ? firstTool : "createFile",
+              input: JSON.stringify(
+                step === 1 && firstTool === "listFiles"
+                  ? { path: "tests" }
+                  : step === 2
+                    ? { parentPath: "", name: "tests", kind: "folder" }
+                    : { parentPath: "tests", name: "test2.ts", kind: "file" },
+              ),
+            });
+          } else {
+            controller.enqueue({ type: "text-start", id: "summary" });
+            controller.enqueue({
+              type: "text-delta",
+              id: "summary",
+              delta: "Created tests/test2.ts.",
+            });
+            controller.enqueue({ type: "text-end", id: "summary" });
+          }
+          controller.enqueue({
+            type: "finish",
+            finishReason: {
+              unified: step <= 3 ? "tool-calls" : "stop",
+              raw: step <= 3 ? "tool_calls" : "stop",
+            },
+            usage,
+          });
+          controller.close();
+        },
+      }),
+    }),
+  });
+  mocks.model.mockReturnValue(model);
+  mocks.wait.mockImplementation(async () => {
+    commands.push(mocks.metadata.get("command") as (typeof commands)[number]);
+    return {
+      ok: true,
+      output:
+        commands.length === 1
+          ? {
+              ok: false,
+              code:
+                failureCode === "mutation"
+                  ? "DIRECTORY_NOT_FOUND"
+                  : failureCode,
+              text: "This folder does not exist. Create its parent folders first.",
+            }
+          : {
+              ok: true,
+              text: "Created",
+              revision: (commands.length === 2 ? "b" : "c").repeat(64),
+            },
+    };
+  });
+  const result = run(
+    { instruction: "Create tests/test2.ts", revision: "a".repeat(64) },
+    { signal: new AbortController().signal },
+  );
+  if (failureCode === "DIRECTORY_NOT_FOUND") {
+    await expect(result).resolves.toEqual({
+      summary: "Created tests/test2.ts.",
+    });
+    expect(commands.map(({ name, revision }) => ({ name, revision }))).toEqual([
+      { name: "listFiles", revision: "a".repeat(64) },
+      { name: "createFile", revision: "a".repeat(64) },
+      { name: "createFile", revision: "b".repeat(64) },
+    ]);
+  } else {
+    await expect(result).rejects.toThrow(`A tool failed (${firstTool})`);
+    expect(commands).toHaveLength(1);
+  }
+  expect(mocks.metadata.has("command")).toBe(false);
+  expect(mocks.metadata.get("logs")).toEqual(
+    expect.arrayContaining([expect.stringContaining("folder does not exist")]),
+  );
 });
 
 it.each([

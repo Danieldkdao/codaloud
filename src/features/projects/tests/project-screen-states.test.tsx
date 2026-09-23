@@ -83,7 +83,9 @@ vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({
   useProjectWorkspaceBranch: () => ({ projectId: "project-one", gitTab: "changes", setGitTab: vi.fn() }),
 }));
 vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: vi.fn() }));
-vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));
+vi.mock("@/features/agent/hooks/use-agent-tasks", () => ({ useAgentTasks: () => [] }));
+vi.mock("@/features/agent/components/task-activity-card", () => ({ TaskActivityCard: () => null }));
+vi.mock("@/features/agent/components/task-activity-sheet", () => ({ TaskActivitySheet: () => null }));
 
 let container: HTMLDivElement;
 let root: Root;
@@ -107,17 +109,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-it.each([
-  { name: "Agent", Screen: AgentScreen, loading: "Loading activity", empty: "No activity yet" },
-])("previews loading for two seconds before showing empty content: $name", ({ Screen, loading, empty }) => {
-  act(() => root.render(createElement(Screen)));
-  expect(container.textContent).toContain(loading);
-  expect(container.textContent).not.toContain(empty);
-  act(() => vi.advanceTimersByTime(1999));
-  expect(container.textContent).toContain(loading);
-  act(() => vi.advanceTimersByTime(1));
-  expect(container.textContent).not.toContain(loading);
-  expect(container.textContent).toContain(empty);
+it("shows real empty Agent state without a mocked loading delay", () => {
+  act(() => root.render(createElement(AgentScreen)));
+  expect(container.textContent).not.toContain("Loading activity");
+  expect(container.textContent).toContain("No activity yet");
 });
 
 const renderCode = (path: string | null = "app/page.tsx") => {
@@ -261,9 +256,9 @@ it.each([
   expect(container.querySelector("textarea")).toBeNull();
 });
 
-it("clears the pending preview when the screen unmounts", () => {
+it("does not schedule a demo loading timer for Agent", () => {
   act(() => root.render(createElement(AgentScreen)));
-  expect(vi.getTimerCount()).toBe(1);
+  expect(vi.getTimerCount()).toBe(0);
   act(() => root.render(null));
   expect(vi.getTimerCount()).toBe(0);
 });

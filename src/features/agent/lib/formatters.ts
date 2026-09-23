@@ -56,10 +56,18 @@ export const formatWorkspaceActionIcon = (
     case "gitDeleteStash":
     case "gitDiscard":
       return "trash-2";
+    default:
+      throw new Error(`Unknown workspace tool name: ${name satisfies never}`);
   }
 };
 
-const formatActivityEntry = (text: string) => {
+const formatActivityEntry = (
+  text: string,
+): {
+  label: string;
+  state: "running" | "completed" | "info";
+  icon: IconProps<"Feather">["name"];
+} => {
   switch (text) {
     case "Searching the web":
       return {
@@ -118,6 +126,60 @@ export const formatTaskActivity = (logs: readonly string[]) => {
     else rows.push({ ...entry, id });
   });
   return rows;
+};
+
+export const formatTaskActivityStats = (logs: readonly string[]) => {
+  const actions = formatTaskActivity(logs).filter(
+    (entry) => entry.state !== "info",
+  );
+  const completed = actions.filter(
+    (entry) => entry.state === "completed",
+  ).length;
+  return {
+    actions: `${actions.length} ${actions.length === 1 ? "action" : "actions"}`,
+    completed: `${completed} completed`,
+  };
+};
+
+export const formatTaskActivityButton = (status: AgentTaskStatus) => {
+  switch (status) {
+    case "queued":
+    case "running":
+    case "waiting":
+      return "View Agent Activity";
+    case "completed":
+    case "failed":
+      return "View Full Activity";
+    default:
+      throw new Error(`Unknown task status: ${status satisfies never}`);
+  }
+};
+
+export const formatTaskActivityState = (
+  state: ReturnType<typeof formatTaskActivity>[number]["state"],
+  status: AgentTaskStatus,
+) => {
+  switch (state) {
+    case "info":
+      return null;
+    case "completed":
+      return "Completed";
+    case "running":
+      switch (status) {
+        case "failed":
+          return "Not completed";
+        case "completed":
+          return "No completion recorded";
+        case "queued":
+        case "running":
+        case "waiting":
+          return "Running";
+        default:
+          throw new Error(`Unknown task status: ${status satisfies never}`);
+      }
+    default:
+      throw new Error(`Unknown activity state: ${state satisfies never}`);
+  }
 };
 
 export const formatWorkspaceAction = (name: WorkspaceToolName) => {
@@ -180,6 +242,8 @@ export const formatWorkspaceAction = (name: WorkspaceToolName) => {
       return "Revert commit";
     case "publishRepository":
       return "Publish repository";
+    default:
+      throw new Error(`Unknown workspace tool name: ${name satisfies never}`);
   }
 };
 export const formatTaskStatus = (status: AgentTaskStatus) => {
@@ -214,6 +278,8 @@ export const formatTaskStatus = (status: AgentTaskStatus) => {
         icon: "alert-circle" as const,
         className: "text-destructive",
       };
+    default:
+      throw new Error(`Unknown task status: ${status satisfies never}`);
   }
 };
 export const formatTaskCounts = (records: readonly AgentTaskRecord[]) => {

@@ -108,6 +108,10 @@ export const handleAgentRequest = async (request: Request) => {
                   "EXPIRED",
                   "TIMED_OUT",
                 ].includes(update.status);
+              const command =
+                terminal || !update.metadata?.command
+                  ? null
+                  : agentCommandSchema.parse(update.metadata.command);
               const event = agentTaskEventSchema.parse({
                 id: runId,
                 status:
@@ -115,13 +119,15 @@ export const handleAgentRequest = async (request: Request) => {
                     ? "completed"
                     : terminal
                       ? "failed"
-                      : update.metadata?.command
-                        ? "waiting"
-                        : update.status === "QUEUED"
-                          ? "queued"
-                          : "running",
+                      : command?.name === "beginTask"
+                        ? "queued"
+                        : command
+                          ? "waiting"
+                          : update.status === "QUEUED"
+                            ? "queued"
+                            : "running",
                 logs: update.metadata?.logs ?? [],
-                command: terminal ? null : (update.metadata?.command ?? null),
+                command,
                 summary:
                   update.status === "COMPLETED"
                     ? update.output?.summary

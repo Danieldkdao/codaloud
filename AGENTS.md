@@ -5,6 +5,12 @@
 - Codaloud is exclusively an iOS and Android app. Web is not a current or future target; implement and verify application behavior for these two native platforms only. Do not add web-specific components, browser fallbacks, or web app setup.
 - Keep infrastructure required by the mobile app: Expo API routes and their server export configuration, OAuth browser sessions, and the CodeMirror editor embedded through Expo DOM/WebView, including its dependencies.
 
+## Native AbortSignal compatibility
+
+- In native app code and shared code reachable from it, use `new AbortController()`, `controller.abort()`, `signal.aborted`, and abort event listeners. Never use `signal.throwIfAborted()`, `AbortSignal.timeout()`, or `AbortSignal.any()` there; do not rely on `AbortSignal.abort()`, `signal.reason`, or custom abort reasons either. TypeScript DOM types and IDE autocomplete do not prove that the installed Expo/React Native runtime implements these APIs.
+- Check cancellation explicitly with `if (signal.aborted)` and handle or throw an appropriate error. Implement timeouts with `setTimeout(() => controller.abort(), milliseconds)` and clear the timer in `finally`. When forwarding cancellation, handle an already-aborted signal and remove listeners during cleanup. Reuse existing compatible helpers where available.
+- Verify other Web API methods against the installed native implementation before using them. Test cancellation paths with React Native's actual AbortController implementation, not only Node or happy-dom globals, which can hide unsupported methods. These restrictions apply to native execution; server-only Expo API routes, Trigger.dev tasks, and Node workers may use APIs supported by their server runtime.
+
 ## Required filenames — check before creating files and before finishing
 
 - Use lowercase kebab-case for every authored filename, including components, hooks, utilities, tests, scripts, and documentation. Separate words with hyphens: `project-filters.tsx`, `use-projects-filters.ts`, and `project-filters.test.tsx`.

@@ -1,25 +1,30 @@
-import Storage from "expo-sqlite/kv-store";
 import { randomUUID } from "expo-crypto";
+import Storage from "expo-sqlite/kv-store";
 import { z } from "zod";
 import {
-  createAgentTask,
   completeAgentCommand,
+  createAgentTask,
   subscribeAgentTask,
 } from "./actions";
 import { createDeviceExecutor } from "./device-executor";
+import {
+  agentTaskEventSchema,
+  agentTaskRequestSchema,
+  type AgentToolResultSchema,
+} from "./schemas";
 import { executeDeviceTool, readWorkspaceRevision } from "./tools/device-tools";
-import { agentTaskEventSchema, agentTaskRequestSchema } from "./schemas";
-import { flushAgentWorkspace, runAgentMutation } from "./workspace-access";
 import {
   workspaceTools,
   type WorkspaceToolName,
 } from "./tools/workspace-tools";
 import type { AgentTaskRecord } from "./types";
+import { flushAgentWorkspace, runAgentMutation } from "./workspace-access";
 
 let userId: string | null = null;
 let active = false;
 let generation = 0;
 let records: AgentTaskRecord[] = [];
+let snapshot: AgentTaskRecord[] = [];
 let hydrated: Promise<void> = Promise.resolve();
 let writes = Promise.resolve();
 let admissions = Promise.resolve();
@@ -28,7 +33,9 @@ const running = new Map<string, AbortController>();
 const finished = (record: AgentTaskRecord) =>
   record.event.status === "completed" || record.event.status === "failed";
 const publish = () => {
-  records = [...records];
+  // Workers retain mutable handles, but React must receive immutable snapshots.
+  // Reusing a handle hides new events from compiler-memoized task cards/sheets.
+  snapshot = records.map((record) => ({ ...record }));
   listeners.forEach((listener) => listener());
 };
 const persist = () => {
@@ -45,10 +52,71 @@ const update = (record: AgentTaskRecord, patch: Partial<AgentTaskRecord>) => {
   Object.assign(record, patch);
   publish();
 };
+const waitForTurn = (record: AgentTaskRecord, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const check = () => {
+      if (signal.aborted || !active || !records.includes(record)) {
+        cleanup();
+        reject(new Error("The workspace session changed."));
+      } else if (
+        records.find(
+          (entry) =>
+            entry.request.projectId === record.request.projectId &&
+            !finished(entry),
+        ) === record
+      ) {
+        cleanup();
+        resolve();
+      }
+    };
+    const cleanup = () => {
+      listeners.delete(check);
+      signal.removeEventListener("abort", check);
+    };
+    listeners.add(check);
+    signal.addEventListener("abort", check, { once: true });
+    check();
+  });
+const beginTask = async (
+  record: AgentTaskRecord,
+  signal: AbortSignal,
+): Promise<AgentToolResultSchema> => {
+  await waitForTurn(record, signal);
+  try {
+    const revision = record.execution?.revision ?? record.request.revision;
+    if (!record.execution?.started) {
+      await flushAgentWorkspace(record.request.projectId);
+      const currentRevision = await readWorkspaceRevision(
+        record.request.projectId,
+      );
+      // React Native's AbortSignal has aborted, but no throwIfAborted method.
+      if (signal.aborted) throw new Error("The workspace session changed.");
+      if (!active || !records.includes(record))
+        throw new Error("The workspace session changed.");
+      if (currentRevision !== revision)
+        throw new Error(
+          "The workspace changed outside the queued tasks. Review your edits and try again.",
+        );
+      update(record, { execution: { started: true, revision } });
+      // Persist the initial revision before acknowledging. Reconnecting replays
+      // this same baseline, never silently rebasing an already-started task.
+      await persist();
+    }
+    return { ok: true, text: "Workspace ready.", revision, truncated: false };
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return {
+      ok: false,
+      text: error instanceof Error ? error.message : "Workspace unavailable.",
+      truncated: false,
+    };
+  }
+};
 const execute = createDeviceExecutor({
   read: (key) => Storage.getItem(key),
   write: (key, value) => Storage.setItem(key, value),
   execute: async (runId, command) => {
+    const current = generation;
     const record = records.find((entry) => entry.event.id === runId);
     if (!record || !active || !userId)
       throw new Error(
@@ -57,11 +125,43 @@ const execute = createDeviceExecutor({
     await flushAgentWorkspace(record.request.projectId);
     if (!active || !records.includes(record))
       throw new Error("The workspace session changed.");
-    const action = () => executeDeviceTool(record.request.projectId, command);
-    return Object.hasOwn(workspaceTools, command.name) &&
-      workspaceTools[command.name as WorkspaceToolName].mutation
+    const action = () => {
+      // Acquiring the editor/save lock can yield after the session check above.
+      if (current !== generation || !active || !records.includes(record))
+        throw new Error("The workspace session changed.");
+      return executeDeviceTool(record.request.projectId, command);
+    };
+    const mutation =
+      Object.hasOwn(workspaceTools, command.name) &&
+      workspaceTools[command.name as WorkspaceToolName].mutation;
+    // Old in-flight runs have no start handshake; never rebase them after a read.
+    if (!record.execution?.started) {
+      update(record, {
+        execution: { started: true, revision: command.revision },
+      });
+      await persist();
+    }
+    const output = await (mutation
       ? runAgentMutation(record.request.projectId, action, command)
-      : action();
+      : action());
+    if (mutation && output.ok && output.revision && records.includes(record)) {
+      for (const pending of records.slice(records.indexOf(record) + 1)) {
+        if (
+          pending.request.projectId === record.request.projectId &&
+          !finished(pending) &&
+          pending.execution?.started === false &&
+          pending.execution.revision === command.revision
+        ) {
+          update(pending, {
+            execution: { started: false, revision: output.revision },
+          });
+        }
+      }
+      // Only a native-guarded success can advance queued baselines. A manual
+      // edit breaks this chain and is still rejected by beginTask/the native guard.
+      await persist();
+    }
+    return output;
   },
 });
 const resume = (record: AgentTaskRecord) => {
@@ -107,7 +207,10 @@ const resume = (record: AgentTaskRecord) => {
         if (event.command && !acknowledged.has(event.command.tokenId)) {
           // The receipt is durable before acknowledgement, so reconnecting never
           // reruns a completed commit, push, deletion, or file write.
-          const output = await execute(event.id, event.command);
+          const output =
+            event.command.name === "beginTask"
+              ? await beginTask(record, controller.signal)
+              : await execute(event.id, event.command);
           if (!controller.signal.aborted) {
             await completeAgentCommand(
               event.id,
@@ -142,7 +245,7 @@ const resume = (record: AgentTaskRecord) => {
   })();
 };
 export const agentTasks = {
-  getSnapshot: () => records,
+  getSnapshot: () => snapshot,
   subscribe: (listener: () => void) => {
     listeners.add(listener);
     return () => {
@@ -172,6 +275,12 @@ export const agentTasks = {
               requestKey: z.string(),
               event: agentTaskEventSchema,
               accepted: z.boolean(),
+              execution: z
+                .object({
+                  started: z.boolean(),
+                  revision: agentTaskRequestSchema.shape.revision,
+                })
+                .optional(),
             }),
           )
           .max(50);
@@ -229,6 +338,7 @@ export const agentTasks = {
         request: input,
         requestKey,
         accepted: false,
+        execution: { started: false, revision },
         event: {
           id: input.requestId,
           status: "queued",
@@ -236,17 +346,23 @@ export const agentTasks = {
           command: null,
         },
       };
-      records = records.filter((entry) => !finished(entry));
+      // Keep recent results visible when another task arrives. Only evict the
+      // oldest terminal records at the persisted store's 50-task limit.
+      while (records.length >= 50) {
+        const oldestFinished = records.findIndex(finished);
+        if (oldestFinished < 0) throw new Error("Task history is full.");
+        records.splice(oldestFinished, 1);
+      }
       records.push(record);
       publish();
       // Persist the request ID before contacting the backend. An uncertain POST is
       // resumed using the same idempotency key, not submitted as another job.
       await persist();
+      // Native AbortSignal has no static timeout; own and clean up this timer.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
-        const accepted = await createAgentTask(
-          input,
-          AbortSignal.timeout(12000),
-        );
+        const accepted = await createAgentTask(input, controller.signal);
         if (owner !== userId) throw new Error("Your session changed.");
         update(record, {
           accepted: true,
@@ -261,6 +377,8 @@ export const agentTasks = {
         });
         resume(record);
         throw error;
+      } finally {
+        clearTimeout(timeout);
       }
     });
     admissions = admission.then(

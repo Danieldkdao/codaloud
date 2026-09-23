@@ -23,6 +23,7 @@ export const agentTaskPayloadSchema = agentTaskRequestSchema.extend({
 export type AgentTaskPayloadSchema = z.infer<typeof agentTaskPayloadSchema>;
 export const agentToolResultSchema = z.object({
   ok: z.boolean(),
+  code: z.string().max(100).optional(),
   text: z.string().max(10000),
   revision: z
     .string()

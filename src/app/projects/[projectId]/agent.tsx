@@ -1,13 +1,15 @@
 import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { KeyboardAwareView } from "@/components/ui/keyboard-aware-view";
 import { ProjectAgentActivityList } from "@/features/projects/components/project-agent-activity-list";
 import { ProjectAgentSearch } from "@/features/projects/components/project-agent-search";
-import { demoAgentActivity } from "@/features/projects/data/demo-agent-activity";
-import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
-import { useWorkspaceLoadingPreview } from "@/features/projects/hooks/use-workspace-loading-preview";
+import { useAgentTasks } from "@/features/agent/hooks/use-agent-tasks";
 
 const AgentScreen = () => {
-  const isLoading = useWorkspaceLoadingPreview();
+  const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const tasks = useAgentTasks().filter(
+    (task) => task.request.projectId === projectId,
+  );
   const [query, setQuery] = useState("");
 
   return (
@@ -16,19 +18,7 @@ const AgentScreen = () => {
       className="flex-1 bg-background"
       style={{ flex: 1 }}
     >
-      {isLoading ? (
-        <ProjectWorkspaceState
-          isLoading
-          icon="activity"
-          title="Loading activity…"
-          description="Getting your requests and results ready."
-        />
-      ) : (
-        <ProjectAgentActivityList
-          activities={demoAgentActivity}
-          search={query}
-        />
-      )}
+      <ProjectAgentActivityList key={projectId} tasks={tasks} search={query} />
       <ProjectAgentSearch query={query} onQueryChange={setQuery} />
     </KeyboardAwareView>
   );

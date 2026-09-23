@@ -58,6 +58,12 @@ export const ProjectWorkspaceDock = ({
     <View
       testID="project-workspace-dock"
       collapsable={false}
+      onLayout={(event) => {
+        // Reserve the whole stack, including live tasks and the transcript, so
+        // the editor's animated accessory row always sits above visible content.
+        const height = event.nativeEvent.layout.height;
+        if (height > 0) setDockHeight(height);
+      }}
       style={{
         position: "absolute",
         // Android resizes the screen above its keyboard; hide the voice dock
@@ -71,17 +77,11 @@ export const ProjectWorkspaceDock = ({
         pointerEvents: "box-none",
       }}
     >
-      <TaskStatusBar projectId={branchSelection.projectId} />
+      {!isGit && <TaskStatusBar projectId={branchSelection.projectId} />}
       <VoiceTranscriptBubble conversation={conversation} />
       <View
         className="w-full"
         collapsable={false}
-        onLayout={(event) => {
-          // Measure only the controls for editor padding. The transcript remains
-          // inside the outer dock's touch bounds so Android can scroll it.
-          const height = event.nativeEvent.layout.height;
-          if (height > 0) setDockHeight(height);
-        }}
         style={{
           gap: 10,
           pointerEvents: "box-none",

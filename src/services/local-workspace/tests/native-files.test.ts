@@ -40,6 +40,33 @@ it("refuses stale saves without losing the current file", () => {
   expect(readFileSync(join(root, projectId, "file.txt"), "utf8")).toBe("newer");
 });
 
+it("identifies a missing folder when listing or creating a nested file", () => {
+  expect(call("list-files", { path: "tests" })).toMatchObject({
+    ok: false,
+    code: "DIRECTORY_NOT_FOUND",
+    message: expect.stringContaining("folder does not exist"),
+  });
+  expect(call("create-file", { parentPath: "tests", name: "test2.ts", kind: "file" })).toMatchObject({
+    ok: false,
+    code: "DIRECTORY_NOT_FOUND",
+    message: expect.stringContaining("folder does not exist"),
+  });
+  expect(existsSync(join(root, projectId, "tests"))).toBe(false);
+  expect(call("create-file", { parentPath: "", name: "tests", kind: "folder" }).ok).toBe(true);
+  expect(call("create-file", { parentPath: "tests", name: "test2.ts", kind: "file" }).ok).toBe(true);
+});
+
+it("distinguishes a file from a missing directory", () => {
+  writeFileSync(join(root, projectId, "tests"), "keep");
+  expect(call("list-files", { path: "tests" })).toMatchObject({
+    ok: false, code: "NOT_A_DIRECTORY",
+  });
+  expect(call("create-file", { parentPath: "tests", name: "test2.ts", kind: "file" })).toMatchObject({
+    ok: false, code: "NOT_A_DIRECTORY",
+  });
+  expect(readFileSync(join(root, projectId, "tests"), "utf8")).toBe("keep");
+});
+
 it.each(["../outside", "/outside", ".git/config", "src/../secret", "src/.GIT/config"])("rejects unsafe path %s", (path) => {
   expect(call("read-file", { path }).ok).toBe(false);
   expect(call("save-file", { path, content: "bad", expectedContentHash: hash("") }).ok).toBe(false);

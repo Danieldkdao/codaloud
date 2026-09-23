@@ -124,3 +124,59 @@ it("closes the response and unsubscribes immediately when the client aborts", as
   expect(await reader.read()).toEqual({ done: true, value: undefined });
   expect(unsubscribe).toHaveBeenCalledOnce();
 });
+it("streams queued handshakes and live action updates before completion", async () => {
+  mocks.retrieve.mockResolvedValue({ payload: { userId: "owner" } });
+  const command = {
+    id: "begin",
+    name: "beginTask",
+    args: {},
+    tokenId: "token",
+    revision: "a".repeat(64),
+  };
+  const unsubscribe = vi.fn();
+  let advance: () => void = () => {};
+  const next = new Promise<void>((resolve) => {
+    advance = resolve;
+  });
+  mocks.subscribe.mockReturnValue({
+    unsubscribe,
+    async *[Symbol.asyncIterator]() {
+      yield {
+        status: "EXECUTING",
+        metadata: { command, logs: ["Waiting for workspace"] },
+      };
+      await next;
+      yield {
+        status: "EXECUTING",
+        metadata: {
+          command: { ...command, name: "createFile" },
+          logs: ["Running: Create file"],
+        },
+      };
+      yield {
+        status: "COMPLETED",
+        metadata: { logs: ["Completed Create file"] },
+        output: { summary: "Created." },
+      };
+    },
+  });
+  const response = await handleAgentRequest(request("GET"));
+  const reader = response.body!.getReader();
+  const decode = (value: Uint8Array | undefined) =>
+    JSON.parse(new TextDecoder().decode(value));
+  expect(decode((await reader.read()).value)).toMatchObject({
+    status: "queued",
+    logs: ["Waiting for workspace"],
+  });
+  advance();
+  expect(decode((await reader.read()).value)).toMatchObject({
+    status: "waiting",
+    logs: ["Running: Create file"],
+  });
+  expect(decode((await reader.read()).value)).toMatchObject({
+    status: "completed",
+    summary: "Created.",
+  });
+  expect((await reader.read()).done).toBe(true);
+  expect(unsubscribe).toHaveBeenCalledOnce();
+});

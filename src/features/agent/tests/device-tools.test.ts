@@ -3,18 +3,25 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   read: vi.fn(),
   guard: vi.fn(),
+  list: vi.fn(),
 }));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   saveProjectFileContentAction: mocks.save,
   readProjectFileContentAction: mocks.read,
+  readProjectFilesAction: mocks.list,
 }));
 vi.mock("@/features/projects/actions/git-actions", () => ({}));
 vi.mock("@/features/projects/actions/publish-actions", () => ({}));
-vi.mock("@/services/local-workspace/execute", () => ({
+vi.mock("../../../../modules/local-workspace", () => ({
+  default: { execute: vi.fn() },
+}));
+vi.mock("@/services/local-workspace/execute", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   executeWorkspace: vi.fn(),
   withWorkspaceRevision: mocks.guard,
 }));
 import { executeDeviceTool } from "../tools/device-tools";
+import { createDeviceExecutor } from "../device-executor";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.read.mockResolvedValue({ content: "Old", path: "readme.md", size: 3 });
@@ -22,6 +29,44 @@ beforeEach(() => {
     const result = await action();
     throw new Error("Missing native revision");
   });
+});
+it("preserves a missing-folder result through execution and durable receipt replay", async () => {
+  mocks.list.mockImplementation(
+    async (_project, _input, _signal, _restoring, onFailure) => {
+      onFailure?.(
+        500,
+        null,
+        "DIRECTORY_NOT_FOUND",
+        "This folder does not exist.",
+      );
+      return null;
+    },
+  );
+  const receipts = new Map<string, string>();
+  const dependencies = {
+    read: async (key: string) => receipts.get(key) ?? null,
+    write: async (key: string, value: string) => {
+      receipts.set(key, value);
+    },
+    execute: (_run: string, command: Parameters<typeof executeDeviceTool>[1]) =>
+      executeDeviceTool("project", command),
+  };
+  const command = {
+    id: "list",
+    tokenId: "token",
+    name: "listFiles",
+    args: { path: "tests" },
+    revision: "a".repeat(64),
+  };
+  for (let delivery = 0; delivery < 2; delivery++) {
+    const executor = createDeviceExecutor(dependencies);
+    expect(await executor("run", command)).toMatchObject({
+      ok: false,
+      code: "DIRECTORY_NOT_FOUND",
+      text: "This folder does not exist.",
+    });
+  }
+  expect(mocks.list).toHaveBeenCalledOnce();
 });
 it("edits one exact excerpt while preserving the rest of a large file", async () => {
   const content = "before\n" + "unchanged\n".repeat(1500) + "after\n";

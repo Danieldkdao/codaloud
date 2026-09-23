@@ -5,6 +5,7 @@ import { View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TaskStatusBar } from "@/features/agent/components/task-status-bar";
+import { ImplementationPlanReview } from "@/features/agent/components/implementation-plan-review";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { useVoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
 import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
@@ -62,9 +63,6 @@ export const ProjectWorkspaceDock = ({
       }}
       style={{
         position: "absolute",
-        // Android resizes the screen above its keyboard; hide the voice dock
-        // there so the editor accessory is the only row touching the keyboard.
-        display: activeTab === "code" && keyboardFrame ? "none" : "flex",
         // Keep the controls above the native tab screen and its editor WebView.
         zIndex: 10,
         bottom: 0,
@@ -73,12 +71,27 @@ export const ProjectWorkspaceDock = ({
         pointerEvents: "box-none",
       }}
     >
-      {!isGit && <TaskStatusBar projectId={branchSelection.projectId} />}
-      <VoiceTranscriptBubble conversation={conversation} />
+      <View
+        style={{
+          display: activeTab === "code" && keyboardFrame ? "none" : "flex",
+        }}
+      >
+        {!isGit && <TaskStatusBar projectId={branchSelection.projectId} />}
+        <VoiceTranscriptBubble conversation={conversation} />
+      </View>
+      {!isGit && (
+        <ImplementationPlanReview
+          projectId={branchSelection.projectId}
+          triggerVisible={!keyboardFrame}
+        />
+      )}
       <View
         className="w-full"
         collapsable={false}
         style={{
+          // Keep the native review sheet mounted while its correction field has
+          // focus; only the editor's dock controls hide above the keyboard.
+          display: activeTab === "code" && keyboardFrame ? "none" : "flex",
           gap: 10,
           pointerEvents: "box-none",
           paddingLeft: horizontalPadding + insets.left,

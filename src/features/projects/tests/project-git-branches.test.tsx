@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => createElement("div", { "data-testid": "task-status-bar" }) }));
+vi.mock("@/features/agent/components/implementation-plan-review", () => ({ ImplementationPlanReview: () => null }));
 vi.mock("expo-sqlite/kv-store", () => ({ default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined) } }));
 // Native voice lifecycle is covered in the voice feature's own integration tests.
 vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({ useVoiceConversation: () => ({ visible: false }) }));

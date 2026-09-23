@@ -76,6 +76,9 @@ vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({
 vi.mock("@/features/agent/components/task-status-bar", () => ({
   TaskStatusBar: () => createElement("div", null, "Task status"),
 }));
+vi.mock("@/features/agent/components/implementation-plan-review", () => ({
+  ImplementationPlanReview: () => null,
+}));
 vi.mock("@/features/voice/components/voice-transcript-bubble", () => ({
   VoiceTranscriptBubble: () => createElement("div", null, "Transcript"),
 }));

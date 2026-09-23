@@ -59,6 +59,7 @@ vi.mock("@/components/ui/input", () => ({
   },
 }));
 vi.mock("@/components/ui/text", () => ({
+  HeadingText: ({ children }: any) => createElement("h2", null, children),
   PText: ({ children }: any) => createElement("p", null, children),
 }));
 vi.mock("@/components/markdown-text", () => ({
@@ -102,11 +103,11 @@ it("opens the Markdown plan automatically with fixed controls outside its bounde
   expect(scroll.textContent).toContain("greeting.ts");
   expect(scroll.querySelector("textarea")).toBeNull();
   expect(scroll.querySelector("button")).toBeNull();
-  expect(
-    container
-      .querySelector('[data-testid="implementation-plan-body"]')
-      ?.getAttribute("style"),
-  ).toContain("height");
+  const body = container.querySelector<HTMLElement>(
+    '[data-testid="implementation-plan-body"]',
+  )!;
+  expect(body.style.height).toBe("");
+  expect(body.style.maxHeight).toBe("600px");
   expect(mocks.approve).not.toHaveBeenCalled();
 });
 it("saves corrections and passes them to explicit approval", async () => {

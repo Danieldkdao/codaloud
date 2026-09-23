@@ -4,7 +4,7 @@ import { MarkdownText } from "@/components/markdown-text";
 import { Button } from "@/components/ui/button";
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Input } from "@/components/ui/input";
-import { PText } from "@/components/ui/text";
+import { HeadingText, PText } from "@/components/ui/text";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { useThemeColor } from "@/hooks/use-theme";
 import { agentPlans } from "../plan-runtime";
@@ -40,8 +40,10 @@ const PlanReview = ({
     setBusy(true);
     setError(undefined);
     try {
-      if (approve) await agentPlans.approve(plan.requestKey, details);
-      else await agentPlans.discard(plan.requestKey);
+      const action = approve
+        ? agentPlans.approve(plan.requestKey, details)
+        : agentPlans.discard(plan.requestKey);
+      await action;
     } catch (cause) {
       reportError(cause);
     } finally {
@@ -68,22 +70,23 @@ const PlanReview = ({
           testID="implementation-plan-body"
           className="gap-3 px-5 pt-3 pb-6"
           style={{
-            height: Math.max(
+            maxHeight: Math.max(
               240,
               Math.min(600, height * 0.76, availableHeight - 32),
             ),
           }}
         >
-          <PText
+          <HeadingText
             accessibilityRole="header"
-            className="text-xl font-semibold"
+            className="text-2xl font-semibold"
             numberOfLines={2}
           >
             Review implementation
-          </PText>
+          </HeadingText>
           <ScrollView
             testID="implementation-plan-scroll"
-            style={{ flex: 1, minHeight: 0 }}
+            // Fit short plans naturally; shrink only the plan when the sheet hits its cap.
+            style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
             contentContainerStyle={{ paddingBottom: 12 }}
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"

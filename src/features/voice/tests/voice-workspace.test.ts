@@ -82,3 +82,27 @@ it("overlays unsaved search results and rejects late reads after cancellation", 
   ).rejects.toThrow(/cancel/i);
   unregister();
 });
+it("clears tool progress and marks failed file reads without claiming a change", async () => {
+  const { request, unregister } = await begin();
+  mocks.read.mockResolvedValue(null);
+  await expect(
+    readVoiceWorkspace("p", {
+      id: request.id,
+      name: "readFile",
+      args: { path: "missing.ts" },
+    }),
+  ).rejects.toThrow();
+  expect(inlineSession.getSnapshot()?.files).toEqual([
+    { path: "missing.ts", status: "failed" },
+  ]);
+  mocks.list.mockRejectedValue(new Error("offline"));
+  await expect(
+    readVoiceWorkspace("p", {
+      id: request.id,
+      name: "listFiles",
+      args: { path: "" },
+    }),
+  ).rejects.toThrow();
+  expect(inlineSession.getSnapshot()?.toolActivity).toBeUndefined();
+  unregister();
+});

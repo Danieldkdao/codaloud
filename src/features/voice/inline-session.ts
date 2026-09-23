@@ -143,6 +143,14 @@ export const createInlineSession = () => {
           break;
         case "complete":
           if (request.status !== "generating") return false;
+          if (
+            !request.text &&
+            request.context?.activeFile?.from ===
+              request.context?.activeFile?.to
+          ) {
+            fail(event.id, "No code was suggested. Cancel and try again.");
+            return true;
+          }
           publish({ ...request, status: "ready" });
           break;
         case "answer":

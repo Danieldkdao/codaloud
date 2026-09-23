@@ -1,5 +1,6 @@
 import { registerAgentWorkspace } from "@/features/agent/workspace-access";
 import { useVoiceEditor } from "@/features/voice/hooks/use-voice-editor";
+import { inlineAcceptanceOperation } from "@/features/voice/constants";
 import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -63,18 +64,22 @@ const CodeScreen = () => {
   const query = useProjectFile(projectId, files.activeFilePath);
   const documents = useProjectEditorDocuments(files, query.data?.content);
   const { dockHeight } = useProjectWorkspaceDockHeight();
-  const { isWorkspaceBusy, branch } = useProjectWorkspaceBranch();
+  const { isWorkspaceBusy, branch, workspaceOperation, runWorkspaceOperation } =
+    useProjectWorkspaceBranch();
+  const editorBusy =
+    isWorkspaceBusy && workspaceOperation !== inlineAcceptanceOperation;
   const { isDarkMode } = useTheme();
   const { preferences } = useEditorPreferences();
   const editor = useRef<CodeEditorRef>(null);
   const voiceEditor = useVoiceEditor({
     projectId,
     branch,
-    busy: isWorkspaceBusy,
+    busy: editorBusy,
     activePath: files.activeFilePath,
     documentKey: documents.activeKey,
     editor,
     getOpenFiles: documents.getOpenFiles,
+    runWorkspaceOperation,
   });
   const voiceEditorRef = useRef(voiceEditor);
   voiceEditorRef.current = voiceEditor;
@@ -317,7 +322,7 @@ const CodeScreen = () => {
             filename={documents.editor?.path ?? ""}
             initialValue={documents.editor?.initialValue ?? ""}
             readOnly={
-              isWorkspaceBusy || !documents.activeKey || Boolean(closingPath)
+              editorBusy || !documents.activeKey || Boolean(closingPath)
             }
             colorScheme={isDarkMode ? "dark" : "light"}
             onReady={onReady}

@@ -5,6 +5,7 @@ import {
   type VoiceConversation,
 } from "./use-voice-conversation";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
+import { inlineAcceptanceOperation } from "../constants";
 
 export const WorkspaceVoiceContext = createContext<VoiceConversation | null>(
   null,
@@ -16,9 +17,11 @@ export const WorkspaceVoiceProvider = ({
 }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const pathname = usePathname();
-  const { branch, isWorkspaceBusy } = useProjectWorkspaceBranch();
+  const { branch, isWorkspaceBusy, workspaceOperation } =
+    useProjectWorkspaceBranch();
   const conversation = useVoiceConversation(
-    !isWorkspaceBusy && pathname.endsWith("/code"),
+    (!isWorkspaceBusy || workspaceOperation === inlineAcceptanceOperation) &&
+      pathname.endsWith("/code"),
     `${projectId}:${branch}:${pathname}`,
     projectId,
   );

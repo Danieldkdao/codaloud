@@ -10,6 +10,7 @@ import type {
   InlineSuggestionAction,
 } from "@/features/editor/types";
 import { inlineSession } from "../inline-session";
+import { inlineAcceptanceOperation } from "../constants";
 
 export const useVoiceEditor = (options: {
   projectId: string;
@@ -19,6 +20,10 @@ export const useVoiceEditor = (options: {
   documentKey?: string;
   editor: RefObject<CodeEditorRef | null>;
   getOpenFiles: () => { path: string; content: string }[];
+  runWorkspaceOperation: <T>(
+    label: string,
+    action: (assertCurrent: () => void) => Promise<T>,
+  ) => Promise<T>;
 }) => {
   const current = useRef(options);
   current.current = options;
@@ -63,6 +68,12 @@ export const useVoiceEditor = (options: {
           if (before.busy)
             throw new Error("Wait for the workspace operation to finish.");
           if (before.activePath && before.documentKey) await capture.flush();
+          // The history picker can display a branch that is not checked out.
+          const { readProjectGitCountsAction } =
+            await import("@/features/projects/actions/git-actions");
+          const checkout = await readProjectGitCountsAction(before.projectId);
+          if (!checkout)
+            throw new Error("Could not confirm the current branch.");
           const after = current.current;
           if (
             after.busy ||
@@ -79,7 +90,7 @@ export const useVoiceEditor = (options: {
               : null;
           return {
             projectId: after.projectId,
-            branch: after.branch ?? "",
+            branch: checkout.currentBranch ?? checkout.headSha ?? "",
             activeFile,
             openFiles: after
               .getOpenFiles()
@@ -101,36 +112,52 @@ export const useVoiceEditor = (options: {
         },
         apply: async (value, context) => {
           const file = context.activeFile;
-          if (
-            !file ||
-            current.current.busy ||
-            (current.current.branch ?? "") !== context.branch
-          )
-            return false;
-          pendingApply.current = {
-            value,
-            key: file.documentKey,
-            revision: file.revision,
-          };
-          try {
-            await apply.flush();
-            return true;
-          } finally {
-            pendingApply.current = null;
-          }
+          if (!file || current.current.busy) return false;
+          return current.current.runWorkspaceOperation(
+            inlineAcceptanceOperation,
+            async (assertCurrent) => {
+              const { readProjectGitCountsAction } =
+                await import("@/features/projects/actions/git-actions");
+              const checkout = await readProjectGitCountsAction(
+                context.projectId,
+              );
+              assertCurrent();
+              if (
+                !checkout ||
+                (checkout.currentBranch ?? checkout.headSha ?? "") !==
+                  context.branch ||
+                inlineSession.getSnapshot()?.id !== value.id
+              )
+                return false;
+              pendingApply.current = {
+                value,
+                key: file.documentKey,
+                revision: file.revision,
+              };
+              try {
+                await apply.flush();
+                return true;
+              } finally {
+                pendingApply.current = null;
+              }
+            },
+          );
         },
       }),
     [options.projectId, capture, apply],
   );
   useEffect(() => {
     const request = inlineSession.getSnapshot();
-    if (
-      request?.projectId === options.projectId &&
-      request.context &&
-      (request.context.branch !== (options.branch ?? "") || options.busy)
-    )
+    if (request?.projectId === options.projectId && options.busy)
       inlineSession.cancel();
-  }, [options.projectId, options.branch, options.busy]);
+  }, [options.projectId, options.busy]);
+  useEffect(
+    () => () => {
+      if (inlineSession.getSnapshot()?.projectId === options.projectId)
+        inlineSession.cancel();
+    },
+    [options.projectId, options.branch],
+  );
   return {
     onContext: async (id: string, value: EditorSnapshot | null) => {
       snapshot.current = value;

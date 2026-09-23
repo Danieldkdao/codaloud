@@ -92,3 +92,37 @@ it("answers questions without generating previews and refuses duplicate or out o
     session.receive({ id: next.id, type: "delta", offset: 3, text: "x" }),
   ).toThrow(/order/);
 });
+it("rejects an empty caret insertion while allowing an explicit selection deletion", async () => {
+  const { session, capture } = setup();
+  capture.mockResolvedValueOnce({
+    ...context(),
+    activeFile: { ...context().activeFile, from: 2, to: 2 },
+  });
+  const request = await session.begin("project");
+  session.receive({ id: request.id, type: "start" });
+  session.receive({ id: request.id, type: "complete" });
+  expect(session.getSnapshot()?.status).toBe("error");
+  session.cancel();
+  const deletion = await session.begin("project");
+  session.receive({ id: deletion.id, type: "start" });
+  session.receive({ id: deletion.id, type: "complete" });
+  expect(session.getSnapshot()?.status).toBe("ready");
+});
+it("survives 250 cancel and restart cycles with delayed updates and revision changes", async () => {
+  const { session, apply } = setup();
+  let oldId = "old";
+  for (let index = 0; index < 250; index++) {
+    const request = await session.begin("project");
+    expect(session.receive({ id: oldId, type: "error", message: "late" })).toBe(
+      false,
+    );
+    session.receive({ id: request.id, type: "start" });
+    session.receive({ id: request.id, type: "delta", offset: 0, text: "new" });
+    if (index % 2) session.invalidate("doc", 2);
+    else session.cancel();
+    expect(session.receive({ id: request.id, type: "complete" })).toBe(false);
+    await session.accept(request.id);
+    oldId = request.id;
+  }
+  expect(apply).not.toHaveBeenCalled();
+});

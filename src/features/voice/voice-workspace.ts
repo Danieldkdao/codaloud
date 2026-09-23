@@ -84,81 +84,96 @@ export const readVoiceWorkspace = async (
   check();
   const { readProjectFileContentAction, readProjectFilesAction } =
     await import("@/features/projects/actions/file-actions");
-  switch (input.name) {
-    case "readFile": {
-      const args = inlineReadSchema.parse(input.args);
-      inlineSession.activity(input.id, { path: args.path, status: "reading" });
-      const active = request!.context?.activeFile;
-      const buffer =
-        active?.path === args.path
-          ? active
-          : request!.context?.openFiles.find((file) => file.path === args.path);
-      const file =
-        buffer ?? (await readProjectFileContentAction(projectId, args.path));
-      check();
-      if (!file) throw new Error("The file could not be read.");
-      inlineSession.activity(input.id, { path: args.path, status: "read" });
-      const content = file.content.replace(/\r\n/g, "\n");
-      const excerpt = content.slice(args.offset, args.offset + args.length);
-      return {
-        path: args.path,
-        source: buffer ? "editor" : "disk",
-        offset: args.offset,
-        content: excerpt,
-        nextOffset:
-          args.offset + excerpt.length < content.length
-            ? args.offset + excerpt.length
-            : null,
-        totalLength: content.length,
-      };
+  let readingPath: string | undefined;
+  try {
+    switch (input.name) {
+      case "readFile": {
+        const args = inlineReadSchema.parse(input.args);
+        readingPath = args.path;
+        inlineSession.activity(input.id, {
+          path: args.path,
+          status: "reading",
+        });
+        const active = request!.context?.activeFile;
+        const buffer =
+          active?.path === args.path
+            ? active
+            : request!.context?.openFiles.find(
+                (file) => file.path === args.path,
+              );
+        const file =
+          buffer ?? (await readProjectFileContentAction(projectId, args.path));
+        check();
+        if (!file) throw new Error("The file could not be read.");
+        inlineSession.activity(input.id, { path: args.path, status: "read" });
+        const content = file.content.replace(/\r\n/g, "\n");
+        const excerpt = content.slice(args.offset, args.offset + args.length);
+        return {
+          path: args.path,
+          source: buffer ? "editor" : "disk",
+          offset: args.offset,
+          content: excerpt,
+          nextOffset:
+            args.offset + excerpt.length < content.length
+              ? args.offset + excerpt.length
+              : null,
+          totalLength: content.length,
+        };
+      }
+      case "searchFiles": {
+        inlineSession.activity(input.id, "Finding references…");
+        const args = workspaceTools.searchFiles.schema.parse(input.args);
+        const result = await readProjectFilesAction(projectId, {
+          ...args,
+          pageSize: Math.min(args.pageSize, 10),
+        });
+        check();
+        if (!result) throw new Error("Search failed.");
+        inlineSession.activity(input.id, null);
+        const buffers = request!.context?.openFiles ?? [];
+        const search = args.search.toLowerCase();
+        const openMatches = buffers.filter(
+          (file) =>
+            (!args.path || file.path.startsWith(`${args.path}/`)) &&
+            ((args.scope !== "content" &&
+              file.path.toLowerCase().includes(search)) ||
+              (args.scope !== "title" &&
+                file.content.toLowerCase().includes(search))),
+        );
+        const files = [
+          ...openMatches.map((file) => ({ path: file.path, source: "editor" })),
+          ...result.files
+            .filter(
+              (file) => !buffers.some((buffer) => buffer.path === file.path),
+            )
+            .map((file) => ({ path: file.path, source: "disk" })),
+        ];
+        return {
+          files: files.slice(0, 10),
+          nextCursor: result.nextCursor,
+          truncated: files.length > 10 || Boolean(result.nextCursor),
+        };
+      }
+      case "listFiles": {
+        inlineSession.activity(input.id, "Browsing files…");
+        const args = workspaceTools.listFiles.schema.parse(input.args);
+        const files = await readProjectFilesAction(projectId, args);
+        check();
+        if (!files) throw new Error("The folder could not be read.");
+        inlineSession.activity(input.id, null);
+        return {
+          files: files.slice(0, 30).map(({ path, isDir }) => ({ path, isDir })),
+          truncated: files.length > 30,
+        };
+      }
+      default:
+        throw new Error("Only read-only voice tools are allowed.");
     }
-    case "searchFiles": {
-      inlineSession.activity(input.id, "Finding references…");
-      const args = workspaceTools.searchFiles.schema.parse(input.args);
-      const result = await readProjectFilesAction(projectId, {
-        ...args,
-        pageSize: Math.min(args.pageSize, 10),
-      });
-      check();
-      if (!result) throw new Error("Search failed.");
-      inlineSession.activity(input.id, null);
-      const buffers = request!.context?.openFiles ?? [];
-      const search = args.search.toLowerCase();
-      const openMatches = buffers.filter(
-        (file) =>
-          (!args.path || file.path.startsWith(`${args.path}/`)) &&
-          ((args.scope !== "content" &&
-            file.path.toLowerCase().includes(search)) ||
-            (args.scope !== "title" &&
-              file.content.toLowerCase().includes(search))),
-      );
-      const files = [
-        ...openMatches.map((file) => ({ path: file.path, source: "editor" })),
-        ...result.files
-          .filter(
-            (file) => !buffers.some((buffer) => buffer.path === file.path),
-          )
-          .map((file) => ({ path: file.path, source: "disk" })),
-      ];
-      return {
-        files: files.slice(0, 10),
-        nextCursor: result.nextCursor,
-        truncated: files.length > 10 || Boolean(result.nextCursor),
-      };
-    }
-    case "listFiles": {
-      inlineSession.activity(input.id, "Browsing files…");
-      const args = workspaceTools.listFiles.schema.parse(input.args);
-      const files = await readProjectFilesAction(projectId, args);
-      check();
-      if (!files) throw new Error("The folder could not be read.");
-      inlineSession.activity(input.id, null);
-      return {
-        files: files.slice(0, 30).map(({ path, isDir }) => ({ path, isDir })),
-        truncated: files.length > 30,
-      };
-    }
-    default:
-      throw new Error("Only read-only voice tools are allowed.");
+  } catch (error) {
+    if (readingPath)
+      inlineSession.activity(input.id, { path: readingPath, status: "failed" });
+    throw error;
+  } finally {
+    inlineSession.activity(input.id, null);
   }
 };

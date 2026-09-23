@@ -11,21 +11,28 @@ const actions: {
   { label: "Format code", icon: "format-align-left" },
   { label: "Organize imports", icon: "sort-alphabetical-ascending" },
   { label: "Find in file", icon: "magnify" },
-  { label: "Replace in file", icon: "find-replace" },
+  { label: "Undo", icon: "undo" },
+  { label: "Redo", icon: "redo" },
 ];
 
 export const ProjectCodeToolbar = ({
   onFind,
-  onReplace,
   onFormat,
   onOrganize,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   disabled = false,
   ...props
 }: ComponentProps<typeof ProjectCodeStatus> & {
   onFind?: () => void;
-  onReplace?: () => void;
   onFormat?: () => void;
   onOrganize?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   disabled?: boolean;
 }) => {
   const run = (label: string) => {
@@ -33,8 +40,11 @@ export const ProjectCodeToolbar = ({
       case "Find in file":
         onFind?.();
         break;
-      case "Replace in file":
-        onReplace?.();
+      case "Undo":
+        onUndo?.();
+        break;
+      case "Redo":
+        onRedo?.();
         break;
       case "Format code":
         onFormat?.();
@@ -59,21 +69,32 @@ export const ProjectCodeToolbar = ({
         gap: 8,
       }}
     >
-      <View
-        testID="editor-status-measure"
-        onLayout={({ nativeEvent }) =>
-          setBadgeHeight(nativeEvent.layout.height)
-        }
-      >
-        <ProjectCodeStatus {...props} />
-      </View>
+      {props.analysis ? (
+        <View
+          testID="editor-status-measure"
+          onLayout={({ nativeEvent }) =>
+            setBadgeHeight(nativeEvent.layout.height)
+          }
+        >
+          <ProjectCodeStatus {...props} />
+        </View>
+      ) : null}
       {actions.map((action) => (
         <GlassSurface key={action.label} borderRadius={badgeHeight / 2}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={action.label}
-            disabled={disabled}
-            accessibilityState={{ disabled }}
+            disabled={
+              disabled ||
+              (action.label === "Undo" && !canUndo) ||
+              (action.label === "Redo" && !canRedo)
+            }
+            accessibilityState={{
+              disabled:
+                disabled ||
+                (action.label === "Undo" && !canUndo) ||
+                (action.label === "Redo" && !canRedo),
+            }}
             onPress={() => run(action.label)}
             className="items-center justify-center rounded-full active:opacity-60"
             style={{ width: badgeHeight, height: badgeHeight }}

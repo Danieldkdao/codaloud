@@ -11,6 +11,7 @@ import AgentScreen from "@/app/projects/[projectId]/agent";
 import CodeScreen from "@/app/projects/[projectId]/code";
 import GitScreen from "@/app/projects/[projectId]/git";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
+import type { SaveSnapshot } from "../lib/project-file-save-document";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
 const selection = vi.hoisted(() => ({ activeFilePath: null as string | null, version: 0, openFile: vi.fn(), closeFile: vi.fn(), getFileVersion: () => 0, get openFilePaths() { return new Set(selection.activeFilePath ? [selection.activeFilePath] : []); }, refreshFile: vi.fn() }));
@@ -29,6 +30,7 @@ const saveFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
 const readFile = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
+const showAlert = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/keyboard-aware-view", () => ({ KeyboardAwareView: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
@@ -38,7 +40,7 @@ vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readPr
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn(), navigate }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths }: { paths: string[] }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" ")) }));
+vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, activePath, save, onRetry, readError }: { paths: string[]; activePath: string | null; save?: SaveSnapshot; onRetry?: () => void; readError?: boolean }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" "), save?.status === "error" ? createElement("button", { "aria-label": `${readError ? "Retry opening" : "Retry saving"} ${activePath}`, onClick: onRetry }, "Error") : save?.status === "saved" ? createElement("button", { "aria-label": `Close ${activePath}` }, "X") : createElement("span", { role: "progressbar" })) }));
 vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: ({ path }: { path: string }) => createElement("button", { "aria-label": "Editor tools", "data-path": path }) }));
 vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
   useEffect(() => { state.editorMounts++; }, []);
@@ -58,6 +60,7 @@ vi.mock("@/components/app-wrapper", () => ({ AppWrapper: ({ children }: { childr
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
+  Alert: { alert: showAlert },
   ScrollView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove: vi.fn() }) },
@@ -97,6 +100,7 @@ beforeEach(() => {
   Object.assign(fileQuery, { data: undefined, isPending: true, isError: false, isFetching: true, error: null });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   saveFile.mockReset();
+  showAlert.mockReset();
   navigate.mockClear();
   state.empty = false;
   state.focus = 0;
@@ -263,38 +267,39 @@ it("does not schedule a demo loading timer for Agent", () => {
   act(() => root.render(null));
   expect(vi.getTimerCount()).toBe(0);
 });
-it("shows loading, debounced saving, success, and failure icons after the diagnostic counts", async () => {
+it("shows save progress in the active tab, then offers retry after failure", async () => {
   renderCode();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   finishLoading();
   renderCode();
   await act(async () => state.ready!());
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')?.getAttribute("data-class")).toBe("text-foreground");
+  expect(container.querySelector('[aria-label="Close app/page.tsx"]')).not.toBeNull();
   const diagnostic = { from: 0, to: 1, message: "Problem", code: 1, severity: "error" as const };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [diagnostic] }));
   const icons = [...container.querySelectorAll('[data-icon]')].map((icon) => icon.getAttribute("data-icon"));
-  expect(icons.slice(-5)).toEqual(["cloud-check-outline", "format-align-left", "sort-alphabetical-ascending", "magnify", "find-replace"]);
+  expect(icons.slice(-5)).toEqual(["format-align-left", "sort-alphabetical-ascending", "magnify", "undo", "redo"]);
   let finish!: (value: unknown) => void;
   saveFile.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await act(async () => state.change!("edited"));
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Close app/page.tsx"]')).toBeNull();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(3000));
   expect(saveFile).toHaveBeenCalledOnce();
   await act(async () => finish({ error: true, message: "Save failed." }));
-  expect(container.querySelector('[data-icon="alert-circle"]')?.getAttribute("data-class")).toBe("text-foreground");
+  expect(container.querySelector('[aria-label="Retry saving app/page.tsx"]')).not.toBeNull();
+  expect(showAlert).toHaveBeenCalledWith("Couldn't save this file", "Save failed.", expect.any(Array));
   expect(container.querySelector("textarea")?.value).toBe("const value = 1;");
   saveFile.mockResolvedValueOnce({ error: false, message: "Saved.", data: { path: "app/page.tsx", size: 6, contentHash: "a".repeat(64) } });
-  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t save file. Tap to retry."]')!.click());
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Retry saving app/page.tsx"]')!.click());
   expect(saveFile).toHaveBeenCalledTimes(2);
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Close app/page.tsx"]')).not.toBeNull();
 });
 
 
-it("shows file read failures in the badge and retries the read", () => {
+it("shows file read failures in the active tab and retries the read", () => {
   Object.assign(fileQuery, { data: undefined, isError: true, isFetching: false, error: new Error("File unavailable") });
   renderCode();
-  const retry = container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t load file. Tap to retry."]');
+  const retry = container.querySelector<HTMLButtonElement>('button[aria-label="Retry opening app/page.tsx"]');
   expect(retry).not.toBeNull();
   act(() => retry!.click());
   expect(fileQuery.refetch).toHaveBeenCalledOnce();

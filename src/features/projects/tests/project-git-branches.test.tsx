@@ -504,7 +504,9 @@ it("shows only the active screen's controls in the lower bar", () => {
     expect(labels().includes("Microphone")).toBe(tab === "code");
     expect(container.textContent).not.toContain("Current branch:");
     if (tab === "code") {
-      expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools", "Undo", "Redo"]));
+      expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools"]));
+      expect(labels()).not.toContain("Undo");
+      expect(labels()).not.toContain("Redo");
       expect(labels()).not.toContain("Previous file");
       expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
@@ -525,7 +527,7 @@ it.each(["app.ts", null])("opens editor settings from the right toolbar with act
   const dock = container.querySelector('[data-testid="project-workspace-dock"]')!;
   expect(dock.querySelector('[aria-label="Editor tools"]')).not.toBeNull();
   expect([...dock.querySelectorAll("button[aria-label]")].map((button) => button.getAttribute("aria-label"))).toEqual([
-    "Files", "Git", "Agent log", "Microphone", "Undo", "Redo", "Editor tools",
+    "Files", "Git", "Microphone", "Agent log", "Editor tools",
   ]);
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Editor tools");

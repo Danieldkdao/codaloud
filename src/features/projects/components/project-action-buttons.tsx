@@ -1,4 +1,3 @@
-import { UndoRedoButtons } from "@/features/editor/components/undo-redo-buttons";
 import { type RefObject } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -32,7 +31,7 @@ export const ProjectActionButtonsLeft = ({
     case "code":
       return (
         <>
-          {(["files", "git", "agent"] as const).map((destination) => {
+          {(["files", "git"] as const).map((destination) => {
             const presentation = formatWorkspaceTab(destination);
             return (
               <Pressable
@@ -89,12 +88,31 @@ export const ProjectActionButtonsRight = ({
   onGitSearchOpenChange,
 }: ProjectActionButtonsRightProps) => {
   const { projectId, gitTab } = useProjectWorkspaceBranch();
+  const router = useRouter();
   const { commitSelection } = useProjectWorkspaceChanges();
+  const agent = formatWorkspaceTab("agent");
   switch (tab) {
     case "code":
       return (
         <>
-          <UndoRedoButtons />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={agent.label}
+            onPress={() =>
+              router.navigate({
+                pathname: "/projects/[projectId]/agent",
+                params: { projectId },
+              })
+            }
+            className="h-13 min-w-11 max-w-16 flex-1 items-center justify-center rounded-full active:bg-secondary"
+          >
+            <Icon
+              {...agent.icon}
+              size={22}
+              accessible={false}
+              className="text-foreground"
+            />
+          </Pressable>
           <ProjectCodeTools key={projectId} />
         </>
       );

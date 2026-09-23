@@ -3,7 +3,6 @@ import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar"
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createEditorFlush } from "@/features/editor/flush";
-import { useEditorControls } from "@/features/editor/use-editor-controls";
 import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
 import type {
@@ -124,6 +123,23 @@ const CodeScreen = () => {
     !isWorkspaceBusy &&
     !closingPath &&
     interaction?.key === documents.activeKey;
+  useEffect(() => {
+    if (documents.activeKey && documents.status.status === "error")
+      Alert.alert(
+        "Couldn't save this file",
+        documents.status.message ??
+          "Your changes are still in the editor. Try saving again.",
+        [
+          { text: "Later", style: "cancel" },
+          { text: "Try again", onPress: documents.retry },
+        ],
+      );
+  }, [
+    documents.activeKey,
+    documents.status.status,
+    documents.status.message,
+    documents.retry,
+  ]);
   const showKeyboardAccessory = Boolean(
     canShowEditorControls &&
     !searchOpen &&
@@ -133,15 +149,6 @@ const CodeScreen = () => {
   const showSelectionMenu = Boolean(
     canShowEditorControls && interaction?.hasSelection,
   );
-  const setControls = useEditorControls()?.setState;
-  useEffect(() => {
-    setControls?.({
-      canUndo: Boolean(canShowEditorControls && interaction?.commands?.canUndo),
-      canRedo: Boolean(canShowEditorControls && interaction?.commands?.canRedo),
-      run: runCommand,
-    });
-    return () => setControls?.(null);
-  }, [setControls, canShowEditorControls, interaction?.commands, runCommand]);
   const bottomInset = dockHeight + badgeHeight + 20;
   const activeAnalysis =
     analysis?.key === documents.activeKey
@@ -231,6 +238,17 @@ const CodeScreen = () => {
           onOpenFile={openFile}
           disabled={isWorkspaceBusy}
           closingPath={closingPath}
+          save={
+            documents.activeKey
+              ? documents.status
+              : query.isError && !query.isFetching
+                ? { status: "error", message: query.error.message }
+                : { status: "loading" }
+          }
+          onRetry={
+            documents.activeKey ? documents.retry : () => void query.refetch()
+          }
+          readError={!documents.activeKey && query.isError}
         />
       ) : null}
       <View className="flex-1">
@@ -368,26 +386,15 @@ const CodeScreen = () => {
                 setReplaceOpen(false);
                 setSearchOpen(true);
               }}
-              onReplace={() => {
-                setReplaceOpen(true);
-                setSearchOpen(true);
-              }}
-              readError={!documents.activeKey && query.isError}
-              status={
-                !documents.activeKey && query.isError && !query.isFetching
-                  ? { status: "error", message: query.error.message }
-                  : isReady
-                    ? documents.status
-                    : { status: "loading" }
-              }
+              onUndo={() => runCommand("undo")}
+              onRedo={() => runCommand("redo")}
+              canUndo={Boolean(
+                canShowEditorControls && interaction?.commands?.canUndo,
+              )}
+              canRedo={Boolean(
+                canShowEditorControls && interaction?.commands?.canRedo,
+              )}
               analysis={documents.activeKey ? activeAnalysis : undefined}
-              onRetry={
-                documents.activeKey
-                  ? documents.retry
-                  : () => {
-                      void query.refetch();
-                    }
-              }
             />
           )}
         </EditorBottomBar>

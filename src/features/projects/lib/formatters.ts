@@ -21,7 +21,6 @@ import type { CreateProjectSchema } from "@/features/projects/actions/schemas";
 import type { ProjectFileKind } from "@/features/projects/actions/file-schemas";
 import type { DiagnosticSeverity } from "@/features/projects/actions/code-intelligence-schemas";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
-import type { ProjectFileSaveStatus } from "@/features/projects/hooks/use-project-file-save";
 import type { ProjectBranchSource } from "@/features/projects/hooks/use-project-workspace-branch";
 import type {
   ProjectSortField,
@@ -34,49 +33,6 @@ export const formatProjectBranchSource = (source: ProjectBranchSource) => {
       return { title: "Local branches", icon: "git-branch" as const };
     case "remote":
       return { title: "Remote branches", icon: "cloud" as const };
-  }
-};
-
-export const formatProjectFileSaveStatus = (status: ProjectFileSaveStatus) => {
-  switch (status) {
-    case "loading":
-      return {
-        label: "Loading file…",
-        busy: true,
-        icon: { family: "Feather" as const, name: "refresh-cw" as const },
-        className: "text-muted-foreground",
-      };
-    case "pending":
-      return {
-        label: "Changes waiting to save…",
-        busy: true,
-        icon: { family: "Feather" as const, name: "refresh-cw" as const },
-        className: "text-muted-foreground",
-      };
-    case "saving":
-      return {
-        label: "Saving file…",
-        busy: true,
-        icon: { family: "Feather" as const, name: "refresh-cw" as const },
-        className: "text-muted-foreground",
-      };
-    case "saved":
-      return {
-        label: "File saved",
-        busy: false,
-        icon: {
-          family: "MaterialCommunityIcons" as const,
-          name: "cloud-check-outline" as const,
-        },
-        className: "text-success-foreground",
-      };
-    case "error":
-      return {
-        label: "Couldn't save file. Tap to retry.",
-        busy: false,
-        icon: { family: "Feather" as const, name: "alert-circle" as const },
-        className: "text-destructive",
-      };
   }
 };
 

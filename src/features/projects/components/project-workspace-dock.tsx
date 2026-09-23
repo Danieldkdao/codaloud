@@ -32,17 +32,13 @@ export const ProjectWorkspaceDock = ({
   // Keep the editor controls stable while a supporting modal covers them.
   const routeName = tab ?? pathname.split("/")[3];
   const activeTab = routeName === "git" ? "git" : "code";
-  // Preserve six 44-point targets plus the 56-point microphone on small phones.
-  // Wider phones share the extra room between larger targets and real gaps.
+  // Give two actions on each side of the microphone matching, flexible space.
   const safeWidth = width - insets.left - insets.right;
   const horizontalPadding =
     activeTab === "code"
-      ? Math.min(12, Math.max(0, (safeWidth - 320) / 2))
+      ? Math.min(20, Math.max(8, (safeWidth - 320) / 2))
       : 16;
-  const actionGap =
-    activeTab === "code"
-      ? Math.min(4, Math.max(0, (safeWidth - horizontalPadding * 2 - 320) / 12))
-      : 0;
+  const actionGap = activeTab === "code" ? 8 : 0;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
   const conversation = useVoiceConversation(

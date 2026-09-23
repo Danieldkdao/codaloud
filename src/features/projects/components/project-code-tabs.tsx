@@ -25,6 +25,7 @@ import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { ProjectCodeTabIndicator } from "./project-code-tab-indicator";
 import { useProjectFilePaths } from "../hooks/use-project-file-paths";
+import type { SaveSnapshot } from "../lib/project-file-save-document";
 import {
   formatProjectChangeCount,
   formatProjectChangePath,
@@ -41,6 +42,9 @@ type ProjectCodeTabsProps = {
   onOpenFile: () => void;
   disabled?: boolean;
   closingPath?: string | null;
+  save?: SaveSnapshot;
+  onRetry?: () => void;
+  readError?: boolean;
 };
 
 export const ProjectCodeTabs = ({
@@ -52,6 +56,9 @@ export const ProjectCodeTabs = ({
   onOpenFile,
   disabled,
   closingPath,
+  save,
+  onRetry,
+  readError = false,
 }: ProjectCodeTabsProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -173,7 +180,7 @@ export const ProjectCodeTabs = ({
           contentContainerStyle={{ alignItems: "center", gap: 4, padding: 8 }}
           data={paths}
           keyExtractor={(path) => path}
-          extraData={{ activePath, disabled, closingPath }}
+          extraData={{ activePath, disabled, closingPath, save }}
           CellRendererComponent={TabCell}
           removeClippedSubviews={false}
           onScrollToIndexFailed={({ index, averageItemLength }) => {
@@ -236,21 +243,53 @@ export const ProjectCodeTabs = ({
                     </PText>
                   ) : null}
                 </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Close ${path}`}
-                  accessibilityState={{ busy: closingPath === path }}
-                  disabled={disabled || Boolean(closingPath)}
-                  onPress={() => onClose(path)}
-                  className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
-                >
-                  <Icon
-                    family="Feather"
-                    name="x"
-                    size={16}
-                    className="text-muted-foreground"
-                  />
-                </Pressable>
+                {selected && save?.status === "error" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${readError ? "Retry opening" : "Retry saving"} ${path}`}
+                    accessibilityHint={save.message}
+                    disabled={disabled || !onRetry}
+                    onPress={onRetry}
+                    className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
+                  >
+                    <Icon
+                      family="Feather"
+                      name="alert-circle"
+                      size={18}
+                      className="text-destructive"
+                    />
+                  </Pressable>
+                ) : selected && save && save.status !== "saved" ? (
+                  <View
+                    accessible
+                    accessibilityRole="progressbar"
+                    accessibilityLabel={
+                      save.status === "loading" ? "Loading file" : "Saving file"
+                    }
+                    className="min-h-12 w-11 items-center justify-center"
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      className="text-foreground"
+                    />
+                  </View>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Close ${path}`}
+                    accessibilityState={{ busy: closingPath === path }}
+                    disabled={disabled || Boolean(closingPath)}
+                    onPress={() => onClose(path)}
+                    className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
+                  >
+                    <Icon
+                      family="Feather"
+                      name="x"
+                      size={16}
+                      className="text-muted-foreground"
+                    />
+                  </Pressable>
+                )}
               </View>
             );
             return selected ? (

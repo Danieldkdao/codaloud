@@ -732,3 +732,39 @@ it("does not execute a mutation if the account changes while the workspace lock 
   await vi.advanceTimersByTimeAsync(1);
   expect(mocks.execute).not.toHaveBeenCalled();
 });
+it("persists confirmed changed files from native receipts across restart", async () => {
+  mocks.execute.mockResolvedValue({
+    ok: true,
+    text: "saved",
+    truncated: false,
+    changedFiles: ["actual.ts"],
+    revision: "a".repeat(64),
+  });
+  mocks.subscribe.mockImplementation(async function* () {
+    yield {
+      id: "run_test",
+      status: "waiting",
+      logs: [],
+      command: {
+        id: "write",
+        tokenId: "token",
+        name: "saveFile",
+        args: { path: "proposed.ts" },
+        revision: "a".repeat(64),
+      },
+    };
+    yield { id: "run_test", status: "completed", logs: [], command: null };
+  });
+  await runtime.enqueue(projectId, "Make an edit", "files");
+  await vi.advanceTimersByTimeAsync(1);
+  expect(
+    runtime.getSnapshot()[0].files?.filter((file) => file.status === "changed"),
+  ).toEqual([{ path: "actual.ts", status: "changed" }]);
+  runtime.setSession(null, false);
+  runtime.setSession("user-a", true);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(
+    runtime.getSnapshot()[0].files?.filter((file) => file.status === "changed"),
+  ).toEqual([{ path: "actual.ts", status: "changed" }]);
+  expect(mocks.execute).toHaveBeenCalledOnce();
+});

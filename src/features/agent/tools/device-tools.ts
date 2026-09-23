@@ -11,6 +11,7 @@ import {
 } from "@/services/local-workspace/execute";
 import { workspaceTools, type WorkspaceToolName } from "./workspace-tools";
 import type { AgentCommandSchema, AgentToolResultSchema } from "../schemas";
+import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
 
 export const readWorkspaceRevision = async (projectId: string) =>
   z
@@ -244,7 +245,23 @@ export const executeDeviceTool = async (
     : { result: await execute(), revision: command.revision };
   const { result } = completed;
   const text = JSON.stringify(result);
+  const changedFiles: string[] = [];
+  if (
+    ["saveFile", "editFile", "createFile", "renameFile", "deleteFile"].includes(
+      name,
+    ) &&
+    result &&
+    typeof result === "object" &&
+    "data" in result &&
+    result.data &&
+    typeof result.data === "object" &&
+    "path" in result.data
+  ) {
+    const path = projectFilePathSchema.safeParse(result.data.path);
+    if (path.success) changedFiles.push(path.data);
+  }
   return {
+    ...(changedFiles.length ? { changedFiles } : {}),
     ok: true,
     text: text.slice(0, 10000),
     truncated: text.length > 10000,

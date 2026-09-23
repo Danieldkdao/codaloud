@@ -1,4 +1,18 @@
 import { z } from "zod";
+import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
+export const fileActivityStatuses = [
+  "reading",
+  "read",
+  "proposed",
+  "changed",
+  "failed",
+] as const;
+export type FileActivityStatus = (typeof fileActivityStatuses)[number];
+export const fileActivitySchema = z.object({
+  path: projectFilePathSchema,
+  status: z.enum(fileActivityStatuses),
+});
+export type FileActivitySchema = z.infer<typeof fileActivitySchema>;
 export const agentTaskStatuses = [
   "queued",
   "running",
@@ -33,6 +47,7 @@ export const agentTaskPayloadSchema = agentTaskRequestSchema.extend({
 });
 export type AgentTaskPayloadSchema = z.infer<typeof agentTaskPayloadSchema>;
 export const agentToolResultSchema = z.object({
+  changedFiles: z.array(projectFilePathSchema).max(100).optional(),
   ok: z.boolean(),
   code: z.string().max(100).optional(),
   text: z.string().max(10000),

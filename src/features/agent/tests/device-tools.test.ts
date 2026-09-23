@@ -148,3 +148,28 @@ it("preserves an action's conflict message before checking its success revision"
     }),
   ).rejects.toThrow("File changed since you read it.");
 });
+it("reports changed paths only from a successful native edit result", async () => {
+  mocks.save.mockResolvedValue({ error: false, data: { path: "actual.ts" } });
+  mocks.guard.mockImplementation(async (_id, revision, action) => ({
+    result: await action(),
+    revision,
+  }));
+  const command = {
+    id: "save",
+    tokenId: "token",
+    name: "saveFile",
+    revision: "a".repeat(64),
+    args: {
+      path: "requested.ts",
+      content: "new",
+      expectedContentHash: "b".repeat(64),
+    },
+  };
+  expect(await executeDeviceTool("project", command)).toMatchObject({
+    changedFiles: ["actual.ts"],
+  });
+  mocks.save.mockResolvedValue({ error: true, message: "No write" });
+  await expect(executeDeviceTool("project", command)).rejects.toThrow(
+    "No write",
+  );
+});

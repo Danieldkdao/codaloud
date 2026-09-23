@@ -10,6 +10,7 @@ import { createDeviceExecutor } from "./device-executor";
 import {
   agentTaskEventSchema,
   agentTaskRequestSchema,
+  fileActivitySchema,
   type AgentToolResultSchema,
 } from "./schemas";
 import { executeDeviceTool, readWorkspaceRevision } from "./tools/device-tools";
@@ -19,6 +20,7 @@ import {
 } from "./tools/workspace-tools";
 import type { AgentTaskRecord } from "./types";
 import { flushAgentWorkspace, runAgentMutation } from "./workspace-access";
+import { updateFileActivity } from "./file-activity";
 
 let userId: string | null = null;
 let active = false;
@@ -247,12 +249,25 @@ const resume = (record: AgentTaskRecord) => {
         update(record, { event, connectionError: undefined });
         await persist();
         if (event.command && !acknowledged.has(event.command.tokenId)) {
+          update(record, {
+            files: updateFileActivity(record.files ?? [], event.command),
+          });
           // The receipt is durable before acknowledgement, so reconnecting never
           // reruns a completed commit, push, deletion, or file write.
           const output =
             event.command.name === "beginTask"
               ? await beginTask(record, controller.signal)
               : await execute(event.id, event.command);
+          // Persist confirmed native results before acknowledgement, including
+          // replayed durable receipts after a connection or app restart.
+          update(record, {
+            files: updateFileActivity(
+              record.files ?? [],
+              event.command,
+              output,
+            ),
+          });
+          await persist();
           if (!controller.signal.aborted) {
             await completeAgentCommand(
               event.id,
@@ -322,6 +337,7 @@ export const agentTasks = {
               event: agentTaskEventSchema,
               accepted: z.boolean(),
               reviewed: z.boolean().default(false),
+              files: z.array(fileActivitySchema).max(100).default([]),
               execution: z
                 .object({
                   started: z.boolean(),

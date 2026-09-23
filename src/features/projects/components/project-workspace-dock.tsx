@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { WorkspaceVoiceContext } from "@/features/voice/hooks/workspace-voice-provider";
+import type { VoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { usePathname } from "expo-router";
 import { View, useWindowDimensions } from "react-native";
@@ -19,9 +21,31 @@ import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-pro
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectBranchMenu } from "./project-branch-menu";
 
-export const ProjectWorkspaceDock = ({
+export const ProjectWorkspaceDock = (props: { tab?: "code" | "git" } = {}) => {
+  const conversation = useContext(WorkspaceVoiceContext);
+  return conversation ? (
+    <WorkspaceDock {...props} conversation={conversation} />
+  ) : (
+    <StandaloneDock {...props} />
+  );
+};
+const StandaloneDock = (props: { tab?: "code" | "git" }) => {
+  const pathname = usePathname();
+  const { projectId } = useProjectWorkspaceBranch();
+  const conversation = useVoiceConversation(
+    props.tab !== "git",
+    `${projectId}:${pathname}`,
+    projectId,
+  );
+  return <WorkspaceDock {...props} conversation={conversation} />;
+};
+const WorkspaceDock = ({
   tab,
-}: { tab?: "code" | "git" } = {}) => {
+  conversation,
+}: {
+  tab?: "code" | "git";
+  conversation: VoiceConversation;
+}) => {
   const keyboardFrame = useKeyboardFrame();
   const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
@@ -42,11 +66,6 @@ export const ProjectWorkspaceDock = ({
   const actionGap = activeTab === "code" ? 8 : 0;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
-  const conversation = useVoiceConversation(
-    !isGit && !keyboardFrame,
-    `${branchSelection.projectId}:${pathname}`,
-    branchSelection.projectId,
-  );
   useEffect(() => {
     setBranchPickerOpen(false);
   }, [branchSelection.projectId, activeTab]);

@@ -4,6 +4,7 @@ import type { ConnectVoice, VoiceConnection, VoiceState } from "./types";
 export const createVoiceController = (
   connect: ConnectVoice,
   beforeStart?: () => Promise<unknown>,
+  onStop?: () => void,
 ) => {
   let state: VoiceState = {
     connection: "idle",
@@ -30,6 +31,7 @@ export const createVoiceController = (
     const previous = connection;
     connection = undefined;
     update({ connection: "idle", mode: null, listening: false, error: null });
+    onStop?.();
     if (previous) closing = previous.close().catch(() => {});
     await closing;
   };

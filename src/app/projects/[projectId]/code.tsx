@@ -2,7 +2,17 @@ import { registerAgentWorkspace } from "@/features/agent/workspace-access";
 import { useVoiceEditor } from "@/features/voice/hooks/use-voice-editor";
 import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { WorkspaceVoiceContext } from "@/features/voice/hooks/workspace-voice-provider";
+import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
 import { createEditorFlush } from "@/features/editor/flush";
 import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
@@ -41,7 +51,12 @@ import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-sh
 import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { useTheme } from "@/hooks/use-theme";
 
+const VoiceTranscriptBubble = lazy(async () => ({
+  default: (await import("@/features/voice/components/voice-transcript-bubble"))
+    .VoiceTranscriptBubble,
+}));
 const CodeScreen = () => {
+  const conversation = useContext(WorkspaceVoiceContext);
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
   const files = useProjectWorkspaceCurrentFile();
@@ -126,6 +141,7 @@ const CodeScreen = () => {
     [documents.activeKey, isWorkspaceBusy],
   );
   const [badgeHeight, setBadgeHeight] = useState(48);
+  const [voiceAccessoryHeight, setVoiceAccessoryHeight] = useState(96);
   useEditorDevelopmentShortcuts();
 
   const isReady = Boolean(
@@ -309,7 +325,9 @@ const CodeScreen = () => {
             onRequestAnalysis={requestAnalysis}
             onAnalysis={onAnalysis}
             bottomInset={bottomInset}
-            keyboardAccessoryHeight={showKeyboardAccessory ? 96 : 0}
+            keyboardAccessoryHeight={
+              showKeyboardAccessory ? voiceAccessoryHeight : 0
+            }
             onInteractionChange={onInteractionChange}
             dom={{
               onLoadStart: () => {
@@ -417,6 +435,19 @@ const CodeScreen = () => {
       ) : null}
       {showKeyboardAccessory ? (
         <ProjectCodeKeyboardAccessory
+          onHeight={setVoiceAccessoryHeight}
+          voice={
+            conversation ? (
+              <VoiceMicrophone conversation={conversation} compact />
+            ) : null
+          }
+          feedback={
+            conversation ? (
+              <Suspense fallback={null}>
+                <VoiceTranscriptBubble conversation={conversation} compact />
+              </Suspense>
+            ) : null
+          }
           frame={keyboardFrame}
           onCommand={runCommand}
           canComment={interaction?.commands?.canComment}

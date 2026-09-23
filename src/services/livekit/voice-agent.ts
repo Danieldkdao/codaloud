@@ -163,9 +163,14 @@ export default defineAgent({
       session,
       metadata.participantIdentity,
     );
-    ctx.room.localParticipant!.registerRpcMethod(voiceControlMethod, (data) =>
-      handleControl(data.callerIdentity, data.payload),
-    );
+    ctx.room.localParticipant!.registerRpcMethod(voiceControlMethod, (data) => {
+      if (
+        data.callerIdentity === metadata.participantIdentity &&
+        ["start", "hands-free"].includes(JSON.parse(data.payload).action)
+      )
+        turnContext = undefined;
+      return handleControl(data.callerIdentity, data.payload);
+    });
     ctx.room.localParticipant!.registerRpcMethod(
       "codaloud.voice.preferences",
       async (data) => {

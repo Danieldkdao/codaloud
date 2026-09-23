@@ -13,8 +13,10 @@ import type { VoiceConversation } from "../hooks/use-voice-conversation";
 
 export const VoiceMicrophone = ({
   conversation,
+  compact = false,
 }: {
   conversation: VoiceConversation;
+  compact?: boolean;
 }) => {
   const { state, pressed } = conversation;
   const foreground = useThemeColor("primary-foreground");
@@ -59,7 +61,8 @@ export const VoiceMicrophone = ({
         onTouchCancel={conversation.onTouchCancel}
         onPress={conversation.onPress}
         className={cn(
-          "size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90",
+          "shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90",
+          compact ? "size-11 mx-1" : "size-14",
           (pressed || state.listening) && "border-2 border-primary-foreground",
         )}
       >

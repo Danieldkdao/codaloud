@@ -66,6 +66,7 @@ export const connectNativeVoice: ConnectVoice = (
     let roomName: string | undefined;
     let agentIdentity: string | undefined;
     let closed = false;
+    let ownedRequestId: string | undefined;
     let unsubscribeTasks: (() => void) | undefined;
     let unsubscribePreferences: (() => void) | undefined;
     let closing: Promise<void> | undefined;
@@ -86,7 +87,7 @@ export const connectNativeVoice: ConnectVoice = (
     const close = () => {
       if (closing) return closing;
       closed = true;
-      if (inlineSession.getSnapshot()?.projectId === options?.projectId)
+      if (ownedRequestId && inlineSession.getSnapshot()?.id === ownedRequestId)
         inlineSession.cancel();
       unsubscribePreferences?.();
       unsubscribeTasks?.();
@@ -173,6 +174,7 @@ export const connectNativeVoice: ConnectVoice = (
         const request = inlineSession.getSnapshot();
         if (!request || request.status !== "listening")
           throw new Error("Finish or cancel the current suggestion first.");
+        ownedRequestId = request.id;
         return encodeVoicePayload(getVoiceContext(request));
       });
       room.registerRpcMethod("codaloud.voice.read", async (data) =>
@@ -188,6 +190,10 @@ export const connectNativeVoice: ConnectVoice = (
         const event = inlineEventSchema.parse(JSON.parse(data.payload));
         if (!inlineSession.receive(event))
           throw new Error("Request cancelled or already completed.");
+        if (event.type === "start") {
+          microphoneTrack.set(undefined);
+          await room.localParticipant.setMicrophoneEnabled(false);
+        }
         return JSON.stringify({ ok: true });
       });
       room.registerRpcMethod("codaloud.plan.propose", async (data) => {
@@ -355,7 +361,11 @@ export const connectNativeVoice: ConnectVoice = (
               inlineSession.getSnapshot()?.status !== "listening"
             )
               await inlineSession.begin(options.projectId);
-            if (action === "cancel" || action === "stop")
+            if (enable) ownedRequestId = inlineSession.getSnapshot()?.id;
+            if (
+              action === "cancel" &&
+              ownedRequestId === inlineSession.getSnapshot()?.id
+            )
               inlineSession.cancel();
             if (!enable) {
               microphoneTrack.set(undefined);

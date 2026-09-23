@@ -5,6 +5,7 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { createVoiceController } from "../voice-controller";
+import { inlineSession } from "../inline-session";
 
 export const useVoiceConversation = (
   enabled: boolean,
@@ -14,28 +15,37 @@ export const useVoiceConversation = (
   const project = useRef(projectId);
   project.current = projectId;
   const [controller] = useState(() =>
-    createVoiceController(async (mode, signal, events) => {
-      // The SDK constructs native event emitters during import. Check the same
-      // native module names it uses before evaluating it in an older app binary.
-      if (
-        !NativeModules.WebRTCModule ||
-        !NativeModules.LivekitReactNativeModule
-      ) {
-        throw new Error(
-          "Voice is missing from this app build. Rebuild and reinstall the app to enable it.",
+    createVoiceController(
+      async (mode, signal, events) => {
+        // The SDK constructs native event emitters during import. Check the same
+        // native module names it uses before evaluating it in an older app binary.
+        if (
+          !NativeModules.WebRTCModule ||
+          !NativeModules.LivekitReactNativeModule
+        ) {
+          throw new Error(
+            "Voice is missing from this app build. Rebuild and reinstall the app to enable it.",
+          );
+        }
+        // Expo discovers native routes when exporting API manifests. Load WebRTC
+        // only on microphone activation, after the app is running on the device.
+        const { connectNativeVoice } =
+          await import("@/services/livekit/voice-native");
+        return connectNativeVoice(
+          mode,
+          signal,
+          events,
+          project.current ? { projectId: project.current } : undefined,
         );
-      }
-      // Expo discovers native routes when exporting API manifests. Load WebRTC
-      // only on microphone activation, after the app is running on the device.
-      const { connectNativeVoice } =
-        await import("@/services/livekit/voice-native");
-      return connectNativeVoice(
-        mode,
-        signal,
-        events,
-        project.current ? { projectId: project.current } : undefined,
-      );
-    }),
+      },
+      async () => {
+        if (project.current) await inlineSession.begin(project.current);
+      },
+      () => {
+        if (inlineSession.getSnapshot()?.projectId === project.current)
+          inlineSession.cancel();
+      },
+    ),
   );
   const state = useSyncExternalStore(
     controller.subscribe,
@@ -48,6 +58,8 @@ export const useVoiceConversation = (
   const suppressTap = useRef(false);
   const previousTap = useRef(0);
   const stop = () => {
+    if (inlineSession.getSnapshot()?.projectId === project.current)
+      inlineSession.cancel();
     held.current = false;
     setPressed(false);
     previousTap.current = 0;
@@ -55,6 +67,8 @@ export const useVoiceConversation = (
     void controller.stop();
   };
   const pause = () => {
+    if (inlineSession.getSnapshot()?.projectId === project.current)
+      inlineSession.cancel();
     held.current = false;
     setPressed(false);
     previousTap.current = 0;
@@ -80,6 +94,27 @@ export const useVoiceConversation = (
     });
     return () => subscription.remove();
   }, [controller]);
+  useEffect(() => {
+    let previous = inlineSession.getSnapshot();
+    return inlineSession.subscribe(() => {
+      const next = inlineSession.getSnapshot();
+      if (
+        previous?.projectId === project.current &&
+        previous &&
+        ["listening", "generating", "ready"].includes(previous.status) &&
+        (!next || next.status === "error")
+      ) {
+        // Cancel invalidates the local request synchronously; stop interrupts
+        // the worker and resets capture so the next tap can start immediately.
+        void controller.pause();
+      }
+      previous = next;
+    });
+  }, [controller]);
+  const inline = useSyncExternalStore(
+    inlineSession.subscribe,
+    inlineSession.getSnapshot,
+  );
 
   const endTouch = () => {
     setPressed(false);
@@ -90,7 +125,12 @@ export const useVoiceConversation = (
   };
 
   return {
-    state,
+    state:
+      inline &&
+      inline.projectId === projectId &&
+      ["generating", "ready", "applying"].includes(inline.status)
+        ? { ...state, listening: false }
+        : state,
     pressed,
     visible: enabled && (open || state.connection !== "idle"),
     stop,

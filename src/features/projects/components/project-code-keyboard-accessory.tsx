@@ -28,6 +28,9 @@ type ProjectCodeKeyboardAccessoryProps = {
   fold?: EditorCommandState["fold"];
   frame?: KeyboardMetrics;
   children?: ReactNode;
+  voice?: ReactNode;
+  feedback?: ReactNode;
+  onHeight?: (height: number) => void;
   onDismissKeyboard: () => void;
 };
 
@@ -53,6 +56,9 @@ export const ProjectCodeKeyboardAccessory = ({
   canComment = true,
   fold = "unavailable",
   children,
+  voice,
+  feedback,
+  onHeight,
   onDismissKeyboard,
 }: ProjectCodeKeyboardAccessoryProps) => {
   const viewport = useRef<View>(null);
@@ -84,14 +90,17 @@ export const ProjectCodeKeyboardAccessory = ({
       {frame ? (
         <View
           testID="editor-keyboard-strip"
+          onLayout={(event) => onHeight?.(event.nativeEvent.layout.height)}
           style={{ position: "absolute", left: 0, right: 0, bottom }}
         >
           <GlassSurface borderRadius={0}>
+            {feedback}
             <View
               testID="editor-keyboard-actions"
               className="h-12 flex-row items-center border-b border-border"
               style={{ paddingLeft: insets.left, paddingRight: insets.right }}
             >
+              {voice}
               <ScrollView
                 testID="editor-keyboard-action-scroll"
                 horizontal

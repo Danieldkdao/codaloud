@@ -25,6 +25,7 @@ import type { VoiceConversation } from "../hooks/use-voice-conversation";
 import { formatVoiceStatus, formatVoiceTranscript } from "../lib/formatters";
 
 import { microphoneTrack } from "@/services/livekit/voice-track";
+import { inlineSession } from "../inline-session";
 
 // Evaluate the native SDK only after a real microphone track exists.
 const VoiceFrequencyBars = lazy(() => import("./voice-frequency-bars"));
@@ -33,12 +34,18 @@ const revealContent = FadeIn.duration(220).reduceMotion(ReduceMotion.System);
 
 export const VoiceTranscriptBubble = ({
   conversation,
+  compact = false,
 }: {
   conversation: VoiceConversation;
+  compact?: boolean;
 }) => {
   const track = useSyncExternalStore(
     microphoneTrack.subscribe,
     microphoneTrack.getSnapshot,
+  );
+  const inline = useSyncExternalStore(
+    inlineSession.subscribe,
+    inlineSession.getSnapshot,
   );
   const { width, height } = useWindowDimensions();
   const scroll = useRef<ScrollView>(null);
@@ -96,7 +103,11 @@ export const VoiceTranscriptBubble = ({
               numberOfLines={2}
               accessibilityLiveRegion="polite"
             >
-              {formatVoiceStatus(state)}
+              {inline?.status === "generating"
+                ? "Writing suggestion…"
+                : inline?.status === "ready"
+                  ? "Review suggestion in editor"
+                  : formatVoiceStatus(state)}
             </PText>
             <Pressable
               accessibilityRole="button"
@@ -168,7 +179,12 @@ export const VoiceTranscriptBubble = ({
               ) : null}
               <ScrollView
                 ref={scroll}
-                style={{ maxHeight: Math.min(240, height * 0.28) }}
+                style={{
+                  maxHeight: compact
+                    ? Math.min(120, height * 0.16)
+                    : Math.min(240, height * 0.28),
+                }}
+                keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator
                 nestedScrollEnabled
                 onScrollBeginDrag={() => {
@@ -249,6 +265,24 @@ export const VoiceTranscriptBubble = ({
                   <PText selectable className="pb-2 text-destructive">
                     {state.error}
                   </PText>
+                ) : null}
+                {inline?.error ? (
+                  <PText className="pb-2 text-destructive">
+                    {inline.error}
+                  </PText>
+                ) : null}
+                {inline &&
+                ["listening", "generating", "ready", "error"].includes(
+                  inline.status,
+                ) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel current request"
+                    onPress={() => inlineSession.cancel()}
+                    className="min-h-11 items-center justify-center rounded-full bg-muted"
+                  >
+                    <PText>Cancel request</PText>
+                  </Pressable>
                 ) : null}
               </ScrollView>
               {showLatest ? (

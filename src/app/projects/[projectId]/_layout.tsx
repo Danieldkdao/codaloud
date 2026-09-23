@@ -1,4 +1,5 @@
 import { AgentWorkspaceBridge } from "@/features/agent/hooks/use-agent-workspace";
+import { WorkspaceVoiceProvider } from "@/features/voice/hooks/workspace-voice-provider";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { useThemeColor } from "@/hooks/use-theme";
@@ -25,13 +26,18 @@ const WorkspaceScreen = ({
   children: ReactNode;
 }) => {
   const showDock = name === "code";
-  return (
+  const content = (
     <ProjectWorkspaceDockHeightProvider>
       <View className="flex-1 bg-background">
         {children}
         {showDock ? <ProjectWorkspaceDock tab={name} /> : null}
       </View>
     </ProjectWorkspaceDockHeightProvider>
+  );
+  return showDock ? (
+    <WorkspaceVoiceProvider>{content}</WorkspaceVoiceProvider>
+  ) : (
+    content
   );
 };
 

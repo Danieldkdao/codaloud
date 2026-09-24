@@ -236,6 +236,7 @@ export const connectNativeVoice: ConnectVoice = (
       const receive = createVoiceTranscriptReceiver(
         credentials.participantIdentity,
         (segment) => {
+          if (closed || signal.aborted) return;
           if (segment.role === "user") inlineSession.transcript(segment.text);
           events.onSegment(segment);
         },
@@ -243,11 +244,32 @@ export const connectNativeVoice: ConnectVoice = (
       room.registerTextStreamHandler(
         "lk.transcription",
         (reader, participant) => {
-          void receive(reader, participant).catch(() => {
-            if (!closed && !signal.aborted)
-              events.onError(
-                "Transcript connection was interrupted. Please try again.",
-              );
+          if (closed || signal.aborted) return;
+          void receive(reader, participant).catch((error: unknown) => {
+            if (closed || signal.aborted) return;
+            // Captions use independent data streams. A failed stream is not a
+            // failed media session; onError tears down audio and cuts off TTS.
+            // Log only classification, never transcript text or remote reasons.
+            console.warn(
+              "[voice] Transcript stream failed; keeping audio connected",
+              {
+                role:
+                  participant.identity === credentials.participantIdentity
+                    ? "user"
+                    : "assistant",
+                errorType: error instanceof Error ? error.name : "Unknown",
+                reason:
+                  error &&
+                  typeof error === "object" &&
+                  "reason" in error &&
+                  typeof error.reason === "number"
+                    ? error.reason
+                    : undefined,
+              },
+            );
+            events.onTranscriptWarning?.(
+              "Some transcript text may be missing. Voice is still connected.",
+            );
           });
         },
       );

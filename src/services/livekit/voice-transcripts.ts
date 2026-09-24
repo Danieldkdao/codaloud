@@ -50,18 +50,29 @@ export const createVoiceTranscriptReceiver = (
     versions.set(key, version);
     const role = participant.identity === identity ? "user" : "assistant";
     let text = "";
-    for await (const chunk of reader) {
-      if (versions.get(key) !== version) return;
-      text = (text + chunk).slice(-16_000);
-      // User streams are replacement snapshots, not assistant-style deltas.
-      // Publish each complete snapshot so transport chunks cannot erase its tail.
-      if (role === "assistant") {
-        if (text.trim() && !assistantSegments.has(key)) {
-          assistantSegments.add(key);
-          assistantTurn++;
+    try {
+      for await (const chunk of reader) {
+        if (versions.get(key) !== version) return;
+        text = (text + chunk).slice(-16_000);
+        // User streams are replacement snapshots, not assistant-style deltas.
+        // Publish each complete snapshot so transport chunks cannot erase its tail.
+        if (role === "assistant") {
+          if (text.trim() && !assistantSegments.has(key)) {
+            assistantSegments.add(key);
+            assistantTurn++;
+          }
+          onSegment({ id, role, text, final: false });
         }
-        onSegment({ id, role, text, final: false });
       }
+    } catch (error) {
+      // A superseded stream can reject while waiting for its next chunk, before
+      // the loop's version check runs. It must not affect its replacement.
+      if (versions.get(key) !== version) return;
+      // Stop animating the received assistant text, but do not make it
+      // authoritative: a later complete snapshot may still repair this row.
+      if (role === "assistant" && text)
+        onSegment({ id, role, text, final: true });
+      throw error;
     }
     if (versions.get(key) === version) {
       if (final) finalized.add(key);

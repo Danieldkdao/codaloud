@@ -452,6 +452,200 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
+it("keeps voice connected when a transcript stream fails during an assistant answer", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const controller = createVoiceController(connectNativeVoice);
+  let failTranscript!: () => void;
+  const interrupted = new Promise<void>((resolve) => {
+    failTranscript = resolve;
+  });
+  try {
+    await controller.start("hands-free");
+    mocks.transcription!(
+      {
+        info: {
+          id: "file-explanation",
+          attributes: { "lk.segment_id": "answer" },
+        },
+        async *[Symbol.asyncIterator]() {
+          yield "This file defines the agent procedures.";
+          await interrupted;
+          throw new Error("Data stream trailer was not received");
+        },
+      },
+      { identity: "agent" },
+    );
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().transcript).toHaveLength(1),
+    );
+    failTranscript();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.getSnapshot()).toMatchObject({
+      connection: "connected",
+      error: null,
+    });
+    expect(mocks.disconnect).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().transcriptWarning).toMatch(
+      /transcript.*missing/i,
+    );
+    mocks.transcription!(
+      {
+        info: { id: "next-answer", attributes: { "lk.segment_id": "next" } },
+        async *[Symbol.asyncIterator]() {
+          yield "The next response still works.";
+        },
+      },
+      { identity: "agent" },
+    );
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().transcript).toContainEqual(
+        expect.objectContaining({
+          id: "next",
+          text: "The next response still works.",
+          final: true,
+        }),
+      ),
+    );
+  } finally {
+    await controller.stop();
+  }
+});
+it("still treats an actual room disconnect as fatal", async () => {
+  const controller = createVoiceController(connectNativeVoice);
+  try {
+    await controller.start("hands-free");
+    for (const listener of mocks.listeners.get("disconnected") ?? [])
+      listener();
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot()).toMatchObject({
+        connection: "error",
+        error: "Voice disconnected. Please try again.",
+      }),
+    );
+    expect(mocks.disconnect).toHaveBeenCalledOnce();
+  } finally {
+    await controller.stop();
+  }
+});
+it("ignores a late stream error and text after its room has closed", async () => {
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const callbacks = { ...events(), onTranscriptWarning: vi.fn() };
+  const connection = await connectNativeVoice(
+    "hold",
+    new AbortController().signal,
+    callbacks,
+  );
+  const handler = mocks.transcription!;
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  handler(
+    {
+      info: { id: "late" },
+      async *[Symbol.asyncIterator]() {
+        yield "Before close";
+        await pending;
+        throw new Error("closed");
+      },
+    },
+    { identity: "agent" },
+  );
+  await vi.waitFor(() => expect(callbacks.onSegment).toHaveBeenCalledOnce());
+  await connection.close();
+  callbacks.onSegment.mockClear();
+  finish();
+  handler(
+    {
+      info: { id: "too-late" },
+      async *[Symbol.asyncIterator]() {
+        yield "Late text";
+      },
+    },
+    { identity: "agent" },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(callbacks.onSegment).not.toHaveBeenCalled();
+  expect(callbacks.onTranscriptWarning).not.toHaveBeenCalled();
+  expect(callbacks.onError).not.toHaveBeenCalled();
+  expect(warning).not.toHaveBeenCalled();
+});
+it.each(["gap", "abnormal trailer"])(
+  "isolates an installed SDK transcript failure caused by %s",
+  async (failure) => {
+    const sdk =
+      await vi.importActual<typeof import("livekit-client")>("livekit-client");
+    const source = new sdk.Room({ disconnectOnPageLeave: false });
+    const manager = source["incomingDataStreamManager"];
+    const controller = createVoiceController(connectNativeVoice);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await controller.start("hands-free");
+      source.registerTextStreamHandler(
+        "lk.transcription",
+        (reader, participant) => mocks.transcription!(reader, participant),
+      );
+      manager["handleStreamHeader"](
+        {
+          streamId: "sdk-answer",
+          topic: "lk.transcription",
+          mimeType: "text/plain",
+          timestamp: 0n,
+          attributes: { "lk.segment_id": "sdk-answer" },
+          compression: 0,
+          contentHeader: {
+            case: "textHeader",
+            value: { attachedStreamIds: [] },
+          },
+        } as Parameters<(typeof manager)["handleStreamHeader"]>[0],
+        "agent",
+        0,
+      );
+      const chunk = (index: number) =>
+        manager["handleStreamChunk"](
+          {
+            streamId: "sdk-answer",
+            chunkIndex: BigInt(index),
+            content: new TextEncoder().encode("Reading the file. "),
+            version: 0,
+          } as Parameters<(typeof manager)["handleStreamChunk"]>[0],
+          0,
+        );
+      chunk(0);
+      await vi.waitFor(() =>
+        expect(controller.getSnapshot().transcript).toHaveLength(1),
+      );
+      if (failure === "gap") chunk(2);
+      else
+        manager["handleStreamTrailer"](
+          {
+            streamId: "sdk-answer",
+            reason: "cancelled",
+            attributes: {},
+          } as Parameters<(typeof manager)["handleStreamTrailer"]>[0],
+          0,
+        );
+      await vi.waitFor(() =>
+        expect(controller.getSnapshot().transcriptWarning).toBeTruthy(),
+      );
+      expect(controller.getSnapshot().connection).toBe("connected");
+      expect(mocks.disconnect).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledWith(
+        "[voice] Transcript stream failed; keeping audio connected",
+        expect.objectContaining({
+          errorType: "DataStreamError",
+          reason:
+            failure === "gap"
+              ? sdk.DataStreamErrorReason.Incomplete
+              : sdk.DataStreamErrorReason.AbnormalEnd,
+        }),
+      );
+    } finally {
+      manager.clearControllers();
+      await controller.stop();
+    }
+  },
+);
 it("reports an absent agent separately from a failed room connection", async () => {
   vi.useFakeTimers();
   mocks.agentReady = false;

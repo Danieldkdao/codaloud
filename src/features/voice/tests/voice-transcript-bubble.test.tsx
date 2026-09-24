@@ -179,6 +179,27 @@ it("keeps the Outfit family on voice status, errors, and speaker labels", () => 
     expect(text.classList.contains("font-sans"), label).toBe(true);
   }
 });
+it("shows missing transcript text as a nonfatal warning while voice stays connected", () => {
+  const message =
+    "Some transcript text may be missing. Voice is still connected.";
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble
+        conversation={{
+          ...conversation,
+          state: {
+            ...conversation.state,
+            connection: "connected",
+            transcriptWarning: message,
+          },
+        }}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain(message);
+  expect(container.textContent).not.toContain("Voice unavailable");
+  expect(container.textContent).toContain("Hello");
+});
 it("follows streaming text until the user scrolls back, then offers jump to latest", () => {
   act(() => mocks.props.onContentSizeChange());
   expect(mocks.scroll).toHaveBeenCalledOnce();

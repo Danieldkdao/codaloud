@@ -56,11 +56,13 @@ export type VoiceState = {
   agentState: "listening" | "thinking" | "speaking";
   transcript: VoiceSegment[];
   error: string | null;
+  transcriptWarning?: string;
 };
 export type VoiceEvents = {
   onSegment: (segment: VoiceSegment) => void;
   onAgentState: (state: VoiceState["agentState"]) => void;
   onError: (message: string) => void;
+  onTranscriptWarning?: (message: string) => void;
 };
 export type VoiceConnection = {
   control: (action: VoiceControlAction) => Promise<void>;

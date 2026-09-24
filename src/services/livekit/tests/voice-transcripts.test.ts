@@ -126,3 +126,50 @@ it("allows a delayed final to finish its original user row after an agent reply"
     final: true,
   });
 });
+it("ignores a rejected obsolete reader after a newer final snapshot wins", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+  let reject!: (reason: Error) => void;
+  const pending = receive(
+    {
+      ...reader("u", []),
+      async *[Symbol.asyncIterator]() {
+        await new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        });
+      },
+    },
+    { identity: "user" },
+  );
+  await receive(reader("u", ["Read the current file"], true), {
+    identity: "user",
+  });
+  reject(new Error("Old reader closed"));
+  await expect(pending).resolves.toBeUndefined();
+  expect(update).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ text: "Read the current file", final: true }),
+  );
+});
+it("settles a failed assistant preview without blocking a replacement snapshot", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+  await expect(
+    receive(
+      {
+        ...reader("a", []),
+        async *[Symbol.asyncIterator]() {
+          yield "Partial explanation";
+          throw new Error("gap");
+        },
+      },
+      { identity: "agent" },
+    ),
+  ).rejects.toThrow("gap");
+  expect(update).toHaveBeenLastCalledWith(
+    expect.objectContaining({ text: "Partial explanation", final: true }),
+  );
+  await receive(reader("a", ["Complete explanation"]), { identity: "agent" });
+  expect(update).toHaveBeenLastCalledWith(
+    expect.objectContaining({ text: "Complete explanation", final: true }),
+  );
+});

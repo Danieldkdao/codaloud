@@ -72,6 +72,26 @@ it("ignores old room events after stop", async () => {
   events.onSegment({ id: "old", role: "user", text: "late", final: true });
   expect(controller.getSnapshot().transcript).toEqual([]);
 });
+it("keeps transcript warnings separate from fatal errors and ignores warnings from an old room", async () => {
+  const { controller, connect, connection } = setup();
+  await controller.start("hold");
+  const events = connect.mock.calls[0]![2];
+  events.onTranscriptWarning("Transcript incomplete");
+  expect(controller.getSnapshot()).toMatchObject({
+    connection: "connected",
+    error: null,
+    transcriptWarning: "Transcript incomplete",
+  });
+  expect(connection.close).not.toHaveBeenCalled();
+  await controller.release();
+  await controller.start("hold");
+  expect(controller.getSnapshot().transcriptWarning).toBeUndefined();
+  await controller.stop();
+  await controller.start("hands-free");
+  events.onTranscriptWarning("Old warning");
+  expect(controller.getSnapshot().transcriptWarning).toBeUndefined();
+  await controller.stop();
+});
 
 it("pauses capture while preserving the transcript and session for resuming", async () => {
   const { controller, connection, connect } = setup();

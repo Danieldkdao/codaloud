@@ -286,6 +286,14 @@ export const VoiceTranscriptBubble = ({
                     {state.error}
                   </PText>
                 ) : null}
+                {state.transcriptWarning ? (
+                  <PText
+                    accessibilityLiveRegion="polite"
+                    className="pb-2 text-muted-foreground"
+                  >
+                    {state.transcriptWarning}
+                  </PText>
+                ) : null}
                 {inline?.error ? (
                   <PText className="pb-2 text-destructive">
                     {inline.error}

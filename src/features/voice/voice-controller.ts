@@ -30,7 +30,13 @@ export const createVoiceController = (
     lifetime = undefined;
     const previous = connection;
     connection = undefined;
-    update({ connection: "idle", mode: null, listening: false, error: null });
+    update({
+      connection: "idle",
+      mode: null,
+      listening: false,
+      error: null,
+      transcriptWarning: undefined,
+    });
     onStop?.();
     if (previous) closing = previous.close().catch(() => {});
     await closing;
@@ -44,7 +50,12 @@ export const createVoiceController = (
   const start = async (mode: VoiceMode) => {
     if (state.connection === "connecting" || state.listening) return;
     const current = ++generation;
-    update({ mode, listening: false, error: null });
+    update({
+      mode,
+      listening: false,
+      error: null,
+      transcriptWarning: undefined,
+    });
     try {
       if (beforeStart) {
         if (!connection) update({ connection: "connecting" });
@@ -78,6 +89,9 @@ export const createVoiceController = (
           },
           onError: (message) => {
             if (!signal.aborted) void fail(message, generation);
+          },
+          onTranscriptWarning: (message) => {
+            if (!signal.aborted) update({ transcriptWarning: message });
           },
         });
         if (current !== generation) {

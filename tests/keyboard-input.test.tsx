@@ -122,3 +122,20 @@ it("releases the target on blur and unmount, and blocks disabled or stale inputs
   expect(native.setNativeProps).not.toHaveBeenCalled();
   expect(target).toBeNull();
 });
+
+it("opts ordinary inputs out of correction, spelling and autofill suggestions", () => {
+  render({ multiline: true });
+  expect(input.autoCorrect).toBe(false);
+  expect(input.spellCheck).toBe(false);
+  expect(input.autoComplete).toBe("off");
+});
+
+it("preserves explicit keyboard preferences and semantic autofill hints", () => {
+  render({ autoCorrect: true, spellCheck: true, autoComplete: "email" });
+  expect(input.autoCorrect).toBe(true);
+  expect(input.spellCheck).toBe(true);
+  expect(input.autoComplete).toBe("email");
+  render({ textContentType: "oneTimeCode" });
+  expect(input.textContentType).toBe("oneTimeCode");
+  expect(input.autoComplete).toBeUndefined();
+});

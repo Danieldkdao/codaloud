@@ -10,7 +10,7 @@ import { useOnboarding } from "@/features/settings/hooks/use-onboarding";
 import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
-import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
+import { FORM_SHEET_OPTIONS, MODAL_SCREEN_OPTIONS } from "@/lib/constants";
 import { fontAssets } from "@/lib/fonts";
 import { subscribeToQueryLifecycle } from "@/lib/query-lifecycle";
 import { useFonts } from "expo-font";
@@ -99,22 +99,16 @@ const RootNavigator = () => {
                     name="new-project"
                     options={{
                       ...MODAL_SCREEN_OPTIONS,
+                      ...FORM_SHEET_OPTIONS,
                       presentation: "formSheet",
-                      sheetAllowedDetents: "fitToContents",
-                      sheetInitialDetentIndex: 0,
-                      sheetGrabberVisible: true,
-                      sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
                   <Stack.Screen
                     name="edit-project"
                     options={{
                       ...MODAL_SCREEN_OPTIONS,
+                      ...FORM_SHEET_OPTIONS,
                       presentation: "formSheet",
-                      sheetAllowedDetents: "fitToContents",
-                      sheetInitialDetentIndex: 0,
-                      sheetGrabberVisible: true,
-                      sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
                   <Stack.Screen name="editor" options={editorScreenOptions} />

@@ -108,9 +108,9 @@ const WorkspaceDock = ({
         className="w-full"
         collapsable={false}
         style={{
-          // Keep the native review sheet mounted while its correction field has
-          // focus; only the editor's dock controls hide above the keyboard.
-          display: activeTab === "code" && keyboardFrame ? "none" : "flex",
+          // The native keyboard covers this bottom-aligned dock. Do not hide its
+          // ancestor: settings and other native sheets are owned by its controls,
+          // so display:none would also dismiss their focused inputs and glass.
           gap: 10,
           pointerEvents: "box-none",
           paddingLeft: horizontalPadding + insets.left,

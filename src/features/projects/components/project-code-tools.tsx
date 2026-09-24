@@ -33,13 +33,14 @@ export const ProjectCodeTools = () => {
         open={open}
         onOpenChange={setOpen}
         backgroundColor={background}
+        scrollable={false}
       >
         <View
-          style={{ maxHeight: height * 0.85 }}
+          style={{ maxHeight: height * 0.85, flexShrink: 1 }}
           accessibilityViewIsModal
           onAccessibilityEscape={() => setOpen(false)}
         >
-          <View className="min-h-14 flex-row items-center justify-between gap-3 border-b border-border px-5">
+          <View className="min-h-14 shrink-0 flex-row items-center justify-between gap-3 border-b border-border px-5">
             <PText accessibilityRole="header" className="text-xl font-semibold">
               Editor settings
             </PText>
@@ -54,6 +55,7 @@ export const ProjectCodeTools = () => {
           </View>
           <ScrollView
             style={{ flexShrink: 1 }}
+            keyboardShouldPersistTaps="handled"
             contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={{
               paddingHorizontal: 20,

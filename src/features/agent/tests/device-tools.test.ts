@@ -1,9 +1,14 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   read: vi.fn(),
   guard: vi.fn(),
   list: vi.fn(),
+  analyze: vi.fn(),
+}));
+vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({
+  readProjectCodeIntelligence: mocks.analyze,
 }));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   saveProjectFileContentAction: mocks.save,
@@ -29,6 +34,39 @@ beforeEach(() => {
     const result = await action();
     throw new Error("Missing native revision");
   });
+});
+it("includes full-file diagnostics in a valid bounded read result without changing its hash", async () => {
+  const content = ('const value = "' + '\t"'.repeat(100) + '";\n').repeat(200);
+  mocks.read.mockResolvedValue({ path: "a.ts", content, size: content.length });
+  mocks.analyze.mockResolvedValue({
+    diagnostics: Array.from({ length: 100 }, () => ({
+      from: 9000,
+      to: 9001,
+      code: 123,
+      severity: "error",
+      message: "issue".repeat(100),
+    })),
+  });
+  const result = await executeDeviceTool("project", {
+    id: "read",
+    tokenId: "token",
+    name: "readFile",
+    args: { path: "a.ts", lineCount: 150 },
+    revision: "a".repeat(64),
+  });
+  expect(result.truncated).toBe(false);
+  const data = JSON.parse(result.text);
+  expect(data.content.length).toBeGreaterThan(0);
+  expect(data).toMatchObject({
+    diagnostics: { status: "ready", total: 100, truncated: true },
+    contentHash: createHash("sha256").update(content).digest("hex"),
+    excerptTruncated: true,
+  });
+  expect(mocks.analyze).toHaveBeenCalledWith("project", {
+    path: "a.ts",
+    content,
+  });
+  expect(mocks.save).not.toHaveBeenCalled();
 });
 it("preserves a missing-folder result through execution and durable receipt replay", async () => {
   mocks.list.mockImplementation(

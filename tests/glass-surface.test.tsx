@@ -19,7 +19,7 @@ vi.mock("react-native", () => ({
   },
   StyleSheet: { absoluteFill: { position: "absolute", inset: 0 } },
   View: ({ children, style, className }: { children?: ReactNode; style?: object; className?: string }) =>
-    createElement("div", { style, className }, children),
+    createElement("div", { style: Object.assign({}, ...[style].flat(Infinity).filter(Boolean)), className }, children),
 }));
 vi.mock("expo-glass-effect", () => ({
   isGlassEffectAPIAvailable: () => native.available,

@@ -3,6 +3,7 @@ import { inlineSession } from "./inline-session";
 import { inlineReadSchema, type VoiceContextSchema } from "./schemas";
 import type { InlineRequest } from "./types";
 import { workspaceTools } from "@/features/agent/tools/workspace-tools";
+import { collectFileDiagnostics } from "@/features/agent/lib/file-diagnostics";
 
 export const encodeVoicePayload = (value: unknown) => {
   const payload = JSON.stringify(value);
@@ -107,8 +108,14 @@ export const readVoiceWorkspace = async (
         if (!file) throw new Error("The file could not be read.");
         inlineSession.activity(input.id, { path: args.path, status: "read" });
         const content = file.content.replace(/\r\n/g, "\n");
+        const diagnostics = await collectFileDiagnostics(
+          projectId,
+          args.path,
+          content,
+        );
+        check();
         const excerpt = content.slice(args.offset, args.offset + args.length);
-        return {
+        const result = {
           path: args.path,
           source: buffer ? "editor" : "disk",
           offset: args.offset,
@@ -118,7 +125,27 @@ export const readVoiceWorkspace = async (
               ? args.offset + excerpt.length
               : null,
           totalLength: content.length,
+          diagnostics,
         };
+        // Long paths and escaped source can leave less room for diagnostics.
+        while (
+          new TextEncoder().encode(JSON.stringify(result)).length > 12000 &&
+          diagnostics.items.length
+        ) {
+          diagnostics.items.pop();
+          diagnostics.truncated = true;
+        }
+        while (
+          new TextEncoder().encode(JSON.stringify(result)).length > 12000 &&
+          result.content.length
+        ) {
+          result.content = result.content.slice(
+            0,
+            Math.floor(result.content.length / 2),
+          );
+          result.nextOffset = args.offset + result.content.length;
+        }
+        return result;
       }
       case "searchFiles": {
         inlineSession.activity(input.id, "Finding references…");

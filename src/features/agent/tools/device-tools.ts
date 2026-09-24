@@ -12,6 +12,7 @@ import {
 import { workspaceTools, type WorkspaceToolName } from "./workspace-tools";
 import type { AgentCommandSchema, AgentToolResultSchema } from "../schemas";
 import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
+import { collectFileDiagnostics } from "../lib/file-diagnostics";
 
 export const readWorkspaceRevision = async (projectId: string) =>
   z
@@ -32,8 +33,13 @@ const invoke = async (
         input.path,
       );
       if (!result) return null;
+      const diagnostics = await collectFileDiagnostics(
+        projectId,
+        input.path,
+        result.content,
+      );
       const lines = result.content.split("\n");
-      return {
+      const response = {
         path: result.path,
         size: result.size,
         contentHash: bytesToHex(
@@ -49,7 +55,28 @@ const invoke = async (
           .slice(input.startLine - 1, input.startLine - 1 + input.lineCount)
           .join("\n")
           .slice(0, 8000),
+        diagnostics,
       };
+      // Preserve valid JSON, the original hash, and diagnostics when the full
+      // response would otherwise be chopped by the generic tool-result limit.
+      while (
+        JSON.stringify(response).length > 10000 &&
+        response.content.length
+      ) {
+        response.excerptTruncated = true;
+        response.content = response.content.slice(
+          0,
+          Math.floor(response.content.length / 2),
+        );
+      }
+      while (
+        JSON.stringify(response).length > 10000 &&
+        diagnostics.items.length
+      ) {
+        diagnostics.items.pop();
+        diagnostics.truncated = true;
+      }
+      return response;
     }
     case "listFiles": {
       let failure: Error | undefined;

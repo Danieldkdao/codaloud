@@ -38,7 +38,7 @@ const empty = z.strictObject({});
 export const workspaceTools = {
   readFile: {
     description:
-      "Read a bounded text file excerpt and its hash. Lines are one-based. Read before editing.",
+      "Read a bounded text file excerpt, its hash, and full-file TypeScript diagnostics with severity, codes and one-based line/column positions. Diagnostics report ready, unavailable or unsupported and may be truncated; these are not ESLint results. Lines are one-based. Read before editing.",
     schema: z.strictObject({
       path: projectFilePathSchema.describe(
         'Existing project-relative file path, e.g. "src/index.ts"; 1–4096 characters, no absolute paths or . / .. segments.',

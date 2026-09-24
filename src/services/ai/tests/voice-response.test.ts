@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
+import { z } from "zod";
 import { voiceModel } from "@/features/voice/constants";
 import { createVoiceReply } from "../voice-response";
 const mocks = vi.hoisted(() => ({
@@ -14,7 +15,138 @@ vi.mock("../server", () => ({ openrouter: { chat: mocks.model } }));
 beforeEach(() => {
   mocks.stream.mockReset();
   mocks.model.mockReturnValue("free-model");
+  vi.spyOn(console, "info").mockImplementation(() => {});
 });
+
+it.each([1, 5, 6, 20])(
+  "answers after up to %i file-read steps instead of ending after a spoken preamble",
+  async (requestedReads) => {
+    const { streamText, tool } =
+      await vi.importActual<typeof import("ai")>("ai");
+    const read = vi.fn(async () => ({
+      content: "file excerpt",
+      nextOffset: 1200,
+    }));
+    let step = 0;
+    const model = new MockLanguageModelV4({
+      doStream: async ({ toolChoice }) => {
+        const current = step++;
+        const answer = current >= requestedReads || toolChoice?.type === "none";
+        return {
+          stream: new ReadableStream({
+            start: (source) => {
+              source.enqueue({ type: "stream-start", warnings: [] });
+              if (current === 0 || answer) {
+                source.enqueue({ type: "text-start", id: "reply" });
+                source.enqueue({
+                  type: "text-delta",
+                  id: "reply",
+                  delta: answer
+                    ? "The part I read handles authentication. I have not inspected the whole file."
+                    : "Let me read the full file to spot any issues. ",
+                });
+                source.enqueue({ type: "text-end", id: "reply" });
+              }
+              if (!answer)
+                source.enqueue({
+                  type: "tool-call",
+                  toolCallId: `read-${current}`,
+                  toolName: "readFile",
+                  input: JSON.stringify({ offset: current * 1200 }),
+                });
+              source.enqueue({
+                type: "finish",
+                finishReason: {
+                  unified: answer ? "stop" : "tool-calls",
+                  raw: undefined,
+                },
+                usage: {
+                  inputTokens: {
+                    total: 10,
+                    noCache: 10,
+                    cacheRead: undefined,
+                    cacheWrite: undefined,
+                  },
+                  outputTokens: { total: 10, text: 10, reasoning: undefined },
+                },
+              });
+              source.close();
+            },
+          }),
+        };
+      },
+    });
+    mocks.model.mockReturnValue(model);
+    mocks.stream.mockImplementation(streamText);
+    let spoken = "";
+    for await (const text of createVoiceReply(
+      [{ role: "user", content: "Read the full file to spot any issues." }],
+      "room",
+      undefined,
+      {
+        readFile: tool({
+          inputSchema: z.object({ offset: z.number() }),
+          execute: read,
+        }),
+      },
+    ))
+      spoken += text;
+    expect(spoken).toContain("The part I read handles authentication.");
+    const reads = Math.min(requestedReads, 6);
+    expect(read).toHaveBeenCalledTimes(reads);
+    expect(model.doStreamCalls).toHaveLength(reads + 1);
+    if (requestedReads >= 6) {
+      expect(model.doStreamCalls.at(-1)!.toolChoice).toEqual({ type: "none" });
+      expect(model.doStreamCalls.at(-1)!.tools).toBeUndefined();
+      expect(JSON.stringify(model.doStreamCalls.at(-1)!.prompt)).toContain(
+        "Explicitly disclose any incomplete file read",
+      );
+    }
+    expect(console.info).toHaveBeenCalledWith(
+      "[voice] Tool started",
+      expect.objectContaining({ tool: "readFile" }),
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      "[voice] Tool completed",
+      expect.objectContaining({ tool: "readFile", success: true }),
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      "[voice] Model step completed",
+      expect.objectContaining({ step: reads + 1, finishReason: "stop" }),
+    );
+    expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(
+      "file excerpt",
+    );
+  },
+);
+
+it.each(["empty", "length", "tool-calls"])(
+  "does not mistake an earlier preamble for a completed answer when the last step is %s",
+  async (ending) => {
+    mocks.stream.mockReturnValue({
+      stream: (async function* () {
+        yield { type: "start-step" };
+        yield { type: "text-delta", text: "Let me read that. " };
+        yield { type: "finish-step", finishReason: "tool-calls" };
+        yield { type: "start-step" };
+        if (ending === "length")
+          yield { type: "text-delta", text: "The issue is" };
+        yield {
+          type: "finish",
+          finishReason: ending === "empty" ? "stop" : ending,
+        };
+      })(),
+    });
+    const consume = async () => {
+      for await (const _text of createVoiceReply([], "room")) {
+        /* consume */
+      }
+    };
+    await expect(consume()).rejects.toThrow(
+      /empty response|without a complete answer/,
+    );
+  },
+);
 it("streams one configured model call with bounded history and no tools or retries", async () => {
   mocks.stream.mockReturnValue({
     stream: (async function* () {

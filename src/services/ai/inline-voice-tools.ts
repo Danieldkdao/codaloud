@@ -15,7 +15,7 @@ export const createInlineVoiceTools = (
   return {
     readFile: tool({
       description:
-        "Read a bounded excerpt of a project file. Open files use the frozen editor contents, including unsaved edits. Offsets are zero-based UTF-16 characters; follow nextOffset for more.",
+        "Read a bounded excerpt of a project file with full-file TypeScript diagnostics, including errors, warnings, codes and one-based line/column positions. Open files use frozen editor contents, including unsaved edits; dependencies use saved project files. Diagnostics are bounded and report ready, unavailable or unsupported, not ESLint results. Offsets are zero-based UTF-16 characters; follow nextOffset for more.",
       inputSchema: inlineReadSchema,
       execute: (args) =>
         rpc("codaloud.voice.read", { id: context.id, name: "readFile", args }),

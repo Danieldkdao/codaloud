@@ -2,17 +2,20 @@ import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider"
 import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { ColorValue } from "react-native";
+import { NativeContentSheet } from "./native-content-sheet";
 
 export type ContentSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDismiss?: () => void;
-  // Omit to retain the native sheet material, including Liquid Glass on iOS.
+  // Android background override; iOS uses the native form-sheet material.
   backgroundColor?: ColorValue;
+  // iOS may scroll simple forms; self-scrolling layouts need a bounded viewport.
+  scrollable?: boolean;
   children: ReactNode;
 };
 
-export const ContentSheet = ({
+const AndroidContentSheet = ({
   open,
   onOpenChange,
   onDismiss,
@@ -42,3 +45,8 @@ export const ContentSheet = ({
     </BottomSheet>
   );
 };
+
+// Keep one public entry point for the native presentation on each platform.
+// EXPO_OS is Expo's compile-time platform flag, not application configuration.
+export const ContentSheet =
+  process.env.EXPO_OS === "ios" ? NativeContentSheet : AndroidContentSheet;

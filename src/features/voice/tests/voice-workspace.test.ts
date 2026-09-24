@@ -1,7 +1,18 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { inlineSession } from "../inline-session";
-import { getVoiceContext, readVoiceWorkspace } from "../voice-workspace";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), list: vi.fn() }));
+import {
+  encodeVoicePayload,
+  getVoiceContext,
+  readVoiceWorkspace,
+} from "../voice-workspace";
+const mocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  list: vi.fn(),
+  analyze: vi.fn(),
+}));
+vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({
+  readProjectCodeIntelligence: mocks.analyze,
+}));
 vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFileContentAction: mocks.read,
   readProjectFilesAction: mocks.list,
@@ -30,6 +41,17 @@ const begin = async () => {
 };
 it("reads frozen unsaved contents and never exposes mutation tools", async () => {
   const { request, unregister } = await begin();
+  mocks.analyze.mockResolvedValue({
+    diagnostics: [
+      {
+        from: 8,
+        to: 14,
+        code: 2304,
+        severity: "error",
+        message: "Unknown name",
+      },
+    ],
+  });
   expect(getVoiceContext(request).mode).toBe("quick-edit");
   expect(
     await readVoiceWorkspace("p", {
@@ -37,7 +59,18 @@ it("reads frozen unsaved contents and never exposes mutation tools", async () =>
       name: "readFile",
       args: { path: "a.ts", offset: 8, length: 6 },
     }),
-  ).toMatchObject({ content: "needle", source: "editor" });
+  ).toMatchObject({
+    content: "needle",
+    source: "editor",
+    diagnostics: {
+      status: "ready",
+      items: [expect.objectContaining({ code: 2304 })],
+    },
+  });
+  expect(mocks.analyze).toHaveBeenCalledWith("p", {
+    path: "a.ts",
+    content: "unsaved needle",
+  });
   expect(mocks.read).not.toHaveBeenCalled();
   await expect(
     readVoiceWorkspace("p", { id: request.id, name: "saveFile", args: {} }),
@@ -57,6 +90,58 @@ it("reads frozen unsaved contents and never exposes mutation tools", async () =>
       args: { path: "a.ts" },
     }),
   ).rejects.toThrow();
+  unregister();
+});
+it("rejects diagnostics that arrive after the voice request is cancelled", async () => {
+  const { request, unregister } = await begin();
+  mocks.analyze.mockImplementationOnce(async () => {
+    inlineSession.cancel();
+    return { diagnostics: [] };
+  });
+  await expect(
+    readVoiceWorkspace("p", {
+      id: request.id,
+      name: "readFile",
+      args: { path: "a.ts" },
+    }),
+  ).rejects.toThrow(/cancel/i);
+  unregister();
+});
+it("keeps the file readable when its diagnostics are unavailable", async () => {
+  const { request, unregister } = await begin();
+  mocks.analyze.mockResolvedValueOnce(null);
+  expect(
+    await readVoiceWorkspace("p", {
+      id: request.id,
+      name: "readFile",
+      args: { path: "a.ts" },
+    }),
+  ).toMatchObject({
+    content: "unsaved needle",
+    diagnostics: { status: "unavailable", total: null },
+  });
+  unregister();
+});
+it("fits diagnostic metadata beside long Unicode paths without breaking read pagination", async () => {
+  const { request, unregister } = await begin();
+  const path =
+    Array.from({ length: 34 }, () => "界".repeat(80)).join("/") +
+    "/" +
+    "界".repeat(20) +
+    "/a.ts";
+  mocks.read.mockResolvedValueOnce({ content: "界".repeat(1200) });
+  mocks.analyze.mockResolvedValueOnce({ diagnostics: [] });
+  const result = await readVoiceWorkspace("p", {
+    id: request.id,
+    name: "readFile",
+    args: { path },
+  });
+  expect(() => encodeVoicePayload(result)).not.toThrow();
+  expect(result).toHaveProperty("content");
+  if ("content" in result) {
+    expect(result.content.length).toBeGreaterThan(0);
+    expect(result.nextOffset).toBe(result.content.length);
+  }
   unregister();
 });
 it("overlays unsaved search results and rejects late reads after cancellation", async () => {

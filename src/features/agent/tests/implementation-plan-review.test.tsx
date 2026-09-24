@@ -108,6 +108,8 @@ it("opens the Markdown plan automatically with fixed controls outside its bounde
   )!;
   expect(body.style.height).toBe("");
   expect(body.style.maxHeight).toBe("600px");
+  expect(body.style.flexShrink).toBe("1");
+  expect(mocks.sheet.scrollable).toBe(false);
   expect(mocks.approve).not.toHaveBeenCalled();
 });
 it("saves corrections and passes them to explicit approval", async () => {

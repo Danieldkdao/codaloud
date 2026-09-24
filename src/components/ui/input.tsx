@@ -94,7 +94,7 @@ export const INPUT_TYPE_DEFAULTS: Record<InputType, TextInputProps> = {
 
 export const inputVariants = cva(
   // Keep the focus outline inside the border so form scroll views cannot clip it.
-  "min-w-0 rounded-lg border border-input px-3 py-2 text-base font-sans text-foreground placeholder:text-muted-foreground selection:text-ring",
+  "min-w-0 rounded-lg border border-input px-3 pt-2 pb-2 text-base font-sans text-foreground placeholder:text-muted-foreground selection:text-ring",
   {
     variants: {
       variant: {
@@ -107,7 +107,7 @@ export const inputVariants = cva(
       size: {
         sm: "min-h-11",
         default: "min-h-12",
-        lg: "min-h-14 px-4 py-3",
+        lg: "min-h-14 px-4 pt-3 pb-3",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
@@ -160,6 +160,8 @@ export const Input = ({
     >
       <TextInput
         ref={inputRef}
+        autoCorrect={false}
+        spellCheck={false}
         {...defaults}
         underlineColorAndroid="transparent"
         textAlignVertical={multiline && !isPassword ? "top" : "center"}
@@ -179,7 +181,7 @@ export const Input = ({
         // Avoid competing autofill hints when the caller chooses an iOS content type.
         autoComplete={
           props.autoComplete ??
-          (textContentType ? undefined : defaults.autoComplete)
+          (textContentType ? undefined : defaults.autoComplete ?? "off")
         }
         textContentType={textContentType}
         editable={isEditable}
@@ -192,7 +194,8 @@ export const Input = ({
         secureTextEntry={isPassword && !(hasToggle && passwordVisible)}
         className={cn(
           inputVariants({ variant, size }),
-          multiline && !isPassword && "min-h-28",
+          // Explicit edges give native multiline text and its caret room at both ends.
+          multiline && !isPassword && "min-h-28 pt-3 pb-3",
           !isEditable && "opacity-50",
           isInvalid &&
             "border-destructive focus:border-destructive focus:outline-destructive",

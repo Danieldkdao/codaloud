@@ -64,8 +64,7 @@ export const MarkdownText = memo(
           fontFamily: "JetBrainsMono_400Regular",
           fontSize: 16,
           color: foreground,
-          backgroundColor: card,
-          borderColor: border,
+          backgroundColor: "#RRGGBB",
         },
         codeBlock: {
           ...body,

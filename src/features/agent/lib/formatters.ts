@@ -1,4 +1,11 @@
 import type { AgentTaskStatus, FileActivityStatus } from "../schemas";
+import type { IconProps } from "@/components/ui/icon";
+import type { AgentTaskRecord } from "../types";
+import {
+  workspaceTools,
+  type WorkspaceToolName,
+} from "../tools/workspace-tools";
+
 export const formatFileActivity = (status: FileActivityStatus) => {
   switch (status) {
     case "reading":
@@ -13,12 +20,6 @@ export const formatFileActivity = (status: FileActivityStatus) => {
       return { label: "Not completed", icon: "alert-circle" as const };
   }
 };
-import type { IconProps } from "@/components/ui/icon";
-import type { AgentTaskRecord } from "../types";
-import {
-  workspaceTools,
-  type WorkspaceToolName,
-} from "../tools/workspace-tools";
 
 export const formatWorkspaceActionIcon = (
   name: WorkspaceToolName,

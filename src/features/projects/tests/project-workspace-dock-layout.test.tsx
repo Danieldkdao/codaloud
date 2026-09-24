@@ -11,6 +11,7 @@ import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar"
 
 const mocks = vi.hoisted(() => ({
   layouts: new Map<string, (event: unknown) => void>(),
+  keyboardVisible: false,
 }));
 vi.mock("react-native", () => ({
   useWindowDimensions: () => ({ width: 390, height: 844 }),
@@ -62,7 +63,8 @@ vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }),
 }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({
-  useKeyboardFrame: () => undefined,
+  useKeyboardFrame: () =>
+    mocks.keyboardVisible ? { screenY: 500, height: 344 } : undefined,
 }));
 vi.mock("@/hooks/use-keyboard-symbols", () => ({
   useKeyboardSymbolsInset: () => 0,
@@ -87,7 +89,8 @@ vi.mock("@/features/voice/components/voice-microphone", () => ({
 }));
 vi.mock("../components/project-action-buttons", () => ({
   ProjectActionButtonsLeft: () => null,
-  ProjectActionButtonsRight: () => null,
+  ProjectActionButtonsRight: () =>
+    createElement("input", { "data-testid": "settings-sheet-host" }),
 }));
 vi.mock("../components/project-branch-menu", () => ({
   ProjectBranchMenu: () => null,
@@ -109,6 +112,7 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.layouts.clear();
+  mocks.keyboardVisible = false;
   container = document.createElement("div");
   root = createRoot(container);
   act(() =>
@@ -150,4 +154,30 @@ it("moves editor controls above the entire floating stack as tasks and transcrip
   // A hidden dock must not discard its last measurement while the keyboard is up.
   measure(0);
   expect(bar.style.bottom).toBe("126px");
+});
+
+it("never hides the native sheet host when a dock-owned input opens the keyboard", () => {
+  const host = container.querySelector<HTMLInputElement>(
+    '[data-testid="settings-sheet-host"]',
+  )!;
+  host.value = "Unsubmitted settings";
+  for (const visible of [true, false, true, false]) {
+    mocks.keyboardVisible = visible;
+    act(() =>
+      root.render(
+        <ProjectWorkspaceDockHeightProvider>
+          <Controls />
+          <ProjectWorkspaceDock tab="code" />
+        </ProjectWorkspaceDockHeightProvider>,
+      ),
+    );
+    expect(container.querySelector('[data-testid="settings-sheet-host"]')).toBe(
+      host,
+    );
+    expect(host.value).toBe("Unsubmitted settings");
+    for (let node: HTMLElement | null = host; node; node = node.parentElement) {
+      expect(node.style.display).not.toBe("none");
+      expect(node.style.opacity).not.toBe("0");
+    }
+  }
 });

@@ -262,14 +262,20 @@ vi.mock("@/components/ui/content-sheet", () => ({
     open,
     children,
     onOpenChange,
+    scrollable,
   }: {
     open: boolean;
     children: ReactNode;
     onOpenChange: (open: boolean) => void;
+    scrollable?: boolean;
   }) =>
     createElement(
       "div",
-      { role: open ? "dialog" : undefined, hidden: !open },
+      {
+        role: open ? "dialog" : undefined,
+        hidden: !open,
+        "data-scrollable": scrollable,
+      },
       children,
       open
         ? createElement("button", {
@@ -681,6 +687,7 @@ it("tracks mock preferences across sheet dismissal without showing command or sa
   act(() => root.render(createElement(ProjectCodeTools)));
   click("Editor tools");
   const sheet = container.querySelector('[role="dialog"]')!;
+  expect(sheet.getAttribute("data-scrollable")).toBe("false");
   for (const text of [
     "Preview",
     "Saving",

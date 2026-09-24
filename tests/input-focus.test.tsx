@@ -8,8 +8,9 @@ import { expect, it, vi } from "vitest";
 
 import { Input } from "@/components/ui/input";
 
-const { compile } = createRequire(import.meta.url)("react-native-css/compiler") as
-  typeof import("react-native-css/compiler");
+const { compile } = createRequire(import.meta.url)(
+  "react-native-css/compiler",
+) as typeof import("react-native-css/compiler");
 
 vi.mock("react-native", () => ({
   View: ({ children }: { children?: ReactNode }) => children,
@@ -34,18 +35,24 @@ it.each([false, true])(
       `@import "./src/global.css"; .input-focus-probe { @apply ${className}; }`,
       { from: `${process.cwd()}/input-focus-probe.css` },
     );
-    const rules = compile(css.css).stylesheet().s?.find(
-      ([name]) => name === "input-focus-probe",
-    )?.[1];
+    const rules = compile(css.css)
+      .stylesheet()
+      .s?.find(([name]) => name === "input-focus-probe")?.[1];
     expect(rules?.some((rule) => rule.p?.f)).toBe(true);
-    const declarations = (focused: boolean) => Object.assign({}, ...rules!
-      .filter((rule) => !rule.p || (focused && rule.p.f))
-      .flatMap((rule) => rule.d ?? [])
-      .map((declaration) => Array.isArray(declaration)
-        ? typeof declaration[1] === "string"
-          ? { [declaration[1]]: declaration[0] }
-          : {}
-        : declaration));
+    const declarations = (focused: boolean) =>
+      Object.assign(
+        {},
+        ...rules!
+          .filter((rule) => !rule.p || (focused && rule.p.f))
+          .flatMap((rule) => rule.d ?? [])
+          .map((declaration) =>
+            Array.isArray(declaration)
+              ? typeof declaration[1] === "string"
+                ? { [declaration[1]]: declaration[0] }
+                : {}
+              : declaration,
+          ),
+      );
     const idle = declarations(false);
     const focused = declarations(true);
     // An outward outline creates a second contour that gets clipped differently
@@ -62,7 +69,47 @@ it.each([false, true])(
 );
 
 it("keeps ghost search inputs free of focus outlines and borders", () => {
-  const markup = renderToStaticMarkup(createElement(Input, { variant: "ghost" }));
+  const markup = renderToStaticMarkup(
+    createElement(Input, { variant: "ghost" }),
+  );
   expect(markup).not.toContain("focus:outline-2");
   expect(markup).not.toContain("focus:border-ring");
 });
+
+it.each([
+  // The native CSS compiler resolves rem units against its 14-point default.
+  { multiline: true, secureTextEntry: false, padding: 10.5 },
+  { multiline: false, secureTextEntry: false, padding: 7 },
+  { multiline: true, secureTextEntry: true, padding: 7 },
+])(
+  "sets balanced native vertical insets for $multiline multiline and $secureTextEntry secure entry",
+  async ({ multiline, secureTextEntry, padding }) => {
+    const markup = renderToStaticMarkup(
+      createElement(Input, { multiline, secureTextEntry }),
+    );
+    const className = markup.match(/class="([^"]+)"/)?.[1];
+    const css = await postcss([tailwindcss()]).process(
+      `@import "./src/global.css"; .multiline-padding-probe { @apply ${className}; }`,
+      { from: `${process.cwd()}/multiline-padding-probe.css` },
+    );
+    const rules = compile(css.css)
+      .stylesheet()
+      .s?.find(([name]) => name === "multiline-padding-probe")?.[1];
+    const declarations = Object.assign(
+      {},
+      ...rules!
+        .filter((rule) => !rule.p)
+        .flatMap((rule) => rule.d ?? [])
+        .map((declaration) =>
+          Array.isArray(declaration)
+            ? typeof declaration[1] === "string"
+              ? { [declaration[1]]: declaration[0] }
+              : {}
+            : declaration,
+        ),
+    );
+    expect(declarations.paddingTop).toBe(padding);
+    expect(declarations.paddingBottom).toBe(padding);
+    expect(declarations.paddingBlock).toBeUndefined();
+  },
+);

@@ -65,11 +65,13 @@ const PlanReview = ({
         open={open}
         onOpenChange={setOpen}
         backgroundColor={background}
+        scrollable={false}
       >
         <View
           testID="implementation-plan-body"
           className="gap-3 px-5 pt-3 pb-6"
           style={{
+            flexShrink: 1,
             maxHeight: Math.max(
               240,
               Math.min(600, height * 0.76, availableHeight - 32),

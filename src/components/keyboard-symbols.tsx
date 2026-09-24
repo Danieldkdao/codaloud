@@ -25,6 +25,15 @@ const symbols = [
   "|",
   "+",
   "-",
+  "!",
+  "?",
+  "%",
+  "&",
+  "*",
+  "^",
+  "$",
+  "~",
+  "`",
 ] as const;
 const formatSymbolLabel = (symbol: string) => {
   switch (symbol) {

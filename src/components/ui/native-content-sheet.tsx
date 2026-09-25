@@ -9,6 +9,7 @@ import { ScreenStack, ScreenStackItem } from "react-native-screens";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ContentSheetProps } from "./content-sheet";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
+import { useThemeColor } from "@/hooks/use-theme";
 import { FORM_SHEET_OPTIONS } from "@/lib/constants";
 
 /** The same UIKit presenter used by Expo Router's New Project form sheet. */
@@ -17,9 +18,11 @@ export const NativeContentSheet = ({
   onOpenChange,
   onDismiss,
   scrollable = true,
+  liquidGlass = false,
   children,
 }: ContentSheetProps) => {
   const id = useId();
+  const background = useThemeColor("background");
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const keyboard = useKeyboardFrame();
@@ -65,7 +68,9 @@ export const NativeContentSheet = ({
           stackPresentation="formSheet"
           {...FORM_SHEET_OPTIONS}
           headerConfig={{ hidden: true }}
-          contentStyle={{ backgroundColor: "transparent" }}
+          contentStyle={{
+            backgroundColor: liquidGlass ? "transparent" : background,
+          }}
           style={StyleSheet.absoluteFill}
           onDismissed={() => {
             if (!presentation.active || !dismissalPending.current) return;
@@ -78,7 +83,7 @@ export const NativeContentSheet = ({
             collapsable={false}
             style={{
               // fitToContents adds a native bottom inset. Reserve it separately
-              // while editing so UIKit stays below its full-height opaque detent.
+              // while editing so the sheet stays above the keyboard.
               maxHeight: Math.max(
                 120,
                 availableHeight -

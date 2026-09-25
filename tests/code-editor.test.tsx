@@ -678,8 +678,9 @@ it("captures exact live selection and accepts only the completed rendered previe
     transcript: "replace this",
   };
   act(() => ref.current!.previewSuggestion(preview, "doc", captured.revision));
-  expect(container.querySelector(".cm-voice-code")!.textContent).toBe("i");
-  expect(onChange).not.toHaveBeenCalled();
+  expect(editor().state.doc.toString()).toBe("hio");
+  expect(container.querySelector(".cm-voice-changed")!.textContent).toBe("i");
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("hio", "doc");
   act(() => ref.current!.acceptSuggestion("p", "doc", captured.revision));
   expect(onSuggestionApplied).toHaveBeenLastCalledWith("p", false);
   act(() =>
@@ -702,4 +703,143 @@ it("captures exact live selection and accepts only the completed rendered previe
     ),
   );
   expect(container.querySelector(".cm-voice-suggestion")).toBeNull();
+});
+
+it("saves streamed chunks and rolls back when declined or leaving the tab", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onContext = vi.fn().mockResolvedValue(undefined);
+  const onChange = vi.fn().mockResolvedValue(undefined);
+  const onInteractionChange = vi.fn().mockResolvedValue(undefined);
+  const onSuggestionAction = vi.fn(async (_id, action) => {
+    if (action === "decline") ref.current!.previewSuggestion(null, "doc", 0);
+  });
+  const props = {
+    ref,
+    filename: "a.txt",
+    documentKey: "doc",
+    initialValue: "hello",
+    onContext,
+    onChange,
+    onInteractionChange,
+    onSuggestionAction,
+  };
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  act(() => ref.current!.captureContext("capture"));
+  const revision = onContext.mock.lastCall![1].revision;
+  const value = {
+    id: "edit",
+    from: 1,
+    to: 4,
+    text: "i",
+    status: "generating" as const,
+    transcript: "",
+  };
+  act(() => ref.current!.previewSuggestion(value, "doc", revision));
+  expect(onInteractionChange.mock.lastCall![0]).toMatchObject({
+    inlineSuggestionId: "edit",
+  });
+  act(() =>
+    ref.current!.previewSuggestion(
+      { ...value, text: "ey", status: "ready" },
+      "doc",
+      revision,
+    ),
+  );
+  expect(onChange).toHaveBeenLastCalledWith("heyo", "doc");
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Decline suggestion"]')!
+      .click(),
+  );
+  expect(onSuggestionAction).toHaveBeenCalledWith("edit", "decline");
+  expect(onChange).toHaveBeenLastCalledWith("hello", "doc");
+  act(() => ref.current!.captureContext("again"));
+  const nextRevision = onContext.mock.lastCall![1].revision;
+  act(() =>
+    ref.current!.previewSuggestion(
+      { ...value, id: "next" },
+      "doc",
+      nextRevision,
+    ),
+  );
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, {
+        ...props,
+        filename: "b.txt",
+        documentKey: "other",
+        initialValue: "other",
+      }),
+    ),
+  );
+  expect(onChange).toHaveBeenLastCalledWith("hello", "doc");
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  expect(editor().state.doc.toString()).toBe("hello");
+  expect(container.querySelector(".cm-voice-actions")).toBeNull();
+});
+
+it("syntax highlights streamed code and accepts through the visible button", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onContext = vi.fn().mockResolvedValue(undefined);
+  const onSuggestionApplied = vi.fn().mockResolvedValue(undefined);
+  let revision = 0;
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, {
+        ref,
+        filename: "inline.ts",
+        documentKey: "doc",
+        initialValue: "",
+        onContext,
+        onSuggestionApplied,
+        onSuggestionAction: async (id, action) => {
+          if (action === "accept")
+            ref.current!.acceptSuggestion(id, "doc", revision);
+        },
+      }),
+    ),
+  );
+  act(() => ref.current!.captureContext("capture"));
+  revision = onContext.mock.lastCall![1].revision;
+  act(() =>
+    ref.current!.previewSuggestion(
+      {
+        id: "edit",
+        from: 0,
+        to: 0,
+        text: "export const answer = 42;",
+        transcript: "",
+        status: "ready",
+      },
+      "doc",
+      revision,
+    ),
+  );
+  await vi.waitFor(() =>
+    expect(container.querySelector(".cm-voice-changed span")).not.toBeNull(),
+  );
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Accept suggestion"]')!
+      .click(),
+  );
+  expect(onSuggestionApplied).toHaveBeenLastCalledWith("edit", true);
+  expect(editor().state.doc.toString()).toBe("export const answer = 42;");
+  expect(container.querySelector(".cm-voice-actions")).toBeNull();
+  expect(editor().state.readOnly).toBe(false);
+});
+
+it("restores focus through the native bridge without moving the caret or focusing a stale document", async () => {
+  const ref = createRef<CodeEditorRef>();
+  await act(async () => root.render(createElement(CodeEditor, {
+    ref, documentKey: "doc", filename: "notes.txt", initialValue: "hello",
+  })));
+  const view = editor();
+  act(() => view.dispatch({ selection: { anchor: 3 } }));
+  act(() => ref.current!.focus("stale"));
+  expect(view.hasFocus).toBe(false);
+  act(() => ref.current!.focus("doc"));
+  expect(view.hasFocus).toBe(true);
+  expect(view.state.selection.main.head).toBe(3);
+  expect(view.state.doc.toString()).toBe("hello");
 });

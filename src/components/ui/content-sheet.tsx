@@ -8,8 +8,10 @@ export type ContentSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDismiss?: () => void;
-  // Android background override; iOS uses the native form-sheet material.
+  // Android background override; iOS matches the modal screen background.
   backgroundColor?: ColorValue;
+  // Opt into the system sheet material on iOS, with Liquid Glass where supported.
+  liquidGlass?: boolean;
   // iOS may scroll simple forms; self-scrolling layouts need a bounded viewport.
   scrollable?: boolean;
   children: ReactNode;

@@ -4,7 +4,11 @@ import { tool, type ModelMessage, type ToolSet } from "ai";
 import { z } from "zod";
 import { voiceModel } from "@/features/voice/constants";
 import { createVoiceReply } from "@/services/ai/voice-response";
-import { createInlineVoiceTools } from "@/services/ai/inline-voice-tools";
+import {
+  createInlineVoiceTools,
+  generateInlineVoiceEdit,
+} from "@/services/ai/inline-voice-tools";
+import { classifyInlineEditIntent } from "@/services/ai/inline-edit-intent";
 import { voiceContextSchema } from "@/features/voice/schemas";
 
 export class VoiceLanguageModel extends llm.LLM {
@@ -137,6 +141,32 @@ class VoiceLanguageModelStream extends llm.LLMStream {
           }
         : this.tools;
     try {
+      if (context?.mode === "quick-edit" && this.workspace) {
+        const instruction = messages.findLast(
+          (message) => message.role === "user",
+        )?.content;
+        if (typeof instruction !== "string") return;
+        const shouldEdit = await classifyInlineEditIntent(
+          instruction,
+          this.abortController.signal,
+        );
+        if (this.abortController.signal.aborted) return;
+        if (!shouldEdit) {
+          await this.workspace.rpc("codaloud.voice.suggestion", {
+            id: context.id,
+            type: "answer",
+          });
+          return;
+        }
+        await generateInlineVoiceEdit(
+          context,
+          messages,
+          instruction,
+          this.workspace.rpc,
+          this.abortController.signal,
+        );
+        return;
+      }
       const reply = context
         ? createVoiceReply(
             messages,
@@ -165,7 +195,10 @@ class VoiceLanguageModelStream extends llm.LLMStream {
         await this.workspace!.rpc("codaloud.voice.suggestion", {
           id: context.id,
           type: "error",
-          message: "Response interrupted. Cancel and try again.",
+          message:
+            context.mode === "quick-edit" && error instanceof Error
+              ? error.message.slice(0, 1000)
+              : "Response interrupted. Cancel and try again.",
         }).catch(() => {});
       if (!this.abortController.signal.aborted) throw error;
     }

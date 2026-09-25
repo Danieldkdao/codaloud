@@ -39,6 +39,7 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
   }, [query.data]);
   return (
     <ContentSheet
+      scrollable={false}
       open
       backgroundColor={card}
       onOpenChange={(open) => {
@@ -46,7 +47,7 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
       }}
     >
       <View
-        style={{ width, maxHeight: height * 0.72 }}
+        style={{ width, maxHeight: height * 0.72, flexShrink: 1 }}
         accessibilityViewIsModal
         onAccessibilityEscape={onClose}
       >
@@ -80,7 +81,9 @@ export const ProjectStashSheet = ({ onClose }: { onClose: () => void }) => {
           operation.workspaceOperation === "Restoring stash…") && (
           <ActivityIndicator
             className="py-3 text-primary"
-            accessibilityLabel={operation.workspaceOperation ?? "Loading stashes"}
+            accessibilityLabel={
+              operation.workspaceOperation ?? "Loading stashes"
+            }
           />
         )}
         {query.fetchStatus === "paused" && (

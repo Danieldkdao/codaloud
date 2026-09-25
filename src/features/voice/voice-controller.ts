@@ -20,11 +20,17 @@ export const createVoiceController = (
   let connection: VoiceConnection | undefined;
   let operations = Promise.resolve();
   let closing = Promise.resolve();
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = undefined;
+  };
   const update = (patch: Partial<VoiceState>) => {
     state = { ...state, ...patch };
     listeners.forEach((listener) => listener());
   };
   const stop = async () => {
+    clearIdle();
     generation++;
     lifetime?.abort();
     lifetime = undefined;
@@ -49,8 +55,10 @@ export const createVoiceController = (
   };
   const start = async (mode: VoiceMode) => {
     if (state.connection === "connecting" || state.listening) return;
+    clearIdle();
     const current = ++generation;
     update({
+      connection: "connecting",
       mode,
       listening: false,
       error: null,
@@ -99,13 +107,13 @@ export const createVoiceController = (
           return;
         }
         connection = created;
-        update({ connection: "connected" });
       }
       const active = connection;
       operations = operations.then(async () => {
         if (current !== generation) return;
         await active.control(mode === "hold" ? "start" : "hands-free");
-        if (current === generation) update({ listening: true });
+        if (current === generation)
+          update({ connection: "connected", listening: true });
       });
       await operations;
     } catch (error) {
@@ -142,7 +150,7 @@ export const createVoiceController = (
       await fail("Voice connection was interrupted. Try again.", current);
     }
   };
-  const pause = async () => {
+  const pause = async (cancel = false) => {
     if (state.connection === "connecting") {
       await stop();
       return;
@@ -153,7 +161,7 @@ export const createVoiceController = (
     update({ mode: null, listening: false });
     operations = operations.then(async () => {
       if (current !== generation) return;
-      await active.control("stop");
+      await active.control(cancel ? "cancel" : "stop");
       if (current === generation) update({ listening: false });
     });
     try {
@@ -162,6 +170,16 @@ export const createVoiceController = (
       operations = Promise.resolve();
       await fail("Voice connection was interrupted. Try again.", current);
     }
+  };
+  const park = async () => {
+    clearIdle();
+    const current = generation;
+    await pause(true);
+    if (current !== generation || state.connection !== "connected") return;
+    update({ transcript: [], error: null, transcriptWarning: undefined });
+    // Closing inline controls ends capture and the turn immediately. Retain
+    // only the muted transport briefly so another tap avoids room/auth setup.
+    idleTimer = setTimeout(() => void stop(), 60_000);
   };
   return {
     getSnapshot: () => state,
@@ -173,7 +191,11 @@ export const createVoiceController = (
     },
     start,
     release,
+    // The native suggestion receiver already muted capture. Keep controller
+    // state in sync so the next spoken correction can reuse this connection.
+    captureEnded: () => update({ listening: false, mode: null }),
     pause,
+    park,
     stop,
   };
 };

@@ -46,6 +46,7 @@ export const ActionSheet = ({
 
   return (
     <ContentSheet
+      scrollable={false}
       open={open}
       onOpenChange={onOpenChange}
       onDismiss={onDismiss}

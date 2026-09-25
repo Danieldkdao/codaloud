@@ -59,6 +59,7 @@ export const ProjectCodeToolbar = ({
   return (
     <ScrollView
       horizontal
+      keyboardShouldPersistTaps="always"
       showsHorizontalScrollIndicator={false}
       className="w-full"
       style={{ flexGrow: 0 }}

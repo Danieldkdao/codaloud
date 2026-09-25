@@ -84,7 +84,28 @@ export const inlineSearchSchema = projectFileSearchQuerySchema.pick({
 export type InlineSearchSchema = z.infer<typeof inlineSearchSchema>;
 export const inlineEventKinds = ["start", "complete", "answer"] as const;
 export type InlineEventKind = (typeof inlineEventKinds)[number];
+export const inlineEditSchema = z.object({
+  oldText: z
+    .string()
+    .max(24000)
+    .describe(
+      "Exact unique source excerpt to replace. Empty only for a new insertion at the captured caret.",
+    ),
+  newText: z
+    .string()
+    .max(24000)
+    .describe("Replacement code. Empty deletes oldText."),
+});
+export type InlineEditSchema = z.infer<typeof inlineEditSchema>;
+
 export const inlineEventSchema = z.union([
+  z.object({
+    id: z.string().max(256),
+    type: z.literal("target"),
+    from: z.number().int().nonnegative(),
+    to: z.number().int().nonnegative(),
+    originalHash: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
   z.object({ id: z.string().max(256), type: z.enum(inlineEventKinds) }),
   z.object({
     id: z.string().max(256),

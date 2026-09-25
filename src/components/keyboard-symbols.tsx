@@ -48,9 +48,11 @@ const formatSymbolLabel = (symbol: string) => {
 
 export const KeyboardSymbols = ({
   onInsert,
+  onTab,
   testID,
 }: {
   onInsert: (symbol: string) => void;
+  onTab?: () => void;
   testID?: string;
 }) => {
   const insets = useSafeAreaInsets();
@@ -69,6 +71,17 @@ export const KeyboardSymbols = ({
         paddingRight: insets.right,
       }}
     >
+      {onTab ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Insert tab"
+          accessibilityHint="Uses your editor indentation settings"
+          onPress={onTab}
+          className="h-12 w-14 items-center justify-center active:opacity-50"
+        >
+          <CodeText className="text-base text-foreground">Tab</CodeText>
+        </Pressable>
+      ) : null}
       {symbols.map((symbol) => (
         <Pressable
           key={symbol}

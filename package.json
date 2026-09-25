@@ -152,5 +152,5 @@
     "tasks:deploy": "trigger deploy"
   },
   "private": true,
-  "packageManager": "pnpm@12.4.1"
+  "packageManager": "pnpm@12.6.0"
 }

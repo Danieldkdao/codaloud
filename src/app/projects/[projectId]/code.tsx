@@ -23,7 +23,7 @@ import type {
 } from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
 import type { EditorCommand } from "@/features/editor/types";
-import { Alert, Keyboard, View } from "react-native";
+import { Alert, View } from "react-native";
 import CodeEditor, {
   type CodeEditorRef,
   type CodeEditorInteraction,
@@ -52,9 +52,9 @@ import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-sh
 import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { useTheme } from "@/hooks/use-theme";
 
-const VoiceTranscriptBubble = lazy(async () => ({
-  default: (await import("@/features/voice/components/voice-transcript-bubble"))
-    .VoiceTranscriptBubble,
+const InlineVoiceControls = lazy(async () => ({
+  default: (await import("@/features/voice/components/inline-voice-controls"))
+    .InlineVoiceControls,
 }));
 const CodeScreen = () => {
   const conversation = useContext(WorkspaceVoiceContext);
@@ -146,7 +146,7 @@ const CodeScreen = () => {
     [documents.activeKey, isWorkspaceBusy],
   );
   const [badgeHeight, setBadgeHeight] = useState(48);
-  const [voiceAccessoryHeight, setVoiceAccessoryHeight] = useState(96);
+  const [voiceAccessoryHeight, setVoiceAccessoryHeight] = useState(160);
   useEditorDevelopmentShortcuts();
 
   const isReady = Boolean(
@@ -241,6 +241,30 @@ const CodeScreen = () => {
       if (alive.current) setClosingPath(null);
     }
   };
+
+  const toolbar = (
+    <ProjectCodeToolbar
+      onProblems={() => setProblemsOpen(true)}
+      disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
+      onFormat={() => {
+        if (documents.activeKey)
+          editor.current?.transform("format", documents.activeKey);
+      }}
+      onOrganize={() => {
+        if (documents.activeKey)
+          editor.current?.transform("organize-imports", documents.activeKey);
+      }}
+      onFind={() => {
+        setReplaceOpen(false);
+        setSearchOpen(true);
+      }}
+      onUndo={() => runCommand("undo")}
+      onRedo={() => runCommand("redo")}
+      canUndo={Boolean(canShowEditorControls && interaction?.commands?.canUndo)}
+      canRedo={Boolean(canShowEditorControls && interaction?.commands?.canRedo)}
+      analysis={documents.activeKey ? activeAnalysis : undefined}
+    />
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -395,7 +419,8 @@ const CodeScreen = () => {
               onChange={setSearchQuery}
               onClose={() => {
                 setSearchOpen(false);
-                Keyboard.dismiss();
+                if (documents.activeKey)
+                  editor.current?.focus(documents.activeKey);
               }}
               onCommand={(command) => {
                 if (documents.activeKey && !isWorkspaceBusy)
@@ -407,39 +432,14 @@ const CodeScreen = () => {
               }}
             />
           ) : (
-            <ProjectCodeToolbar
-              onProblems={() => setProblemsOpen(true)}
-              disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
-              onFormat={() => {
-                if (documents.activeKey)
-                  editor.current?.transform("format", documents.activeKey);
-              }}
-              onOrganize={() => {
-                if (documents.activeKey)
-                  editor.current?.transform(
-                    "organize-imports",
-                    documents.activeKey,
-                  );
-              }}
-              onFind={() => {
-                setReplaceOpen(false);
-                setSearchOpen(true);
-              }}
-              onUndo={() => runCommand("undo")}
-              onRedo={() => runCommand("redo")}
-              canUndo={Boolean(
-                canShowEditorControls && interaction?.commands?.canUndo,
-              )}
-              canRedo={Boolean(
-                canShowEditorControls && interaction?.commands?.canRedo,
-              )}
-              analysis={documents.activeKey ? activeAnalysis : undefined}
-            />
+            toolbar
           )}
         </EditorBottomBar>
       ) : null}
       {showKeyboardAccessory ? (
         <ProjectCodeKeyboardAccessory
+          status={toolbar}
+          voiceActive={Boolean(conversation?.visible)}
           onHeight={setVoiceAccessoryHeight}
           voice={
             conversation ? (
@@ -449,7 +449,7 @@ const CodeScreen = () => {
           feedback={
             conversation ? (
               <Suspense fallback={null}>
-                <VoiceTranscriptBubble conversation={conversation} compact />
+                <InlineVoiceControls conversation={conversation} />
               </Suspense>
             ) : null
           }

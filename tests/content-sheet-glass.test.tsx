@@ -2,9 +2,13 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ContentSheet } from "@/components/ui/content-sheet";
+import {
+  ContentSheet,
+  type ContentSheetProps,
+} from "@/components/ui/content-sheet";
 
 const native = vi.hoisted(() => ({
+  background: "modal-background",
   stack: {} as Record<string, any>,
   sheet: {} as Record<string, any>,
   android: {} as Record<string, any>,
@@ -41,6 +45,9 @@ vi.mock("react-native", () => {
 vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 62, bottom: 34, left: 0, right: 0 }),
 }));
+vi.mock("@/hooks/use-theme", () => ({
+  useThemeColor: () => native.background,
+}));
 vi.mock("@/hooks/use-keyboard-frame", () => ({
   useKeyboardFrame: () => native.keyboard,
 }));
@@ -58,7 +65,7 @@ let root: Root;
 let container: HTMLDivElement;
 const changed = vi.fn();
 const dismissed = vi.fn();
-const render = async (open = true) => {
+const render = async (open = true, props: Partial<ContentSheetProps> = {}) => {
   await act(async () =>
     root.render(
       createElement(ContentSheet, {
@@ -68,12 +75,14 @@ const render = async (open = true) => {
         backgroundColor: "white",
         scrollable: false,
         children: createElement("input", { defaultValue: "Draft" }),
+        ...props,
       }),
     ),
   );
 };
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  native.background = "modal-background";
   native.stack = {};
   native.sheet = {};
   native.android = {};
@@ -84,19 +93,35 @@ beforeEach(() => {
 });
 afterEach(() => act(() => root.unmount()));
 
-it("uses New Project's native form sheet with system geometry, animation and material", async () => {
+it("uses the modal screen background with native sheet geometry and animation", async () => {
   await render();
   expect(native.sheet).toMatchObject({
     stackPresentation: "formSheet",
     sheetAllowedDetents: "fitToContents",
     sheetGrabberVisible: true,
     sheetExpandsWhenScrolledToEdge: false,
-    contentStyle: { backgroundColor: "transparent" },
+    contentStyle: { backgroundColor: "modal-background" },
   });
   expect(native.sheet.sheetCornerRadius).toBeUndefined();
   expect(native.sheet.transitionDuration).toBeUndefined();
   expect(native.sheet.stackAnimation).toBeUndefined();
   expect(container.querySelector('[data-testid="sheet-backdrop"]')).toBeNull();
+});
+it("opts into the system glass material and restores the solid background", async () => {
+  await render(true, { liquidGlass: true });
+  expect(native.sheet.contentStyle).toEqual({ backgroundColor: "transparent" });
+  await render(true, { liquidGlass: false });
+  expect(native.sheet.contentStyle).toEqual({
+    backgroundColor: "modal-background",
+  });
+});
+it("updates the solid sheet background when the app theme changes", async () => {
+  await render();
+  native.background = "dark-modal-background";
+  await render();
+  expect(native.sheet.contentStyle).toEqual({
+    backgroundColor: "dark-modal-background",
+  });
 });
 it("keeps the draft mounted across content rerenders", async () => {
   await render();

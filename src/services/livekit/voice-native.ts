@@ -38,7 +38,10 @@ export const connectNativeVoice: ConnectVoice = (
     releaseAudio = resolve;
   });
   const result = setupQueue.then(async (): Promise<VoiceConnection> => {
+    let startupTimedOut = false;
     const checkCancelled = () => {
+      if (startupTimedOut)
+        throw new Error("Voice connection timed out. Please try again.");
       if (signal.aborted) throw new Error("Voice connection cancelled.");
     };
     checkCancelled();
@@ -84,7 +87,10 @@ export const connectNativeVoice: ConnectVoice = (
       if (connecting) void disconnect();
     };
     signal.addEventListener("abort", abort);
-    const timeout = setTimeout(() => request.abort(), 30_000);
+    const timeout = setTimeout(() => {
+      startupTimedOut = true;
+      abort();
+    }, 30_000);
     const close = () => {
       if (closing) return closing;
       closed = true;
@@ -102,8 +108,12 @@ export const connectNativeVoice: ConnectVoice = (
         await disconnect();
         await AudioSession.stopAudioSession().catch(() => {});
         voiceAudioSession.set(false);
-        if (roomName) await deleteVoiceSession(roomName);
-      })().finally(releaseAudio);
+      })().finally(() => {
+        // HTTP cleanup can wait on auth/database availability. Native audio is
+        // already released, so it must not block another microphone activation.
+        releaseAudio();
+        if (roomName) void deleteVoiceSession(roomName).catch(() => {});
+      });
       return closing;
     };
     const inspectAgent = () => {
@@ -194,7 +204,11 @@ export const connectNativeVoice: ConnectVoice = (
         const event = inlineEventSchema.parse(JSON.parse(data.payload));
         if (!inlineSession.receive(event))
           throw new Error("Request cancelled or already completed.");
-        if (event.type === "start") {
+        if (
+          event.type === "start" ||
+          (event.type === "answer" &&
+            inlineSession.getSnapshot()?.mode === "quick-edit")
+        ) {
           microphoneTrack.set(undefined);
           await room.localParticipant.setMicrophoneEnabled(false);
         }
@@ -315,12 +329,12 @@ export const connectNativeVoice: ConnectVoice = (
             clearTimeout(timer);
             room.off(RoomEvent.ParticipantAttributesChanged, ready);
             room.off(RoomEvent.ParticipantConnected, ready);
-            signal.removeEventListener("abort", cancelled);
+            request.signal.removeEventListener("abort", cancelled);
           };
           room.on(RoomEvent.ParticipantAttributesChanged, ready);
           room.on(RoomEvent.ParticipantConnected, ready);
-          signal.addEventListener("abort", cancelled);
-          if (signal.aborted) cancelled();
+          request.signal.addEventListener("abort", cancelled);
+          if (request.signal.aborted) cancelled();
           else ready();
         });
       checkCancelled();
@@ -434,8 +448,9 @@ export const connectNativeVoice: ConnectVoice = (
         },
       };
     } catch (error) {
-      const failure =
-        error instanceof Error
+      const failure = startupTimedOut
+        ? new Error("Voice connection timed out. Please try again.")
+        : error instanceof Error
           ? error
           : new Error("Voice could not connect. Try again.");
       // Show startup failures before teardown: deleting the server room can

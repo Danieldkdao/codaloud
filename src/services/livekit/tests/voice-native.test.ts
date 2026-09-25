@@ -133,6 +133,7 @@ beforeEach(() => {
   mocks.listeners.clear();
   mocks.transcription = undefined;
   mocks.disconnect.mockResolvedValue(undefined);
+  mocks.remove.mockResolvedValue(undefined);
   mocks.startAudio.mockResolvedValue(undefined);
   mocks.configureAudio.mockResolvedValue(undefined);
   mocks.stopAudio.mockResolvedValue(undefined);
@@ -702,7 +703,7 @@ it.each(["hold", "hands-free"] as const)(
       mocks.agentReady = true;
       retry = controller.start(mode);
       await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.create).toHaveBeenCalledOnce();
+      expect(mocks.create).toHaveBeenCalledTimes(2);
       finishCleanup();
       await Promise.all([starting, retry]);
       expect(controller.getSnapshot()).toMatchObject({
@@ -771,7 +772,7 @@ it.each([
         expect(mocks.disconnect).not.toHaveBeenCalled();
       } else {
         await vi.advanceTimersByTimeAsync(14_999);
-        expect(controller.getSnapshot().connection).toBe("connected");
+        expect(controller.getSnapshot().connection).toBe("connecting");
         expect(mocks.disconnect).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);
         await starting;
@@ -866,6 +867,133 @@ it("binds authenticated suggestion RPCs to a frozen turn and rejects late update
     await expect(send({ id: context.id, type: "complete" })).rejects.toThrow(
       /cancel/i,
     );
+    await connection.control("start");
+    expect(inlineSession.getSnapshot()?.id).not.toBe(context.id);
+    abort.abort();
+    await expect(
+      send({ id: inlineSession.getSnapshot()!.id, type: "start" }),
+    ).rejects.toThrow();
+  } finally {
+    await connection.close();
+    unregister();
+  }
+});
+it("allows a new room after native cleanup even while server room deletion is stalled", async () => {
+  let finishDelete!: () => void;
+  mocks.remove.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishDelete = resolve;
+      }),
+  );
+  const first = await connectNativeVoice(
+    "hands-free",
+    new AbortController().signal,
+    events(),
+  );
+  const closing = first.close();
+  const next = connectNativeVoice(
+    "hands-free",
+    new AbortController().signal,
+    events(),
+  );
+  try {
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2), {
+      timeout: 150,
+    });
+    expect(mocks.stopAudio).toHaveBeenCalledOnce();
+  } finally {
+    finishDelete();
+    await closing;
+    await (await next).close();
+  }
+});
+it("aborts a stalled room handshake at the startup deadline", async () => {
+  vi.useFakeTimers();
+  let rejectConnect!: (error: Error) => void;
+  mocks.connect.mockImplementationOnce(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectConnect = reject;
+      }),
+  );
+  mocks.disconnect.mockImplementationOnce(async () =>
+    rejectConnect(new Error("cancelled")),
+  );
+  const callbacks = events();
+  const pending = connectNativeVoice(
+    "hands-free",
+    new AbortController().signal,
+    callbacks,
+  ).catch((error) => error);
+  try {
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mocks.disconnect).toHaveBeenCalledOnce();
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.stringMatching(/timed out/i),
+    );
+  } finally {
+    rejectConnect(new Error("test cleanup"));
+    await pending;
+  }
+});
+
+it("mutes a skipped inline request and rejects late code from it", async () => {
+  const nativeRequire = createRequire(
+    import.meta.resolve("react-native/package.json"),
+  );
+  const { AbortController: NativeAbortController } = nativeRequire(
+    "abort-controller",
+  ) as { AbortController: typeof AbortController };
+  const abort = new NativeAbortController();
+  const capture = vi.fn(async () => ({
+    projectId: "project",
+    branch: "main",
+    openFiles: [],
+    activeFile: {
+      path: "a.ts",
+      documentKey: "doc",
+      revision: 1,
+      content: "hello",
+      from: 0,
+      to: 5,
+      focused: true,
+    },
+  }));
+  const unregister = inlineSession.register("project", {
+    capture,
+    preview: () => {},
+    apply: async () => true,
+  });
+  const connection = await connectNativeVoice("hold", abort.signal, events(), {
+    projectId: "project",
+  });
+  try {
+    await connection.control("start");
+    const handler = (method: string) =>
+      mocks.register.mock.calls.find(([name]) => name === method)![1];
+    await expect(
+      handler("codaloud.voice.context")({
+        callerIdentity: "intruder",
+        payload: "{}",
+      }),
+    ).rejects.toThrow();
+    const context = JSON.parse(
+      await handler("codaloud.voice.context")({
+        callerIdentity: "agent",
+        payload: "{}",
+      }),
+    );
+    expect(capture).toHaveBeenCalledOnce();
+    const send = (event: unknown) =>
+      handler("codaloud.voice.suggestion")({
+        callerIdentity: "agent",
+        payload: JSON.stringify(event),
+      });
+    await send({ id: context.id, type: "answer" });
+    expect(mocks.microphone).toHaveBeenLastCalledWith(false);
+    expect(inlineSession.getSnapshot()?.status).toBe("answered");
+    await expect(send({ id: context.id, type: "start" })).rejects.toThrow(/cancel|completed/i);
     await connection.control("start");
     expect(inlineSession.getSnapshot()?.id).not.toBe(context.id);
     abort.abort();

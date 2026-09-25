@@ -641,6 +641,11 @@ it("instantly searches full local paths case-insensitively and opens files outsi
   expect(
     container.querySelector('[aria-label="Open src/Closed.ts"]'),
   ).toBeNull();
+  expect(
+    container
+      .querySelector('[aria-label="Search project paths"]')
+      ?.closest("[data-glass]"),
+  ).not.toBeNull();
   searchPaths("  SRC/CLO  ");
   expect(
     container.querySelector('[role="dialog"] [aria-label="Switch to a.ts"]'),
@@ -701,6 +706,7 @@ it("tracks mock preferences across sheet dismissal without showing command or sa
     expect(sheet.textContent).not.toContain(text);
   }
   expect(sheet.textContent).toContain("Git author");
+  expect(sheet.querySelector("h2")?.textContent).toBe("Editor settings");
   for (const label of ["Theme", "Font"]) {
     const select = sheet.querySelector<HTMLSelectElement>(
       `select[aria-label="${label}"]`,

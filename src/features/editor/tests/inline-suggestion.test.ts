@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { history, undo, redo } from "@codemirror/commands";
 import {
   inlineSuggestion,
-  setInlineSuggestion,
   acceptInlineSuggestion,
+  updateInlineSuggestion,
 } from "../inline-suggestion";
 
 const views: EditorView[] = [];
@@ -29,52 +29,107 @@ const preview = {
   status: "generating" as const,
   transcript: "make it forty two",
 };
-it("streams a replacement without changing the source and accepts as one isolated undo step", () => {
+it("streams syntax-highlightable document text and keeps speech out of the file", () => {
+  const view = setup();
+  updateInlineSuggestion(view, { ...preview, text: "", status: "listening" });
+  expect(view.dom.querySelector(".cm-voice-actions")).toBeNull();
+  updateInlineSuggestion(view, preview);
+  expect(view.state.doc.toString()).toBe("const x = 42;");
+  expect(view.dom.querySelector(".cm-voice-changed")?.textContent).toBe("42");
+  expect(view.dom.textContent).not.toContain(preview.transcript);
+  expect(view.dom.querySelector(".cm-voice-code")).toBeNull();
+});
+it("accepts a multi-chunk edit as one isolated undo step, even after moving the cursor", () => {
   const view = setup();
   view.dispatch({ changes: { from: 0, insert: "// note\n" } });
-  const suggestion = { ...preview, from: 18, to: 19 };
-  view.dispatch({ effects: setInlineSuggestion.of(suggestion) });
-  expect(view.state.doc.toString()).toBe("// note\nconst x = 1;");
+  const value = { ...preview, from: 18, to: 19 };
+  updateInlineSuggestion(view, value);
   expect(acceptInlineSuggestion(view, "one")).toBe(false);
-  view.dispatch({
-    effects: setInlineSuggestion.of({ ...suggestion, status: "ready" }),
-  });
+  view.dispatch({ selection: { anchor: 0 }, userEvent: "select.pointer" });
+  updateInlineSuggestion(view, { ...value, text: "420", status: "ready" });
   expect(acceptInlineSuggestion(view, "wrong")).toBe(false);
   expect(acceptInlineSuggestion(view, "one")).toBe(true);
-  expect(view.state.doc.toString()).toBe("// note\nconst x = 42;");
-  expect(acceptInlineSuggestion(view, "one")).toBe(false);
+  expect(view.state.doc.toString()).toBe("// note\nconst x = 420;");
+  expect(view.dom.querySelector(".cm-voice-actions")).toBeNull();
   undo(view);
   expect(view.state.doc.toString()).toBe("// note\nconst x = 1;");
   redo(view);
-  expect(view.state.doc.toString()).toBe("// note\nconst x = 42;");
+  expect(view.state.doc.toString()).toBe("// note\nconst x = 420;");
 });
-it("invalidates previews on any edit, even an edit later undone", () => {
-  const view = setup();
-  view.dispatch({
-    effects: setInlineSuggestion.of({ ...preview, status: "ready" }),
-  });
-  view.dispatch({ changes: { from: 0, insert: "x" } });
-  undo(view);
-  expect(acceptInlineSuggestion(view, "one")).toBe(false);
+it("restores replacements, insertions, and deletions when declined or cancelled", () => {
+  for (const value of [
+    preview,
+    { ...preview, from: 12, to: 12, text: "\nnext();" },
+    { ...preview, text: "", status: "ready" as const },
+  ]) {
+    const view = setup();
+    updateInlineSuggestion(view, value);
+    updateInlineSuggestion(view, null);
+    expect(view.state.doc.toString()).toBe("const x = 1;");
+    expect(view.state.field(inlineSuggestion)).toBeNull();
+  }
 });
-it("supports empty replacements and caret insertions and declines without an undo entry", () => {
+it("does not let typing overwrite an unresolved streamed edit", () => {
   const view = setup();
-  view.dispatch({
-    effects: setInlineSuggestion.of({ ...preview, text: "", status: "ready" }),
-  });
-  expect(acceptInlineSuggestion(view, "one")).toBe(true);
-  expect(view.state.doc.toString()).toBe("const x = ;");
-  undo(view);
-  view.dispatch({
-    effects: setInlineSuggestion.of({
-      ...preview,
-      from: 12,
-      to: 12,
-      text: "\nnext();",
-      status: "ready",
+  updateInlineSuggestion(view, preview);
+  view.dispatch({ changes: { from: 10, to: 12, insert: "oops" } });
+  expect(view.state.doc.toString()).toBe("const x = 42;");
+  updateInlineSuggestion(view, null);
+  view.dispatch({ changes: { from: 10, to: 11, insert: "7" } });
+  expect(view.state.doc.toString()).toBe("const x = 7;");
+});
+it("normalizes streamed CRLF offsets without corrupting the target", () => {
+  const view = setup();
+  updateInlineSuggestion(view, { ...preview, text: "a\r\n" });
+  updateInlineSuggestion(view, { ...preview, text: "a\r\nb", status: "ready" });
+  expect(view.state.doc.toString()).toBe("const x = a\nb;");
+  updateInlineSuggestion(view, null);
+  expect(view.state.doc.toString()).toBe("const x = 1;");
+});
+it("delivers real review button clicks through the editor event boundary", () => {
+  const onAction = vi.fn();
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: "const x = 1;",
+      extensions: [
+        inlineSuggestion,
+        EditorView.domEventHandlers({
+          "codaloud-suggestion": (event) => {
+            onAction((event as CustomEvent).detail);
+            return true;
+          },
+        }),
+      ],
     }),
   });
-  view.dispatch({ effects: setInlineSuggestion.of(null) });
+  views.push(view);
+  updateInlineSuggestion(view, { ...preview, status: "ready" });
+  view.dom.querySelector<HTMLButtonElement>("button")!.click();
+  expect(onAction).toHaveBeenCalledWith({ id: "one", action: "accept" });
+  view.dom.querySelectorAll<HTMLButtonElement>("button")[1]!.click();
+  expect(onAction).toHaveBeenLastCalledWith({ id: "one", action: "decline" });
+});
+it("keeps pending review and history intact when undo is requested before acceptance", () => {
+  const view = setup();
+  updateInlineSuggestion(view, { ...preview, status: "ready" });
+  undo(view);
+  expect(view.state.doc.toString()).toBe("const x = 42;");
+  expect(acceptInlineSuggestion(view, "one")).toBe(true);
+  undo(view);
   expect(view.state.doc.toString()).toBe("const x = 1;");
-  expect(undo(view)).toBe(false);
+});
+it("retargets the captured caret to a validated replacement before streaming starts", () => {
+  const view = setup();
+  updateInlineSuggestion(view, {
+    ...preview,
+    from: 12,
+    to: 12,
+    text: "",
+    status: "generating",
+  });
+  updateInlineSuggestion(view, { ...preview, text: "", status: "generating" });
+  updateInlineSuggestion(view, { ...preview, status: "ready" });
+  expect(view.state.doc.toString()).toBe("const x = 42;");
+  updateInlineSuggestion(view, null);
+  expect(view.state.doc.toString()).toBe("const x = 1;");
 });

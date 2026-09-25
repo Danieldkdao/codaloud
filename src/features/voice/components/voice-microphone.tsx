@@ -19,7 +19,8 @@ export const VoiceMicrophone = ({
   compact?: boolean;
 }) => {
   const { state, pressed } = conversation;
-  const foreground = useThemeColor("primary-foreground");
+  const foreground = useThemeColor("foreground");
+  const primaryForeground = useThemeColor("primary-foreground");
   const scale = useSharedValue(1);
   useEffect(() => {
     scale.value = withSpring(pressed ? 0.94 : state.listening ? 1.08 : 1, {
@@ -38,7 +39,11 @@ export const VoiceMicrophone = ({
         accessibilityLabel={
           state.mode === "hands-free" ? "Stop listening" : "Microphone"
         }
-        accessibilityHint="Hold to talk and release to send. Double-tap for hands-free."
+        accessibilityHint={
+          compact
+            ? "Speak a quick edit at the cursor."
+            : "Hold to talk and release to send. Double-tap for hands-free."
+        }
         accessibilityState={{
           busy: state.connection === "connecting",
           selected: state.listening,
@@ -48,34 +53,41 @@ export const VoiceMicrophone = ({
           { name: "stop-voice", label: "Stop listening" },
         ]}
         onAccessibilityAction={({ nativeEvent }) => {
-          if (nativeEvent.actionName === "start-voice")
-            conversation.startHandsFree();
+          if (nativeEvent.actionName === "start-voice") {
+            if (compact) conversation.startInline();
+            else conversation.startHandsFree();
+          }
           if (nativeEvent.actionName === "stop-voice") conversation.pause();
         }}
         delayLongPress={300}
         onTouchStart={conversation.onTouchStart}
         onPressIn={conversation.onTouchStart}
-        onLongPress={conversation.onLongPress}
+        onLongPress={compact ? undefined : conversation.onLongPress}
         onPressOut={conversation.onPressOut}
         onTouchEnd={conversation.onTouchEnd}
         onTouchCancel={conversation.onTouchCancel}
-        onPress={conversation.onPress}
+        onPress={compact ? conversation.startInline : conversation.onPress}
         className={cn(
-          "shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90",
-          compact ? "size-11 mx-1" : "size-14",
-          (pressed || state.listening) && "border-2 border-primary-foreground",
+          "shrink-0 items-center justify-center rounded-full",
+          compact
+            ? "size-11 mx-1 bg-transparent"
+            : "size-14 bg-primary active:bg-primary/90",
         )}
       >
         <View pointerEvents="none">
           {state.connection === "connecting" ? (
-            <ActivityIndicator color={foreground} />
+            <ActivityIndicator
+              color={compact ? foreground : primaryForeground}
+            />
           ) : (
             <Icon
               family="Feather"
               name={state.mode === "hands-free" ? "square" : "mic"}
               size={24}
               accessible={false}
-              className="text-primary-foreground"
+              className={cn(
+                compact ? "text-foreground" : "text-primary-foreground",
+              )}
             />
           )}
         </View>

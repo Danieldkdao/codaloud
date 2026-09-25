@@ -13,6 +13,22 @@ const state = vi.hoisted(() => ({
   dismissKeyboard: vi.fn(),
   scrollProps: {} as ScrollViewProps,
 }));
+vi.mock("react-native-reanimated", () => {
+  const transition = {
+    duration: () => transition,
+    reduceMotion: () => transition,
+  };
+  return {
+    default: {
+      View: ({ children, testID, style }: any) =>
+        createElement("div", { "data-testid": testID, style }, children),
+    },
+    FadeIn: transition,
+    FadeOut: transition,
+    LinearTransition: transition,
+    ReduceMotion: { System: "system" },
+  };
+});
 vi.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: { getImageSource: async (name: string) => ({ uri: name }) } }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "foreground" }));
 vi.mock("@/components/ui/native-select", () => ({ NativeSelect: ({ label, sections }: { label: string; sections: { options: { label: string; onSelect: () => void }[] }[] }) =>
@@ -61,6 +77,51 @@ beforeEach(() => {
   root = createRoot(container);
 });
 afterEach(() => act(() => root.unmount()));
+it("replaces every keyboard toolbar row with voice controls until closed", () => {
+  const props = {
+    frame: { screenY: 544, screenX: 0, height: 300, width: 390 },
+    onDismissKeyboard: state.dismissKeyboard,
+    status: createElement("div", { "data-status": true }, "TypeScript · Undo"),
+    feedback: createElement(
+      "div",
+      { "data-feedback": true },
+      "Transcript and waveform",
+    ),
+  };
+  act(() =>
+    root.render(
+      createElement(ProjectCodeKeyboardAccessory, {
+        ...props,
+        voiceActive: true,
+      }),
+    ),
+  );
+  expect(container.querySelector("[data-feedback]")).not.toBeNull();
+  expect(container.querySelector("[data-status]")).toBeNull();
+  expect(
+    container.querySelector('[data-testid="editor-keyboard-actions"]'),
+  ).toBeNull();
+  expect(
+    container.querySelector('[data-testid="editor-keyboard-symbols"]'),
+  ).toBeNull();
+  act(() =>
+    root.render(
+      createElement(ProjectCodeKeyboardAccessory, {
+        ...props,
+        voiceActive: false,
+      }),
+    ),
+  );
+  const status = container.querySelector("[data-status]")!;
+  const actions = container.querySelector(
+    '[data-testid="editor-keyboard-actions"]',
+  )!;
+  expect(status).not.toBeNull();
+  expect(
+    status.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(container.querySelector("[data-feedback]")).toBeNull();
+});
 it("shows a glass strip flush with the keyboard, follows frame changes, and hides on dismissal", () => {
   act(() => root.render(createElement(Probe)));
   expect(container.querySelector("button")).toBeNull();
@@ -90,7 +151,7 @@ it("offers all symbol and line-action placeholders without emitting edits", () =
     expect(button).not.toBeNull();
     act(() => button.click());
   }
-  expect(container.querySelectorAll("button")).toHaveLength(31);
+  expect(container.querySelectorAll("button")).toHaveLength(41);
 });
 
 it("offers native selection menu placeholders with familiar clipboard and code actions", async () => {
@@ -117,7 +178,7 @@ it("keeps line and selection actions above a full-width, scrollable symbol row",
     expect(symbols.querySelector(`[aria-label="${label}"]`)).toBeNull();
   }
   expect(actions.compareDocumentPosition(symbols) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(symbols.querySelectorAll("button")).toHaveLength(22);
+  expect(symbols.querySelectorAll("button")).toHaveLength(32);
   expect(state.scrollProps.horizontal).toBe(true);
   expect(container.querySelector('[data-icon="chevron-left"]')).toBeNull();
   expect(container.querySelector('[data-icon="chevron-right"]')).toBeNull();
@@ -182,7 +243,7 @@ it("routes all four cursor controls through a scrollable action row without dism
   expect(actions.querySelector('[aria-label="Hide keyboard"]')).toBeNull();
   expect(state.dismissKeyboard).not.toHaveBeenCalled();
 });
-it("keeps the voice button fixed outside the horizontally scrolling actions and feedback above the strip", () => {
+it("keeps the voice button fixed outside the horizontally scrolling actions before recording", () => {
   act(() =>
     root.render(
       createElement(ProjectCodeKeyboardAccessory, {
@@ -207,5 +268,17 @@ it("keeps the voice button fixed outside the horizontally scrolling actions and 
     container.querySelector(
       '[data-testid="editor-keyboard-strip"] [data-feedback]',
     ),
-  ).not.toBeNull();
+  ).toBeNull();
+});
+
+it("routes the symbols row Tab button to the editor indentation command", () => {
+  const onCommand = vi.fn();
+  act(() => root.render(createElement(ProjectCodeKeyboardAccessory, {
+    frame: { screenY: 544, screenX: 0, height: 300, width: 390 },
+    onCommand, onDismissKeyboard: state.dismissKeyboard,
+  })));
+  const button = container.querySelector<HTMLButtonElement>('[aria-label="Insert tab"]');
+  expect(button).not.toBeNull();
+  act(() => button!.click());
+  expect(onCommand).toHaveBeenCalledExactlyOnceWith("tab");
 });

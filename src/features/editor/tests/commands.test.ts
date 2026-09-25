@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { defaultKeymap, history, undo } from "@codemirror/commands";
 import { languages } from "@codemirror/language-data";
-import { codeFolding, ensureSyntaxTree } from "@codemirror/language";
+import { codeFolding, ensureSyntaxTree, indentUnit } from "@codemirror/language";
 import { runEditorCommand, getEditorCommandState } from "../commands";
 const views: EditorView[] = [];
 const make = async (doc = "one\ntwo\nthree", readOnly = false) => {
@@ -86,6 +86,7 @@ it("keeps read-only documents unchanged for every mutating command", async () =>
   const view = await make("hello", true);
   for (const command of [
     "insert",
+    "tab",
     "cut",
     "paste",
     "delete-line",
@@ -184,4 +185,16 @@ it("matches standard vertical arrow-key navigation through uneven lines", async 
     expect(view.state.selection.eq(keyboard.state.selection, true)).toBe(true);
   }
   expect(view.state.doc.toString()).toBe("abcdef\nx\nabcdef");
+});
+
+it.each(["  ", "    ", "\t"])("inserts the configured indentation unit %j at the caret and can undo it", async (unit) => {
+  const view = new EditorView({ state: EditorState.create({
+    doc: "hello", selection: { anchor: 2 }, extensions: [history(), indentUnit.of(unit)],
+  }) });
+  views.push(view);
+  await runEditorCommand(view, "tab", clipboard());
+  expect(view.state.doc.toString()).toBe(`he${unit}llo`);
+  expect(view.state.selection.main.head).toBe(2 + unit.length);
+  undo(view);
+  expect(view.state.doc.toString()).toBe("hello");
 });

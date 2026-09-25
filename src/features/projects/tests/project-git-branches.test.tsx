@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+vi.mock("react-native-screens", () => ({ ScreenStack: ({ children }: { children?: ReactNode }) => children, ScreenStackItem: ({ children }: { children?: ReactNode }) => children }));
 vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => createElement("div", { "data-testid": "task-status-bar" }) }));
 vi.mock("@/features/agent/components/implementation-plan-review", () => ({ ImplementationPlanReview: () => null }));
 vi.mock("expo-sqlite/kv-store", () => ({ default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined) } }));

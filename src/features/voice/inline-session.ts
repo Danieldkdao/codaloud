@@ -1,3 +1,5 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import type { InlineEvent, InlineRequest, VoiceEditorBridge } from "./types";
 import type { InlineSuggestion } from "@/features/editor/types";
 import { mergeFileActivity } from "@/features/agent/file-activity";
@@ -15,8 +17,8 @@ export const createInlineSession = () => {
   };
   const suggestion = (value: InlineRequest): InlineSuggestion => ({
     id: value.id,
-    from: value.context!.activeFile!.from,
-    to: value.context!.activeFile!.to,
+    from: value.range?.from ?? value.context!.activeFile!.from,
+    to: value.range?.to ?? value.context!.activeFile!.to,
     text: value.text,
     transcript: value.transcript,
     status:
@@ -53,11 +55,8 @@ export const createInlineSession = () => {
         if (owner === bridge) cancel();
       };
     },
-    begin: async (projectId: string) => {
-      if (
-        request &&
-        ["generating", "ready", "applying"].includes(request.status)
-      )
+    begin: async (projectId: string, requestedMode?: InlineRequest["mode"]) => {
+      if (request && ["generating", "applying"].includes(request.status))
         throw new Error(
           "Accept, decline, or cancel the current suggestion first.",
         );
@@ -82,7 +81,11 @@ export const createInlineSession = () => {
         const context = captured
           ? (JSON.parse(JSON.stringify(captured)) as typeof captured)
           : null;
-        const mode = context?.activeFile?.focused ? "quick-edit" : "agent";
+        if (requestedMode === "quick-edit" && !context?.activeFile)
+          throw new Error("Open a file before requesting an inline edit.");
+        const mode =
+          requestedMode ??
+          (context?.activeFile?.focused ? "quick-edit" : "agent");
         publish({ ...request, context, mode });
         if (mode === "quick-edit")
           bridge?.preview(suggestion(request!), context!);
@@ -131,6 +134,34 @@ export const createInlineSession = () => {
             }),
           });
           break;
+        case "target": {
+          const source = request.context?.activeFile?.content.replace(
+            /\r\n/g,
+            "\n",
+          );
+          if (
+            request.status !== "generating" ||
+            request.range ||
+            request.text ||
+            source === undefined ||
+            !Number.isInteger(event.from) ||
+            !Number.isInteger(event.to) ||
+            event.from < 0 ||
+            event.to < event.from ||
+            event.to > source.length ||
+            event.to - event.from > 24000 ||
+            bytesToHex(
+              sha256(
+                new TextEncoder().encode(source.slice(event.from, event.to)),
+              ),
+            ) !== event.originalHash
+          )
+            throw new Error(
+              "The edit target does not match the captured file.",
+            );
+          publish({ ...request, range: { from: event.from, to: event.to } });
+          break;
+        }
         case "delta":
           if (
             request.status !== "generating" ||
@@ -145,8 +176,8 @@ export const createInlineSession = () => {
           if (request.status !== "generating") return false;
           if (
             !request.text &&
-            request.context?.activeFile?.from ===
-              request.context?.activeFile?.to
+            (request.range?.from ?? request.context?.activeFile?.from) ===
+              (request.range?.to ?? request.context?.activeFile?.to)
           ) {
             fail(event.id, "No code was suggested. Cancel and try again.");
             return true;
@@ -166,14 +197,19 @@ export const createInlineSession = () => {
         owner?.preview(suggestion(request!), request!.context!);
       return true;
     },
-    invalidate: (documentKey?: string, revision?: number) => {
+    invalidate: (
+      documentKey?: string,
+      revision?: number,
+      inlineSuggestionId?: string,
+    ) => {
       const file = request?.context?.activeFile;
       if (
         file &&
         request?.mode === "quick-edit" &&
         request &&
         ["listening", "generating", "ready"].includes(request.status) &&
-        (file.documentKey !== documentKey || file.revision !== revision)
+        (file.documentKey !== documentKey ||
+          (file.revision !== revision && inlineSuggestionId !== request.id))
       )
         fail(request.id, "The document changed. Cancel and start again.");
     },
@@ -193,13 +229,19 @@ export const createInlineSession = () => {
         if (request?.id !== id) return;
         const before = original.context!.activeFile!;
         const after = current.activeFile;
+        // CodeMirror offsets use LF even when the saved file uses CRLF.
+        const source = before.content.replace(/\r\n/g, "\n");
+        const range = original.range ?? before;
+        const expected =
+          source.slice(0, range.from) +
+          original.text.replace(/\r\n/g, "\n") +
+          source.slice(range.to);
         if (
           current.projectId !== original.projectId ||
           current.branch !== original.context!.branch ||
           !after ||
           after.documentKey !== before.documentKey ||
-          after.revision !== before.revision ||
-          after.content !== before.content
+          after.content.replace(/\r\n/g, "\n") !== expected
         )
           throw new Error(
             "The document or branch changed. Cancel and start again.",

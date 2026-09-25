@@ -49,6 +49,7 @@ export const TaskActivitySheet = ({
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const scroll = useRef<ScrollView>(null);
+  const pendingNavigation = useRef<(() => void) | null>(null);
   const following = useRef(true);
   const userScrolling = useRef(false);
   const userGesture = useRef(false);
@@ -74,10 +75,22 @@ export const TaskActivitySheet = ({
   };
 
   return (
-    <ContentSheet open={open} onOpenChange={onOpenChange} onDismiss={onDismiss}>
+    <ContentSheet
+      scrollable={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      onDismiss={() => {
+        const navigate = pendingNavigation.current;
+        pendingNavigation.current = null;
+        onDismiss?.();
+        // UIKit must finish dismissing this presenter before Expo Router presents
+        // another modal. Overlapping transitions can dismiss the new route too.
+        navigate?.();
+      }}
+    >
       <KeyboardAwareView
         testID="task-activity-detail"
-        style={{ height: height * 0.82 }}
+        style={{ height: height * 0.82, flexShrink: 1 }}
       >
         <View className="flex-1 gap-4">
           <View className="mx-5 flex-row items-center gap-3">
@@ -156,7 +169,12 @@ export const TaskActivitySheet = ({
                 <FileActivity
                   projectId={task.request.projectId}
                   files={task.files}
-                  onNavigate={() => onOpenChange(false)}
+                  onNavigate={(navigate) => {
+                    if (pendingNavigation.current) return;
+                    pendingNavigation.current = navigate;
+                    Keyboard.dismiss();
+                    onOpenChange(false);
+                  }}
                 />
               ) : null}
               {!filteredActivity.length ? (

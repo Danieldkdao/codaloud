@@ -31,6 +31,8 @@ vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileCont
 const readFile = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 const showAlert = vi.hoisted(() => vi.fn());
+const focusEditor = vi.hoisted(() => vi.fn());
+const dismissKeyboard = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/keyboard-aware-view", () => ({ KeyboardAwareView: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
@@ -42,8 +44,9 @@ vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "proje
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, activePath, save, onRetry, readError }: { paths: string[]; activePath: string | null; save?: SaveSnapshot; onRetry?: () => void; readError?: boolean }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" "), save?.status === "error" ? createElement("button", { "aria-label": `${readError ? "Retry opening" : "Retry saving"} ${activePath}`, onClick: onRetry }, "Error") : save?.status === "saved" ? createElement("button", { "aria-label": `Close ${activePath}` }, "X") : createElement("span", { role: "progressbar" })) }));
 vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: ({ path }: { path: string }) => createElement("button", { "aria-label": "Editor tools", "data-path": path }) }));
-vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ ref, documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { ref?: { current: unknown }; documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
   useEffect(() => { state.editorMounts++; }, []);
+  if (ref) ref.current = { focus: focusEditor };
   state.change = onChange;
   state.ready = () => onReady(documentKey);
   state.analysis = (value) => onAnalysis(value, documentKey);
@@ -61,6 +64,7 @@ vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Bool
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
   Alert: { alert: showAlert },
+  Keyboard: { dismiss: dismissKeyboard },
   ScrollView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove: vi.fn() }) },
@@ -315,5 +319,19 @@ vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
 });
 
 vi.mock("@/features/editor/components/editor-problems-sheet", () => ({ EditorProblemsSheet: () => null }));
-vi.mock("@/features/editor/components/editor-search-bar", () => ({ EditorSearchBar: () => null }));
+vi.mock("@/features/editor/components/editor-search-bar", () => ({ EditorSearchBar: ({ onClose }: { onClose: () => void }) => createElement("button", { "aria-label": "Close file search", onClick: onClose }) }));
 vi.mock("expo-clipboard", () => ({ getStringAsync: async () => "", setStringAsync: async () => true }));
+
+it("closing file search returns focus to the same editor without dismissing the keyboard", async () => {
+  finishLoading();
+  renderCode();
+  await act(async () => state.ready!());
+  const original = container.querySelector("textarea");
+  const search = container.querySelector<HTMLButtonElement>('[aria-label="Find in file"]');
+  expect(search).not.toBeNull();
+  act(() => search!.click());
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Close file search"]')!.click());
+  expect(focusEditor).toHaveBeenCalledWith(expect.any(String));
+  expect(dismissKeyboard).not.toHaveBeenCalled();
+  expect(container.querySelector("textarea")).toBe(original);
+});

@@ -1,5 +1,6 @@
 export type EditorCommand =
   | "insert"
+  | "tab"
   | "cursor-left"
   | "cursor-right"
   | "cursor-up"

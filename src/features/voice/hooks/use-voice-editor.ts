@@ -164,7 +164,7 @@ export const useVoiceEditor = (options: {
       capture.acknowledge(id, value ? null : "Editor not ready.");
     },
     onInteraction: (state: CodeEditorInteraction, key?: string) =>
-      inlineSession.invalidate(key, state.revision),
+      inlineSession.invalidate(key, state.revision, state.inlineSuggestionId),
     onSuggestionAction: async (id: string, action: InlineSuggestionAction) => {
       if (inlineSession.getSnapshot()?.id !== id) return;
       if (action === "accept") await inlineSession.accept(id);

@@ -3,6 +3,7 @@ import { act, createElement, useImperativeHandle, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { VoiceTranscriptBubble } from "../components/voice-transcript-bubble";
+import { InlineVoiceControls } from "../components/inline-voice-controls";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
 const mocks = vi.hoisted(() => ({
   scroll: vi.fn(),
@@ -130,6 +131,61 @@ beforeEach(() => {
   act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
 });
 afterEach(() => act(() => root.unmount()));
+it("keeps inline feedback minimal and lets recording stop without closing the controls", () => {
+  const pause = vi.fn();
+  const startInline = vi.fn();
+  const value = {
+    ...conversation,
+    pause,
+    startInline,
+    state: {
+      ...conversation.state,
+      transcript: [
+        ...conversation.state.transcript,
+        {
+          id: "assistant",
+          role: "assistant" as const,
+          text: "Long assistant reply",
+          final: true,
+        },
+      ],
+    },
+  };
+  act(() => root.render(<InlineVoiceControls conversation={value} />));
+  expect(container.textContent).toContain("Hello");
+  expect(container.textContent).not.toContain("Long assistant reply");
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>(
+        '[aria-label="Stop recording and send edit"]',
+      )!
+      .click(),
+  );
+  expect(pause).toHaveBeenCalledOnce();
+  expect(value.stop).not.toHaveBeenCalled();
+  act(() =>
+    root.render(
+      <InlineVoiceControls
+        conversation={{ ...value, state: { ...value.state, listening: false } }}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("Hello");
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Speak another edit"]')!
+      .click(),
+  );
+  expect(startInline).toHaveBeenCalledOnce();
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>(
+        '[aria-label="Close inline voice edit"]',
+      )!
+      .click(),
+  );
+  expect(value.stop).toHaveBeenCalledOnce();
+});
 it("renders both speakers as Markdown and marks unfinished replies as streaming", () => {
   act(() =>
     root.render(

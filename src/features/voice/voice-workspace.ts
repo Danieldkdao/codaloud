@@ -13,6 +13,7 @@ export const encodeVoicePayload = (value: unknown) => {
 };
 export const getVoiceContext = (request: InlineRequest): VoiceContextSchema => {
   const file = request.context?.activeFile;
+  const source = file?.content.replace(/\r\n/g, "\n") ?? "";
   const context: VoiceContextSchema = {
     id: request.id,
     projectId: request.projectId,
@@ -28,12 +29,12 @@ export const getVoiceContext = (request: InlineRequest): VoiceContextSchema => {
           revision: file.revision,
           from: file.from,
           to: file.to,
-          before: file.content.slice(Math.max(0, file.from - 800), file.from),
-          selected: file.content.slice(
+          before: source.slice(Math.max(0, file.from - 800), file.from),
+          selected: source.slice(
             file.from,
             Math.min(file.to, file.from + 1200),
           ),
-          after: file.content.slice(file.to, file.to + 800),
+          after: source.slice(file.to, file.to + 800),
           selectionTruncated: file.to - file.from > 1200,
         }
       : null,

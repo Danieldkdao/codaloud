@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   search: {} as any,
   reducedMotion: false,
   navigate: vi.fn(),
+  push: vi.fn(),
+  flush: vi.fn(async () => {}),
   taskSearch: {} as any,
   projectId: "project",
   touch: {} as any,
@@ -29,7 +31,11 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ projectId: mocks.projectId }),
-  useRouter: () => ({ navigate: mocks.navigate }),
+  useRouter: () => ({ navigate: mocks.navigate, push: mocks.push }),
+}));
+vi.mock("../workspace-access", () => ({ flushAgentWorkspace: mocks.flush }));
+vi.mock("@/features/projects/hooks/use-project-workspace-current-file", () => ({
+  useProjectWorkspaceCurrentFile: () => ({ openFile: vi.fn() }),
 }));
 vi.mock("@/features/projects/hooks/use-workspace-loading-preview", () => ({
   useWorkspaceLoadingPreview: () => false,
@@ -246,6 +252,8 @@ beforeEach(() => {
   mocks.search = {};
   mocks.reducedMotion = false;
   mocks.navigate.mockClear();
+  mocks.push.mockClear();
+  mocks.flush.mockReset().mockResolvedValue(undefined);
   mocks.projectId = "project";
   mocks.touch = {};
   mocks.buttons = {};
@@ -258,6 +266,29 @@ beforeEach(() => {
   render();
 });
 afterEach(() => act(() => root.unmount()));
+it("waits for the activity sheet to dismiss before opening review changes and can reopen it afterward", async () => {
+  mocks.tasks[0].files = [{ path: "a.ts", status: "changed" }];
+  render();
+  showDetail();
+  await act(async () => {
+    const review = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Review changes",
+    )!;
+    review.click();
+  });
+  expect(mocks.flush).toHaveBeenCalledWith("project");
+  expect(detail().open).toBe(false);
+  expect(mocks.push).not.toHaveBeenCalled();
+  act(() => detail().onDismiss());
+  expect(mocks.push).toHaveBeenCalledExactlyOnceWith({
+    pathname: "/projects/[projectId]/git/workspace-diff",
+    params: { projectId: "project" },
+  });
+  click("View Agent Activity");
+  expect(detail().open).toBe(true);
+  act(() => detail().onDismiss());
+  expect(mocks.push).toHaveBeenCalledOnce();
+});
 
 it("animates the entire swipe row on entry and exit, without losing its touch guard", () => {
   const row = mocks.animations["task-history-row"];

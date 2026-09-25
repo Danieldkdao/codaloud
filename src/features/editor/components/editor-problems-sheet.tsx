@@ -8,8 +8,15 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { ContentSheet } from "@/components/ui/content-sheet";
+import { GlassSurface } from "@/components/ui/glass-surface";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, {
+  ReduceMotion,
+  useAnimatedStyle,
+  withSpring,
+} from "react-native-reanimated";
 import { Input } from "@/components/ui/input";
-import { PText } from "@/components/ui/text";
+import { HeadingText, PText } from "@/components/ui/text";
 import { Icon } from "@/components/ui/icon";
 import { useThemeColor } from "@/hooks/use-theme";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
@@ -27,6 +34,8 @@ import {
   formatProblemLocation,
 } from "../lib/formatters";
 
+const problemFilters = ["all", ...diagnosticSeverities] as const;
+
 export const EditorProblemsSheet = ({
   open,
   onOpenChange,
@@ -43,8 +52,9 @@ export const EditorProblemsSheet = ({
   const background = useThemeColor("background");
   const { height } = useWindowDimensions();
   const keyboard = useKeyboardFrame();
-  // A screen-sized detent plus the keyboard forces iOS into its opaque,
-  // full-height sheet appearance. Keep the same fraction of the usable area.
+  const insets = useSafeAreaInsets();
+  const [filterWidth, setFilterWidth] = useState(0);
+  // Keep the list and footer within the usable area when the keyboard opens.
   const availableHeight =
     Platform.OS === "ios" && keyboard
       ? Math.max(0, Math.min(height, keyboard.screenY))
@@ -52,6 +62,21 @@ export const EditorProblemsSheet = ({
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [severity, setSeverity] = useState<DiagnosticSeverity | "all">("all");
+  const segmentWidth = Math.max(0, (filterWidth - 8) / problemFilters.length);
+  const selectedIndex = problemFilters.indexOf(severity);
+  const selectionStyle = useAnimatedStyle(() => ({
+    width: segmentWidth,
+    transform: [
+      {
+        translateX: withSpring(selectedIndex * segmentWidth, {
+          damping: 24,
+          stiffness: 260,
+          mass: 0.8,
+          reduceMotion: ReduceMotion.System,
+        }),
+      },
+    ],
+  }));
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search), 150);
     return () => clearTimeout(timer);
@@ -63,26 +88,31 @@ export const EditorProblemsSheet = ({
   );
   return (
     <ContentSheet
+      scrollable={false}
       open={open}
       onOpenChange={onOpenChange}
       backgroundColor={background}
     >
       <KeyboardAvoidingView
-        // SwiftUI moves the iOS sheet above the keyboard; extra RN padding would
+        // UIKit moves the iOS sheet above the keyboard; extra RN padding would
         // subtract its height a second time and hide the search controls.
         behavior={Platform.OS === "android" ? "height" : undefined}
-        style={{ height: availableHeight * 0.7 }}
-        className="gap-3 px-4 pb-4"
+        style={{
+          height: availableHeight * 0.7,
+          flexShrink: 1,
+          paddingBottom: keyboard ? 0 : insets.bottom,
+        }}
+        className="gap-3 px-4"
         accessibilityViewIsModal
         onAccessibilityEscape={() => onOpenChange(false)}
       >
-        <View className="flex-row items-center justify-between">
-          <PText
+        <View className="min-h-14 shrink-0 flex-row items-center justify-between gap-3">
+          <HeadingText
             accessibilityRole="header"
-            className="text-xl font-semibold text-foreground"
+            className="min-w-0 flex-1 text-xl font-semibold text-foreground"
           >
             Problems in this file
-          </PText>
+          </HeadingText>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close problems"
@@ -135,30 +165,62 @@ export const EditorProblemsSheet = ({
             );
           }}
         />
-        <View className="flex-row flex-wrap gap-1">
-          {(["all", ...diagnosticSeverities] as const).map((value) => (
-            <Pressable
-              key={value}
-              accessibilityRole="button"
-              accessibilityState={{ selected: severity === value }}
-              onPress={() => setSeverity(value)}
-              className={cn(
-                "min-h-11 min-w-11 items-center justify-center rounded-xl px-3",
-                severity === value && "bg-secondary",
-              )}
-            >
-              <PText>{formatProblemFilter(value)}</PText>
-            </Pressable>
-          ))}
-        </View>
-        <Input
-          accessibilityLabel="Search problems"
-          placeholder="Search messages or diagnostic codes"
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
+        <GlassSurface borderRadius={28}>
+          <View
+            accessibilityRole="tablist"
+            accessibilityLabel="Diagnostic severity"
+            onLayout={(event) => setFilterWidth(event.nativeEvent.layout.width)}
+            className="relative flex-row p-1"
+          >
+            {filterWidth > 0 && (
+              <Animated.View
+                pointerEvents="none"
+                className="absolute bottom-1 left-1 top-1 rounded-full bg-secondary/70"
+                style={selectionStyle}
+              />
+            )}
+            {problemFilters.map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: severity === value }}
+                onPress={() => setSeverity(value)}
+                className="min-h-11 min-w-0 flex-1 items-center justify-center rounded-full px-1 py-2"
+              >
+                <PText
+                  className={cn(
+                    "text-center",
+                    severity === value && "font-semibold",
+                  )}
+                >
+                  {formatProblemFilter(value)}
+                </PText>
+              </Pressable>
+            ))}
+          </View>
+        </GlassSurface>
+        <GlassSurface borderRadius={28}>
+          <View className="flex-row items-center pl-4 pr-2">
+            <Icon
+              family="Feather"
+              name="search"
+              size={20}
+              className="text-muted-foreground"
+              accessible={false}
+            />
+            <Input
+              type="search"
+              variant="ghost"
+              containerClassName="min-w-0 flex-1"
+              accessibilityLabel="Search problems"
+              placeholder="Search messages or diagnostic codes"
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          </View>
+        </GlassSurface>
       </KeyboardAvoidingView>
     </ContentSheet>
   );

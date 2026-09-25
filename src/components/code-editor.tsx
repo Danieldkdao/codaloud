@@ -73,7 +73,7 @@ import type {
 import { editorConfiguration } from "@/features/editor/configuration";
 import {
   inlineSuggestion,
-  setInlineSuggestion,
+  updateInlineSuggestion,
   acceptInlineSuggestion,
 } from "@/features/editor/inline-suggestion";
 import type {
@@ -116,6 +116,7 @@ export type CodeEditorRef = {
   flushChanges(requestId?: string): Promise<void>;
   nextMatch: () => void;
   previousMatch: () => void;
+  focus: (documentKey: string) => void;
   dismissKeyboard: () => void;
 };
 
@@ -124,6 +125,7 @@ export type CodeEditorInteraction = {
   hasSelection: boolean;
   commands?: EditorCommandState;
   revision?: number;
+  inlineSuggestionId?: string;
 };
 
 type CodeEditorProps = {
@@ -280,6 +282,7 @@ const CodeEditor = ({
   const activeFilename = useRef(filename);
   activeFilename.current = filename;
   const revision = useRef(0);
+  const inlineRevision = useRef<number | null>(null);
   const suggestionCallbacks = useRef({
     onContext,
     onSuggestionAction,
@@ -385,15 +388,21 @@ const CodeEditor = ({
         ) => {
           const editor = view.current;
           if (!editor || key !== activeDocument.current) return;
-          if (
-            value &&
-            (expectedRevision !== revision.current ||
-              value.from < 0 ||
-              value.to > editor.state.doc.length ||
-              value.to < value.from)
-          )
-            return;
-          editor.dispatch({ effects: setInlineSuggestion.of(value) });
+          const pending = editor.state.field(inlineSuggestion);
+          if (value) {
+            if (readOnlyRef.current) return;
+            if (pending) {
+              if (
+                pending.id !== value.id ||
+                inlineRevision.current !== expectedRevision
+              )
+                return;
+            } else {
+              if (expectedRevision !== revision.current) return;
+              inlineRevision.current = expectedRevision;
+            }
+          }
+          updateInlineSuggestion(editor, value);
         },
         acceptSuggestion: (
           id: string,
@@ -403,8 +412,9 @@ const CodeEditor = ({
           const editor = view.current;
           const applied = Boolean(
             editor &&
+            !readOnlyRef.current &&
             key === activeDocument.current &&
-            expectedRevision === revision.current &&
+            expectedRevision === inlineRevision.current &&
             acceptInlineSuggestion(editor, id),
           );
           void suggestionCallbacks.current
@@ -524,6 +534,10 @@ const CodeEditor = ({
             else throw error;
           }
         },
+        focus: (key: string) => {
+          if (key !== activeDocument.current || readOnlyRef.current) return;
+          view.current?.focus();
+        },
         dismissKeyboard: () => {
           // Native Keyboard.dismiss only blurs registered React Native inputs.
           // Release the WebView's contenteditable focus to close its keyboard.
@@ -542,6 +556,7 @@ const CodeEditor = ({
   const reportInteraction = (editor: EditorView, key?: string) => {
     const state = {
       revision: revision.current,
+      inlineSuggestionId: editor.state.field(inlineSuggestion)?.id,
       commands: getEditorCommandState(editor),
       focused: editor.hasFocus,
       hasSelection: !editor.state.selection.main.empty,
@@ -551,6 +566,7 @@ const CodeEditor = ({
       previous &&
       previous.key === key &&
       previous.revision === state.revision &&
+      previous.inlineSuggestionId === state.inlineSuggestionId &&
       JSON.stringify(previous.commands) === JSON.stringify(state.commands) &&
       previous.focused === state.focused &&
       previous.hasSelection === state.hasSelection
@@ -745,13 +761,17 @@ const CodeEditor = ({
     }
     return () => {
       disposed = true;
+      // Roll back pending edits through the normal save callback before caching
+      // or leaving this document. A late native clear cannot target a new tab.
+      if (editor.state.field(inlineSuggestion))
+        updateInlineSuggestion(editor, null);
+      inlineRevision.current = null;
       if (
         documentKey &&
         (!openKeys.current || openKeys.current.includes(documentKey))
       ) {
         buffers.current.set(documentKey, {
-          state: editor.state.update({ effects: setInlineSuggestion.of(null) })
-            .state,
+          state: editor.state,
           top: editor.scrollDOM.scrollTop,
           left: editor.scrollDOM.scrollLeft,
         });

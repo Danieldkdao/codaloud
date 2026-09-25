@@ -14,7 +14,14 @@ const respond = (body: unknown, status: number) =>
 export const handleVoiceSessionRequest = async (request: Request) => {
   let allocatedRoom: string | undefined;
   try {
-    const session = await auth.api.getSession({ headers: request.headers });
+    // Retry only authentication lookup, before any room allocation. A transient
+    // database transport failure must not create duplicate rooms or bypass auth.
+    const readSession = () => auth.api.getSession({ headers: request.headers });
+    const session = await readSession().catch(() => {
+      if (request.signal.aborted) throw new Error("Request cancelled.");
+      return readSession();
+    });
+    if (request.signal.aborted) throw new Error("Request cancelled.");
     if (!session) return respond({ message: "Sign in to use voice." }, 401);
     if (request.method !== "POST" && request.method !== "DELETE") {
       return respond({ message: "Method not allowed." }, 405);

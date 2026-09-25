@@ -10,6 +10,13 @@ export type VoiceEditorContext = {
 };
 export type InlineEvent =
   | { id: string; type: "start" | "complete" | "answer" }
+  | {
+      id: string;
+      type: "target";
+      from: number;
+      to: number;
+      originalHash: string;
+    }
   | { id: string; type: "delta"; offset: number; text: string }
   | { id: string; type: "error"; message: string };
 export type InlineRequest = {
@@ -26,6 +33,7 @@ export type InlineRequest = {
     | "accepted"
     | "error";
   text: string;
+  range?: { from: number; to: number };
   transcript: string;
   error?: string;
   files?: FileActivitySchema[];

@@ -2,6 +2,7 @@
 import { act, createElement, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { NativeContentSheet } from "@/components/ui/native-content-sheet";
 import { EditorSearchBar } from "../components/editor-search-bar";
 import { EditorProblemsSheet } from "../components/editor-problems-sheet";
 import type { EditorSearchQuery } from "../types";
@@ -13,19 +14,29 @@ vi.mock("@/hooks/use-keyboard-frame", () => ({
 }));
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
-  KeyboardAvoidingView: ({ children, style, behavior }: {
+  StyleSheet: { absoluteFill: {} },
+  KeyboardAvoidingView: ({
+    children,
+    style,
+    behavior,
+  }: {
     children?: ReactNode;
     style: object;
     behavior?: string;
-  }) => createElement("div", {
-    "data-problems-layout": true,
-    "data-keyboard-behavior": behavior,
-    style,
-  }, children),
+  }) =>
+    createElement(
+      "div",
+      {
+        "data-problems-layout": true,
+        "data-keyboard-behavior": behavior,
+        style,
+      },
+      children,
+    ),
   View: ({ children }: { children?: ReactNode }) =>
     createElement("div", null, children),
   ScrollView: ({ children }: { children?: ReactNode }) =>
-    createElement("div", null, children),
+    createElement("div", { "data-scroll": true }, children),
   Pressable: ({
     children,
     onPress,
@@ -41,7 +52,12 @@ vi.mock("react-native", () => ({
   }) =>
     createElement(
       "button",
-      { onClick: onPress, "aria-label": accessibilityLabel, disabled, className },
+      {
+        onClick: onPress,
+        "aria-label": accessibilityLabel,
+        disabled,
+        className,
+      },
       children,
     ),
   FlatList: ({
@@ -55,7 +71,7 @@ vi.mock("react-native", () => ({
   }) =>
     createElement(
       "div",
-      null,
+      { "data-list": true },
       data.length
         ? data.map((item, index) =>
             createElement("div", { key: index }, renderItem({ item })),
@@ -69,6 +85,8 @@ vi.mock("@/lib/utils", () => ({
   cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
 }));
 vi.mock("@/components/ui/text", () => ({
+  HeadingText: ({ children }: { children?: ReactNode }) =>
+    createElement("h2", null, children),
   PText: ({ children }: { children?: ReactNode }) =>
     createElement("span", null, children),
 }));
@@ -93,13 +111,14 @@ vi.mock("@/components/ui/input", () => ({
     }),
 }));
 vi.mock("@/components/ui/content-sheet", () => ({
-  ContentSheet: ({
-    children,
-    open,
-  }: {
-    children?: ReactNode;
-    open: boolean;
-  }) => (open ? children : null),
+  ContentSheet: NativeContentSheet,
+}));
+vi.mock("react-native-screens", () => ({
+  ScreenStack: ({ children }: { children?: ReactNode }) => children,
+  ScreenStackItem: ({ children }: { children?: ReactNode }) => children,
+}));
+vi.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 50, bottom: 34, left: 0, right: 0 }),
 }));
 let root: Root;
 let container: HTMLDivElement;
@@ -143,7 +162,11 @@ it("toggles replacement and search options without dropping either input", () =>
   };
   act(() => root.render(createElement(Probe)));
   click("Toggle replace");
-  expect(container.querySelector('[aria-label="Find in file"]')?.getAttribute("data-container-class")).toContain("flex-1");
+  expect(
+    container
+      .querySelector('[aria-label="Find in file"]')
+      ?.getAttribute("data-container-class"),
+  ).toContain("flex-1");
   expect(
     container.querySelector<HTMLInputElement>('[aria-label="Replace with"]')
       ?.value,
@@ -218,9 +241,15 @@ it("debounces problem search, combines severity filters, and selects the exact d
   const input = container.querySelector("input")!;
   const warning = container.querySelector('[aria-label^="warning:"]')!;
   expect(warning.className).toContain("bg-warning/10");
-  expect(warning.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  const filters = [...container.querySelectorAll("button")].find((button) => button.textContent === "Warnings")!;
-  expect(filters.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    warning.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  const filters = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Warnings",
+  )!;
+  expect(
+    filters.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   act(() => {
     input.value = "unused";
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -237,20 +266,40 @@ it("debounces problem search, combines severity filters, and selects the exact d
   expect(select).toHaveBeenCalledWith(diagnostics[1]);
 });
 
-vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => children }));
+vi.mock("@/components/ui/glass-surface", () => ({
+  GlassSurface: ({ children }: { children: ReactNode }) =>
+    createElement("div", { "data-glass": true }, children),
+}));
 vi.mock("react-native-reanimated", () => {
-  const transition = { duration: () => transition, reduceMotion: () => transition };
-  return { default: { View: ({ children }: { children: ReactNode }) => createElement("div", null, children) }, LinearTransition: transition, FadeIn: transition, FadeOut: transition, ReduceMotion: { System: "system" } };
+  const transition = {
+    duration: () => transition,
+    reduceMotion: () => transition,
+  };
+  return {
+    useAnimatedStyle: (callback: () => object) => callback(),
+    withSpring: (value: number) => value,
+    default: {
+      View: ({ children }: { children: ReactNode }) =>
+        createElement("div", null, children),
+    },
+    LinearTransition: transition,
+    FadeIn: transition,
+    FadeOut: transition,
+    ReduceMotion: { System: "system" },
+  };
 });
 
 it("keeps Problems at a compact glass detent when its search keyboard opens and closes", () => {
-  const render = () => act(() => root.render(
-    createElement(EditorProblemsSheet, {
-      open: true,
-      onOpenChange: vi.fn(),
-      onSelect: vi.fn(),
-    }),
-  ));
+  const render = () =>
+    act(() =>
+      root.render(
+        createElement(EditorProblemsSheet, {
+          open: true,
+          onOpenChange: vi.fn(),
+          onSelect: vi.fn(),
+        }),
+      ),
+    );
   const panel = () =>
     container.querySelector<HTMLElement>("[data-problems-layout]")!;
   render();
@@ -260,11 +309,60 @@ it("keeps Problems at a compact glass detent when its search keyboard opens and 
   // Leave room above the sheet, rather than forcing iOS to a full-height opaque sheet.
   expect(parseFloat(panel().style.height)).toBeLessThan(460 * 0.8);
   expect(panel().getAttribute("data-keyboard-behavior")).toBeNull();
-  expect(container.querySelector('[aria-label="Search problems"]')).not.toBeNull();
+  expect(
+    container.querySelector('[aria-label="Search problems"]'),
+  ).not.toBeNull();
   keyboard.frame = { screenY: 410 }; // predictive text / symbol accessory changes
   render();
   expect(parseFloat(panel().style.height)).toBeLessThan(410 * 0.8);
   keyboard.frame = undefined;
   render();
   expect(parseFloat(panel().style.height)).toBe(originalHeight);
+});
+
+it("gives the Problems list its own viewport without a vertical ScrollView ancestor", () => {
+  act(() =>
+    root.render(
+      createElement(EditorProblemsSheet, {
+        open: true,
+        onOpenChange: vi.fn(),
+        onSelect: vi.fn(),
+      }),
+    ),
+  );
+  const list = container.querySelector("[data-list]")!;
+  expect(list).not.toBeNull();
+  expect(list.closest("[data-scroll]")).toBeNull();
+});
+
+it("gives Problems a heading, glass search and filters, and safe-area footer space", () => {
+  act(() =>
+    root.render(
+      createElement(EditorProblemsSheet, {
+        open: true,
+        onOpenChange: vi.fn(),
+        onSelect: vi.fn(),
+      }),
+    ),
+  );
+  expect(container.querySelector("h2")?.textContent).toBe(
+    "Problems in this file",
+  );
+  expect(
+    container
+      .querySelector('[aria-label="Search problems"]')
+      ?.closest("[data-glass]"),
+  ).not.toBeNull();
+  for (const label of ["All", "Errors", "Warnings", "Info"]) {
+    const filter = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === label,
+    )!;
+    expect(filter.closest("[data-glass]")).not.toBeNull();
+  }
+  expect(
+    parseFloat(
+      container.querySelector<HTMLElement>("[data-problems-layout]")!.style
+        .paddingBottom,
+    ),
+  ).toBeGreaterThanOrEqual(34 + 24);
 });

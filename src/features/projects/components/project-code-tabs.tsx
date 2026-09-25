@@ -333,13 +333,14 @@ export const ProjectCodeTabs = ({
         </View>
       </View>
       <ContentSheet
+        scrollable={false}
         open={open}
         onOpenChange={changeOpen}
         backgroundColor={card}
       >
-        <View className="gap-3 px-4 pb-8 pt-4">
+        <View className="shrink gap-3 px-4 pb-8 pt-4">
           <FlatList
-            style={{ maxHeight: height * 0.45 }}
+            style={{ maxHeight: height * 0.45, flexShrink: 1 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             data={visiblePaths}
@@ -448,43 +449,45 @@ export const ProjectCodeTabs = ({
               No matching paths
             </PText>
           ) : null}
-          <View className="flex-row items-center gap-2 rounded-xl border border-input bg-background pl-3">
-            <Icon
-              family="Feather"
-              name="search"
-              size={20}
-              className="text-muted-foreground"
-              accessible={false}
-            />
-            <Input
-              type="search"
-              variant="ghost"
-              accessibilityLabel="Search project paths"
-              placeholder="Search project paths"
-              value={search}
-              onChangeText={setSearch}
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerClassName="min-w-0 flex-1"
-              className="border-0 bg-background focus:border-transparent focus:outline-0"
-            />
-            {search ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear file search"
-                onPress={() => setSearch("")}
-                className="size-12 items-center justify-center"
-              >
-                <Icon
-                  family="Feather"
-                  name="x"
-                  size={20}
-                  className="text-muted-foreground"
-                  accessible={false}
-                />
-              </Pressable>
-            ) : null}
-          </View>
+          <GlassSurface borderRadius={28}>
+            <View className="flex-row items-center gap-2 pl-4 pr-2">
+              <Icon
+                family="Feather"
+                name="search"
+                size={20}
+                className="text-muted-foreground"
+                accessible={false}
+              />
+              <Input
+                type="search"
+                variant="ghost"
+                accessibilityLabel="Search project paths"
+                placeholder="Search project paths"
+                value={search}
+                onChangeText={setSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                containerClassName="min-w-0 flex-1"
+                className="border-0 focus:border-transparent focus:outline-0"
+              />
+              {search ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear file search"
+                  onPress={() => setSearch("")}
+                  className="size-12 items-center justify-center"
+                >
+                  <Icon
+                    family="Feather"
+                    name="x"
+                    size={20}
+                    className="text-muted-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+              ) : null}
+            </View>
+          </GlassSurface>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open another file"

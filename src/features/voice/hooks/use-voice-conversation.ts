@@ -13,6 +13,7 @@ export const useVoiceConversation = (
   projectId?: string,
 ) => {
   const project = useRef(projectId);
+  const requestedMode = useRef<"quick-edit" | undefined>(undefined);
   project.current = projectId;
   const [controller] = useState(() =>
     createVoiceController(
@@ -39,7 +40,8 @@ export const useVoiceConversation = (
         );
       },
       async () => {
-        if (project.current) await inlineSession.begin(project.current);
+        if (project.current)
+          await inlineSession.begin(project.current, requestedMode.current);
       },
       () => {
         if (inlineSession.getSnapshot()?.projectId === project.current)
@@ -64,11 +66,10 @@ export const useVoiceConversation = (
     setPressed(false);
     previousTap.current = 0;
     setOpen(false);
-    void controller.stop();
+    if (requestedMode.current === "quick-edit") void controller.park();
+    else void controller.stop();
   };
   const pause = () => {
-    if (inlineSession.getSnapshot()?.projectId === project.current)
-      inlineSession.cancel();
     held.current = false;
     setPressed(false);
     previousTap.current = 0;
@@ -99,6 +100,13 @@ export const useVoiceConversation = (
     return inlineSession.subscribe(() => {
       const next = inlineSession.getSnapshot();
       if (
+        next?.projectId === project.current &&
+        (next?.status === "generating" ||
+          (next?.mode === "quick-edit" && next.status === "answered")) &&
+        previous?.status !== next?.status
+      )
+        controller.captureEnded();
+      if (
         previous?.projectId === project.current &&
         previous &&
         ["listening", "generating", "ready"].includes(previous.status) &&
@@ -106,7 +114,7 @@ export const useVoiceConversation = (
       ) {
         // Cancel invalidates the local request synchronously; stop interrupts
         // the worker and resets capture so the next tap can start immediately.
-        void controller.pause();
+        void controller.pause(true);
       }
       previous = next;
     });
@@ -132,11 +140,19 @@ export const useVoiceConversation = (
         ? { ...state, listening: false }
         : state,
     pressed,
-    visible: enabled && (open || state.connection !== "idle"),
+    visible:
+      enabled && (open || state.listening || state.connection === "connecting"),
     stop,
     pause,
+    startInline: () => {
+      if (!enabled) return;
+      requestedMode.current = "quick-edit";
+      setOpen(true);
+      void controller.start("hands-free");
+    },
     startHandsFree: () => {
       if (enabled) {
+        requestedMode.current = undefined;
         setOpen(true);
         void controller.start("hands-free");
       }
@@ -152,6 +168,7 @@ export const useVoiceConversation = (
       held.current = true;
       suppressTap.current = true;
       previousTap.current = 0;
+      requestedMode.current = undefined;
       setOpen(true);
       void controller.start("hold");
     },
@@ -175,6 +192,7 @@ export const useVoiceConversation = (
       }
       const now = Date.now();
       if (previousTap.current && now - previousTap.current <= 300) {
+        requestedMode.current = undefined;
         previousTap.current = 0;
         setOpen(true);
         void controller.start("hands-free");

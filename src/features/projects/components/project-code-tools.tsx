@@ -1,6 +1,6 @@
 import { ContentSheet } from "@/components/ui/content-sheet";
 import { Icon } from "@/components/ui/icon";
-import { PText } from "@/components/ui/text";
+import { HeadingText, PText } from "@/components/ui/text";
 import { EditorSettings } from "@/features/settings/components/editor-settings";
 import { useThemeColor } from "@/hooks/use-theme";
 import { useState } from "react";
@@ -41,9 +41,12 @@ export const ProjectCodeTools = () => {
           onAccessibilityEscape={() => setOpen(false)}
         >
           <View className="min-h-14 shrink-0 flex-row items-center justify-between gap-3 border-b border-border px-5">
-            <PText accessibilityRole="header" className="text-xl font-semibold">
+            <HeadingText
+              accessibilityRole="header"
+              className="min-w-0 flex-1 text-xl font-semibold text-foreground"
+            >
               Editor settings
-            </PText>
+            </HeadingText>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Done"

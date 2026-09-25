@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useVoiceConversation } from "../hooks/use-voice-conversation";
 import { VoiceMicrophone } from "../components/voice-microphone";
+import { inlineSession } from "../inline-session";
 const mocks = vi.hoisted(() => ({
   control: vi.fn(),
   close: vi.fn(),
@@ -46,9 +47,17 @@ vi.mock("react-native-reanimated", () => ({
   withSpring: (value: number) => value,
 }));
 let current!: ReturnType<typeof useVoiceConversation>;
-const Harness = ({ enabled = true }: { enabled?: boolean }) => {
-  current = useVoiceConversation(enabled, "project");
-  return <VoiceMicrophone conversation={current} />;
+const Harness = ({
+  enabled = true,
+  projectId,
+  compact = false,
+}: {
+  enabled?: boolean;
+  projectId?: string;
+  compact?: boolean;
+}) => {
+  current = useVoiceConversation(enabled, "project", projectId);
+  return <VoiceMicrophone conversation={current} compact={compact} />;
 };
 let root: Root;
 beforeEach(async () => {
@@ -62,6 +71,47 @@ beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   root = createRoot(document.createElement("div"));
   await act(async () => root.render(<Harness />));
+});
+it("stops inline recording without discarding the request, then allows another edit after generation", async () => {
+  const unregister = inlineSession.register("p", {
+    capture: async () => ({
+      projectId: "p",
+      branch: "main",
+      openFiles: [],
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        content: "",
+        from: 0,
+        to: 0,
+        focused: false,
+      },
+    }),
+    preview: vi.fn(),
+    apply: vi.fn(async () => true),
+  });
+  await act(async () => root.render(<Harness projectId="p" />));
+  await act(async () => current.startInline());
+  const request = inlineSession.getSnapshot()!;
+  expect(request.mode).toBe("quick-edit");
+  await act(async () => current.pause());
+  expect(inlineSession.getSnapshot()?.id).toBe(request.id);
+  await act(async () => {
+    inlineSession.receive({ id: request.id, type: "start" });
+    inlineSession.receive({
+      id: request.id,
+      type: "delta",
+      offset: 0,
+      text: "code",
+    });
+    inlineSession.receive({ id: request.id, type: "complete" });
+  });
+  await act(async () => current.startInline());
+  expect(inlineSession.getSnapshot()?.id).not.toBe(request.id);
+  expect(current.state.listening).toBe(true);
+  await act(async () => current.stop());
+  unregister();
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -172,10 +222,57 @@ it("submits on responder release even when the raw touch-end event is missing", 
   expect(mocks.close).not.toHaveBeenCalled();
 });
 
-it("shows immediate press feedback before starting a voice connection", async () => {
+it("shows immediate press feedback on the neutral inline microphone before starting a voice connection", async () => {
+  await act(async () => root.render(<Harness compact />));
   await act(async () => mocks.button.onTouchStart());
-  expect(mocks.button.className).toContain("border-primary-foreground");
+  expect(current.pressed).toBe(true);
+  expect(mocks.button.className).not.toContain("bg-primary");
   expect(mocks.connect).not.toHaveBeenCalled();
   await act(async () => mocks.button.onTouchEnd());
-  expect(mocks.button.className).not.toContain("border-primary-foreground");
+  expect(current.pressed).toBe(false);
+});
+it("hides inline controls while retaining a muted room for the next tap", async () => {
+  await act(async () => current.startInline());
+  await act(async () => current.stop());
+  expect(current.visible).toBe(false);
+  expect(current.state.listening).toBe(false);
+  expect(mocks.control).toHaveBeenLastCalledWith("cancel");
+  expect(mocks.close).not.toHaveBeenCalled();
+  await act(async () => current.startInline());
+  expect(mocks.connect).toHaveBeenCalledOnce();
+  expect(current.visible).toBe(true);
+  expect(current.state.listening).toBe(true);
+});
+
+it("ends skipped inline capture and can immediately start another request", async () => {
+  const unregister = inlineSession.register("p", {
+    capture: async () => ({
+      projectId: "p",
+      branch: "main",
+      openFiles: [],
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        content: "",
+        from: 0,
+        to: 0,
+        focused: false,
+      },
+    }),
+    preview: vi.fn(),
+    apply: vi.fn(async () => true),
+  });
+  await act(async () => root.render(<Harness projectId="p" />));
+  await act(async () => current.startInline());
+  const request = inlineSession.getSnapshot()!;
+  expect(request.mode).toBe("quick-edit");
+  await act(async () => { inlineSession.receive({ id: request.id, type: "answer" }); });
+  expect(current.state.listening).toBe(false);
+  expect(current.visible).toBe(true);
+  await act(async () => current.startInline());
+  expect(inlineSession.getSnapshot()?.id).not.toBe(request.id);
+  expect(current.state.listening).toBe(true);
+  await act(async () => current.stop());
+  unregister();
 });

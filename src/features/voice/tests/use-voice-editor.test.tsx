@@ -22,6 +22,7 @@ const mount = async (blocked = false) => {
   mocks.branch.mockReset().mockResolvedValue({ currentBranch: "main" });
   let locked = false;
   const apply = vi.fn();
+  let content = "abc";
   const runWorkspaceOperation = vi.fn(
     async <T,>(
       _label: string,
@@ -43,12 +44,15 @@ const mount = async (blocked = false) => {
           void bridge.onContext(id, {
             documentKey: "doc",
             revision: 1,
-            content: "abc",
+            content,
             from: 0,
             to: 1,
             focused: true,
           }),
-        previewSuggestion: () => {},
+        previewSuggestion: (value: { text: string; status: string } | null) => {
+          content =
+            value && value.status !== "listening" ? value.text + "bc" : "abc";
+        },
         acceptSuggestion: (id: string) => {
           expect(locked).toBe(true);
           apply();

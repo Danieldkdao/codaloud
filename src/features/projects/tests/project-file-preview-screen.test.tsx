@@ -15,7 +15,7 @@ vi.mock("../hooks/use-project-workspace-current-file", () => ({ useProjectWorksp
 vi.mock("../actions/file-actions", () => ({ readProjectFileContentAction: mocks.read }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: mocks.isDarkMode }), useThemeColor: () => "transparent" }));
 vi.mock("@/components/code-editor", () => ({ default: (props: ComponentProps<typeof CodeEditor>) => {
-  useImperativeHandle(props.ref, () => ({ captureContext: () => {}, previewSuggestion: () => {}, acceptSuggestion: () => {}, revealDiagnostic: () => {}, transform: () => {}, searchCommand: () => {}, command: async () => {}, flushChanges: async () => {}, dismissKeyboard: vi.fn(), nextMatch: mocks.nextMatch, previousMatch: mocks.previousMatch }));
+  useImperativeHandle(props.ref, () => ({ focus: vi.fn(), captureContext: () => {}, previewSuggestion: () => {}, acceptSuggestion: () => {}, revealDiagnostic: () => {}, transform: () => {}, searchCommand: () => {}, command: async () => {}, flushChanges: async () => {}, dismissKeyboard: vi.fn(), nextMatch: mocks.nextMatch, previousMatch: mocks.previousMatch }));
   mocks.editor(props);
   return <div data-testid="editor">{props.initialValue}</div>;
 } }));

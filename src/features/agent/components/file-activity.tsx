@@ -15,12 +15,16 @@ export const FileActivity = ({
 }: {
   projectId: string;
   files: FileActivitySchema[];
-  onNavigate?: () => void;
+  onNavigate?: (navigate: () => void) => void;
 }) => {
   const router = useRouter();
   const workspace = useProjectWorkspaceCurrentFile();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const navigate = (action: () => void) => {
+    if (onNavigate) onNavigate(action);
+    else action();
+  };
   return (
     <View className="gap-2">
       {files.map((file) => {
@@ -32,11 +36,12 @@ export const FileActivity = ({
             accessibilityLabel={`${presentation.label} ${file.path}. Open file`}
             className="min-h-12 flex-row items-center gap-3 rounded-xl bg-secondary px-3 py-2"
             onPress={() => {
-              workspace.openFile(file.path);
-              onNavigate?.();
-              router.dismissTo({
-                pathname: "/projects/[projectId]/code",
-                params: { projectId },
+              navigate(() => {
+                workspace.openFile(file.path);
+                router.dismissTo({
+                  pathname: "/projects/[projectId]/code",
+                  params: { projectId },
+                });
               });
             }}
           >
@@ -74,10 +79,11 @@ export const FileActivity = ({
             setError(undefined);
             try {
               await flushAgentWorkspace(projectId);
-              onNavigate?.();
-              router.push({
-                pathname: "/projects/[projectId]/git/workspace-diff",
-                params: { projectId },
+              navigate(() => {
+                router.push({
+                  pathname: "/projects/[projectId]/git/workspace-diff",
+                  params: { projectId },
+                });
               });
             } catch {
               setError("Save your changes before opening the diff.");

@@ -160,7 +160,12 @@ export const ProjectWorkspaceFileSearch = () => {
           />
         </Pressable>
       </View>
-      <ContentSheet open={open} onOpenChange={setOpen} backgroundColor={card}>
+      <ContentSheet
+        scrollable={false}
+        open={open}
+        onOpenChange={setOpen}
+        backgroundColor={card}
+      >
         <ScrollView
           style={{ maxHeight: Math.max(160, height - insets.top - 80) }}
           contentInsetAdjustmentBehavior="never"

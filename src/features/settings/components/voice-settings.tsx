@@ -117,7 +117,7 @@ export const VoiceSettings = ({ settings = false }: { settings?: boolean }) => {
               }}
               className={cn(
                 "min-h-16 flex-row items-center gap-3 rounded-2xl border border-border p-3 active:opacity-60",
-                !settings && "bg-background",
+                !settings && "bg-card/70",
                 preferences.voiceId === voice.id &&
                   "border-primary bg-primary/10",
               )}

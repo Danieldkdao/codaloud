@@ -191,3 +191,32 @@ it("clears tool progress and marks failed file reads without claiming a change",
   expect(inlineSession.getSnapshot()?.toolActivity).toBeUndefined();
   unregister();
 });
+it("uses editor LF offsets when capturing a CRLF file for an exact replacement", () => {
+  const request = {
+    id: "one",
+    projectId: "p",
+    mode: "quick-edit" as const,
+    status: "listening" as const,
+    text: "",
+    transcript: "",
+    context: {
+      projectId: "p",
+      branch: "main",
+      openFiles: [],
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        content: "first\r\nMath.random\r\nlast",
+        from: 6,
+        to: 17,
+        focused: true,
+      },
+    },
+  };
+  expect(getVoiceContext(request).activeFile).toMatchObject({
+    before: "first\n",
+    selected: "Math.random",
+    after: "\nlast",
+  });
+});

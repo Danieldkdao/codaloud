@@ -176,7 +176,7 @@ export const ProjectCommitForm = ({ enabled }: { enabled: boolean }) => {
               maxLength={5000}
               accessibilityLabel="Commit message"
               // Put the inset on the wrapper so native multiline padding cannot skew it.
-              containerClassName="rounded-2xl bg-background p-3"
+              containerClassName="rounded-2xl bg-card/70 p-3"
               autoCapitalize="none"
               autoComplete="off"
               autoCorrect={false}

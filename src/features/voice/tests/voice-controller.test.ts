@@ -131,3 +131,57 @@ it("captures the request before connecting and ignores capture completion after 
   await started;
   expect(connect).not.toHaveBeenCalled();
 });
+it("reuses a muted inline connection across repeated closes and releases it after idle timeout", async () => {
+  vi.useFakeTimers();
+  const { controller, connection, connect } = setup();
+  try {
+    for (let index = 0; index < 3; index++) {
+      await controller.start("hands-free");
+      expect(controller.getSnapshot().listening).toBe(true);
+      await controller.park();
+      expect(connection.control).toHaveBeenLastCalledWith("cancel");
+      expect(controller.getSnapshot().listening).toBe(false);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(connect).toHaveBeenCalledOnce();
+    expect(connection.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(connection.close).toHaveBeenCalledOnce();
+    expect(controller.getSnapshot().connection).toBe("idle");
+  } finally {
+    await controller.stop();
+    vi.useRealTimers();
+  }
+});
+it("can start again after a control failure without reusing a rejected operation queue", async () => {
+  const { controller, connection, connect } = setup();
+  connection.control.mockRejectedValueOnce(new Error("transport lost"));
+  await controller.start("hands-free");
+  expect(controller.getSnapshot().connection).toBe("error");
+  await controller.start("hands-free");
+  expect(connect).toHaveBeenCalledTimes(2);
+  expect(controller.getSnapshot().listening).toBe(true);
+  await controller.stop();
+});
+it("only reports connected when the microphone is ready for speech", async () => {
+  const { controller, connection } = setup();
+  let ready!: () => void;
+  connection.control.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        ready = resolve;
+      }),
+  );
+  const starting = controller.start("hands-free");
+  try {
+    await vi.waitFor(() => expect(ready).toBeTypeOf("function"));
+    expect(controller.getSnapshot()).toMatchObject({
+      connection: "connecting",
+      listening: false,
+    });
+  } finally {
+    ready();
+    await starting;
+    await controller.stop();
+  }
+});

@@ -129,3 +129,23 @@ it("dispatches validated user speech preferences and rejects unlisted voices", a
   ).toBe(400);
   expect(mocks.createRoom).not.toHaveBeenCalled();
 });
+it("recovers a transient authentication lookup failure before creating exactly one room", async () => {
+  mocks.session.mockRejectedValueOnce(
+    Object.assign(new Error("Database unavailable"), { code: "ETIMEDOUT" }),
+  );
+  const response = await handleVoiceSessionRequest(
+    request({ mode: "hands-free" }),
+  );
+  expect(response.status).toBe(200);
+  expect(mocks.session).toHaveBeenCalledTimes(2);
+  expect(mocks.createRoom).toHaveBeenCalledOnce();
+});
+it("bounds authentication retries and never allocates a room when authentication stays unavailable", async () => {
+  mocks.session.mockRejectedValue(new Error("Database unavailable"));
+  const response = await handleVoiceSessionRequest(
+    request({ mode: "hands-free" }),
+  );
+  expect(response.status).toBe(503);
+  expect(mocks.session).toHaveBeenCalledTimes(2);
+  expect(mocks.createRoom).not.toHaveBeenCalled();
+});

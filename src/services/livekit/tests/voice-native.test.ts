@@ -878,6 +878,133 @@ it("binds authenticated suggestion RPCs to a frozen turn and rejects late update
     unregister();
   }
 });
+it("acks a stale turn's trailing event instead of tearing down the live turn", async () => {
+  const nativeRequire = createRequire(
+    import.meta.resolve("react-native/package.json"),
+  );
+  const { AbortController: NativeAbortController } = nativeRequire(
+    "abort-controller",
+  ) as { AbortController: typeof AbortController };
+  const abort = new NativeAbortController();
+  const unregister = inlineSession.register("project", {
+    capture: vi.fn(async () => ({
+      projectId: "project",
+      branch: "main",
+      openFiles: [],
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        content: "hello",
+        from: 0,
+        to: 5,
+        focused: true,
+      },
+    })),
+    preview: () => {},
+    apply: async () => true,
+  });
+  const connection = await connectNativeVoice("hold", abort.signal, events(), {
+    projectId: "project",
+  });
+  try {
+    await connection.control("start");
+    const handler = (method: string) =>
+      mocks.register.mock.calls.find(([name]) => name === method)![1];
+    const send = (event: unknown) =>
+      handler("codaloud.voice.suggestion")({
+        callerIdentity: "agent",
+        payload: JSON.stringify(event),
+      });
+    const first = JSON.parse(
+      await handler("codaloud.voice.context")({
+        callerIdentity: "agent",
+        payload: "{}",
+      }),
+    );
+    await send({ id: first.id, type: "start" });
+    await send({ id: first.id, type: "delta", offset: 0, text: "world" });
+    await send({ id: first.id, type: "complete" });
+    expect(inlineSession.getSnapshot()?.status).toBe("ready");
+    // The user does not accept and simply speaks again.
+    await connection.control("hands-free");
+    const second = inlineSession.getSnapshot()!;
+    expect(second.id).not.toBe(first.id);
+    expect(second.status).toBe("listening");
+    // A trailing event from the superseded turn must not kill this turn.
+    await expect(send({ id: first.id, type: "answer" })).resolves.toBeDefined();
+    await expect(
+      send({ id: first.id, type: "complete" }),
+    ).resolves.toBeDefined();
+    const live = inlineSession.getSnapshot();
+    expect(live?.id).toBe(second.id);
+    expect(live?.status).toBe("listening");
+  } finally {
+    await connection.close();
+    unregister();
+  }
+});
+it("keeps a generating turn alive when the microphone is reopened", async () => {
+  const nativeRequire = createRequire(
+    import.meta.resolve("react-native/package.json"),
+  );
+  const { AbortController: NativeAbortController } = nativeRequire(
+    "abort-controller",
+  ) as { AbortController: typeof AbortController };
+  const abort = new NativeAbortController();
+  const unregister = inlineSession.register("project", {
+    capture: vi.fn(async () => ({
+      projectId: "project",
+      branch: "main",
+      openFiles: [],
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        content: "hello",
+        from: 0,
+        to: 5,
+        focused: true,
+      },
+    })),
+    preview: () => {},
+    apply: async () => true,
+  });
+  const connection = await connectNativeVoice("hold", abort.signal, events(), {
+    projectId: "project",
+  });
+  try {
+    await connection.control("start");
+    const handler = (method: string) =>
+      mocks.register.mock.calls.find(([name]) => name === method)![1];
+    const send = (event: unknown) =>
+      handler("codaloud.voice.suggestion")({
+        callerIdentity: "agent",
+        payload: JSON.stringify(event),
+      });
+    const first = JSON.parse(
+      await handler("codaloud.voice.context")({
+        callerIdentity: "agent",
+        payload: "{}",
+      }),
+    );
+    await send({ id: first.id, type: "start" });
+    expect(inlineSession.getSnapshot()?.status).toBe("generating");
+    // Reopening the microphone mid-suggestion must not start a competing
+    // request, and must not report the in-flight turn as a lost connection.
+    await expect(connection.control("hands-free")).resolves.toBeUndefined();
+    const live = inlineSession.getSnapshot();
+    expect(live?.id).toBe(first.id);
+    expect(live?.status).toBe("generating");
+    // The in-flight turn still owns the conversation and can finish.
+    await send({ id: first.id, type: "delta", offset: 0, text: "world" });
+    await send({ id: first.id, type: "complete" });
+    expect(inlineSession.getSnapshot()?.status).toBe("ready");
+  } finally {
+    await connection.close();
+    unregister();
+  }
+});
 it("allows a new room after native cleanup even while server room deletion is stalled", async () => {
   let finishDelete!: () => void;
   mocks.remove.mockImplementationOnce(
@@ -993,7 +1120,9 @@ it("mutes a skipped inline request and rejects late code from it", async () => {
     await send({ id: context.id, type: "answer" });
     expect(mocks.microphone).toHaveBeenLastCalledWith(false);
     expect(inlineSession.getSnapshot()?.status).toBe("answered");
-    await expect(send({ id: context.id, type: "start" })).rejects.toThrow(/cancel|completed/i);
+    await expect(send({ id: context.id, type: "start" })).rejects.toThrow(
+      /cancel|completed/i,
+    );
     await connection.control("start");
     expect(inlineSession.getSnapshot()?.id).not.toBe(context.id);
     abort.abort();

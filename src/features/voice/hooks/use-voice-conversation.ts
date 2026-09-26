@@ -44,7 +44,15 @@ export const useVoiceConversation = (
           await inlineSession.begin(project.current, requestedMode.current);
       },
       () => {
-        if (inlineSession.getSnapshot()?.projectId === project.current)
+        // A turn that already failed keeps its specific message on screen.
+        // Cancelling it here would erase the actionable reason and leave only
+        // the generic connection error the agent reports afterwards.
+        const request = inlineSession.getSnapshot();
+        if (
+          request &&
+          request.projectId === project.current &&
+          request.status !== "error"
+        )
           inlineSession.cancel();
       },
     ),

@@ -202,6 +202,14 @@ export const connectNativeVoice: ConnectVoice = (
       room.registerRpcMethod("codaloud.voice.suggestion", async (data) => {
         authorizeWorkspace(data);
         const event = inlineEventSchema.parse(JSON.parse(data.payload));
+        // The user can start a new turn before the agent finishes the previous
+        // one, so a trailing event for a superseded request is expected, not a
+        // protocol violation. Ack and drop it: throwing here fails the RPC
+        // inside the agent's live turn, which surfaces as a failed generation
+        // for the request the user is actually waiting on.
+        const current = inlineSession.getSnapshot();
+        if (current && current.id !== event.id)
+          return JSON.stringify({ ok: true, stale: true });
         if (!inlineSession.receive(event))
           throw new Error("Request cancelled or already completed.");
         if (
@@ -404,13 +412,26 @@ export const connectNativeVoice: ConnectVoice = (
           controls = controls.then(async () => {
             if (closed || signal.aborted) return;
             const enable = action === "start" || action === "hands-free";
+            const snapshot = inlineSession.getSnapshot();
+            // A suggestion that is still generating or applying already owns
+            // the turn. Reopening the microphone must not start a competing
+            // request: begin() rejects those states, and that rejection would
+            // reach the caller as a lost connection rather than as the
+            // suggestion the user is still waiting on.
+            const inFlight =
+              !!snapshot &&
+              (snapshot.status === "generating" ||
+                snapshot.status === "applying");
             if (
               enable &&
+              !inFlight &&
               options?.projectId &&
-              inlineSession.getSnapshot()?.status !== "listening"
+              snapshot?.status !== "listening"
             )
               await inlineSession.begin(options.projectId);
-            if (enable) {
+            // Leave ownedRequestId and turnClaimed alone while a turn is in
+            // flight so the agent keeps streaming into the request it owns.
+            if (enable && !inFlight) {
               ownedRequestId = inlineSession.getSnapshot()?.id;
               turnClaimed = false;
             }

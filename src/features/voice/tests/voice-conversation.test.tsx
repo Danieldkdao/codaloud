@@ -118,6 +118,59 @@ afterEach(async () => {
   await act(async () => root.unmount());
 });
 
+it("keeps the specific failure visible when the agent reports a generic one", async () => {
+  // The turn fails with an actionable message, then the agent session errors
+  // and reports only "Failed to generate response". The specific reason must
+  // survive, because it is what the user can act on.
+  let agentEvents: { onError: (message: string) => void } | undefined;
+  mocks.connect.mockImplementation(
+    async (_mode: unknown, _signal: unknown, events: any) => {
+      agentEvents = events;
+      return { control: mocks.control, close: mocks.close };
+    },
+  );
+  const unregister = inlineSession.register("p", {
+    capture: async () => ({
+      projectId: "p",
+      branch: "main",
+      openFiles: [],
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        content: "",
+        from: 0,
+        to: 0,
+        focused: false,
+      },
+    }),
+    preview: vi.fn(),
+    apply: vi.fn(async () => true),
+  });
+  await act(async () => root.render(<Harness projectId="p" />));
+  await act(async () => current.startInline());
+  const id = inlineSession.getSnapshot()!.id;
+  await act(async () => {
+    inlineSession.receive({
+      id,
+      type: "error",
+      message:
+        "The edit target is ambiguous. Select a unique section and try again.",
+    });
+  });
+  expect(inlineSession.getSnapshot()?.error).toMatch(/ambiguous/);
+  await act(async () => {
+    agentEvents!.onError("Failed to generate response. Please try again.");
+    // onError tears the controller down asynchronously; let it settle so the
+    // teardown does not leak into the next test.
+    await vi.waitFor(() => expect(current.state.connection).toBe("error"));
+  });
+  expect(current.state.error).toMatch(/failed to generate/i);
+  // The precise reason is what inline-voice-controls renders first.
+  expect(inlineSession.getSnapshot()?.error).toMatch(/ambiguous/);
+  inlineSession.cancel();
+  unregister();
+});
 it("surfaces an error instead of wedging in connecting when the editor capture never responds", async () => {
   vi.useFakeTimers();
   // The editor bridge flush and the git-counts read inside capture are not

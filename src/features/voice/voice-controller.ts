@@ -1,6 +1,32 @@
 import type { VoiceMode } from "./schemas";
 import type { ConnectVoice, VoiceConnection, VoiceState } from "./types";
 
+// The editor capture flushes CodeMirror and reads project git counts. Neither
+// is bounded, so a dead bridge or a stalled request would otherwise leave the
+// sheet on "connecting" forever, where the guard in start() silently swallows
+// every later tap. Bound only this phase: connecting itself legitimately
+// waits up to 20s for the agent to join.
+const captureTimeoutMs = 10_000;
+const captureTimeoutMessage = "The editor did not respond. Please try again.";
+
+const settleWithin = async (work: Promise<unknown>, milliseconds: number) => {
+  // The abandoned work can still settle or reject after the deadline. Mark it
+  // handled so a discarded turn never becomes an unhandled rejection.
+  work.catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(captureTimeoutMessage)),
+      milliseconds,
+    );
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export const createVoiceController = (
   connect: ConnectVoice,
   beforeStart?: () => Promise<unknown>,
@@ -67,7 +93,7 @@ export const createVoiceController = (
     try {
       if (beforeStart) {
         if (!connection) update({ connection: "connecting" });
-        await beforeStart();
+        await settleWithin(beforeStart(), captureTimeoutMs);
         if (current !== generation) return;
       }
       if (!connection) {

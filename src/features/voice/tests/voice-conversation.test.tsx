@@ -114,7 +114,34 @@ it("stops inline recording without discarding the request, then allows another e
   unregister();
 });
 afterEach(async () => {
+  vi.useRealTimers();
   await act(async () => root.unmount());
+});
+
+it("surfaces an error instead of wedging in connecting when the editor capture never responds", async () => {
+  vi.useFakeTimers();
+  // The editor bridge flush and the git-counts read inside capture are not
+  // bounded. A hung capture must not leave the sheet stuck on connecting,
+  // where the next tap is silently swallowed.
+  const unregister = inlineSession.register("p", {
+    capture: () => new Promise(() => {}),
+    preview: vi.fn(),
+    apply: vi.fn(async () => true),
+  });
+  await act(async () => root.render(<Harness projectId="p" />));
+  await act(async () => current.startInline());
+  expect(current.state.connection).toBe("connecting");
+  expect(current.state.error).toBeNull();
+  expect(current.visible).toBe(true);
+  expect(mocks.connect).not.toHaveBeenCalled();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10_000);
+  });
+  expect(current.state.connection).not.toBe("connecting");
+  expect(current.state.error).toMatch(/editor/i);
+  expect(current.visible).toBe(true);
+  expect(mocks.connect).not.toHaveBeenCalled();
+  unregister();
 });
 it("a single tap shows instructions, a double tap starts hands-free, and a third pauses without dismissing", async () => {
   await act(async () => {
@@ -267,7 +294,9 @@ it("ends skipped inline capture and can immediately start another request", asyn
   await act(async () => current.startInline());
   const request = inlineSession.getSnapshot()!;
   expect(request.mode).toBe("quick-edit");
-  await act(async () => { inlineSession.receive({ id: request.id, type: "answer" }); });
+  await act(async () => {
+    inlineSession.receive({ id: request.id, type: "answer" });
+  });
   expect(current.state.listening).toBe(false);
   expect(current.visible).toBe(true);
   await act(async () => current.startInline());

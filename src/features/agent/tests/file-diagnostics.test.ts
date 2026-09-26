@@ -25,7 +25,8 @@ it("analyzes full contents and exposes real compiler errors with source position
   });
   expect(result.items).toContainEqual(
     expect.objectContaining({
-      code: 2322,
+      source: "TypeScript",
+      code: "TS2322",
       severity: "error",
       line: 2,
       column: 7,
@@ -49,19 +50,43 @@ it("distinguishes a clean file from unavailable or unsupported analysis", async 
     status: "unavailable",
   });
   mocks.analyze.mockClear();
-  expect(await collectFileDiagnostics("p", "readme.md", "hello")).toMatchObject(
-    { status: "unsupported" },
+  expect(
+    await collectFileDiagnostics("p", "readme.txt", "hello"),
+  ).toMatchObject({ status: "unsupported" });
+  expect(mocks.analyze).not.toHaveBeenCalled();
+});
+
+it("includes source-accurate offline parser findings for non-TypeScript formats", async () => {
+  const result = await collectFileDiagnostics(
+    "p",
+    "settings.json",
+    '{"enabled": true,}',
   );
+
+  expect(result).toMatchObject({
+    status: "ready",
+    engine: "format-parser",
+    total: 1,
+    items: [
+      expect.objectContaining({
+        source: "JSON parser",
+        code: expect.stringMatching(/^json:/),
+        severity: "error",
+        line: 1,
+      }),
+    ],
+  });
   expect(mocks.analyze).not.toHaveBeenCalled();
 });
 
 it("bounds escaped Unicode diagnostics without claiming the complete list was sent", async () => {
   mocks.analyze.mockResolvedValue({
-    diagnostics: Array.from({ length: 100 }, () => ({
+    diagnostics: Array.from({ length: 100 }, (_, index) => ({
       from: 0,
       to: 1,
       severity: "error",
-      code: 123,
+      source: "TypeScript",
+      code: `TS${index}`,
       message: "\u0000😀".repeat(1000),
     })),
   });

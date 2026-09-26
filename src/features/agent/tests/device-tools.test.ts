@@ -39,10 +39,11 @@ it("includes full-file diagnostics in a valid bounded read result without changi
   const content = ('const value = "' + '\t"'.repeat(100) + '";\n').repeat(200);
   mocks.read.mockResolvedValue({ path: "a.ts", content, size: content.length });
   mocks.analyze.mockResolvedValue({
-    diagnostics: Array.from({ length: 100 }, () => ({
+    diagnostics: Array.from({ length: 100 }, (_, index) => ({
       from: 9000,
       to: 9001,
-      code: 123,
+      source: "TypeScript",
+      code: `TS${index}`,
       severity: "error",
       message: "issue".repeat(100),
     })),

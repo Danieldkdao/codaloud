@@ -1,5 +1,46 @@
-import { CODE_INTELLIGENCE_FILE_PATTERN } from "@/features/projects/constants";
-import type { CodeIntelligenceResultSchema } from "@/features/projects/actions/code-intelligence-schemas";
+import { createCodeAnalyzerRegistry } from "@/features/code-intelligence/analyzer-registry";
+import { getCodeFileType } from "@/features/code-intelligence/file-type";
+import type { CodeFileType } from "@/features/code-intelligence/file-type";
+import type { CodeAnalyzerResult } from "@/features/code-intelligence/analyzer-registry";
+
+type DiagnosticsEngine =
+  "typescript" | "tree-sitter" | "format-parser" | "none";
+
+const getDiagnosticsEngine = (fileType: CodeFileType): DiagnosticsEngine => {
+  switch (fileType) {
+    case "typescript":
+    case "javascript":
+      return "typescript";
+    case "python":
+    case "java":
+    case "c":
+    case "cpp":
+    case "csharp":
+    case "go":
+    case "php":
+    case "rust":
+    case "ruby":
+    case "shell":
+    case "dockerfile":
+      return "tree-sitter";
+    case "markdown":
+    case "json":
+    case "jsonc":
+    case "json5":
+    case "yaml":
+    case "toml":
+    case "xml":
+    case "ini":
+    case "env":
+      return "format-parser";
+    case "unsupported":
+      return "none";
+    default: {
+      const exhaustive: never = fileType;
+      return exhaustive;
+    }
+  }
+};
 
 // Native-only: use the same compiler service as the editor, never a cloud copy
 // of the file or an executable lint configuration from the repository.
@@ -8,31 +49,35 @@ export const collectFileDiagnostics = async (
   path: string,
   content: string,
 ) => {
+  const fileType = getCodeFileType(path);
+  const engine = getDiagnosticsEngine(fileType);
   const unavailable = (status: "unsupported" | "unavailable") => ({
-    engine: "typescript" as const,
+    engine,
     status,
     items: [],
     total: null,
     truncated: false,
   });
-  if (!CODE_INTELLIGENCE_FILE_PATTERN.test(path))
-    return unavailable("unsupported");
+  if (engine === "none") return unavailable("unsupported");
+
+  const analyzer = createCodeAnalyzerRegistry(path, (input) =>
+    import("@/features/projects/actions/code-intelligence-actions").then(
+      ({ readProjectCodeIntelligence }) =>
+        readProjectCodeIntelligence(projectId, input),
+    ),
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const analysis = await Promise.race([
-      (async () => {
-        const { readProjectCodeIntelligence } =
-          await import("@/features/projects/actions/code-intelligence-actions");
-        return readProjectCodeIntelligence(projectId, { path, content });
-      })(),
+      analyzer.analyzeFile({ path, content, revision: 1 }),
       // Do not hold a file read behind slow dependency IO. The shared editor
       // analyzer may finish later; disposing it here would interrupt the editor.
-      new Promise<CodeIntelligenceResultSchema | null>((resolve) => {
+      new Promise<CodeAnalyzerResult | null>((resolve) => {
         timer = setTimeout(() => resolve(null), 2000);
       }),
     ]);
-    if (!analysis || !("diagnostics" in analysis))
-      return unavailable("unavailable");
+    if (!analysis) return unavailable("unavailable");
+    if (analysis.status !== "ready") return unavailable(analysis.status);
     const items = analysis.diagnostics.slice(0, 20).map((item) => {
       const lines = content
         .slice(0, item.from)
@@ -46,7 +91,7 @@ export const collectFileDiagnostics = async (
       };
     });
     const result = {
-      engine: "typescript" as const,
+      engine,
       status: "ready" as const,
       items,
       total: analysis.diagnostics.length,
@@ -67,5 +112,6 @@ export const collectFileDiagnostics = async (
     return unavailable("unavailable");
   } finally {
     clearTimeout(timer);
+    analyzer.dispose();
   }
 };

@@ -38,7 +38,7 @@ const empty = z.strictObject({});
 export const workspaceTools = {
   readFile: {
     description:
-      "Read a bounded text file excerpt, its hash, and full-file TypeScript diagnostics with severity, codes and one-based line/column positions. Diagnostics report ready, unavailable or unsupported and may be truncated; these are not ESLint results. Lines are one-based. Read before editing.",
+      "Read a bounded text file excerpt, its hash, and available on-device diagnostics for supported code and config files. Each diagnostic includes its source, severity, code, and one-based line/column positions. TypeScript files include compiler diagnostics; other code and config formats report parser findings. Diagnostics report ready, unavailable or unsupported and may be truncated. They are not ESLint results or full compiler checks for every language. Lines are one-based. Read before editing.",
     schema: z.strictObject({
       path: projectFilePathSchema.describe(
         'Existing project-relative file path, e.g. "src/index.ts"; 1–4096 characters, no absolute paths or . / .. segments.',

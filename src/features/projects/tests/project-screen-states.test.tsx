@@ -159,7 +159,7 @@ it("shows severity counts in the floating badge and resets them for another file
   renderCode();
   expect(container.textContent).toContain("app/page.tsx");
   const previousAnalysis = state.analysis!;
-  const diagnostic = { from: 0, to: 1, message: "Problem", code: 1 };
+  const diagnostic = { from: 0, to: 1, message: "Problem", source: "TypeScript", code: "TS1" };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [
     { ...diagnostic, severity: "error" }, { ...diagnostic, severity: "warning" }, { ...diagnostic, severity: "info" },
   ] }));
@@ -282,7 +282,7 @@ it("shows save progress in the active tab, then offers retry after failure", asy
   renderCode();
   await act(async () => state.ready!());
   expect(container.querySelector('[aria-label="Close app/page.tsx"]')).not.toBeNull();
-  const diagnostic = { from: 0, to: 1, message: "Problem", code: 1, severity: "error" as const };
+  const diagnostic = { from: 0, to: 1, message: "Problem", source: "TypeScript", code: "TS1", severity: "error" as const };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [diagnostic] }));
   const icons = [...container.querySelectorAll('[data-icon]')].map((icon) => icon.getAttribute("data-icon"));
   expect(icons.slice(-5)).toEqual(["format-align-left", "sort-alphabetical-ascending", "magnify", "undo", "redo"]);

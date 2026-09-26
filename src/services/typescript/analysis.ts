@@ -14,6 +14,7 @@ import type {
   LanguageServiceHost,
   ScriptElementKind,
 } from "typescript";
+import { normalizeCodeDiagnostics } from "@/features/code-intelligence/diagnostics";
 
 const formatSeverity = (category: DiagnosticCategory) => {
   switch (category) {
@@ -214,7 +215,9 @@ const createTypeScriptSession = (
         jsx: ts.JsxEmit.ReactJSX,
         strict: true,
         allowJs: true,
-        checkJs: true,
+        checkJs:
+          parsed?.options.checkJs ??
+          /(?:^|\r?\n)\s*\/\/\s*@ts-check\b/.test(input.content),
         allowImportingTsExtensions: true,
         ...parsed?.options,
         noEmit: true,
@@ -334,22 +337,29 @@ const createTypeScriptSession = (
         };
       } else {
         result = {
-          diagnostics: [
-            ...service.getSyntacticDiagnostics(target),
-            ...service.getSemanticDiagnostics(target),
-            ...service.getSuggestionDiagnostics(target),
-          ]
-            .filter(
-              (item) =>
-                item.file?.fileName === target && item.start !== undefined,
-            )
-            .map((item) => ({
-              from: item.start!,
-              to: item.start! + (item.length ?? 0),
-              severity: formatSeverity(item.category),
-              code: item.code,
-              message: ts.flattenDiagnosticMessageText(item.messageText, "\n"),
-            })),
+          diagnostics: normalizeCodeDiagnostics(
+            input.content,
+            [
+              ...service.getSyntacticDiagnostics(target),
+              ...service.getSemanticDiagnostics(target),
+              ...service.getSuggestionDiagnostics(target),
+            ]
+              .filter(
+                (item) =>
+                  item.file?.fileName === target && item.start !== undefined,
+              )
+              .map((item) => ({
+                from: item.start!,
+                to: item.start! + (item.length ?? 0),
+                severity: formatSeverity(item.category),
+                source: "TypeScript",
+                code: `TS${item.code}`,
+                message: ts.flattenDiagnosticMessageText(
+                  item.messageText,
+                  "\n",
+                ),
+              })),
+          ),
         };
       }
       invalidatedResolutions = false;
@@ -410,7 +420,7 @@ const createTypeScriptSession = (
       );
       return result;
     },
-    dispose: () => {
+    dispose: async () => {
       closed = true;
       return queued.then(reset);
     },

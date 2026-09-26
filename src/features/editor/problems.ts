@@ -14,6 +14,6 @@ export const filterEditorProblems = <T extends CodeDiagnosticSchema>(
       (severity === "all" || item.severity === severity) &&
       (!query ||
         item.message.toLocaleLowerCase().includes(query) ||
-        `ts${item.code}`.includes(query)),
+        `${item.source} ${item.code}`.toLocaleLowerCase().includes(query)),
   );
 };

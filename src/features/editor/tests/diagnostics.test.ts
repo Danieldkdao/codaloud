@@ -39,18 +39,20 @@ it("filters problems locally by severity, message, and diagnostic code", async (
       to: 1,
       severity: "error" as const,
       message: "Type mismatch",
-      code: 2322,
+      source: "TypeScript",
+      code: "TS2322",
     },
     {
       from: 2,
       to: 3,
       severity: "info" as const,
       message: "Unused value",
-      code: 6133,
+      source: "TypeScript",
+      code: "TS6133",
     },
   ];
-  expect(filterEditorProblems(diagnostics, "  TYPE ", "all")).toHaveLength(1);
-  expect(filterEditorProblems(diagnostics, "TS6133", "all")).toHaveLength(1);
+  expect(filterEditorProblems(diagnostics, "  MISMATCH ", "all")).toHaveLength(1);
+  expect(filterEditorProblems(diagnostics, "typescript ts6133", "all")).toHaveLength(1);
   expect(filterEditorProblems(diagnostics, "", "warning")).toHaveLength(0);
   expect(filterEditorProblems(diagnostics, "unused", "error")).toHaveLength(0);
 });

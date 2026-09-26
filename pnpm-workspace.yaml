@@ -18,6 +18,18 @@ allowBuilds:
   esbuild: false
   protobufjs: false
   react-native-enriched-markdown: true
+  tree-sitter-bash: false
+  tree-sitter-c: false
+  tree-sitter-c-sharp: false
+  tree-sitter-cli: true
+  tree-sitter-containerfile: false
+  tree-sitter-cpp: false
+  tree-sitter-go: false
+  tree-sitter-java: false
+  tree-sitter-php: false
+  tree-sitter-python: false
+  tree-sitter-ruby: false
+  tree-sitter-rust: false
 
 patchedDependencies:
   # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.

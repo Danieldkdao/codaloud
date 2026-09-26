@@ -46,7 +46,8 @@ it("reads frozen unsaved contents and never exposes mutation tools", async () =>
       {
         from: 8,
         to: 14,
-        code: 2304,
+        source: "TypeScript",
+        code: "TS2304",
         severity: "error",
         message: "Unknown name",
       },
@@ -64,7 +65,7 @@ it("reads frozen unsaved contents and never exposes mutation tools", async () =>
     source: "editor",
     diagnostics: {
       status: "ready",
-      items: [expect.objectContaining({ code: 2304 })],
+      items: [expect.objectContaining({ code: "TS2304" })],
     },
   });
   expect(mocks.analyze).toHaveBeenCalledWith("p", {

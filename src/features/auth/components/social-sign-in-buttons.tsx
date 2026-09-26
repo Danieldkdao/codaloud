@@ -82,7 +82,7 @@ export const SocialSignInButtons = () => {
           name="apple"
           brand
           size={23}
-          className="text-secondary-foreground"
+          className="text-foreground"
           accessible={false}
         />
         Continue with Apple

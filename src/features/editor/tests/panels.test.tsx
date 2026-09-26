@@ -212,7 +212,8 @@ it("debounces problem search, combines severity filters, and selects the exact d
     {
       from: 0,
       to: 1,
-      code: 1,
+      code: "tree-sitter-python:syntax-error",
+      source: "Tree-sitter: Python",
       severity: "error" as const,
       message: "Invalid assignment",
       line: 1,
@@ -221,7 +222,8 @@ it("debounces problem search, combines severity filters, and selects the exact d
     {
       from: 2,
       to: 3,
-      code: 2,
+      code: "TS2",
+      source: "TypeScript",
       severity: "warning" as const,
       message: "Unused name",
       line: 2,
@@ -262,7 +264,7 @@ it("debounces problem search, combines severity filters, and selects the exact d
   click("Errors");
   expect(container.textContent).toContain("No matching problems");
   click("Warnings");
-  click("warning: Unused name, Line 2, column 1 · TS2");
+  click("warning: Unused name, Line 2, column 1 · TypeScript TS2");
   expect(select).toHaveBeenCalledWith(diagnostics[1]);
 });
 

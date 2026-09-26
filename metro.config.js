@@ -6,6 +6,7 @@ const { withNativewind } = require("nativewind/metro");
 process.env.EXPO_NO_BUNDLE_SPLITTING ??= "1";
 
 const config = getDefaultConfig(__dirname);
+config.resolver.assetExts.push("wasm");
 
 module.exports = withNativewind(config, {
   inlineVariables: false,

@@ -121,13 +121,14 @@ export const formatProblemFilter = (
   }
 };
 export const formatProblemLocation = (item: {
-  code: number;
+  code: string;
+  source: string;
   line?: number;
   column?: number;
 }) =>
   item.line
-    ? `Line ${item.line}, column ${item.column ?? 1} · TS${item.code}`
-    : `TS${item.code}`;
+    ? `Line ${item.line}, column ${item.column ?? 1} · ${item.source} ${item.code}`
+    : `${item.source} ${item.code}`;
 
 export const formatNativeEditorFontClass = (font: EditorFont) => {
   switch (font) {

@@ -18,13 +18,16 @@ import {
   LanguageDescription,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
+import { codeEditorLanguages } from "./code-editor-language-data";
 import {
   createCodeEditorIntelligence,
   type CodeEditorAnalysis,
   type CodeEditorAnalysisRequest,
 } from "./code-editor-intelligence";
-import { CODE_INTELLIGENCE_FILE_PATTERN } from "@/features/projects/constants";
+import {
+  getCodeFileType,
+  hasLocalCodeAnalyzer,
+} from "@/features/code-intelligence/file-type";
 import { tags } from "@lezer/highlight";
 import { editorFontAssets } from "@/features/editor/fonts";
 import { Outfit_400Regular } from "@expo-google-fonts/outfit/400Regular";
@@ -339,8 +342,11 @@ const CodeEditor = ({
   changeCallback.current = onChange;
   const analysisCallbacks = useRef({ onRequestAnalysis, onAnalysis });
   analysisCallbacks.current = { onRequestAnalysis, onAnalysis };
-  const hasAnalysis =
-    Boolean(onRequestAnalysis) && CODE_INTELLIGENCE_FILE_PATTERN.test(filename);
+  const codeFileType = getCodeFileType(filename);
+  const hasNativeAnalysis =
+    Boolean(onRequestAnalysis) &&
+    (codeFileType === "typescript" || codeFileType === "javascript");
+  const hasAnalysis = hasNativeAnalysis || hasLocalCodeAnalyzer(codeFileType);
   const notifiedEditor = useRef<object | null>(null);
   const [preparedEditor, setPreparedEditor] = useState<{
     editor: EditorView;
@@ -653,7 +659,7 @@ const CodeEditor = ({
       inlineDiagnostics,
       editorAutocompletion(
         filename,
-        hasAnalysis
+        hasNativeAnalysis
           ? async (input) =>
               analysisCallbacks.current.onRequestAnalysis?.(
                 input,
@@ -746,7 +752,10 @@ const CodeEditor = ({
       void analysisCallbacks.current
         .onAnalysis?.({ status: "unsupported", diagnostics: [] }, documentKey)
         .catch(() => {});
-    const description = LanguageDescription.matchFilename(languages, filename);
+    const description = LanguageDescription.matchFilename(
+      codeEditorLanguages,
+      filename,
+    );
     setLanguageError(false);
     void description
       ?.load()

@@ -4,6 +4,7 @@ import type {
   CodeIntelligenceRequestSchema,
   CodeIntelligenceResultSchema,
 } from "@/features/projects/actions/code-intelligence-schemas";
+import { createCodeAnalyzerRegistry } from "@/features/code-intelligence/analyzer-registry";
 
 export type CodeEditorAnalysis = {
   status: "checking" | "ready" | "unavailable" | "unsupported";
@@ -23,8 +24,10 @@ export const createCodeEditorIntelligence = (
   let generation = 0;
   let hasAnalysis = false;
   let pending = Promise.resolve();
+  const analyzer = createCodeAnalyzerRegistry(filename, request);
   const analyze = async (
     input: CodeIntelligenceRequestSchema,
+    revision: number,
     isCurrent: () => boolean,
   ) => {
     const previous = pending;
@@ -37,7 +40,9 @@ export const createCodeEditorIntelligence = (
       // Keep one analysis in flight per editor. Skip superseded requests before
       // crossing the DOM/native boundary and doing compiler work.
       if (!active || !isCurrent()) return null;
-      return await request(input).catch(() => null);
+      return await analyzer.analyzeFile({ ...input, revision });
+    } catch {
+      return null;
     } finally {
       release();
     }
@@ -50,12 +55,21 @@ export const createCodeEditorIntelligence = (
         if (!hasAnalysis) onAnalysis({ status: "checking", diagnostics: [] });
         const result = await analyze(
           { path: filename, content: doc.toString() },
+          current,
           () => view.state.doc === doc && current === generation,
         );
         if (!active || view.state.doc !== doc || current !== generation)
           return [];
-        if (!result || !("diagnostics" in result)) {
+        if (!result) {
           onAnalysis({ status: "unavailable", diagnostics: [] });
+          return [];
+        }
+        if (result.status !== "ready") {
+          onAnalysis({
+            status: result.status,
+            revision: result.revision,
+            diagnostics: [],
+          });
           return [];
         }
         const diagnostics = result.diagnostics
@@ -72,14 +86,14 @@ export const createCodeEditorIntelligence = (
             };
           });
         hasAnalysis = true;
-        onAnalysis({ status: "ready", diagnostics });
+        onAnalysis({ status: "ready", revision: result.revision, diagnostics });
         return diagnostics.map((item) => ({
           ...item,
-          source: `TS${item.code}`,
+          source: item.source,
         }));
       },
       {
-        delay: 150,
+        delay: analyzer.debounceMs,
         // Retain squiggles and native badge counts without DOM hover popups.
         tooltipFilter: () => [],
         autoPanel: false,
@@ -92,6 +106,7 @@ export const createCodeEditorIntelligence = (
     destroy: () => {
       active = false;
       generation++;
+      analyzer.dispose();
     },
   };
 };

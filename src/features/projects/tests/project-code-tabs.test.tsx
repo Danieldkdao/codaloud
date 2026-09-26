@@ -424,7 +424,7 @@ it("opens Problems from diagnostic counts without a save control", () => {
         analysis: {
           status: "ready",
           diagnostics: [
-            { from: 0, to: 1, message: "Bad type", severity: "error", code: 1 },
+            { from: 0, to: 1, message: "Bad type", severity: "error", source: "TypeScript", code: "TS1" },
           ],
         },
       }),

@@ -8,7 +8,7 @@ import {
   createInlineVoiceTools,
   generateInlineVoiceEdit,
 } from "@/services/ai/inline-voice-tools";
-import { classifyInlineEditIntent } from "@/services/ai/inline-edit-intent";
+import { classifyInlineIntent } from "@/services/ai/inline-intent";
 import { voiceContextSchema } from "@/features/voice/schemas";
 
 export class VoiceLanguageModel extends llm.LLM {
@@ -146,26 +146,32 @@ class VoiceLanguageModelStream extends llm.LLMStream {
           (message) => message.role === "user",
         )?.content;
         if (typeof instruction !== "string") return;
-        const shouldEdit = await classifyInlineEditIntent(
+        const intent = await classifyInlineIntent(
           instruction,
           this.abortController.signal,
         );
         if (this.abortController.signal.aborted) return;
-        if (!shouldEdit) {
+        if (intent === "ignore") {
+          // Nothing to act on, so close the turn without generating an edit.
           await this.workspace.rpc("codaloud.voice.suggestion", {
             id: context.id,
             type: "answer",
           });
           return;
         }
-        await generateInlineVoiceEdit(
-          context,
-          messages,
-          instruction,
-          this.workspace.rpc,
-          this.abortController.signal,
-        );
-        return;
+        // An "answer" intent falls through to the conversational reply below so
+        // the user hears a real response. It keeps the inline read tools, so
+        // the model can check diagnostics before speaking.
+        if (intent === "edit") {
+          await generateInlineVoiceEdit(
+            context,
+            messages,
+            instruction,
+            this.workspace.rpc,
+            this.abortController.signal,
+          );
+          return;
+        }
       }
       const reply = context
         ? createVoiceReply(

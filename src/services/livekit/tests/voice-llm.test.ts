@@ -1,12 +1,18 @@
 import { expect, it, vi } from "vitest";
 import { initializeLogger, llm } from "@livekit/agents";
 import { VoiceLanguageModel } from "../voice-llm";
-const mocks = vi.hoisted(() => ({ reply: vi.fn(), edit: vi.fn(), classify: vi.fn().mockResolvedValue(true) }));
+const mocks = vi.hoisted(() => ({
+  reply: vi.fn(),
+  edit: vi.fn(),
+  classify: vi.fn().mockResolvedValue("edit"),
+}));
 vi.mock("@/services/ai/quick-edit", () => ({ streamQuickEdit: mocks.edit }));
 vi.mock("@/services/ai/voice-response", () => ({
   createVoiceReply: mocks.reply,
 }));
-vi.mock("@/services/ai/inline-edit-intent", () => ({ classifyInlineEditIntent: mocks.classify }));
+vi.mock("@/services/ai/inline-intent", () => ({
+  classifyInlineIntent: mocks.classify,
+}));
 initializeLogger({ pretty: false, level: "silent" });
 it("generates an inline edit directly without asking the conversation model to call a tool", async () => {
   mocks.reply.mockClear();
@@ -206,19 +212,130 @@ it("binds implementation plans to the frozen native request", async () => {
   stream.close();
 });
 
-it.each(["I wanted", "Never mind, stop", "What's wrong with this code?"])("does not generate code for a rejected transcript: %s", async (transcript) => {
+it.each(["I wanted", "Never mind, stop", "um", "thanks"])(
+  "stays silent for an ignored transcript: %s",
+  async (transcript) => {
+    mocks.edit.mockClear();
+    mocks.reply.mockClear();
+    mocks.classify.mockResolvedValueOnce("ignore");
+    const rpc = vi.fn(async () => ({ ok: true }));
+    const chat = new llm.ChatContext();
+    chat.addMessage({ role: "user", content: "Add a function" });
+    chat.addMessage({ role: "user", content: transcript });
+    const stream = new VoiceLanguageModel("room", undefined, {
+      context: async () => ({
+        id: "inline",
+        projectId: "p",
+        branch: "main",
+        mode: "quick-edit",
+        activeFile: null,
+        openFiles: [],
+        openFilesTruncated: false,
+      }),
+      rpc,
+    }).chat({ chatCtx: chat });
+    for await (const _ of stream) {
+      /* drain */
+    }
+    expect(mocks.classify).toHaveBeenLastCalledWith(
+      transcript,
+      expect.any(AbortSignal),
+    );
+    expect(mocks.edit).not.toHaveBeenCalled();
+    expect(mocks.reply).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("codaloud.voice.suggestion", {
+      id: "inline",
+      type: "answer",
+    });
+    stream.close();
+  },
+);
+
+it.each(["Why am I getting this error here?", "What is going on here?"])(
+  "answers an explained transcript instead of staying silent: %s",
+  async (transcript) => {
+    mocks.edit.mockClear();
+    mocks.reply.mockClear();
+    mocks.classify.mockResolvedValueOnce("answer");
+    mocks.reply.mockImplementation(() =>
+      (async function* () {
+        yield "That is a type error.";
+      })(),
+    );
+    const rpc = vi.fn(async () => ({ ok: true }));
+    const chat = new llm.ChatContext();
+    chat.addMessage({ role: "user", content: "Add a function" });
+    chat.addMessage({ role: "user", content: transcript });
+    const stream = new VoiceLanguageModel("room", undefined, {
+      context: async () => ({
+        id: "inline",
+        projectId: "p",
+        branch: "main",
+        mode: "quick-edit",
+        activeFile: null,
+        openFiles: [],
+        openFilesTruncated: false,
+      }),
+      rpc,
+    }).chat({ chatCtx: chat });
+    const chunks = [];
+    for await (const part of stream) chunks.push(part);
+    expect(mocks.classify).toHaveBeenLastCalledWith(
+      transcript,
+      expect.any(AbortSignal),
+    );
+    expect(mocks.edit).not.toHaveBeenCalled();
+    expect(mocks.reply).toHaveBeenCalled();
+    expect(
+      chunks
+        .filter((part) => part.delta?.content)
+        .map((part) => part.delta?.content)
+        .join(""),
+    ).toBe("That is a type error.");
+    stream.close();
+  },
+);
+
+it("generates an inline edit for a question about what is wrong", async () => {
+  mocks.reply.mockClear();
   mocks.edit.mockClear();
-  mocks.classify.mockResolvedValueOnce(false);
+  mocks.classify.mockResolvedValueOnce("edit");
+  mocks.edit.mockImplementation(async (_messages, _instruction, id, send) => {
+    await send({ id, type: "start" });
+    await send({ id, type: "complete" });
+  });
   const rpc = vi.fn(async () => ({ ok: true }));
   const chat = new llm.ChatContext();
-  chat.addMessage({ role: "user", content: "Add a function" });
-  chat.addMessage({ role: "user", content: transcript });
+  chat.addMessage({
+    role: "user",
+    content: "Why am I getting this error here?",
+  });
   const stream = new VoiceLanguageModel("room", undefined, {
-    context: async () => ({ id: "inline", projectId: "p", branch: "main", mode: "quick-edit", activeFile: null, openFiles: [], openFilesTruncated: false }), rpc,
+    context: async () => ({
+      id: "inline",
+      projectId: "p",
+      branch: "main",
+      mode: "quick-edit",
+      openFiles: [],
+      openFilesTruncated: false,
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        from: 0,
+        to: 0,
+        before: "",
+        selected: "",
+        after: "",
+        selectionTruncated: false,
+      },
+    }),
+    rpc,
   }).chat({ chatCtx: chat });
-  for await (const _ of stream) { /* drain */ }
-  expect(mocks.classify).toHaveBeenLastCalledWith(transcript, expect.any(AbortSignal));
-  expect(mocks.edit).not.toHaveBeenCalled();
-  expect(rpc).toHaveBeenCalledExactlyOnceWith("codaloud.voice.suggestion", { id: "inline", type: "answer" });
+  for await (const _ of stream) {
+    /* drain */
+  }
+  expect(mocks.reply).not.toHaveBeenCalled();
+  expect(mocks.edit).toHaveBeenCalled();
   stream.close();
 });

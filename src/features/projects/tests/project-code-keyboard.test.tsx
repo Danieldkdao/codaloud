@@ -31,8 +31,8 @@ vi.mock("react-native-reanimated", () => {
 });
 vi.mock("@expo/vector-icons", () => ({ MaterialCommunityIcons: { getImageSource: async (name: string) => ({ uri: name }) } }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "foreground" }));
-vi.mock("@/components/ui/native-select", () => ({ NativeSelect: ({ label, sections }: { label: string; sections: { options: { label: string; onSelect: () => void }[] }[] }) =>
-  createElement("div", { "aria-label": label }, sections.flatMap((section) => section.options.map((option) => createElement("button", { key: option.label, onClick: option.onSelect }, option.label)))),
+vi.mock("@/components/ui/native-select", () => ({ NativeSelect: ({ label, sections }: { label: string; sections: { options: { label: string; disabled?: boolean; onSelect: () => void }[] }[] }) =>
+  createElement("div", { "aria-label": label }, sections.flatMap((section) => section.options.map((option) => createElement("button", { key: option.label, disabled: option.disabled, onClick: option.onSelect }, option.label)))),
 }));
 vi.mock("react-native", () => ({
   Keyboard: {
@@ -281,4 +281,31 @@ it("routes the symbols row Tab button to the editor indentation command", () => 
   expect(button).not.toBeNull();
   act(() => button!.click());
   expect(onCommand).toHaveBeenCalledExactlyOnceWith("tab");
+});
+
+it("enables Explain only for an available selection and invokes the explanation handler", async () => {
+  const explain = vi.fn();
+  await act(async () =>
+    root.render(
+      createElement(ProjectCodeSelectionMenu, {
+        onExplain: explain,
+        canExplain: true,
+      }),
+    ),
+  );
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Explain to me with AI",
+  )!;
+  expect(button.disabled).toBe(false);
+  act(() => button.click());
+  expect(explain).toHaveBeenCalledOnce();
+  await act(async () =>
+    root.render(
+      createElement(ProjectCodeSelectionMenu, {
+        onExplain: explain,
+        canExplain: false,
+      }),
+    ),
+  );
+  expect(button.disabled).toBe(true);
 });

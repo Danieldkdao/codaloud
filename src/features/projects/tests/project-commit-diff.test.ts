@@ -18,9 +18,10 @@ const details = (files: ProjectCommitFileSchema[]): ProjectCommitDetailsSchema =
 it("adapts real commit patches into the existing virtualized diff rows", () => {
   const diff = createProjectCommitDiff(details([file]));
   const rows = createProjectWorkspaceDiffRows(diff.files, new Set());
-  expect(rows.map(row => row.kind)).toEqual(["file", "comparison", "line", "line"]);
-  expect(rows[2]).toMatchObject({ path: file.path, line: { kind: "deletion", text: "before" } });
-  expect(rows[3]).toMatchObject({ path: file.path, line: { kind: "addition", text: "after" } });
+  expect(rows.map(row => row.kind)).toEqual(["file", "comparison", "hunk", "line", "line"]);
+  expect(rows[2]).toMatchObject({ path: file.path, hunk: { header: "@@ -1 +1 @@" } });
+  expect(rows[3]).toMatchObject({ path: file.path, line: { kind: "deletion", text: "before" } });
+  expect(rows[4]).toMatchObject({ path: file.path, line: { kind: "addition", text: "after" } });
   expect(diff.summary.staged).toEqual({ fileCount: 1, additions: 1, deletions: 1, unavailableCount: 0 });
 });
 

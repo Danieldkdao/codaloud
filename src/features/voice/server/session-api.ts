@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { auth } from "@/lib/auth/auth";
+import { getCurrentUser } from "@/lib/auth/helpers";
 import { serverEnv } from "@/data/env/server";
 import { createVoiceAccessToken, livekit } from "@/services/livekit/server";
 import { voiceAgentName } from "../constants";
@@ -16,13 +16,13 @@ export const handleVoiceSessionRequest = async (request: Request) => {
   try {
     // Retry only authentication lookup, before any room allocation. A transient
     // database transport failure must not create duplicate rooms or bypass auth.
-    const readSession = () => auth.api.getSession({ headers: request.headers });
-    const session = await readSession().catch(() => {
+    const readCurrentUser = () => getCurrentUser(request.headers);
+    const { userId } = await readCurrentUser().catch(() => {
       if (request.signal.aborted) throw new Error("Request cancelled.");
-      return readSession();
+      return readCurrentUser();
     });
     if (request.signal.aborted) throw new Error("Request cancelled.");
-    if (!session) return respond({ message: "Sign in to use voice." }, 401);
+    if (!userId) return respond({ message: "Sign in to use voice." }, 401);
     if (request.method !== "POST" && request.method !== "DELETE") {
       return respond({ message: "Method not allowed." }, 405);
     }
@@ -37,7 +37,7 @@ export const handleVoiceSessionRequest = async (request: Request) => {
     }
     // Local projects are not cloud resources; every voice room is allocated by
     // the server and owned by the authenticated account, never a client identity.
-    const prefix = `voice-${encodeURIComponent(session.user.id)}-`;
+    const prefix = `voice-${encodeURIComponent(userId)}-`;
     if (request.method === "DELETE") {
       const roomName =
         body && typeof body === "object" && "roomName" in body
@@ -68,17 +68,17 @@ export const handleVoiceSessionRequest = async (request: Request) => {
     allocatedRoom = roomName;
     await livekit.agentDispatch.createDispatch(roomName, voiceAgentName, {
       metadata: JSON.stringify({
-        participantIdentity: session.user.id,
+        participantIdentity: userId,
         ...input.data,
       }),
     });
-    const token = await createVoiceAccessToken(roomName, session.user.id);
+    const token = await createVoiceAccessToken(roomName, userId);
     return respond(
       {
         serverUrl: serverEnv.LIVEKIT_URL,
         token,
         roomName,
-        participantIdentity: session.user.id,
+        participantIdentity: userId,
         mode: input.data.mode,
       },
       200,

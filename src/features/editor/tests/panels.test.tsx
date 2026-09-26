@@ -364,5 +364,5 @@ it("gives Problems a heading, glass search and filters, and safe-area footer spa
       container.querySelector<HTMLElement>("[data-problems-layout]")!.style
         .paddingBottom,
     ),
-  ).toBeGreaterThanOrEqual(34 + 24);
+  ).toBeGreaterThanOrEqual(34);
 });

@@ -11,6 +11,7 @@ import type {
 } from "@/features/projects/types";
 import type {
   ProjectDiffComparison,
+  ProjectDiffHunk,
   ProjectDiffLine,
   ProjectDiffScope,
   ProjectWorkspaceDiffData,
@@ -442,6 +443,21 @@ export const formatProjectDiffRow = (line: ProjectDiffLine) => {
         label: `Unchanged line ${line.newLine}: ${line.text}`,
       };
   }
+};
+
+export const formatProjectDiffHunk = (hunk: ProjectDiffHunk) => {
+  const oldRange =
+    hunk.oldCount === 0
+      ? `after line ${hunk.oldStart}`
+      : `lines ${hunk.oldStart} through ${hunk.oldStart + hunk.oldCount - 1}`;
+  const newRange =
+    hunk.newCount === 0
+      ? `after line ${hunk.newStart}`
+      : `lines ${hunk.newStart} through ${hunk.newStart + hunk.newCount - 1}`;
+  return {
+    label: hunk.header,
+    accessibilityLabel: `Changes ${oldRange} to ${newRange}`,
+  };
 };
 
 export const formatProjectDiffDisclosure = (

@@ -843,3 +843,46 @@ it("restores focus through the native bridge without moving the caret or focusin
   expect(view.state.selection.main.head).toBe(3);
   expect(view.state.doc.toString()).toBe("hello");
 });
+
+it("shows an explanation highlight without changing selection or source and removes it on dismissal", async () => {
+  const ref = createRef<CodeEditorRef>();
+  const onContext = vi.fn().mockResolvedValue(undefined);
+  const props = {
+    ref,
+    filename: "explain.ts",
+    documentKey: "explain",
+    initialValue: "const x = 1;",
+    onContext,
+  };
+  await act(async () => root.render(createElement(CodeEditor, props)));
+  act(() => ref.current!.captureContext("before"));
+  const original = onContext.mock.lastCall![1];
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, {
+        ...props,
+        explanationRange: {
+          documentKey: "explain",
+          revision: original.revision,
+          from: 6,
+          to: 7,
+        },
+      }),
+    ),
+  );
+  expect(
+    container.querySelector(".cm-explanation-highlight")?.textContent,
+  ).toBe("x");
+  act(() => ref.current!.captureContext("after"));
+  expect(onContext.mock.lastCall![1]).toMatchObject({
+    content: original.content,
+    from: original.from,
+    to: original.to,
+  });
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, { ...props, explanationRange: null }),
+    ),
+  );
+  expect(container.querySelector(".cm-explanation-highlight")).toBeNull();
+});

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { auth } from "@/lib/auth/auth";
+import { getCurrentUser } from "@/lib/auth/helpers";
 import { tasks, runs, wait, idempotencyKeys } from "@/services/trigger/server";
 import {
   agentTaskRequestSchema,
@@ -18,25 +18,25 @@ const readBody = async (request: Request) => {
 };
 export const handleAgentRequest = async (request: Request) => {
   try {
-    const session = await auth.api.getSession({ headers: request.headers });
-    if (!session) return reply({ message: "Sign in to run tasks." }, 401);
+    const { userId } = await getCurrentUser(request.headers);
+    if (!userId) return reply({ message: "Sign in to run tasks." }, 401);
     if (request.method === "POST") {
       const input = agentTaskRequestSchema.safeParse(await readBody(request));
       if (!input.success)
         return reply({ message: "Invalid task request." }, 400);
       const key = await idempotencyKeys.create(
-        `${session.user.id}:${input.data.deviceId}:${input.data.requestId}`,
+        `${userId}:${input.data.deviceId}:${input.data.requestId}`,
         { scope: "global" },
       );
       const run = await tasks.trigger<typeof workspaceTask>(
         "workspace-task",
-        { ...input.data, userId: session.user.id },
+        { ...input.data, userId },
         {
           idempotencyKey: key,
           idempotencyKeyTTL: "24h",
           maxAttempts: 1,
-          concurrencyKey: `${session.user.id}:${input.data.deviceId}:${input.data.projectId}`,
-          tags: [`user:${session.user.id}`],
+          concurrencyKey: `${userId}:${input.data.deviceId}:${input.data.projectId}`,
+          tags: [`user:${userId}`],
         },
       );
       return reply({ id: run.id }, 202);
@@ -45,7 +45,7 @@ export const handleAgentRequest = async (request: Request) => {
     if (!runId || !/^run_[a-zA-Z0-9_-]{1,200}$/.test(runId))
       return reply({ message: "Invalid task." }, 400);
     const run = await runs.retrieve<typeof workspaceTask>(runId);
-    if (run.payload?.userId !== session.user.id)
+    if (run.payload?.userId !== userId)
       return reply({ message: "This task is not yours." }, 403);
     if (request.method === "PATCH") {
       const input = z

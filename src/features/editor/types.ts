@@ -57,3 +57,14 @@ export type EditorSearchSummary = {
   active: number;
   error: string | null;
 };
+
+export type EditorExplanationHighlight = Pick<
+  EditorSnapshot,
+  "documentKey" | "revision" | "from" | "to"
+>;
+export type EditorExplanationState = {
+  status: "loading" | "streaming" | "ready" | "error";
+  text: string;
+  error?: string;
+  highlight: EditorExplanationHighlight | null;
+};

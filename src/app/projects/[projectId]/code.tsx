@@ -1,8 +1,15 @@
+import { EditorExplanationBubble } from "@/features/editor/components/editor-explanation-bubble";
+import { useEditorExplanation } from "@/features/editor/hooks/use-editor-explanation";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
+import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
 import { registerAgentWorkspace } from "@/features/agent/workspace-access";
 import { useVoiceEditor } from "@/features/voice/hooks/use-voice-editor";
 import { inlineAcceptanceOperation } from "@/features/voice/constants";
 import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   lazy,
   Suspense,
@@ -23,7 +30,7 @@ import type {
 } from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
 import type { EditorCommand } from "@/features/editor/types";
-import { Alert, View } from "react-native";
+import { Alert, View, useWindowDimensions } from "react-native";
 import CodeEditor, {
   type CodeEditorRef,
   type CodeEditorInteraction,
@@ -130,6 +137,25 @@ const CodeScreen = () => {
   const [interaction, setInteraction] = useState<
     CodeEditorInteraction & { key?: string }
   >();
+  const explanation = useEditorExplanation({
+    editor,
+    documentKey: documents.activeKey,
+    path: files.activeFilePath,
+    revision:
+      interaction?.key === documents.activeKey
+        ? interaction?.revision
+        : undefined,
+    enabled:
+      Boolean(documents.activeKey && readyKey === documents.activeKey) &&
+      !editorBusy &&
+      !closingPath &&
+      !conversation?.visible &&
+      !interaction?.inlineSuggestionId,
+  });
+  useFocusEffect(
+    useCallback(() => () => explanation.close(), [explanation.close]),
+  );
+  const { height: screenHeight } = useWindowDimensions();
   const onInteractionChange = useCallback(
     async (state: CodeEditorInteraction, key?: string) => {
       voiceEditorRef.current.onInteraction(state, key);
@@ -177,6 +203,7 @@ const CodeScreen = () => {
   const showKeyboardAccessory = Boolean(
     canShowEditorControls &&
     !searchOpen &&
+    !explanation.state &&
     keyboardFrame &&
     interaction?.focused,
   );
@@ -241,6 +268,22 @@ const CodeScreen = () => {
       if (alive.current) setClosingPath(null);
     }
   };
+
+  const projectSelectionMenu = (
+    <ProjectCodeSelectionMenu
+      onCommand={runCommand}
+      canExplain={
+        showSelectionMenu &&
+        !conversation?.visible &&
+        !interaction?.inlineSuggestionId
+      }
+      onExplain={() => {
+        setSearchOpen(false);
+        void explanation.start();
+      }}
+      commands={interaction?.commands}
+    />
+  );
 
   const toolbar = (
     <ProjectCodeToolbar
@@ -320,7 +363,12 @@ const CodeScreen = () => {
           importantForAccessibility={isReady ? "auto" : "no-hide-descendants"}
         >
           <CodeEditor
-            onContext={voiceEditor.onContext}
+            explanationRange={explanation.highlight}
+            onContext={async (id, snapshot) => {
+              if (id.startsWith("explain:"))
+                await explanation.onContext(id, snapshot);
+              else await voiceEditor.onContext(id, snapshot);
+            }}
             onSuggestionAction={voiceEditor.onSuggestionAction}
             onSuggestionApplied={voiceEditor.onSuggestionApplied}
             ref={editor}
@@ -355,7 +403,11 @@ const CodeScreen = () => {
             onAnalysis={onAnalysis}
             bottomInset={bottomInset}
             keyboardAccessoryHeight={
-              showKeyboardAccessory ? voiceAccessoryHeight : 0
+              explanation.state && keyboardFrame
+                ? badgeHeight + 8
+                : showKeyboardAccessory
+                  ? voiceAccessoryHeight
+                  : 0
             }
             onInteractionChange={onInteractionChange}
             dom={{
@@ -404,13 +456,36 @@ const CodeScreen = () => {
           <CodeEditorLoading bottomInset={bottomInset} />
         ) : null}
       </View>
-      {files.activeFilePath && (searchOpen || !keyboardFrame) ? (
+      {files.activeFilePath &&
+      (explanation.state || searchOpen || !keyboardFrame) ? (
         <EditorBottomBar
-          frame={searchOpen ? keyboardFrame : undefined}
+          frame={explanation.state || searchOpen ? keyboardFrame : undefined}
           dockHeight={dockHeight}
           onHeight={setBadgeHeight}
         >
-          {searchOpen ? (
+          {explanation.state ? (
+            <Animated.View
+              key="explanation"
+              entering={enterGlassSurface}
+              exiting={exitGlassSurface}
+              layout={LinearTransition.duration(220).reduceMotion(
+                ReduceMotion.System,
+              )}
+            >
+              <EditorExplanationBubble
+                state={explanation.state}
+                maxHeight={Math.min(
+                  360,
+                  (keyboardFrame?.screenY ?? screenHeight) * 0.5,
+                )}
+                onClose={() => {
+                  explanation.close();
+                  if (keyboardFrame && documents.activeKey)
+                    editor.current?.focus(documents.activeKey);
+                }}
+              />
+            </Animated.View>
+          ) : searchOpen ? (
             <EditorSearchBar
               query={searchQuery}
               summary={searchSummary}
@@ -432,7 +507,14 @@ const CodeScreen = () => {
               }}
             />
           ) : (
-            toolbar
+            <Animated.View
+              key="toolbar"
+              layout={LinearTransition.duration(220).reduceMotion(
+                ReduceMotion.System,
+              )}
+            >
+              {toolbar}
+            </Animated.View>
           )}
         </EditorBottomBar>
       ) : null}
@@ -459,21 +541,11 @@ const CodeScreen = () => {
           fold={interaction?.commands?.fold}
           onDismissKeyboard={() => editor.current?.dismissKeyboard()}
         >
-          {showSelectionMenu ? (
-            <ProjectCodeSelectionMenu
-              onCommand={runCommand}
-              commands={interaction?.commands}
-            />
-          ) : null}
+          {showSelectionMenu ? projectSelectionMenu : null}
         </ProjectCodeKeyboardAccessory>
-      ) : showSelectionMenu && !keyboardFrame ? (
+      ) : showSelectionMenu && !keyboardFrame && !explanation.state ? (
         <View className="absolute right-4 top-16">
-          <GlassSurface borderRadius={24}>
-            <ProjectCodeSelectionMenu
-              onCommand={runCommand}
-              commands={interaction?.commands}
-            />
-          </GlassSurface>
+          <GlassSurface borderRadius={24}>{projectSelectionMenu}</GlassSurface>
         </View>
       ) : null}
     </View>

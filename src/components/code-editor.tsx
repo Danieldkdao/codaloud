@@ -78,9 +78,14 @@ import {
 } from "@/features/editor/inline-suggestion";
 import type {
   EditorSnapshot,
+  EditorExplanationHighlight,
   InlineSuggestion,
   InlineSuggestionAction,
 } from "@/features/editor/types";
+import {
+  explanationHighlight,
+  setExplanationHighlight,
+} from "@/features/editor/explanation-highlight";
 import { defaultEditorPreferences } from "@/features/settings/constants";
 import type { EditorPreferences } from "@/features/settings/types";
 import {
@@ -129,6 +134,7 @@ export type CodeEditorInteraction = {
 };
 
 type CodeEditorProps = {
+  explanationRange?: EditorExplanationHighlight | null;
   onContext?: (
     requestId: string,
     snapshot: EditorSnapshot | null,
@@ -240,6 +246,7 @@ const formatEditorThemeClassName = (
 };
 
 const CodeEditor = ({
+  explanationRange,
   onContext,
   onSuggestionAction,
   onSuggestionApplied,
@@ -616,6 +623,7 @@ const CodeEditor = ({
       highlightSpecialChars(),
       history(),
       inlineSuggestion,
+      explanationHighlight,
       EditorView.domEventHandlers({
         "codaloud-suggestion": (event) => {
           const { id, action } = (
@@ -917,6 +925,17 @@ const CodeEditor = ({
       });
     }
   }, [effectiveInset, viewportHeight, fontsLoaded]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    const range =
+      explanationRange?.documentKey === activeDocument.current &&
+      explanationRange?.revision === revision.current
+        ? explanationRange
+        : null;
+    editor.dispatch({ effects: setExplanationHighlight.of(range ?? null) });
+  }, [explanationRange, documentKey]);
 
   return (
     <section

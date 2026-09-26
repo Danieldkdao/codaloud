@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: () => null }));
+vi.mock("@/features/editor/explanation-actions", () => ({ streamEditorExplanation: async (_input: unknown, _signal: AbortSignal, onText: (text: string) => void) => { onText("Explained selection"); } }));
+vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: ({ onExplain, canExplain }: { onExplain?: () => void; canExplain?: boolean }) => createElement("button", { onClick: onExplain, disabled: !canExplain, "aria-label": "Explain selection" }) }));
+vi.mock("@/features/editor/components/editor-explanation-bubble", () => ({ EditorExplanationBubble: ({ state, onClose }: any) => createElement("section", { "data-explanation": true }, state.text, createElement("button", { onClick: onClose, "aria-label": "Close explanation" })) }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 vi.mock("@/features/projects/components/project-code-keyboard-accessory", () => ({ ProjectCodeKeyboardAccessory: () => null }));
 import { act, createElement, useEffect, type ReactNode } from "react";
@@ -37,16 +39,18 @@ vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/keyboard-aware-view", () => ({ KeyboardAwareView: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));
-const state = vi.hoisted(() => ({ editorMounts: 0, empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
+const state = vi.hoisted(() => ({ interaction: undefined as (() => Promise<void>) | undefined, highlight: null as unknown, editorMounts: 0, empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn(), navigate }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
 vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, activePath, save, onRetry, readError }: { paths: string[]; activePath: string | null; save?: SaveSnapshot; onRetry?: () => void; readError?: boolean }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" "), save?.status === "error" ? createElement("button", { "aria-label": `${readError ? "Retry opening" : "Retry saving"} ${activePath}`, onClick: onRetry }, "Error") : save?.status === "saved" ? createElement("button", { "aria-label": `Close ${activePath}` }, "X") : createElement("span", { role: "progressbar" })) }));
 vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: ({ path }: { path: string }) => createElement("button", { "aria-label": "Editor tools", "data-path": path }) }));
-vi.mock("@/components/code-editor", () => ({ default: ({ ref, documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { ref?: { current: unknown }; documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ ref, documentKey, onReady, onAnalysis, onChange, onContext, onInteractionChange, explanationRange, colorScheme, initialValue, readOnly }: { onContext?: (id: string, snapshot: unknown) => Promise<void>; onInteractionChange?: (state: unknown, key: string) => Promise<void>; explanationRange?: unknown; ref?: { current: unknown }; documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
   useEffect(() => { state.editorMounts++; }, []);
-  if (ref) ref.current = { focus: focusEditor };
+  if (ref) ref.current = { focus: focusEditor, captureContext: (id: string) => onContext?.(id, { documentKey, revision: 1, content: initialValue, from: 0, to: 5, focused: false }) };
+  state.interaction = async () => { await onInteractionChange?.({ focused: false, hasSelection: true, revision: 1 }, documentKey); };
+  state.highlight = explanationRange;
   state.change = onChange;
   state.ready = () => onReady(documentKey);
   state.analysis = (value) => onAnalysis(value, documentKey);
@@ -334,4 +338,32 @@ it("closing file search returns focus to the same editor without dismissing the 
   expect(focusEditor).toHaveBeenCalledWith(expect.any(String));
   expect(dismissKeyboard).not.toHaveBeenCalled();
   expect(container.querySelector("textarea")).toBe(original);
+});
+
+it("explains a selection through the screen and removes its highlight on dismissal", async () => {
+  finishLoading();
+  renderCode();
+  await act(async () => {
+    await state.ready!();
+    await state.interaction!();
+  });
+  const explain = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Explain selection"]',
+  )!;
+  expect(explain.disabled).toBe(false);
+  await act(async () => explain.click());
+  expect(container.querySelector("[data-explanation]")?.textContent).toContain(
+    "Explained selection",
+  );
+  expect(state.highlight).toMatchObject({ from: 0, to: 5 });
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Close explanation"]')!
+      .click(),
+  );
+  expect(container.querySelector("[data-explanation]")).toBeNull();
+  expect(state.highlight).toBeNull();
+  expect(
+    container.querySelector('[aria-label="Explain selection"]'),
+  ).not.toBeNull();
 });

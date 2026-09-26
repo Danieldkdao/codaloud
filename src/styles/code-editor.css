@@ -300,3 +300,9 @@ body {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+
+.code-editor-host .cm-explanation-highlight {
+  background: color-mix(in srgb, var(--info) 18%, transparent);
+  border-bottom: 2px solid var(--info);
+  border-radius: 3px;
+}

@@ -74,6 +74,7 @@ export type ProjectWorkspaceDiffRow = { key: string; path: string } & (
       comparison: ProjectDiffComparison;
       status: ProjectWorkspaceDiffEntry["indexStatus"];
     }
+  | { kind: "hunk"; hunk: ProjectDiffHunk }
   | { kind: "line"; line: ProjectDiffLine }
 );
 

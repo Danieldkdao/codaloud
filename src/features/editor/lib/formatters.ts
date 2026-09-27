@@ -104,6 +104,9 @@ export const formatCompletionIcon = (type?: string) => {
   }
 };
 
+export const formatSuppressedAnalysisNotice = (count: number) =>
+  `Showing ${count} syntax ${count === 1 ? "error" : "errors"}. This file does not parse, so every other check was skipped. Fix the syntax errors to see the warnings and suggestions for the rest of the file.`;
+
 export const formatProblemFilter = (
   severity:
     | import("@/features/projects/actions/code-intelligence-schemas").DiagnosticSeverity

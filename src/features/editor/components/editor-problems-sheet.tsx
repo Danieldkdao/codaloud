@@ -27,11 +27,12 @@ import {
   type DiagnosticSeverity,
 } from "@/features/projects/actions/code-intelligence-schemas";
 import { formatCodeDiagnostic } from "@/features/projects/lib/formatters";
-import { filterEditorProblems } from "../problems";
+import { filterEditorProblems, isAnalysisSuppressed } from "../problems";
 import {
   formatProblemAccent,
   formatProblemFilter,
   formatProblemLocation,
+  formatSuppressedAnalysisNotice,
 } from "../lib/formatters";
 
 const problemFilters = ["all", ...diagnosticSeverities] as const;
@@ -86,6 +87,10 @@ export const EditorProblemsSheet = ({
     query,
     severity,
   );
+  // Read the unfiltered list: the notice explains why the file looks clean of
+  // other findings, which is true regardless of what is currently filtered.
+  const suppressed =
+    analysis?.status === "ready" && isAnalysisSuppressed(analysis.diagnostics);
   return (
     <ContentSheet
       scrollable={false}
@@ -122,6 +127,13 @@ export const EditorProblemsSheet = ({
             <PText className="text-primary">Done</PText>
           </Pressable>
         </View>
+        {suppressed && (
+          <View className="shrink-0 gap-1 rounded-2xl bg-info/10 p-3">
+            <PText className="text-base text-info">
+              {formatSuppressedAnalysisNotice(analysis.diagnostics.length)}
+            </PText>
+          </View>
+        )}
         <FlatList
           style={{ flex: 1 }}
           data={problems}

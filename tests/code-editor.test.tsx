@@ -52,6 +52,11 @@ vi.mock("@/features/code-intelligence/parsers/grammar-loader", () => ({
   createTreeSitterLanguageAnalyzer: (grammarId: string) =>
     treeSitterLoaderMock.create(grammarId),
 }));
+// Python runs through Pyodide rather than the tree-sitter grammar, so the
+// native runtime is stubbed instead of the grammar loader.
+vi.mock("@/features/code-intelligence/parsers/python-analyzer", () => ({
+  createPythonAnalyzer: () => pythonAnalyzerMock,
+}));
 
 let container: HTMLDivElement;
 let root: Root;
@@ -340,8 +345,8 @@ it("runs Python diagnostics in the editor DOM and disposes the parser on close",
         to: 9,
         severity: "error",
         message: "Unexpected syntax",
-        source: "Tree-sitter: Python",
-        code: "tree-sitter-python:syntax-error",
+        source: "CPython",
+        code: "python:syntax-error",
       },
     ],
   });
@@ -363,9 +368,7 @@ it("runs Python diagnostics in the editor DOM and disposes the parser on close",
     expect(onAnalysis).toHaveBeenLastCalledWith(
       expect.objectContaining({
         status: "ready",
-        diagnostics: [
-          expect.objectContaining({ source: "Tree-sitter: Python" }),
-        ],
+        diagnostics: [expect.objectContaining({ source: "CPython" })],
       }),
     ),
   );

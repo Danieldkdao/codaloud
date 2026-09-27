@@ -38,7 +38,9 @@ describe("createCodeAnalyzerRegistry", () => {
       loadPythonAnalyzer,
     );
 
-    expect(registry.debounceMs).toBe(250);
+    // Python runs through Pyodide, so it waits longer than a tree-sitter parse
+    // before analysis starts.
+    expect(registry.debounceMs).toBe(900);
     expect(loadPythonAnalyzer).not.toHaveBeenCalled();
     await registry.analyzeFile({
       path: "src/main.py",
@@ -49,6 +51,23 @@ describe("createCodeAnalyzerRegistry", () => {
     expect(pythonAnalyzer.analyze).toHaveBeenCalledWith("print(1)");
     registry.dispose();
     expect(pythonAnalyzer.dispose).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["main.py", 900],
+    ["main.rb", 250],
+    ["deploy.sh", 400],
+    ["main.go", 250],
+    ["Main.java", 250],
+  ])("debounces %s to %i ms", (path, debounceMs) => {
+    const registry = createCodeAnalyzerRegistry(
+      path,
+      vi.fn(),
+      vi.fn(async () => createPythonAnalyzer()),
+    );
+
+    expect(registry.debounceMs).toBe(debounceMs);
+    registry.dispose();
   });
 
   it.each([

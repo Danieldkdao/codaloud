@@ -116,6 +116,7 @@ const PlanReview = ({
                   .updateDetails(plan.requestKey, value)
                   .catch(reportError);
               }}
+              className="bg-card/70"
             />
             {error && (
               <PText

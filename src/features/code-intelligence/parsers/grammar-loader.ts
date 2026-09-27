@@ -1,11 +1,19 @@
+import { Image } from "react-native";
 import { treeSitterGrammars, type TreeSitterGrammarId } from "./grammars";
 import { createTreeSitterAnalyzer } from "./tree-sitter-runtime";
 
-const resolveDomAsset = (assetPath: string) => {
-  // Expo injects the asset base into the embedded DOM; shared server/client env modules are unavailable here.
-  const baseUrl = process.env.EXPO_BASE_URL;
-  if (!baseUrl) throw new Error("Expo DOM asset base URL is unavailable.");
-  return new URL(assetPath, baseUrl).toString();
+// Resolve a bundled asset to a URL the wasm runtime can fetch. Expo's own DOM
+// base URL is not readable from the React Native side, so use the React Native
+// asset resolver, which returns a dev-server URL in development and a local
+// asset path in release. Returns null when the asset cannot be resolved so the
+// analyzer degrades to "unavailable" instead of throwing while the module loads.
+const resolveWasmAsset = (asset: number | string): string | null => {
+  if (typeof asset === "string") return asset;
+  try {
+    return Image.resolveAssetSource(asset)?.uri ?? null;
+  } catch {
+    return null;
+  }
 };
 
 const grammarAssets: Record<TreeSitterGrammarId, number | string> = {
@@ -22,17 +30,23 @@ const grammarAssets: Record<TreeSitterGrammarId, number | string> = {
   dockerfile: require("./grammars/containerfile.wasm"),
 };
 
-const runtimeWasmUrl = resolveDomAsset(
-  String(require("web-tree-sitter/web-tree-sitter.wasm")),
-);
+// web-tree-sitter uses FinalizationRegistry for lookaheads, but catches its
+// absence internally, so a missing registry only costs that convenience.
+const unavailableWasmUrl = "unavailable.wasm";
 
 export const createTreeSitterLanguageAnalyzer = (
   grammarId: TreeSitterGrammarId,
-) =>
-  createTreeSitterAnalyzer(
+) => {
+  const runtimeWasmUrl =
+    resolveWasmAsset(require("web-tree-sitter/web-tree-sitter.wasm")) ??
+    unavailableWasmUrl;
+  const wasmUrl =
+    resolveWasmAsset(grammarAssets[grammarId]) ?? unavailableWasmUrl;
+  return createTreeSitterAnalyzer(
     {
       ...treeSitterGrammars[grammarId],
-      wasmUrl: resolveDomAsset(String(grammarAssets[grammarId])),
+      wasmUrl,
     },
     runtimeWasmUrl,
   );
+};

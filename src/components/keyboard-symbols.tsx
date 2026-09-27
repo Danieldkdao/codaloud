@@ -2,7 +2,7 @@ import { Pressable, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CodeText } from "@/components/ui/text";
 
-const symbols = [
+export const keyboardSymbols = [
   "(",
   ")",
   "{",
@@ -12,6 +12,7 @@ const symbols = [
   "<",
   ">",
   ".",
+  ",",
   ":",
   ";",
   "'",
@@ -82,7 +83,7 @@ export const KeyboardSymbols = ({
           <CodeText className="text-base text-foreground">Tab</CodeText>
         </Pressable>
       ) : null}
-      {symbols.map((symbol) => (
+      {keyboardSymbols.map((symbol) => (
         <Pressable
           key={symbol}
           accessibilityRole="button"

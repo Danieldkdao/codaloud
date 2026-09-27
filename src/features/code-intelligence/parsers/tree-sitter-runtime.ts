@@ -1,6 +1,7 @@
-import { Language, Parser, type Tree } from "web-tree-sitter";
+import type { Language, Parser, Tree } from "web-tree-sitter";
 import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 import type { CodeDiagnosticSchema } from "@/features/projects/actions/code-intelligence-schemas";
+import { ensureTreeSitterGlobals } from "./tree-sitter-globals";
 import {
   getTreeSitterDiagnostics,
   type TreeSitterLanguage,
@@ -17,19 +18,32 @@ export type TreeSitterAnalysis = {
 
 const MAX_PARSE_DURATION_MS = 100;
 let runtimeInitialization: Promise<void> | undefined;
+let runtimeModule: Promise<typeof import("web-tree-sitter")> | undefined;
 const grammarLanguages = new Map<string, Promise<Language>>();
 
+// Load lazily so the process shim is installed before the Emscripten module
+// evaluates. A static import would hoist above the shim and throw.
+const loadRuntimeModule = () => {
+  runtimeModule ??= (async () => {
+    ensureTreeSitterGlobals();
+    return import("web-tree-sitter");
+  })();
+  return runtimeModule;
+};
+
 const initializeRuntime = (runtimeWasmUrl: string) => {
-  runtimeInitialization ??= Parser.init({
-    locateFile: () => runtimeWasmUrl,
-  });
+  runtimeInitialization ??= loadRuntimeModule().then(({ Parser }) =>
+    Parser.init({ locateFile: () => runtimeWasmUrl }),
+  );
   return runtimeInitialization;
 };
 
 const loadGrammarLanguage = (wasmUrl: string) => {
   let languagePromise = grammarLanguages.get(wasmUrl);
   if (!languagePromise) {
-    languagePromise = Language.load(wasmUrl);
+    languagePromise = loadRuntimeModule().then(({ Language }) =>
+      Language.load(wasmUrl),
+    );
     grammarLanguages.set(wasmUrl, languagePromise);
     void languagePromise.catch(() => {
       if (grammarLanguages.get(wasmUrl) === languagePromise)
@@ -52,6 +66,7 @@ export const createTreeSitterAnalyzer = (
       await initializeRuntime(runtimeWasmUrl);
       const language = await loadGrammarLanguage(grammar.wasmUrl);
       if (disposed) return;
+      const { Parser } = await loadRuntimeModule();
       parser = new Parser();
       parser.setLanguage(language);
     })();
@@ -91,9 +106,18 @@ export const createTreeSitterAnalyzer = (
         diagnostics: getTreeSitterDiagnostics(content, tree.rootNode, grammar),
       };
     } catch (error) {
-      console.warn(
-        `Tree-sitter failed for ${grammar.id}: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
+      // Log the message and the resolved asset URLs. The failure name alone
+      // ("TypeError") does not identify whether the wasm fetch or the parse
+      // broke, and these are development-only diagnostics.
+      if (__DEV__)
+        console.warn(
+          `Tree-sitter failed for ${grammar.id}: ${
+            error instanceof Error
+              ? `${error.name}: ${error.message}`
+              : "unknown error"
+          }`,
+          { runtimeWasmUrl, grammarWasmUrl: grammar.wasmUrl },
+        );
       return { status: "unavailable", diagnostics: [] };
     } finally {
       tree?.delete();

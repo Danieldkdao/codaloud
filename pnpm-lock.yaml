@@ -192,6 +192,7 @@ overrides:
 
 patchedDependencies:
   '@trigger.dev/core@4.6.3': e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7
+  jsonc-parser@3.3.1: 214a1d1597125c6dd199fda4607cf12c0ccf8d387395af8536a78c86b1e74063
   livekit-client@2.22.3: 90eeff8ce57ee32263784e264330188bfa0fba436d52e2beb6a95b4d1c8ba7a1
   react-native-keyboard-controller@1.21.9: 4e0169d85161f49fbd57c9cf9561965aab884d665b3832f149b0134f3bf3ff75
 
@@ -432,7 +433,7 @@ importers:
         version: 2.2.3
       jsonc-parser:
         specifier: 3.3.1
-        version: 3.3.1
+        version: 3.3.1(patch_hash=214a1d1597125c6dd199fda4607cf12c0ccf8d387395af8536a78c86b1e74063)
       livekit-client:
         specifier: 2.22.3
         version: 2.22.3(patch_hash=90eeff8ce57ee32263784e264330188bfa0fba436d52e2beb6a95b4d1c8ba7a1)(@types/dom-mediacapture-record@1.0.22)
@@ -14157,7 +14158,7 @@ snapshots:
 
   jsonc-parser@3.2.1: {}
 
-  jsonc-parser@3.3.1: {}
+  jsonc-parser@3.3.1(patch_hash=214a1d1597125c6dd199fda4607cf12c0ccf8d387395af8536a78c86b1e74063): {}
 
   jsonify@0.0.1: {}
 

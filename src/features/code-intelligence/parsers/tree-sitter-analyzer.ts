@@ -15,6 +15,42 @@ export type TreeSitterLanguage = {
   label: string;
 };
 
+// A missing node's type is the exact token the grammar wanted: ":" for a
+// missing colon, ")" for an unclosed call. Quoting literals makes them
+// obvious; named categories read better bare.
+const describeMissing = (type: string) =>
+  /^[\s\S]{1,3}$/.test(type) ? `'${type}'` : type;
+
+// Only a single-child error node identifies one offending token. A node with
+// several children is a recovered fragment, so name the last token the grammar
+// did accept: the fault is at the boundary just after it.
+const errorContext = (node: TreeSitterNode) => {
+  const last = node.isError ? node.children[node.children.length - 1] : null;
+  const token =
+    last && last.endIndex - last.startIndex <= 24 ? last.type : null;
+  return node.children.length === 1
+    ? token && !node.children[0].children.length
+      ? token
+      : null
+    : token;
+};
+
+// Grammar error nodes can span a whole block: a single missing colon turns a
+// two-line function into one ERROR node covering every character. Reporting
+// that range underlines the entire block and parks the message on the last
+// line, far from the real fault. Anchor the finding to the first line of the
+// error, which is where the parse actually broke.
+const clampToFirstLine = (
+  content: string,
+  start: number,
+  end: number,
+): number => {
+  const lineBreak = content.indexOf("\n", start);
+  if (lineBreak < 0 || lineBreak >= end) return end;
+  // Keep the newline out of the range so the highlight stays on one line.
+  return lineBreak > start ? lineBreak : lineBreak;
+};
+
 const getUtf8ByteLength = (codePoint: number) => {
   if (codePoint <= 0x7f) return 1;
   if (codePoint <= 0x7ff) return 2;
@@ -80,26 +116,44 @@ export const getTreeSitterDiagnostics = (
       pendingNodes.push(node.children[index]);
   }
 
+  // Clamp before mapping. The offset table only contains the ranges we ask
+  // for, so a clamped end has to be mapped too or it falls back to the wide
+  // original range.
+  const ranges = findings.map(({ node, startIndex, endIndex }) => ({
+    node,
+    startIndex,
+    endIndex: node.isMissing
+      ? endIndex
+      : clampToFirstLine(content, startIndex, endIndex),
+  }));
   const mappedOffsets = mapUtf8OffsetsToUtf16(
     content,
-    findings.flatMap(({ startIndex, endIndex }) => [startIndex, endIndex]),
+    ranges.flatMap(({ startIndex, endIndex }) => [startIndex, endIndex]),
   );
   const source = `Tree-sitter: ${language.label}`;
   const code = `tree-sitter-${language.id}:syntax-error`;
   return normalizeCodeDiagnostics(
     content,
-    findings.flatMap(({ node, startIndex, endIndex }) => {
+    ranges.flatMap(({ node, startIndex, endIndex }) => {
       const from = mappedOffsets.get(startIndex);
       const to = mappedOffsets.get(endIndex);
       if (from === undefined || to === undefined) return [];
+      // Quote the offending token when the grammar identified one, otherwise
+      // report the last token it accepted before the parse broke.
+      const token = node.isError ? errorContext(node) : null;
+      const recovered = node.children.length > 1;
       return [
         {
           from,
-          to,
+          to: Math.max(from, to),
           severity: "error" as const,
           message: node.isMissing
-            ? `Expected ${node.type}`
-            : "Unexpected syntax",
+            ? `Expected ${describeMissing(node.type)}`
+            : token
+              ? recovered
+                ? `Unexpected syntax after ${JSON.stringify(token)}`
+                : `Unexpected ${JSON.stringify(token)}`
+              : "Unexpected syntax",
           source,
           code,
         },

@@ -99,7 +99,7 @@ export const workspaceTools = {
   },
   saveFile: {
     description:
-      "Replace a small file after reading all its content, with the exact hash from readFile. Files over 8000 characters require editFile.",
+      "Replace a small file after reading all its content, with the exact hash from readFile. Requires all three arguments: path, the complete new content, and expectedContentHash. Never call this with partial or empty arguments. Files over 8000 characters require editFile.",
     schema: saveProjectFileContentSchema.safeExtend({
       path: saveProjectFileContentSchema.shape.path.describe(
         'Existing project-relative file path, e.g. "src/index.ts"; 1–4096 characters, no absolute paths or . / .. segments.',
@@ -116,7 +116,7 @@ export const workspaceTools = {
   },
   editFile: {
     description:
-      "Replace one unique exact text excerpt, preserving the rest of the file. Pass the file hash from readFile. Preferred for targeted edits and large files.",
+      "Replace one unique exact text excerpt, preserving the rest of the file. Pass the file hash from readFile. Preferred for targeted edits and large files. Requires all four arguments: path, expectedContentHash, oldText, and newText. Never call this with partial or empty arguments.",
     schema: saveProjectFileContentSchema
       .pick({ path: true, expectedContentHash: true })
       .extend({

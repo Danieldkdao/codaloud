@@ -1,0 +1,62 @@
+diff --git a/lib/esm/impl/edit.js b/lib/esm/impl/edit.js
+index 4114d525b7fa2db6824ee4c3351c58aa4c6a4876..3a838e73b5ed288791ccc6eb35eeec18f02ece80 100644
+--- a/lib/esm/impl/edit.js
++++ b/lib/esm/impl/edit.js
+@@ -3,8 +3,8 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 'use strict';
+-import { format, isEOL } from './format';
+-import { parseTree, findNodeAtLocation } from './parser';
++import { format, isEOL } from './format.js';
++import { parseTree, findNodeAtLocation } from './parser.js';
+ export function removeProperty(text, path, options) {
+     return setProperty(text, path, void 0, options);
+ }
+diff --git a/lib/esm/impl/format.js b/lib/esm/impl/format.js
+index 8663a1f385b08ddb8d2cc32bd3fc793b6751737c..67580b7dc5db25f60882285bfb7106cef633f90c 100644
+--- a/lib/esm/impl/format.js
++++ b/lib/esm/impl/format.js
+@@ -3,8 +3,8 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 'use strict';
+-import { createScanner } from './scanner';
+-import { cachedSpaces, cachedBreakLinesWithSpaces, supportedEols } from './string-intern';
++import { createScanner } from './scanner.js';
++import { cachedSpaces, cachedBreakLinesWithSpaces, supportedEols } from './string-intern.js';
+ export function format(documentText, range, options) {
+     let initialIndentLevel;
+     let formatText;
+diff --git a/lib/esm/impl/parser.js b/lib/esm/impl/parser.js
+index 6ebb947f32bcf5da4bd55ff140be75fb52bbe429..a533a973aeeb5f1a0262b8ef7fb31afe04615c3c 100644
+--- a/lib/esm/impl/parser.js
++++ b/lib/esm/impl/parser.js
+@@ -3,7 +3,7 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 'use strict';
+-import { createScanner } from './scanner';
++import { createScanner } from './scanner.js';
+ var ParseOptions;
+ (function (ParseOptions) {
+     ParseOptions.DEFAULT = {
+diff --git a/lib/esm/main.js b/lib/esm/main.js
+index 18e3cb7168b5cc4401a25bcace1f8af379c408d5..f3926c6b859faf78f8f2063187eedf45d65abfa6 100644
+--- a/lib/esm/main.js
++++ b/lib/esm/main.js
+@@ -3,10 +3,10 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 'use strict';
+-import * as formatter from './impl/format';
+-import * as edit from './impl/edit';
+-import * as scanner from './impl/scanner';
+-import * as parser from './impl/parser';
++import * as formatter from './impl/format.js';
++import * as edit from './impl/edit.js';
++import * as scanner from './impl/scanner.js';
++import * as parser from './impl/parser.js';
+ /**
+  * Creates a JSON scanner on the given text.
+  * If ignoreTrivia is set, whitespaces or comments are ignored.

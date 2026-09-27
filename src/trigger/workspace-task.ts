@@ -1,4 +1,5 @@
 import { formatWorkspaceAction } from "@/features/agent/lib/formatters";
+import { describeToolError } from "@/features/agent/lib/tool-error-recovery";
 import {
   agentTaskPayloadSchema,
   agentToolResultSchema,
@@ -226,7 +227,7 @@ export const workspaceTask = schemaTask({
       },
       // Allow all 24 calls sequentially, then one step for the final summary.
       stopWhen: stepCountIs(25),
-      maxOutputTokens: 2200,
+      maxOutputTokens: 8000,
       maxRetries: 0,
       providerOptions: { openrouter: { reasoning: { enabled: false } } },
       abortSignal: signal,
@@ -238,11 +239,15 @@ export const workspaceTask = schemaTask({
         if (part.type === "abort") throw new Error("Task generation stopped.");
         if (part.type === "text-delta")
           summary = (summary + part.text).slice(-3000);
-        if (part.type === "tool-error")
-          throw new Error(
-            `A tool failed (${part.toolName}). Review completed steps before trying again.`,
-            { cause: part.error },
-          );
+        if (part.type === "tool-error") {
+          const outcome = describeToolError(part.toolName, part.error);
+          await log(outcome.message);
+          // A schema rejection never reached the tool body, so the model can
+          // correct its own arguments on the next step. Execution failures stay
+          // fatal so a mutation with an unknown result is never retried.
+          if (!outcome.recoverable)
+            throw new Error(outcome.message, { cause: part.error });
+        }
         if (part.type === "start-step") summary = "";
       }
     } catch (error) {

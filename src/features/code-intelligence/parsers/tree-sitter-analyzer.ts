@@ -1,4 +1,5 @@
 import { normalizeCodeDiagnostics } from "../diagnostics";
+import { mapUtf8OffsetsToUtf16 } from "./utf8-offsets";
 import type { CodeDiagnosticSchema } from "@/features/projects/actions/code-intelligence-schemas";
 
 type TreeSitterNode = {
@@ -49,39 +50,6 @@ const clampToFirstLine = (
   if (lineBreak < 0 || lineBreak >= end) return end;
   // Keep the newline out of the range so the highlight stays on one line.
   return lineBreak > start ? lineBreak : lineBreak;
-};
-
-const getUtf8ByteLength = (codePoint: number) => {
-  if (codePoint <= 0x7f) return 1;
-  if (codePoint <= 0x7ff) return 2;
-  if (codePoint <= 0xffff) return 3;
-  return 4;
-};
-
-const mapUtf8OffsetsToUtf16 = (content: string, offsets: number[]) => {
-  const uniqueOffsets = [...new Set(offsets)].sort(
-    (left, right) => left - right,
-  );
-  const mappedOffsets = new Map<number, number>();
-  let offsetIndex = 0;
-  let byteOffset = 0;
-  let utf16Offset = 0;
-
-  for (const codePoint of content) {
-    while (uniqueOffsets[offsetIndex] === byteOffset) {
-      mappedOffsets.set(uniqueOffsets[offsetIndex], utf16Offset);
-      offsetIndex++;
-    }
-
-    byteOffset += getUtf8ByteLength(codePoint.codePointAt(0)!);
-    utf16Offset += codePoint.length;
-    while (uniqueOffsets[offsetIndex] === byteOffset) {
-      mappedOffsets.set(uniqueOffsets[offsetIndex], utf16Offset);
-      offsetIndex++;
-    }
-  }
-
-  return mappedOffsets;
 };
 
 export const getTreeSitterDiagnostics = (

@@ -194,6 +194,7 @@ patchedDependencies:
   '@trigger.dev/core@4.6.3': e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7
   jsonc-parser@3.3.1: 214a1d1597125c6dd199fda4607cf12c0ccf8d387395af8536a78c86b1e74063
   livekit-client@2.22.3: 90eeff8ce57ee32263784e264330188bfa0fba436d52e2beb6a95b4d1c8ba7a1
+  pyodide@314.0.7: e0cf558cd7a7d050ffedfb4eba8e4d6a9a4519e856dd1a2ccada5c3a359d2ded
   react-native-keyboard-controller@1.21.9: 4e0169d85161f49fbd57c9cf9561965aab884d665b3832f149b0134f3bf3ff75
 
 importers:
@@ -314,6 +315,9 @@ importers:
       '@react-native-masked-view/masked-view':
         specifier: 0.3.2
         version: 0.3.2(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@ruby/prism':
+        specifier: 1.9.0
+        version: 1.9.0
       '@t3-oss/env-core':
         specifier: ^0.13.11
         version: 0.13.11(typescript@6.0.3)(zod@4.5.4)
@@ -446,6 +450,9 @@ importers:
       prettier:
         specifier: 3.9.8
         version: 3.9.8
+      pyodide:
+        specifier: 314.0.7
+        version: 314.0.7(patch_hash=e0cf558cd7a7d050ffedfb4eba8e4d6a9a4519e856dd1a2ccada5c3a359d2ded)(bufferutil@4.1.0)
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -491,6 +498,9 @@ importers:
       remend:
         specifier: 1.3.0
         version: 1.3.0
+      shellcheck-wasm:
+        specifier: 0.3.3
+        version: 0.3.3
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
@@ -1177,6 +1187,9 @@ packages:
 
   '@better-fetch/fetch@1.3.2':
     resolution: {integrity: sha512-Gs7n99b5tqUC6cQAPbV0uED3IraHB6xQbHLQ/C3l7ZFafHScOx9pQ+DYmP5blbLFShVWLqxNUlI9wi4xU/X+ow==}
+
+  '@bjorn3/browser_wasi_shim@0.4.2':
+    resolution: {integrity: sha512-/iHkCVUG3VbcbmEHn5iIUpIrh7a7WPiwZ3sHy4HZKZzBdSadwdddYDZAII2zBvQYV0Lfi8naZngPCN7WPHI/hA==}
 
   '@bufbuild/protobuf@1.10.1':
     resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
@@ -3811,6 +3824,9 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@ruby/prism@1.9.0':
+    resolution: {integrity: sha512-/j+JfP1eA0nCjx6c/8L6K/ENErmsqc6RMAba8rKYNz4RadrT7AW20u4WrjpWYWzdlk6k1YWHxoW9OS68w02+Vw==}
+
   '@s2-dev/streamstore@0.25.0':
     resolution: {integrity: sha512-oB8OJObT/s2Q68Tr01NLfDnQPFJp/Kn2pP3seWybgP7VrjQ+j1efXReOsyVCDsUBVMxkyPlzt75o/+GuL5Q3vg==}
 
@@ -4062,6 +4078,9 @@ packages:
 
   '@types/dom-mediacapture-record@1.0.22':
     resolution: {integrity: sha512-mUMZLK3NvwRLcAAT9qmcK+9p7tpU2FHdDsntR3YI4+GY88XrgG4XiE7u1Q2LAN2/FZOz/tdMDC3GQCR4T8nFuw==}
+
+  '@types/emscripten@1.41.6':
+    resolution: {integrity: sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==}
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
@@ -6863,6 +6882,10 @@ packages:
   pure-rand@6.1.0:
     resolution: {integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==}
 
+  pyodide@314.0.7:
+    resolution: {integrity: sha512-0YvXxEhfEdpLfb/XkM2BFAeMROq0iMUX2bzzH9pOttyMcWkwq+HbE5uyuGD82LN7y2q+SNvi/6V5JEsOlD2R1A==}
+    engines: {node: '>=18.0.0'}
+
   qs@6.16.0:
     resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
     engines: {node: '>=0.6'}
@@ -7304,6 +7327,10 @@ packages:
   shell-quote@1.10.0:
     resolution: {integrity: sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA==}
     engines: {node: '>= 0.4'}
+
+  shellcheck-wasm@0.3.3:
+    resolution: {integrity: sha512-uhuXlbdP7GxZetfPvVMPFaMsw8t4VCFEA2qlWAOjIYUoCNdpPd7DSrARmAuKbBSeJFXxmgEaHT3F0yejXPt0wA==}
+    engines: {node: '>=20.0.0'}
 
   side-channel-list@1.0.1:
     resolution: {integrity: sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==}
@@ -8939,6 +8966,8 @@ snapshots:
       '@noble/hashes': 2.4.0
 
   '@better-fetch/fetch@1.3.2': {}
+
+  '@bjorn3/browser_wasi_shim@0.4.2': {}
 
   '@bufbuild/protobuf@1.10.1': {}
 
@@ -11645,6 +11674,8 @@ snapshots:
   '@rollup/rollup-darwin-arm64@4.63.4':
     optional: true
 
+  '@ruby/prism@1.9.0': {}
+
   '@s2-dev/streamstore@0.25.0(supports-color@10.2.2)':
     dependencies:
       '@protobuf-ts/runtime': 2.11.1
@@ -11893,6 +11924,8 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/dom-mediacapture-record@1.0.22': {}
+
+  '@types/emscripten@1.41.6': {}
 
   '@types/estree@1.0.9': {}
 
@@ -15107,6 +15140,14 @@ snapshots:
 
   pure-rand@6.1.0: {}
 
+  pyodide@314.0.7(patch_hash=e0cf558cd7a7d050ffedfb4eba8e4d6a9a4519e856dd1a2ccada5c3a359d2ded)(bufferutil@4.1.0):
+    dependencies:
+      '@types/emscripten': 1.41.6
+      ws: 8.21.3(bufferutil@4.1.0)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   qs@6.16.0:
     dependencies:
       es-define-property: 1.0.1
@@ -15678,6 +15719,10 @@ snapshots:
   shebang-regex@3.0.0: {}
 
   shell-quote@1.10.0: {}
+
+  shellcheck-wasm@0.3.3:
+    dependencies:
+      '@bjorn3/browser_wasi_shim': 0.4.2
 
   side-channel-list@1.0.1:
     dependencies:

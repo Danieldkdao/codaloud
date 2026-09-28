@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 vi.mock("@/features/editor/explanation-actions", () => ({ streamEditorExplanation: async (_input: unknown, _signal: AbortSignal, onText: (text: string) => void) => { onText("Explained selection"); } }));
+// Narration reaches the filesystem and audio session, neither of which exist here.
+vi.mock("@/features/editor/explanation-speech-client", () => ({ explanationSpeech: () => ({ speak: vi.fn(), stop: vi.fn() }) }));
 vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: ({ onExplain, canExplain }: { onExplain?: () => void; canExplain?: boolean }) => createElement("button", { onClick: onExplain, disabled: !canExplain, "aria-label": "Explain selection" }) }));
 vi.mock("@/features/editor/components/editor-explanation-bubble", () => ({ EditorExplanationBubble: ({ state, onClose }: any) => createElement("section", { "data-explanation": true }, state.text, createElement("button", { onClick: onClose, "aria-label": "Close explanation" })) }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));

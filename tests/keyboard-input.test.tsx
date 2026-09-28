@@ -10,7 +10,7 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TextInputProps } from "react-native";
-import { Input } from "@/components/ui/input";
+import { Input, type InputProps } from "@/components/ui/input";
 import { KeyboardSymbolsContext } from "@/hooks/use-keyboard-symbols";
 
 let input: TextInputProps;
@@ -42,7 +42,7 @@ const host = {
 };
 let root: Root;
 let container: HTMLDivElement;
-const render = (props: TextInputProps = {}) =>
+const render = (props: InputProps = {}) =>
   act(() =>
     root.render(
       createElement(
@@ -67,6 +67,20 @@ beforeEach(() => {
   root = createRoot(container);
 });
 afterEach(() => act(() => root.unmount()));
+
+it("does not raise the special-character strip when the field opts out", () => {
+  render({ keyboardSymbols: false });
+  focus();
+  // The host is app-wide, so an input that does not opt out still puts the strip
+  // over every screen. A file name field must stay out of that.
+  expect(target).toBeNull();
+});
+
+it("raises the special-character strip by default", () => {
+  render();
+  focus();
+  expect(target).not.toBeNull();
+});
 
 it("inserts at the cursor, replaces selections, and preserves rapid consecutive taps", () => {
   const changed = vi.fn();

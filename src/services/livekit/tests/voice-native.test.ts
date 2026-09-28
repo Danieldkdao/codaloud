@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
+import { DataStreamErrorReason } from "livekit-client";
 import { inlineSession } from "@/features/voice/inline-session";
 import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
@@ -65,6 +66,17 @@ vi.mock("@/features/voice/actions", () => ({
   deleteVoiceSession: mocks.remove,
 }));
 vi.mock("livekit-client", () => ({
+  DataStreamErrorReason: {
+    AlreadyOpened: 0,
+    AbnormalEnd: 1,
+    DecodeFailed: 2,
+    LengthExceeded: 3,
+    Incomplete: 4,
+    HandlerAlreadyRegistered: 7,
+    EncryptionTypeMismatch: 8,
+    HeaderTooLarge: 9,
+    PayloadTooLarge: 10,
+  },
   Track: { Source: { Microphone: "microphone" }, Kind: { Audio: "audio" } },
   RoomEvent: {
     ParticipantAttributesChanged: "attributes",
@@ -471,7 +483,11 @@ it("keeps voice connected when a transcript stream fails during an assistant ans
         async *[Symbol.asyncIterator]() {
           yield "This file defines the agent procedures.";
           await interrupted;
-          throw new Error("Data stream trailer was not received");
+          // A real gap in the payload is the one case that means text was dropped;
+          // the banner is reserved for genuine loss, not a plain unclassified Error.
+          throw Object.assign(new Error("Data stream incomplete"), {
+            reason: DataStreamErrorReason.Incomplete,
+          });
         },
       },
       { identity: "agent" },
@@ -626,6 +642,16 @@ it.each(["gap", "abnormal trailer"])(
           } as Parameters<(typeof manager)["handleStreamTrailer"]>[0],
           0,
         );
+      // An interrupted answer is a normal barge-in, not lost text. Only a real
+      // gap in the payload is worth telling the user about.
+      if (failure === "abnormal trailer") {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(controller.getSnapshot().transcriptWarning).toBeUndefined();
+        expect(warning).not.toHaveBeenCalled();
+        expect(controller.getSnapshot().connection).toBe("connected");
+        expect(mocks.disconnect).not.toHaveBeenCalled();
+        return;
+      }
       await vi.waitFor(() =>
         expect(controller.getSnapshot().transcriptWarning).toBeTruthy(),
       );
@@ -635,10 +661,7 @@ it.each(["gap", "abnormal trailer"])(
         "[voice] Transcript stream failed; keeping audio connected",
         expect.objectContaining({
           errorType: "DataStreamError",
-          reason:
-            failure === "gap"
-              ? sdk.DataStreamErrorReason.Incomplete
-              : sdk.DataStreamErrorReason.AbnormalEnd,
+          reason: sdk.DataStreamErrorReason.Incomplete,
         }),
       );
     } finally {

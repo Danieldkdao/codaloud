@@ -12,13 +12,20 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import {
+  PanResponder,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
+  Easing,
   FadeIn,
   LinearTransition,
   ReduceMotion,
   useAnimatedStyle,
-  withSpring,
+  useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
@@ -35,6 +42,12 @@ const FileActivity = lazy(async () => ({
 const VoiceFrequencyBars = lazy(() => import("./voice-frequency-bars"));
 
 const revealContent = FadeIn.duration(220).reduceMotion(ReduceMotion.System);
+
+// The shortest a drag will go. Full minimize hides the transcript and is only
+// reachable through the minimize button, so a drag never strands the user.
+const DRAG_MIN_HEIGHT = 120;
+const slideEasing = Easing.inOut(Easing.cubic);
+const slideMs = 300;
 
 export const VoiceTranscriptBubble = ({
   conversation,
@@ -54,30 +67,57 @@ export const VoiceTranscriptBubble = ({
   const { width, height } = useWindowDimensions();
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
-  const reviewing = useRef(false);
+  // Only a real touch may pause following; a drag that never scrolls must leave
+  // the decision to onScroll, or the tail stops following with no way back.
+  const userGesture = useRef(false);
+  const userScrolling = useRef(false);
   const [showLatest, setShowLatest] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [contentHeight, setContentHeight] = useState<number | null>(null);
-  const contentStyle = useAnimatedStyle(() => ({
-    height:
-      contentHeight === null
-        ? undefined
-        : withSpring(collapsed ? 0 : contentHeight, {
-            damping: 26,
-            stiffness: 280,
-            overshootClamping: true,
-            reduceMotion: ReduceMotion.System,
-          }),
-    opacity: withTiming(collapsed ? 0 : 1, {
+  // One animated height that the drag handle, minimize button and content growth
+  // all write to, so every resize slides; the ScrollView fills it and scrolls.
+  const viewportHeight = useSharedValue(0);
+  const sized = useRef(false);
+  const contentHeight = useRef(0);
+  const dragFrom = useRef(0);
+  const maxHeight = compact
+    ? Math.min(160, height * 0.22)
+    : Math.min(420, height * 0.45);
+  const clampHeight = (value: number) =>
+    Math.max(DRAG_MIN_HEIGHT, Math.min(maxHeight, value));
+  const autoHeight = () => clampHeight(contentHeight.current);
+  const slideTo = (value: number) => {
+    viewportHeight.value = withTiming(value, {
+      duration: slideMs,
+      easing: slideEasing,
+      reduceMotion: ReduceMotion.System,
+    });
+  };
+  const viewportStyle = useAnimatedStyle(() => ({
+    height: viewportHeight.value,
+    opacity: withTiming(viewportHeight.value > 8 ? 1 : 0, {
       duration: 180,
       reduceMotion: ReduceMotion.System,
     }),
   }));
+  const resizeHandle = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      dragFrom.current = viewportHeight.value;
+    },
+    onPanResponderMove: (_event, gesture) => {
+      sized.current = true;
+      viewportHeight.value = clampHeight(dragFrom.current - gesture.dy);
+    },
+  });
   const { state } = conversation;
   useEffect(() => {
     if (!conversation.visible || state.connection === "connecting") {
       follow.current = true;
-      reviewing.current = false;
+      userGesture.current = false;
+      userScrolling.current = false;
+      sized.current = false;
+      viewportHeight.value = 0;
       setShowLatest(false);
       setCollapsed(false);
     }
@@ -120,10 +160,18 @@ export const VoiceTranscriptBubble = ({
               }
               accessibilityState={{ expanded: !collapsed }}
               onPress={() => {
-                reviewing.current = false;
+                userGesture.current = false;
+                userScrolling.current = false;
                 follow.current = true;
                 setShowLatest(false);
-                setCollapsed((value) => !value);
+                const next = !collapsed;
+                setCollapsed(next);
+                if (next) {
+                  slideTo(0);
+                } else {
+                  sized.current = false;
+                  slideTo(autoHeight());
+                }
               }}
               className="size-12 shrink-0 items-center justify-center rounded-full active:bg-muted"
             >
@@ -150,7 +198,7 @@ export const VoiceTranscriptBubble = ({
           </View>
           <Animated.View
             testID="voice-transcript-viewport"
-            style={[{ overflow: "hidden" }, contentStyle]}
+            style={[{ overflow: "hidden" }, viewportStyle]}
             pointerEvents={collapsed ? "none" : "auto"}
             accessibilityElementsHidden={collapsed}
             importantForAccessibility={
@@ -160,22 +208,17 @@ export const VoiceTranscriptBubble = ({
             <View
               testID="voice-transcript-content"
               className="pb-2"
-              // Measure unconstrained content, even while its viewport is closed.
-              // Animating actual height keeps the native glass background in sync.
-              style={
-                contentHeight === null
-                  ? undefined
-                  : {
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                    }
-              }
-              onLayout={({ nativeEvent: { layout } }) =>
-                setContentHeight(layout.height)
-              }
+              style={{ flex: 1 }}
             >
+              <View
+                testID="voice-transcript-handle"
+                {...resizeHandle.panHandlers}
+                accessibilityRole="adjustable"
+                accessibilityLabel="Drag to resize transcript"
+                className="items-center py-1"
+              >
+                <View className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+              </View>
               {state.listening && track ? (
                 <Suspense fallback={null}>
                   <VoiceFrequencyBars track={track} />
@@ -183,28 +226,25 @@ export const VoiceTranscriptBubble = ({
               ) : null}
               <ScrollView
                 ref={scroll}
-                style={{
-                  maxHeight: compact
-                    ? Math.min(120, height * 0.16)
-                    : Math.min(240, height * 0.28),
-                }}
+                style={{ flex: 1 }}
                 keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator
                 nestedScrollEnabled
                 onScrollBeginDrag={() => {
-                  reviewing.current = true;
-                  follow.current = false;
+                  userGesture.current = true;
+                  userScrolling.current = true;
                 }}
                 onScrollEndDrag={() => {
-                  reviewing.current = false;
+                  userScrolling.current = false;
                 }}
                 onMomentumScrollBegin={() => {
                   // scrollToEnd also emits momentum events; only a user drag
                   // may opt out of following the latest transcript.
-                  reviewing.current = !follow.current;
+                  userScrolling.current = userGesture.current;
                 }}
                 onMomentumScrollEnd={() => {
-                  reviewing.current = false;
+                  userGesture.current = false;
+                  userScrolling.current = false;
                 }}
                 onScroll={({
                   nativeEvent: {
@@ -213,16 +253,24 @@ export const VoiceTranscriptBubble = ({
                     layoutMeasurement,
                   },
                 }) => {
-                  if (!reviewing.current) return;
-                  follow.current =
+                  const atBottom =
                     contentSize.height -
                       layoutMeasurement.height -
                       contentOffset.y <
                     40;
+                  // Automatic scrolling emits intermediate offsets, so reaching
+                  // the bottom re-arms following even when no finger is down.
+                  if (userScrolling.current || atBottom)
+                    follow.current = atBottom;
                   setShowLatest(!follow.current);
                 }}
                 scrollEventThrottle={32}
-                onContentSizeChange={() => {
+                onContentSizeChange={(_w, content) => {
+                  contentHeight.current = content;
+                  // Growth follows the reply until the user takes over with the
+                  // handle; after that their chosen height wins.
+                  if (!collapsed && !sized.current && Number.isFinite(content))
+                    slideTo(clampHeight(content));
                   if (follow.current)
                     scroll.current?.scrollToEnd({ animated: true });
                 }}
@@ -244,6 +292,7 @@ export const VoiceTranscriptBubble = ({
                     <FileActivity
                       projectId={inline.projectId}
                       files={inline.files}
+                      className="pb-2"
                     />
                   </Suspense>
                 ) : null}
@@ -317,7 +366,8 @@ export const VoiceTranscriptBubble = ({
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => {
-                    reviewing.current = false;
+                    userGesture.current = false;
+                    userScrolling.current = false;
                     follow.current = true;
                     setShowLatest(false);
                     scroll.current?.scrollToEnd({ animated: true });

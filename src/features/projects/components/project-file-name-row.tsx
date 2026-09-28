@@ -22,6 +22,7 @@ import {
   type CreateProjectFileSchema,
   type ProjectFileKind,
 } from "@/features/projects/actions/file-schemas";
+import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import {
   formatProjectFileKind,
   formatProjectFileNameAction,
@@ -35,7 +36,6 @@ export type ProjectFileNameRowHandle = {
 type ProjectFileNameRowProps = {
   ref?: Ref<ProjectFileNameRowHandle>;
   submitOnBlur?: boolean;
-  presentation?: "row" | "sheet";
   kind: ProjectFileKind;
   disabled?: boolean;
   mode: "create" | "update";
@@ -49,7 +49,6 @@ type ProjectFileNameRowProps = {
 export const ProjectFileNameRow = ({
   ref,
   submitOnBlur = true,
-  presentation: surface = "row",
   kind,
   disabled = false,
   mode,
@@ -62,6 +61,10 @@ export const ProjectFileNameRow = ({
   const [name, setName] = useState(initialName);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Validation waits for submit: a name that momentarily matches a sibling
+  // mid-typing must not flash an error, and typing again clears `attempted`.
+  const [attempted, setAttempted] = useState(false);
+  const { beginNaming, endNaming } = useProjectWorkspaceFileCreation();
   const inputRef = useRef<TextInput>(null);
   const submitting = useRef(false);
   const cancelling = useRef(false);
@@ -74,7 +77,7 @@ export const ProjectFileNameRow = ({
     !(mode === "update" && name === initialName);
   const visibleError = pending
     ? null
-    : hasNameConflict
+    : attempted && hasNameConflict
       ? "A file or folder with this name already exists. Please use a different name."
       : error;
 
@@ -84,6 +87,23 @@ export const ProjectFileNameRow = ({
       mounted.current = false;
     };
   }, []);
+
+  // A name is being typed for as long as this row exists, whether it creates or
+  // renames, so the Files toolbar can get its search bar out of the way.
+  useEffect(() => {
+    beginNaming();
+    return endNaming;
+  }, [beginNaming, endNaming]);
+
+  // This field takes focus when it appears. Focusing during the commit that inserts
+  // the row races the layout pass, so it waits for the browser's idle callback.
+  useEffect(() => {
+    if (disabled) return;
+    const handle = requestIdleCallback(() => {
+      if (mounted.current) inputRef.current?.focus();
+    });
+    return () => cancelIdleCallback(handle);
+  }, [disabled]);
 
   const submit = async (source: "submit" | "blur") => {
     // Native keyboards can emit submit and blur before React renders disabled.
@@ -95,6 +115,7 @@ export const ProjectFileNameRow = ({
     )
       return;
     // Keep typing and cancellation available, but block both keyboard and blur submission.
+    setAttempted(true);
     if (hasNameConflict) return;
     if (!name.trim()) {
       onCancel();
@@ -138,10 +159,9 @@ export const ProjectFileNameRow = ({
 
   return (
     <View
-      className={cn(
-        "gap-2 px-4 py-3",
-        surface === "row" && "border-b border-border bg-card",
-      )}
+      // Transparent so the surrounding glass surface is the only background:
+      // an opaque fill here would cover the material and tint its edges.
+      className="gap-2 px-3 py-2"
       accessibilityState={{ busy: pending }}
     >
       <View className="flex-row items-center gap-3">
@@ -152,13 +172,13 @@ export const ProjectFileNameRow = ({
         />
         <Input
           ref={inputRef}
-          autoFocus
           size="lg"
           containerClassName="flex-1"
           value={name}
           onChangeText={(value) => {
             setName(value);
             setError(null);
+            setAttempted(false);
             lastAttempt.current = null;
           }}
           accessibilityLabel={presentation.inputLabel}
@@ -185,6 +205,10 @@ export const ProjectFileNameRow = ({
               onCancel();
             }
           }}
+          className={cn(
+            "bg-transparent px-1 text-lg focus:border-transparent focus:outline-0",
+            !visibleError && "border-0",
+          )}
         />
         {pending && (
           <ActivityIndicator

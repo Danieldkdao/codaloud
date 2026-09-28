@@ -33,8 +33,18 @@ import CodeScreen from "@/app/projects/[projectId]/code";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import type { ProjectFilesList } from "@/features/projects/components/project-files-list";
-import type { ProjectFileCreateSheet } from "@/features/projects/components/project-file-create-sheet";
+import type { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 import type { Stack } from "expo-router";
+
+// The published package omits the native component its entry point imports, so the
+// markdown stub keeps the screen renderable outside a real native build.
+vi.mock("react-native-enriched-markdown", () => ({
+  EnrichedMarkdownText: ({ markdown }: { markdown: string }) =>
+    createElement("span", null, markdown),
+}));
+// expo/fetch is consumed from TypeScript source, which the Node test resolver
+// cannot follow. Other suites stub it the same way.
+vi.mock("expo/fetch", () => ({ fetch: vi.fn() }));
 
 vi.mock("react-native-reanimated", () => {
   const transition = {
@@ -87,6 +97,9 @@ vi.mock("expo-router", () => ({
   usePathname: () => `/projects/${mocks.projectId}/code`,
   useLocalSearchParams: () => ({ projectId: mocks.projectId }),
   useRouter: () => ({ navigate: vi.fn(), dismissTo: mocks.dismissTo }),
+  // CodeScreen closes the explanation bubble on blur through this hook.
+  useFocusEffect: (effect: () => void | (() => void)) =>
+    useEffect(effect, [effect]),
   Stack: Object.assign(
     (props: ComponentProps<typeof Stack>) => {
       stackOptions = props.screenOptions;
@@ -153,12 +166,14 @@ vi.mock("@/features/projects/components/project-workspace-dock", () => ({
 vi.mock("@/features/projects/components/project-files-list", () => ({
   ProjectFilesList: (props: ComponentProps<typeof ProjectFilesList>) => {
     fileList = props;
-    return null;
+    // The screen passes the inline create row in as a node; render it so the
+    // ProjectFileCreateRow mock below can capture its props.
+    return createElement(Fragment, null, props.createRow);
   },
 }));
-vi.mock("@/features/projects/components/project-file-create-sheet", () => ({
-  ProjectFileCreateSheet: (
-    props: ComponentProps<typeof ProjectFileCreateSheet>,
+vi.mock("@/features/projects/components/project-file-create-row", () => ({
+  ProjectFileCreateRow: (
+    props: ComponentProps<typeof ProjectFileCreateRow>,
   ) => {
     createRow = props;
     return null;
@@ -278,7 +293,7 @@ vi.mock("react-native", () => ({
 let selection: ReturnType<typeof useProjectWorkspaceCurrentFile>;
 let creation: ReturnType<typeof useProjectWorkspaceFileCreation>;
 let fileList: ComponentProps<typeof ProjectFilesList>;
-let createRow: ComponentProps<typeof ProjectFileCreateSheet>;
+let createRow: ComponentProps<typeof ProjectFileCreateRow>;
 let client: QueryClient;
 let container: HTMLDivElement;
 let root: Root;
@@ -325,17 +340,15 @@ beforeEach(async () => {
   mocks.update.mockReset();
   mocks.delete.mockReset();
   mocks.create.mockReset();
-  mocks.save
-    .mockReset()
-    .mockImplementation(async (_project, input) => ({
-      error: false,
-      message: "Saved.",
-      data: {
-        path: input.path,
-        size: Buffer.byteLength(input.content),
-        contentHash: createHash("sha256").update(input.content).digest("hex"),
-      },
-    }));
+  mocks.save.mockReset().mockImplementation(async (_project, input) => ({
+    error: false,
+    message: "Saved.",
+    data: {
+      path: input.path,
+      size: Buffer.byteLength(input.content),
+      contentHash: createHash("sha256").update(input.content).digest("hex"),
+    },
+  }));
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   container = document.createElement("div");
   root = createRoot(container);
@@ -902,7 +915,7 @@ it.each([0, 6_000])(
       }),
     );
     await act(async () => {
-      await createRow.onCreate({
+      await createRow.onSubmit({
         parentPath: "",
         name: "old.ts",
         kind: "file",
@@ -922,7 +935,7 @@ it("refreshes an actively selected path recreated after an external deletion", a
     async (_project: string, path: string) => ({ path, content: "", size: 0 }),
   );
   await act(async () => {
-    await createRow.onCreate({ parentPath: "", name: "old.ts", kind: "file" });
+    await createRow.onSubmit({ parentPath: "", name: "old.ts", kind: "file" });
   });
   await flush();
   expect(selection.activeFilePath).toBe("old.ts");
@@ -1044,6 +1057,16 @@ vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
 
 vi.mock("@/features/editor/components/editor-problems-sheet", () => ({
   EditorProblemsSheet: () => null,
+}));
+// The read-aloud client pulls in expo-file-system and the audio session, so this
+// screen mocks a no-op speech handle like the other CodeScreen suites.
+vi.mock("@/features/editor/explanation-speech-client", () => ({
+  explanationSpeech: () => ({ speak: vi.fn(), stop: vi.fn() }),
+}));
+// The real explanation stream reaches the auth client, which loads
+// expo-secure-store (native module source). Stub it out as the sibling suites do.
+vi.mock("@/features/editor/explanation-actions", () => ({
+  streamEditorExplanation: async () => {},
 }));
 vi.mock("@/features/editor/components/editor-search-bar", () => ({
   EditorSearchBar: () => null,

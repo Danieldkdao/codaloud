@@ -149,14 +149,18 @@ it.each([false, true])(
     // sibling would subtract those 48 points from the full-screen navigator.
     expect(ancestor).not.toBe(container);
     expect(ancestor?.style.position).toBe("absolute");
-    expect(parseFloat(ancestor?.style.height ?? "0")).toBeGreaterThanOrEqual(48);
+    expect(parseFloat(ancestor?.style.height ?? "0")).toBeGreaterThanOrEqual(
+      48,
+    );
   },
 );
 
 it("registers iOS symbols before native focus, including between separate input focus events", () => {
   render();
   const enabled = () =>
-    container.querySelector("[data-native-accessory]")?.getAttribute("data-enabled");
+    container
+      .querySelector("[data-native-accessory]")
+      ?.getAttribute("data-enabled");
   // Native focus notifications arrive before the JS onFocus handler, including in sheets.
   expect(enabled()).toBe("true");
   act(() => host.activate({ id: "project-name", insert: vi.fn() }));
@@ -171,6 +175,7 @@ it.each([true, false])(
   (glass) => {
     device.glass = glass;
     render();
+    act(() => host.activate({ id: "search", insert: vi.fn() }));
     const viewport = container.querySelector<HTMLElement>(
       '[data-testid="keyboard-symbols-viewport"]',
     );
@@ -182,3 +187,17 @@ it.each([true, false])(
     expect(viewport!.querySelector("button")).not.toBeNull();
   },
 );
+
+it("keeps the iOS accessory empty while no opted-in field is focused", () => {
+  render();
+  // A field that opts out never activates the host; the attachment stays on but an
+  // empty viewport collapses it, so it must not be visible.
+  const viewport = container.querySelector<HTMLElement>(
+    '[data-testid="keyboard-symbols-viewport"]',
+  )!;
+  expect(viewport.querySelector("button")).toBeNull();
+  act(() => host.activate({ id: "search", insert: vi.fn() }));
+  expect(viewport.querySelector("button")).not.toBeNull();
+  act(() => host.deactivate("search"));
+  expect(viewport.querySelector("button")).toBeNull();
+});

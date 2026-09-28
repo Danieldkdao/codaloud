@@ -3,10 +3,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { ProjectFilesAdd } from "@/features/projects/components/project-files-add";
+import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { ProjectWorkspaceFileSearch } from "@/features/projects/components/project-workspace-file-search";
 
 export const ProjectFilesToolbar = () => {
   const insets = useSafeAreaInsets();
+  const { naming } = useProjectWorkspaceFileCreation();
+
+  // A file name is being typed here or in a rename row, so the search field and
+  // the add button would read as controls the user never opened.
+  if (naming) return null;
 
   return (
     <View

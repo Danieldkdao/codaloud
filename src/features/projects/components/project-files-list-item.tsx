@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
 import Swipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { ProjectIcon } from "@/components/project-icon";
 import { Button } from "@/components/ui/button";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
+import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
 import type {
   DeleteProjectFileSchema,
   ProjectFileEntrySchema,
@@ -79,25 +85,41 @@ export const ProjectFilesListItem = ({
     });
   };
 
+  // Renaming uses the same glass field and the same transition as creating, so
+  // the row and the input are one continuous surface rather than two designs.
+  const layout = LinearTransition.duration(220).reduceMotion(
+    ReduceMotion.System,
+  );
   if (isUpdating && !isDisabled) {
     return (
-      <ProjectFileNameRow
-        mode="update"
-        kind={kind}
-        initialName={file.name}
-        existingNames={existingNames}
-        parentPath={file.path.slice(0, Math.max(0, file.path.lastIndexOf("/")))}
-        onCancel={() => {
-          pressGuard.onSettleEnd();
-          setIsUpdating(false);
-        }}
-        onSubmit={async (input) => {
-          if (input.name !== file.name)
-            await onUpdate({ ...input, previousName: file.name });
-          pressGuard.onSettleEnd();
-          setIsUpdating(false);
-        }}
-      />
+      <Animated.View
+        entering={enterGlassSurface}
+        exiting={exitGlassSurface}
+        layout={layout}
+      >
+        <GlassSurface borderRadius={16}>
+          <ProjectFileNameRow
+            mode="update"
+            kind={kind}
+            initialName={file.name}
+            existingNames={existingNames}
+            parentPath={file.path.slice(
+              0,
+              Math.max(0, file.path.lastIndexOf("/")),
+            )}
+            onCancel={() => {
+              pressGuard.onSettleEnd();
+              setIsUpdating(false);
+            }}
+            onSubmit={async (input) => {
+              if (input.name !== file.name)
+                await onUpdate({ ...input, previousName: file.name });
+              pressGuard.onSettleEnd();
+              setIsUpdating(false);
+            }}
+          />
+        </GlassSurface>
+      </Animated.View>
     );
   }
 

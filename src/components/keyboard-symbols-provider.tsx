@@ -86,7 +86,11 @@ const SymbolHostProvider = ({
                     overflow: "hidden",
                   }}
                 >
-                  {symbols}
+                  {/* Rendered only while an opted-in field holds focus. The native
+                      attachment stays on so the strip appears without a delay, but
+                      an empty viewport collapses the accessory to nothing, which is
+                      what keeps it off every other screen in the app. */}
+                  {target ? symbols : null}
                 </View>
               </KeyboardExtender>
             </View>

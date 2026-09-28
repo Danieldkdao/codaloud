@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   bubbleProps: {} as Record<string, any>,
   viewportProps: {} as Record<string, any>,
   contentProps: {} as Record<string, any>,
+  pan: {} as Record<string, any>,
 }));
 vi.mock("react-native", () => ({
   Text: ({
@@ -21,6 +22,12 @@ vi.mock("react-native", () => ({
     className?: string;
   }) => createElement("span", { className }, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
+  PanResponder: {
+    create: (config: Record<string, any>) => {
+      mocks.pan = config;
+      return { panHandlers: {} };
+    },
+  },
   View: ({ children, ...props }: any) => {
     if (props.testID === "voice-transcript-content") mocks.contentProps = props;
     return createElement("div", null, children);
@@ -63,7 +70,8 @@ vi.mock("@/lib/utils", async () => {
   const { twMerge } = await import("tailwind-merge");
   return { cn: (...items: Parameters<typeof clsx>) => twMerge(clsx(...items)) };
 });
-vi.mock("react-native-reanimated", () => {
+vi.mock("react-native-reanimated", async () => {
+  const { useRef } = await import("react");
   const transition = {
     duration: () => transition,
     reduceMotion: () => transition,
@@ -92,8 +100,14 @@ vi.mock("react-native-reanimated", () => {
       },
     },
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    useSharedValue: (initial: number) => {
+      const box = useRef<{ value: number } | null>(null);
+      if (box.current === null) box.current = { value: initial };
+      return box.current;
+    },
     withSpring: (value: number, config: object) => ({ value, config }),
     withTiming: (value: number, config: object) => ({ value, config }),
+    Easing: { inOut: (easing: unknown) => easing, cubic: "cubic" },
     FadeIn: transition,
     FadeInDown: transition,
     FadeOutDown: transition,
@@ -107,6 +121,13 @@ let conversation: VoiceConversation;
 const scrollEvent = {
   nativeEvent: {
     contentOffset: { y: 0 },
+    contentSize: { height: 800 },
+    layoutMeasurement: { height: 200 },
+  },
+};
+const bottomEvent = {
+  nativeEvent: {
+    contentOffset: { y: 600 },
     contentSize: { height: 800 },
     layoutMeasurement: { height: 200 },
   },
@@ -403,48 +424,75 @@ it("collapses without stopping voice and reopens with text received while hidden
   expect(conversation.stop).not.toHaveBeenCalled();
 });
 
-it("animates measured transcript height through collapse, resize, and rapid reopening", () => {
-  expect(mocks.contentProps.onLayout).toBeTypeOf("function");
-  act(() =>
-    mocks.contentProps.onLayout({ nativeEvent: { layout: { height: 180 } } }),
-  );
-  const animatedHeight = () =>
-    mocks.viewportProps.style
-      .flat()
-      .find((style: any) => style?.height !== undefined).height;
-  expect(animatedHeight()).toMatchObject({
-    value: 180,
-    config: { reduceMotion: "system" },
+// The viewport height is one animated value that growth, drag and collapse all
+// write to, so a test reads that single style entry to assert the size.
+const viewportHeight = () => {
+  const style = [mocks.viewportProps.style]
+    .flat()
+    .filter(Boolean)
+    .find((entry) => entry.height !== undefined);
+  return style.height;
+};
+
+it("grows the viewport with the reply, capped so a long reply scrolls", () => {
+  const rerender = () =>
+    act(() =>
+      root.render(<VoiceTranscriptBubble conversation={conversation} />),
+    );
+  act(() => mocks.props.onContentSizeChange(0, 800));
+  rerender();
+  expect(viewportHeight().value).toBeCloseTo(Math.min(420, 844 * 0.45));
+  expect(mocks.props.style).toMatchObject({ flex: 1 });
+  act(() => mocks.props.onContentSizeChange(0, 40));
+  rerender();
+  expect(viewportHeight().value).toBe(120);
+});
+
+it("drags between the floor and the cap and never below the floor", () => {
+  const rerender = () =>
+    act(() =>
+      root.render(<VoiceTranscriptBubble conversation={conversation} />),
+    );
+  act(() => {
+    mocks.pan.onPanResponderGrant();
+    mocks.pan.onPanResponderMove({}, { dy: -200 });
   });
-  const content = container.querySelector(
-    '[data-testid="voice-transcript-viewport"]',
-  )!.firstChild;
+  rerender();
+  expect(viewportHeight()).toBe(200);
+  act(() => mocks.pan.onPanResponderMove({}, { dy: 600 }));
+  rerender();
+  expect(viewportHeight()).toBe(120);
+  act(() => mocks.pan.onPanResponderMove({}, { dy: -4000 }));
+  rerender();
+  expect(viewportHeight()).toBeCloseTo(Math.min(420, 844 * 0.45));
+});
+
+it("collapses to nothing and slides back open from the same chevron", () => {
+  act(() => mocks.props.onContentSizeChange(0, 800));
   act(() =>
     container
       .querySelector<HTMLButtonElement>('[aria-label="Collapse transcript"]')!
       .click(),
   );
-  expect(animatedHeight()).toMatchObject({ value: 0 });
+  expect(viewportHeight().value).toBe(0);
   expect(mocks.viewportProps.pointerEvents).toBe("none");
-  expect(mocks.viewportProps.importantForAccessibility).toBe(
-    "no-hide-descendants",
-  );
-  act(() =>
-    mocks.contentProps.onLayout({ nativeEvent: { layout: { height: 220 } } }),
-  );
-  expect(animatedHeight()).toMatchObject({ value: 0 });
   act(() =>
     container
       .querySelector<HTMLButtonElement>('[aria-label="Expand transcript"]')!
       .click(),
   );
-  expect(animatedHeight()).toMatchObject({ value: 220 });
-  expect(
-    container.querySelector('[data-testid="voice-transcript-viewport"]')!
-      .firstChild,
-  ).toBe(content);
+  expect(viewportHeight().value).toBeCloseTo(Math.min(420, 844 * 0.45));
   expect(mocks.viewportProps.pointerEvents).toBe("auto");
-  expect(conversation.stop).not.toHaveBeenCalled();
+});
+
+it("collapses to nothing from the chevron with a slide, not a jump", () => {
+  act(() => mocks.props.onContentSizeChange(0, 800));
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Collapse transcript"]')!
+      .click(),
+  );
+  expect(viewportHeight().value).toBe(0);
 });
 
 it("keeps close available when collapsed and expands a new conversation", () => {
@@ -526,4 +574,54 @@ it("keeps jump-to-latest hidden through programmatic momentum until a new drag",
     mocks.props.onScroll(scrollEvent);
   });
   expect(container.textContent).toContain("Jump to latest");
+});
+
+// A touch that never becomes a scroll must not cost the transcript its tail.
+it("keeps following the latest text when a touch never turns into a scroll", () => {
+  act(() => mocks.props.onScrollBeginDrag());
+  act(() => mocks.props.onContentSizeChange());
+  expect(mocks.scroll).toHaveBeenCalledOnce();
+  expect(container.textContent).not.toContain("Jump to latest");
+});
+
+it("does not mistake intermediate automatic scroll events for a user scrolling away", () => {
+  act(() => mocks.props.onContentSizeChange());
+  act(() => mocks.props.onMomentumScrollBegin());
+  act(() => mocks.props.onScroll(scrollEvent));
+  act(() => mocks.props.onContentSizeChange());
+  expect(mocks.scroll).toHaveBeenCalledTimes(2);
+  expect(container.textContent).not.toContain("Jump to latest");
+});
+
+it("resumes following when the user scrolls back to the bottom without the button", () => {
+  act(() => {
+    mocks.props.onScrollBeginDrag();
+    mocks.props.onScroll(scrollEvent);
+  });
+  expect(container.textContent).toContain("Jump to latest");
+  act(() => mocks.props.onScroll(bottomEvent));
+  expect(container.textContent).not.toContain("Jump to latest");
+  act(() => mocks.props.onContentSizeChange());
+  expect(mocks.scroll).toHaveBeenCalledOnce();
+});
+
+// A flick ends the gesture long after the last offset arrives, so the handlers
+// that clear the gesture flags must not also freeze the follow decision.
+it("keeps following after a drag and flick gesture ends", () => {
+  act(() => {
+    mocks.props.onScrollBeginDrag();
+    mocks.props.onScroll(scrollEvent);
+  });
+  act(() => {
+    mocks.props.onScrollEndDrag();
+    mocks.props.onMomentumScrollBegin();
+    mocks.props.onScroll(scrollEvent);
+  });
+  act(() => {
+    mocks.props.onMomentumScrollEnd();
+    mocks.props.onScroll(bottomEvent);
+  });
+  act(() => mocks.props.onContentSizeChange());
+  expect(mocks.scroll).toHaveBeenCalledOnce();
+  expect(container.textContent).not.toContain("Jump to latest");
 });

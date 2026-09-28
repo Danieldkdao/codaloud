@@ -39,6 +39,29 @@ vi.mock("react-native", () => ({
     ),
   ActivityIndicator: () => null,
 }));
+vi.mock("react-native-reanimated", () => {
+  const animation = {
+    duration: () => animation,
+    delay: () => animation,
+    easing: () => animation,
+    withInitialValues: () => animation,
+    reduceMotion: () => animation,
+  };
+  return {
+    default: {
+      View: ({ children }: { children: ReactNode }) =>
+        createElement("div", null, children),
+    },
+    LinearTransition: animation,
+    ReduceMotion: { System: "system" },
+  };
+});
+// The glass background is presentation only; this test covers swipe behaviour.
+vi.mock("@/components/ui/glass-surface", () => ({
+  GlassSurface: ({ children }: { children: ReactNode }) =>
+    createElement("div", null, children),
+}));
+
 vi.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
   SwipeDirection: { LEFT: "left", RIGHT: "right" },
   default: (props: SwipeableProps) => {

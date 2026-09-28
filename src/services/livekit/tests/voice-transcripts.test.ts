@@ -1,7 +1,12 @@
 import { expect, it, vi } from "vitest";
 import { createVoiceController } from "@/features/voice/voice-controller";
+import type { VoiceSegment } from "@/features/voice/types";
 import { formatVoiceTranscript } from "@/features/voice/lib/formatters";
-import { createVoiceTranscriptReceiver } from "../voice-transcripts";
+import { DataStreamErrorReason } from "livekit-client";
+import {
+  createVoiceTranscriptReceiver,
+  isLostTranscriptText,
+} from "../voice-transcripts";
 const reader = (id: string, chunks: string[], final = false) => ({
   info: {
     id: crypto.randomUUID(),
@@ -33,6 +38,72 @@ it("replaces user interim text and appends assistant deltas", async () => {
     final: true,
   });
 });
+it("does not double an assistant reply that arrives first as deltas and then whole", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+
+  // Deltas, then the settled turn republished whole. The client owns the
+  // accumulation, so appending that re-send would show the paragraph twice.
+  const answer = "No, I don't have a Python, Ruby, or Shell linter here.";
+  await receive(
+    reader(
+      "a",
+      ["No, I don't have a ", "Python, Ruby, or Shell linter here.", answer],
+      true,
+    ),
+    {
+      identity: "agent",
+    },
+  );
+
+  expect(update).toHaveBeenLastCalledWith({
+    id: "a",
+    role: "assistant",
+    text: answer,
+    final: true,
+  });
+});
+it("does not double an assistant reply replayed on a fresh stream", async () => {
+  const update = vi.fn();
+  const receive = createVoiceTranscriptReceiver("user", update);
+  const answer = "No, I don't have a Python, Ruby, or Shell linter here.";
+
+  // The same sentence can also arrive as its own stream, for instance when the
+  // agent flushes a completed turn after already streaming it.
+  await receive(reader("a", [answer], true), { identity: "agent" });
+  await receive(reader("a-2", [answer], true), { identity: "agent" });
+
+  expect(formatVoiceTranscript(segmentsFrom(update))).toEqual([
+    expect.objectContaining({ role: "assistant", text: answer }),
+  ]);
+});
+const segmentsFrom = (update: ReturnType<typeof vi.fn>) => {
+  const byId = new Map<string, VoiceSegment>();
+  for (const call of update.mock.calls) byId.set(call[0].id, call[0]);
+  return [...byId.values()];
+};
+it("reports lost text only for reasons that actually drop a payload", () => {
+  // The banner is user-visible, so silence is the safe default; a barge-in, a
+  // disconnect or a listener bug all mean the transcript is in fact complete.
+  expect(isLostTranscriptText(new Error("boom"))).toBe(false);
+  expect(isLostTranscriptText("boom")).toBe(false);
+  expect(
+    isLostTranscriptText({ reason: DataStreamErrorReason.AbnormalEnd }),
+  ).toBe(false);
+  expect(
+    isLostTranscriptText({ reason: DataStreamErrorReason.Incomplete }),
+  ).toBe(true);
+  expect(
+    isLostTranscriptText({ reason: DataStreamErrorReason.DecodeFailed }),
+  ).toBe(true);
+  expect(
+    isLostTranscriptText({ reason: DataStreamErrorReason.LengthExceeded }),
+  ).toBe(true);
+  expect(
+    isLostTranscriptText({ reason: DataStreamErrorReason.PayloadTooLarge }),
+  ).toBe(true);
+});
+
 it("does not let an older slow interim overwrite a final segment", async () => {
   const update = vi.fn();
   const receive = createVoiceTranscriptReceiver("user", update);

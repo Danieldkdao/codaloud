@@ -20,7 +20,10 @@ import {
 } from "@/features/voice/voice-workspace";
 import { configureVoiceAudio, prepareVoiceAudio } from "./voice-audio";
 import { microphoneTrack, voiceAudioSession } from "./voice-track";
-import { createVoiceTranscriptReceiver } from "./voice-transcripts";
+import {
+  createVoiceTranscriptReceiver,
+  isLostTranscriptText,
+} from "./voice-transcripts";
 
 configureVoiceAudio();
 
@@ -202,11 +205,8 @@ export const connectNativeVoice: ConnectVoice = (
       room.registerRpcMethod("codaloud.voice.suggestion", async (data) => {
         authorizeWorkspace(data);
         const event = inlineEventSchema.parse(JSON.parse(data.payload));
-        // The user can start a new turn before the agent finishes the previous
-        // one, so a trailing event for a superseded request is expected, not a
-        // protocol violation. Ack and drop it: throwing here fails the RPC
-        // inside the agent's live turn, which surfaces as a failed generation
-        // for the request the user is actually waiting on.
+        // A trailing event for a superseded turn is expected, not a protocol
+        // violation; throwing would fail the RPC in the request the user awaits.
         const current = inlineSession.getSnapshot();
         if (current && current.id !== event.id)
           return JSON.stringify({ ok: true, stale: true });
@@ -269,9 +269,11 @@ export const connectNativeVoice: ConnectVoice = (
           if (closed || signal.aborted) return;
           void receive(reader, participant).catch((error: unknown) => {
             if (closed || signal.aborted) return;
-            // Captions use independent data streams. A failed stream is not a
-            // failed media session; onError tears down audio and cuts off TTS.
-            // Log only classification, never transcript text or remote reasons.
+            // An interrupted stream is a normal end of turn, not an error. Warn
+            // about it and users see a scary banner every time they interrupt.
+            if (!isLostTranscriptText(error)) return;
+            // A failed caption stream is not a failed media session; onError would
+            // tear down audio and cut off TTS. Log classification only, never text.
             console.warn(
               "[voice] Transcript stream failed; keeping audio connected",
               {
@@ -413,11 +415,8 @@ export const connectNativeVoice: ConnectVoice = (
             if (closed || signal.aborted) return;
             const enable = action === "start" || action === "hands-free";
             const snapshot = inlineSession.getSnapshot();
-            // A suggestion that is still generating or applying already owns
-            // the turn. Reopening the microphone must not start a competing
-            // request: begin() rejects those states, and that rejection would
-            // reach the caller as a lost connection rather than as the
-            // suggestion the user is still waiting on.
+            // A generating or applying suggestion already owns the turn, so reopening
+            // the mic must not start a competing request begin() would reject.
             const inFlight =
               !!snapshot &&
               (snapshot.status === "generating" ||
@@ -474,9 +473,8 @@ export const connectNativeVoice: ConnectVoice = (
         : error instanceof Error
           ? error
           : new Error("Voice could not connect. Try again.");
-      // Show startup failures before teardown: deleting the server room can
-      // stall independently of the native connection. Keep teardown serialized
-      // so a retry cannot acquire the microphone before this owner releases it.
+      // Startup failures show before teardown, and teardown stays serialized so a
+      // retry cannot grab the microphone before this owner releases it.
       if (!signal.aborted) events.onError(failure.message);
       await close();
       throw failure;

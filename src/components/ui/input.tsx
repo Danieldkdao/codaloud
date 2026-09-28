@@ -39,6 +39,11 @@ export type InputProps = ComponentPropsWithRef<typeof TextInput> & {
   showPasswordToggle?: boolean;
   showPasswordLabel?: string;
   hidePasswordLabel?: string;
+  /**
+   * Whether this field offers the special-character strip above the keyboard.
+   * The host is app-wide, so a password or one-time code field must opt out.
+   */
+  keyboardSymbols?: boolean;
 };
 
 export const INPUT_TYPE_DEFAULTS: Record<InputType, TextInputProps> = {
@@ -139,6 +144,7 @@ export const Input = ({
   showPasswordToggle = true,
   showPasswordLabel = "Show password",
   hidePasswordLabel = "Hide password",
+  keyboardSymbols = true,
   ...props
 }: InputProps) => {
   const inputRef = useRef<TextInput>(null);
@@ -151,7 +157,11 @@ export const Input = ({
   const isInvalid = ariaInvalid ?? invalid;
   const hasToggle = isPassword && showPasswordToggle;
   const defaults = INPUT_TYPE_DEFAULTS[type];
-  const symbolInput = useKeyboardSymbols(inputRef, props, isEditable);
+  const symbolInput = useKeyboardSymbols(
+    inputRef,
+    props,
+    isEditable && keyboardSymbols,
+  );
 
   return (
     <View
@@ -181,7 +191,7 @@ export const Input = ({
         // Avoid competing autofill hints when the caller chooses an iOS content type.
         autoComplete={
           props.autoComplete ??
-          (textContentType ? undefined : defaults.autoComplete ?? "off")
+          (textContentType ? undefined : (defaults.autoComplete ?? "off"))
         }
         textContentType={textContentType}
         editable={isEditable}

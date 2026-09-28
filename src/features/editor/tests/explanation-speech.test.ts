@@ -98,6 +98,17 @@ describe("explanation speech", () => {
     expect(played).toHaveLength(1);
   });
 
+  it("stops the active player immediately on stop()", async () => {
+    const stopPlayback = vi.fn();
+    const { options, played } = options_({ stopPlayback });
+    const speech = createExplanationSpeech(options);
+    const running = speech.speak("Playing now. Next one.");
+    await vi.waitFor(() => expect(played).toHaveLength(1));
+    speech.stop();
+    await running;
+    expect(stopPlayback).toHaveBeenCalled();
+  });
+
   it("keeps going when synthesis fails for one sentence", async () => {
     const { options, played } = options_();
     let first = true;
@@ -130,7 +141,7 @@ describe("explanation speech", () => {
 });
 
 // Shorthand so the factory above stays readable.
-const options_ = () => {
+const options_ = (overrides?: { stopPlayback?: () => void }) => {
   const synthesized: string[] = [];
   const played: string[] = [];
   let release: (() => void) | null = null;
@@ -149,6 +160,10 @@ const options_ = () => {
           release = resolve;
         });
       },
+      stopPlayback: overrides?.stopPlayback ?? (() => {
+        release?.();
+        release = null;
+      }),
     } satisfies ExplanationSpeechOptions,
     finish: () => release?.(),
   };

@@ -10,6 +10,12 @@ import { createExplanationSpeech } from "./explanation-speech";
 /** Requests one sentence of audio. The API key never reaches the client. */
 export const synthesizeSpeech = async (text: string) => {
   const voiceId = editorPreferencesStore.getSnapshot().preferences.voiceId;
+  // Check for a cached file before hitting the API so repeated sentences reuse
+  // the saved audio instead of re-synthesizing.
+  const directory = new Directory(Paths.cache, "explanations");
+  if (!directory.exists) directory.create({ intermediates: true });
+  const file = new File(directory, `${hashText(`${voiceId}:${text}`)}.wav`);
+  if (file.exists) return file.uri;
   const cookie = await authClient.getCookie();
   const response = await fetch(
     `${getBaseURL().replace(/\/$/, "")}/api/editor/speak`,
@@ -21,10 +27,6 @@ export const synthesizeSpeech = async (text: string) => {
     },
   );
   if (!response.ok) throw new Error("Couldn’t synthesize this sentence.");
-  // Cache by content so repeated sentences skip synthesis and reuse the file.
-  const directory = new Directory(Paths.cache, "explanations");
-  if (!directory.exists) directory.create({ intermediates: true });
-  const file = new File(directory, `${hashText(text)}.wav`);
   file.write(await response.bytes());
   return file.uri;
 };
@@ -40,10 +42,13 @@ const hashText = (text: string) => {
  * Plays synthesized audio without stealing the audio session from a live voice
  * conversation, matching how the voice previews coordinate with WebRTC.
  */
+let activePlayer: { pause: () => void; remove: () => void } | null = null;
+
 const playSpeech = async (uri: string) => {
   if (voiceAudioSession.getSnapshot()) return;
   const { createAudioPlayer } = await import("expo-audio");
   const player = createAudioPlayer({ uri }, { keepAudioSessionActive: true });
+  activePlayer = player;
   // Nothing bounds playback indefinitely: a player that never loads or never
   // reports a terminal status must not stall the rest of the queue.
   const MAX_PLAYBACK_MS = 30_000;
@@ -82,8 +87,17 @@ const playSpeech = async (uri: string) => {
       armDeadline(MAX_PLAYBACK_MS / 1000);
     });
   } finally {
+    activePlayer = null;
     player.pause();
     player.remove();
+  }
+};
+
+const stopPlayback = () => {
+  if (activePlayer) {
+    activePlayer.pause();
+    activePlayer.remove();
+    activePlayer = null;
   }
 };
 
@@ -100,6 +114,7 @@ export const explanationSpeech = () => {
       },
       synthesize: synthesizeSpeech,
       play: playSpeech,
+      stopPlayback,
       // A missing API key or a rejected request would otherwise look exactly
       // like the feature being off, so make it visible in the console.
       onError: (error) => {

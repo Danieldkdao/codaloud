@@ -7,6 +7,8 @@ export type ExplanationSpeechOptions = {
   synthesize: (text: string) => Promise<string>;
   /** Plays a source and resolves when it finishes. */
   play: (source: string) => Promise<void>;
+  /** Stops the active player immediately. */
+  stopPlayback: () => void;
   /** Reports a sentence that could not be synthesized or played. */
   onError?: (error: unknown, sentence: string) => void;
 };
@@ -21,8 +23,7 @@ export const createExplanationSpeech = (options: ExplanationSpeechOptions) => {
 
   const stop = () => {
     generation++;
-    // Playback cannot be cancelled through the player contract, so let the
-    // pending await finish and let the generation check drop the remainder.
+    options.stopPlayback();
     release?.();
     release = null;
   };

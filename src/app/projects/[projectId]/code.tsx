@@ -90,11 +90,16 @@ const CodeScreen = () => {
   });
   const voiceEditorRef = useRef(voiceEditor);
   voiceEditorRef.current = voiceEditor;
+  // The native flush is a script injection whose result the platform discards,
+  // so a lost injection is re-sent instead of burning one long timeout.
   const [editorFlush] = useState(() =>
-    createEditorFlush((requestId) => {
-      if (!editor.current?.flushChanges) throw new Error("Editor not ready");
-      void editor.current.flushChanges(requestId);
-    }),
+    createEditorFlush(
+      (requestId) => {
+        if (!editor.current?.flushChanges) throw new Error("Editor not ready");
+        void editor.current.flushChanges(requestId);
+      },
+      { attempts: 3, timeout: 1700 },
+    ),
   );
   useEffect(() => () => editorFlush.dispose(), [editorFlush]);
   const current = useRef({ files, documents });
@@ -241,8 +246,11 @@ const CodeScreen = () => {
     setClosingPath(path);
     const version = files.getFileVersion(path);
     try {
-      // Native imperative methods are fire-and-forget; wait for the DOM acknowledgement.
-      await editorFlush.flush();
+      // The DOM editor holds only the active document, and its native flush is
+      // fire-and-forget, so wait for the acknowledgement just for that document.
+      // Skip the native flush when the editor hasn't reported ready — there are
+      // no native-side edits to deliver, and the injection would time out.
+      if (path === files.activeFilePath && isReady) await editorFlush.flush();
       await documents.flushFile(path);
       if (
         alive.current &&
@@ -474,6 +482,8 @@ const CodeScreen = () => {
             >
               <EditorExplanationBubble
                 state={explanation.state}
+                speaking={explanation.speaking}
+                onToggleReadAloud={explanation.toggleReadAloud}
                 maxHeight={Math.min(
                   360,
                   (keyboardFrame?.screenY ?? screenHeight) * 0.5,

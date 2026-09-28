@@ -317,7 +317,6 @@ const CodeEditor = ({
   );
   const openKeys = useRef(openDocumentKeys);
   openKeys.current = openDocumentKeys;
-  const pendingChanges = useRef(new Set<Promise<void>>());
   useEffect(() => {
     if (openDocumentKeys)
       for (const key of buffers.current.keys()) {
@@ -533,8 +532,14 @@ const CodeEditor = ({
         },
         flushChanges: async (requestId?: string) => {
           try {
-            while (pendingChanges.current.size)
-              await Promise.all([...pendingChanges.current]);
+            // Republish the live document rather than draining the change
+            // reports: their untimed replies would stall this acknowledgement.
+            const editor = view.current;
+            const key = activeDocument.current;
+            if (editor && key)
+              void changeCallback
+                .current?.(editor.state.doc.toString(), key)
+                ?.catch(() => {});
             if (requestId) await flushCallback.current?.(requestId, null);
           } catch (error) {
             if (requestId)
@@ -693,17 +698,14 @@ const CodeEditor = ({
         )
           reportMatches(update.view);
         if (update.docChanged) {
-          const pending = documentKey
+          // Fire-and-forget: the reply leg has no timeout, so awaiting it would
+          // let a single stalled report block everything that follows.
+          const reported = documentKey
             ? changeCallback.current?.(update.state.sliceDoc(), documentKey)
             : changeCallback.current?.(update.state.sliceDoc());
-          if (pending) {
-            pendingChanges.current.add(pending);
-            void pending
-              .catch((error: unknown) => {
-                console.warn("Unable to report editor changes", error);
-              })
-              .finally(() => pendingChanges.current.delete(pending));
-          }
+          void reported?.catch((error: unknown) => {
+            console.warn("Unable to report editor changes", error);
+          });
         }
       }),
       syntaxHighlighting(highlightStyle),

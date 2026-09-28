@@ -45,6 +45,14 @@ const pythonAnalyzerMock = vi.hoisted(() => ({
   analyze: vi.fn(),
   dispose: vi.fn(),
 }));
+const pythonTreeSitterMock = vi.hoisted(() => ({
+  analyze: vi.fn(),
+  dispose: vi.fn(),
+}));
+const pythonRuntimeMock = vi.hoisted(() => ({
+  ready: false,
+  warm: vi.fn(() => Promise.resolve()),
+}));
 const treeSitterLoaderMock = vi.hoisted(() => ({
   create: vi.fn(),
 }));
@@ -52,10 +60,15 @@ vi.mock("@/features/code-intelligence/parsers/grammar-loader", () => ({
   createTreeSitterLanguageAnalyzer: (grammarId: string) =>
     treeSitterLoaderMock.create(grammarId),
 }));
-// Python runs through Pyodide rather than the tree-sitter grammar, so the
-// native runtime is stubbed instead of the grammar loader.
+// Python reads CPython's messages once Pyodide is up and answers from tree-sitter
+// while it boots, so both ends and the runtime state are stubbed here.
 vi.mock("@/features/code-intelligence/parsers/python-analyzer", () => ({
   createPythonAnalyzer: () => pythonAnalyzerMock,
+  // The registry hands the host's runtime reader to Pyodide, which fetches its
+  // own standard library and wasm. Stubbed out so no real runtime is booted.
+  setPyodideRuntimeLoader: vi.fn(),
+  isPyodideRuntimeReady: () => pythonRuntimeMock.ready,
+  warmPyodideRuntime: pythonRuntimeMock.warm,
 }));
 
 let container: HTMLDivElement;
@@ -81,7 +94,10 @@ const editor = () =>
 beforeEach(() => {
   fontState.loaded = true;
   fontState.error = null;
-  treeSitterLoaderMock.create.mockReturnValue(pythonAnalyzerMock);
+  pythonRuntimeMock.ready = false;
+  treeSitterLoaderMock.create.mockImplementation((grammarId: string) =>
+    grammarId === "python" ? pythonTreeSitterMock : pythonAnalyzerMock,
+  );
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   document.body.append(container);
@@ -336,8 +352,10 @@ it("marks and reports diagnostics, then clears corrected errors", async () => {
   expect(container.querySelector(".cm-lintRange-error")).toBeNull();
 });
 
-it("runs Python diagnostics in the editor DOM and disposes the parser on close", async () => {
-  pythonAnalyzerMock.analyze.mockResolvedValue({
+// While Pyodide is still booting, the grammar answers so a typing pause never
+// waits seconds; the boot runs in the background for the pauses after it.
+it("runs Python diagnostics in the editor DOM while Pyodide is cold and disposes the parser on close", async () => {
+  pythonTreeSitterMock.analyze.mockResolvedValue({
     status: "ready",
     diagnostics: [
       {
@@ -345,8 +363,8 @@ it("runs Python diagnostics in the editor DOM and disposes the parser on close",
         to: 9,
         severity: "error",
         message: "Unexpected syntax",
-        source: "CPython",
-        code: "python:syntax-error",
+        source: "Tree-sitter: Python",
+        code: "tree-sitter-python:syntax-error",
       },
     ],
   });
@@ -368,18 +386,124 @@ it("runs Python diagnostics in the editor DOM and disposes the parser on close",
     expect(onAnalysis).toHaveBeenLastCalledWith(
       expect.objectContaining({
         status: "ready",
-        diagnostics: [expect.objectContaining({ source: "CPython" })],
+        diagnostics: [
+          expect.objectContaining({ source: "Tree-sitter: Python" }),
+        ],
       }),
     ),
   );
-  expect(pythonAnalyzerMock.analyze).toHaveBeenCalledWith("value = )");
+  expect(pythonTreeSitterMock.analyze).toHaveBeenCalledWith("value = )");
+  expect(pythonRuntimeMock.warm).toHaveBeenCalled();
   expect(onRequestAnalysis).not.toHaveBeenCalled();
   expect(container.querySelector(".cm-lintRange-error")).not.toBeNull();
 
   act(() => root.unmount());
   await vi.waitFor(() =>
-    expect(pythonAnalyzerMock.dispose).toHaveBeenCalledOnce(),
+    expect(pythonTreeSitterMock.dispose).toHaveBeenCalledOnce(),
   );
+});
+
+// CPython's messages are the ones worth reading, so a warm runtime wins over
+// the grammar even when both can answer.
+it("prefers CPython's own messages once the Pyodide runtime is warm", async () => {
+  pythonRuntimeMock.ready = true;
+  pythonTreeSitterMock.analyze.mockResolvedValue({
+    status: "ready",
+    diagnostics: [
+      {
+        from: 8,
+        to: 9,
+        severity: "error",
+        message: "Unexpected syntax",
+        source: "Tree-sitter: Python",
+        code: "tree-sitter-python:syntax-error",
+      },
+    ],
+  });
+  pythonAnalyzerMock.analyze.mockResolvedValue({
+    status: "ready",
+    diagnostics: [
+      {
+        from: 8,
+        to: 9,
+        message: "Expected ':'",
+        source: "CPython",
+        code: "python:syntax-error",
+        severity: "error",
+      },
+    ],
+  });
+  const onAnalysis = vi.fn().mockResolvedValue(undefined);
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, {
+        filename: "broken.py",
+        initialValue: "value = )",
+        onAnalysis,
+        onRequestAnalysis: vi.fn(),
+      }),
+    ),
+  );
+
+  act(() => forceLinting(editor()));
+  await vi.waitFor(() =>
+    expect(onAnalysis).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "ready",
+        diagnostics: [
+          expect.objectContaining({ code: "python:syntax-error" }),
+        ],
+      }),
+    ),
+  );
+  expect(pythonAnalyzerMock.analyze).toHaveBeenCalledWith("value = )");
+  expect(container.querySelector(".cm-lintRange-error")).not.toBeNull();
+});
+
+// A warm runtime that stops answering must not read as a clean file.
+it("falls back to the grammar when a warm Pyodide cannot answer", async () => {
+  pythonRuntimeMock.ready = true;
+  pythonAnalyzerMock.analyze.mockResolvedValue({
+    status: "unavailable",
+    diagnostics: [],
+  });
+  pythonTreeSitterMock.analyze.mockResolvedValue({
+    status: "ready",
+    diagnostics: [
+      {
+        from: 8,
+        to: 9,
+        severity: "error",
+        message: "Unexpected syntax",
+        source: "Tree-sitter: Python",
+        code: "tree-sitter-python:syntax-error",
+      },
+    ],
+  });
+  const onAnalysis = vi.fn().mockResolvedValue(undefined);
+  await act(async () =>
+    root.render(
+      createElement(CodeEditor, {
+        filename: "broken.py",
+        initialValue: "value = )",
+        onAnalysis,
+        onRequestAnalysis: vi.fn(),
+      }),
+    ),
+  );
+
+  act(() => forceLinting(editor()));
+  await vi.waitFor(() =>
+    expect(onAnalysis).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: "ready",
+        diagnostics: [
+          expect.objectContaining({ source: "Tree-sitter: Python" }),
+        ],
+      }),
+    ),
+  );
+  expect(container.querySelector(".cm-lintRange-error")).not.toBeNull();
 });
 
 it("runs the filename-selected Java grammar without a native compiler request", async () => {

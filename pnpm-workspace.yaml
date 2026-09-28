@@ -2,17 +2,45 @@ overrides:
   lightningcss: 1.30.1
 
 minimumReleaseAgeExclude:
-  - '@expo/cli@57.0.22'
-  - '@expo/ui@57.0.16'
+  - "@expo/cli@57.0.22"
+  - "@expo/ui@57.0.16"
   - expo-modules-core@57.0.16
   - expo-modules-jsi@57.0.8
   - expo-router@57.0.19
   - expo@57.0.20
+  - "@deepgram/sdk@5.12.0"
+  - livekit-server-sdk@2.19.1
 
 allowBuilds:
+  "@depot/cli": false
+  "@livekit/local-inference": false
   bufferutil: false
   esbuild: false
   protobufjs: false
+  react-native-enriched-markdown: true
+  tree-sitter-bash: false
+  tree-sitter-c: false
+  tree-sitter-c-sharp: false
+  tree-sitter-cli: true
+  tree-sitter-containerfile: false
+  tree-sitter-cpp: false
+  tree-sitter-go: false
+  tree-sitter-java: false
+  tree-sitter-php: false
+  tree-sitter-python: false
+  tree-sitter-ruby: false
+  tree-sitter-rust: false
+  unrs-resolver: false
 
 patchedDependencies:
+  # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.
+  '@trigger.dev/core@4.6.3': patches/@trigger.dev__core@4.6.3.patch
+  # Add file extensions to the ESM build so Metro resolves its relative imports.
+  jsonc-parser@3.3.1: patches/jsonc-parser@3.3.1.patch
+  # Signal/track lifecycle fixes in SDK source and both published JS builds.
+  # Recheck voice-sdk-lifecycle.test.ts before removing this on an SDK upgrade.
+  livekit-client@2.22.3: patches/livekit-client@2.22.3.patch
+  # Remove the Node-only dynamic imports and builtin specifiers so Metro can
+  # bundle the runtime for React Native. See the patch for the full rationale.
+  pyodide@314.0.7: patches/pyodide@314.0.7.patch
   react-native-keyboard-controller@1.21.9: patches/react-native-keyboard-controller@1.21.9.patch

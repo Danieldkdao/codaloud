@@ -2,6 +2,7 @@ import {
   defaultEditorPreferences,
   editorFonts,
   editorThemes,
+  voicePresets,
 } from "./constants";
 import type { EditorPreferences } from "./types";
 
@@ -13,6 +14,8 @@ const restorePreferences = (raw: string | null): EditorPreferences => {
     /* Recover malformed device data. */
   }
   const preferences = { ...defaultEditorPreferences };
+  if (voicePresets.some((voice) => voice.id === saved.voiceId))
+    preferences.voiceId = saved.voiceId!;
   if (editorThemes.includes(saved.theme!)) preferences.theme = saved.theme!;
   if (editorFonts.includes(saved.font!)) preferences.font = saved.font!;
   if (
@@ -28,6 +31,7 @@ const restorePreferences = (raw: string | null): EditorPreferences => {
   )
     preferences.tabSize = saved.tabSize!;
   for (const key of [
+    "speechEnabled",
     "wordWrap",
     "lineNumbers",
     "minimap",

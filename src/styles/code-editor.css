@@ -263,3 +263,46 @@ body {
 .code-editor-host .cm-minimap tspan {
   fill: currentColor;
 }
+.cm-voice-changed {
+  background: var(--success);
+  box-shadow: inset 0 -1px var(--success-border);
+}
+.cm-voice-actions {
+  position: sticky;
+  left: 8px;
+  width: max-content;
+  display: flex;
+  vertical-align: middle;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 8px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-family: EditorUI, sans-serif;
+  font-size: 16px;
+  white-space: nowrap;
+}
+.cm-voice-actions[data-deletion="true"] {
+  border-color: var(--destructive);
+}
+.cm-voice-actions button {
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--foreground);
+  background: var(--muted);
+  border-radius: 8px;
+  touch-action: manipulation;
+}
+.cm-voice-actions button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.code-editor-host .cm-explanation-highlight {
+  background: color-mix(in srgb, var(--info) 18%, transparent);
+  border-bottom: 2px solid var(--info);
+  border-radius: 3px;
+}

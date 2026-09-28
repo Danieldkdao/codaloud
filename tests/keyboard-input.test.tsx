@@ -10,7 +10,7 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { TextInputProps } from "react-native";
-import { Input } from "@/components/ui/input";
+import { Input, type InputProps } from "@/components/ui/input";
 import { KeyboardSymbolsContext } from "@/hooks/use-keyboard-symbols";
 
 let input: TextInputProps;
@@ -42,7 +42,7 @@ const host = {
 };
 let root: Root;
 let container: HTMLDivElement;
-const render = (props: TextInputProps = {}) =>
+const render = (props: InputProps = {}) =>
   act(() =>
     root.render(
       createElement(
@@ -67,6 +67,20 @@ beforeEach(() => {
   root = createRoot(container);
 });
 afterEach(() => act(() => root.unmount()));
+
+it("does not raise the special-character strip when the field opts out", () => {
+  render({ keyboardSymbols: false });
+  focus();
+  // The host is app-wide, so an input that does not opt out still puts the strip
+  // over every screen. A file name field must stay out of that.
+  expect(target).toBeNull();
+});
+
+it("raises the special-character strip by default", () => {
+  render();
+  focus();
+  expect(target).not.toBeNull();
+});
 
 it("inserts at the cursor, replaces selections, and preserves rapid consecutive taps", () => {
   const changed = vi.fn();
@@ -121,4 +135,21 @@ it("releases the target on blur and unmount, and blocks disabled or stale inputs
   act(() => insert("+"));
   expect(native.setNativeProps).not.toHaveBeenCalled();
   expect(target).toBeNull();
+});
+
+it("opts ordinary inputs out of correction, spelling and autofill suggestions", () => {
+  render({ multiline: true });
+  expect(input.autoCorrect).toBe(false);
+  expect(input.spellCheck).toBe(false);
+  expect(input.autoComplete).toBe("off");
+});
+
+it("preserves explicit keyboard preferences and semantic autofill hints", () => {
+  render({ autoCorrect: true, spellCheck: true, autoComplete: "email" });
+  expect(input.autoCorrect).toBe(true);
+  expect(input.spellCheck).toBe(true);
+  expect(input.autoComplete).toBe("email");
+  render({ textContentType: "oneTimeCode" });
+  expect(input.textContentType).toBe("oneTimeCode");
+  expect(input.autoComplete).toBeUndefined();
 });

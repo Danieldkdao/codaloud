@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
+import { useSwipePressGuard } from "@/hooks/use-swipe-press-guard";
 import {
   formatCommitTimestamp,
   formatProjectStashLabel,
@@ -23,7 +24,6 @@ type ProjectStashListItemProps = {
 };
 
 const closedOffset = { x: 0, y: 0 };
-const tapMovementLimit = 8;
 
 export const ProjectStashListItem = ({
   stash,
@@ -34,9 +34,7 @@ export const ProjectStashListItem = ({
   const { width } = useWindowDimensions();
   const scrollView = useRef<ScrollView>(null);
   const deleting = useRef(false);
-  const touchStart = useRef({ x: 0, y: 0 });
-  const suppressPress = useRef(false);
-  const isSettling = useRef(false);
+  const pressGuard = useSwipePressGuard();
   const [isDeleting, setIsDeleting] = useState(false);
   const [rowHeight, setRowHeight] = useState(0);
   const [isActionVisible, setIsActionVisible] = useState(false);
@@ -81,7 +79,7 @@ export const ProjectStashListItem = ({
         accessibilityLabel={`Delete stash: ${stash.message}`}
         disabled={isDisabled}
         onPress={() => {
-          if (suppressPress.current) return;
+          if (pressGuard.shouldSuppressPress()) return;
           void remove();
         }}
       >
@@ -116,31 +114,10 @@ export const ProjectStashListItem = ({
       scrollEnabled={!isDisabled}
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={16}
-      onTouchStart={({ nativeEvent }) => {
-        touchStart.current = { x: nativeEvent.pageX, y: nativeEvent.pageY };
-        // Keep a drag's release suppressed through snapping; only a new touch
-        // can become a tap. Touching a moving row merely stops its momentum.
-        suppressPress.current = isSettling.current;
-      }}
-      onTouchMove={({ nativeEvent }) => {
-        if (
-          Math.abs(nativeEvent.pageX - touchStart.current.x) >
-            tapMovementLimit ||
-          Math.abs(nativeEvent.pageY - touchStart.current.y) > tapMovementLimit
-        ) {
-          suppressPress.current = true;
-        }
-      }}
-      onScrollBeginDrag={() => {
-        suppressPress.current = true;
-      }}
-      onMomentumScrollBegin={() => {
-        isSettling.current = true;
-        suppressPress.current = true;
-      }}
-      onMomentumScrollEnd={() => {
-        isSettling.current = false;
-      }}
+      {...pressGuard.touchHandlers}
+      onScrollBeginDrag={pressGuard.onDrag}
+      onMomentumScrollBegin={pressGuard.onSettleStart}
+      onMomentumScrollEnd={pressGuard.onSettleEnd}
       onScroll={({ nativeEvent }) => {
         setIsActionVisible(!isDisabled && nativeEvent.contentOffset.x > 1);
       }}
@@ -160,7 +137,7 @@ export const ProjectStashListItem = ({
           if (nativeEvent.actionName === "delete") void remove();
         }}
         onPress={() => {
-          if (isDisabled || suppressPress.current) return;
+          if (isDisabled || pressGuard.shouldSuppressPress()) return;
           close();
           onSelect();
         }}

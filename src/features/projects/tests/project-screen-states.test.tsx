@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
-vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: () => null }));
+vi.mock("@/features/editor/explanation-actions", () => ({ streamEditorExplanation: async (_input: unknown, _signal: AbortSignal, onText: (text: string) => void) => { onText("Explained selection"); } }));
+// Narration reaches the filesystem and audio session, neither of which exist here.
+vi.mock("@/features/editor/explanation-speech-client", () => ({ explanationSpeech: () => ({ speak: vi.fn(), stop: vi.fn() }) }));
+vi.mock("@/features/projects/components/project-code-selection-menu", () => ({ ProjectCodeSelectionMenu: ({ onExplain, canExplain }: { onExplain?: () => void; canExplain?: boolean }) => createElement("button", { onClick: onExplain, disabled: !canExplain, "aria-label": "Explain selection" }) }));
+vi.mock("@/features/editor/components/editor-explanation-bubble", () => ({ EditorExplanationBubble: ({ state, onClose }: any) => createElement("section", { "data-explanation": true }, state.text, createElement("button", { onClick: onClose, "aria-label": "Close explanation" })) }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 vi.mock("@/features/projects/components/project-code-keyboard-accessory", () => ({ ProjectCodeKeyboardAccessory: () => null }));
 import { act, createElement, useEffect, type ReactNode } from "react";
@@ -11,13 +15,15 @@ import AgentScreen from "@/app/projects/[projectId]/agent";
 import CodeScreen from "@/app/projects/[projectId]/code";
 import GitScreen from "@/app/projects/[projectId]/git";
 import type { CodeEditorAnalysis } from "@/components/code-editor-intelligence";
+import type { SaveSnapshot } from "../lib/project-file-save-document";
 
 const fileQuery = vi.hoisted(() => ({ data: undefined as { path: string; content: string; size: number } | undefined, isPending: true, isError: false, isFetching: true, error: null as Error | null, refetch: vi.fn() }));
 const selection = vi.hoisted(() => ({ activeFilePath: null as string | null, version: 0, openFile: vi.fn(), closeFile: vi.fn(), getFileVersion: () => 0, get openFilePaths() { return new Set(selection.activeFilePath ? [selection.activeFilePath] : []); }, refreshFile: vi.fn() }));
-vi.mock("react-native-reanimated", () => {
-  const transition = { duration: () => transition, reduceMotion: () => transition };
+vi.mock("react-native-reanimated", async () => {
+  const { FlatList } = await import("react-native");
+  const transition = { duration: () => transition, reduceMotion: () => transition, springify: () => transition, dampingRatio: () => transition };
   return {
-    default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+    default: { FlatList, View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
     LinearTransition: transition, FadeIn: transition, FadeOut: transition,
     ReduceMotion: { System: "system" },
   };
@@ -28,19 +34,25 @@ const saveFile = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/actions/file-actions", () => ({ saveProjectFileContentAction: saveFile, readProjectFileContentAction: async () => fileQuery.data ?? null }));
 const readFile = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
+const showAlert = vi.hoisted(() => vi.fn());
+const focusEditor = vi.hoisted(() => vi.fn());
+const dismissKeyboard = vi.hoisted(() => vi.fn());
 vi.mock("@/features/projects/hooks/use-project-file", () => ({ useProjectFile: (...args: unknown[]) => { readFile(...args); return fileQuery; } }));
 vi.mock("@/components/ui/glass-surface", () => ({ GlassSurface: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/keyboard-aware-view", () => ({ KeyboardAwareView: ({ children }: { children: ReactNode }) => createElement("div", null, children) }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, onPress }: { children: ReactNode; onPress: () => void }) => createElement("button", { onClick: onPress }, children) }));
-const state = vi.hoisted(() => ({ editorMounts: 0, empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
+const state = vi.hoisted(() => ({ interaction: undefined as (() => Promise<void>) | undefined, highlight: null as unknown, editorMounts: 0, empty: false, focus: 0, change: undefined as ((value: string) => Promise<void>) | undefined, ready: undefined as (() => Promise<void>) | undefined, analysis: undefined as ((value: CodeEditorAnalysis) => Promise<void>) | undefined }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({ readProjectCodeIntelligence: vi.fn() }));
 vi.mock("@/hooks/use-theme", () => ({ useTheme: () => ({ isDarkMode: true }) }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-one" }), useRouter: () => ({ push: vi.fn(), navigate }), useFocusEffect: (effect: () => void | (() => void)) => useEffect(effect, [effect, state.focus]) }));
 vi.mock("@/hooks/use-editor-development-shortcuts", () => ({ useEditorDevelopmentShortcuts: () => {} }));
-vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths }: { paths: string[] }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" ")) }));
+vi.mock("@/features/projects/components/project-code-tabs", () => ({ ProjectCodeTabs: ({ paths, activePath, save, onRetry, readError }: { paths: string[]; activePath: string | null; save?: SaveSnapshot; onRetry?: () => void; readError?: boolean }) => createElement("span", { "data-testid": "code-tabs" }, paths.join(" "), save?.status === "error" ? createElement("button", { "aria-label": `${readError ? "Retry opening" : "Retry saving"} ${activePath}`, onClick: onRetry }, "Error") : save?.status === "saved" ? createElement("button", { "aria-label": `Close ${activePath}` }, "X") : createElement("span", { role: "progressbar" })) }));
 vi.mock("@/features/projects/components/project-code-tools", () => ({ ProjectCodeTools: ({ path }: { path: string }) => createElement("button", { "aria-label": "Editor tools", "data-path": path }) }));
-vi.mock("@/components/code-editor", () => ({ default: ({ documentKey, onReady, onAnalysis, onChange, colorScheme, initialValue, readOnly }: { documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
+vi.mock("@/components/code-editor", () => ({ default: ({ ref, documentKey, onReady, onAnalysis, onChange, onContext, onInteractionChange, explanationRange, colorScheme, initialValue, readOnly }: { onContext?: (id: string, snapshot: unknown) => Promise<void>; onInteractionChange?: (state: unknown, key: string) => Promise<void>; explanationRange?: unknown; ref?: { current: unknown }; documentKey: string; onChange: (value: string) => Promise<void>; onReady: (key?: string) => Promise<void>; onAnalysis: (value: CodeEditorAnalysis, key?: string) => Promise<void>; colorScheme: string; initialValue: string; readOnly?: boolean }) => {
   useEffect(() => { state.editorMounts++; }, []);
+  if (ref) ref.current = { focus: focusEditor, captureContext: (id: string) => onContext?.(id, { documentKey, revision: 1, content: initialValue, from: 0, to: 5, focused: false }) };
+  state.interaction = async () => { await onInteractionChange?.({ focused: false, hasSelection: true, revision: 1 }, documentKey); };
+  state.highlight = explanationRange;
   state.change = onChange;
   state.ready = () => onReady(documentKey);
   state.analysis = (value) => onAnalysis(value, documentKey);
@@ -57,6 +69,8 @@ vi.mock("@/components/app-wrapper", () => ({ AppWrapper: ({ children }: { childr
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
+  Alert: { alert: showAlert },
+  Keyboard: { dismiss: dismissKeyboard },
   ScrollView: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   AppState: { addEventListener: () => ({ remove: vi.fn() }) },
@@ -83,7 +97,9 @@ vi.mock("@/features/projects/hooks/use-project-workspace-branch", () => ({
   useProjectWorkspaceBranch: () => ({ projectId: "project-one", gitTab: "changes", setGitTab: vi.fn() }),
 }));
 vi.mock("@/features/projects/hooks/use-project-commit-history", () => ({ useProjectCommitHistory: vi.fn() }));
-vi.mock("@/features/projects/data/demo-agent-activity", () => ({ demoAgentActivity: [] }));
+vi.mock("@/features/agent/hooks/use-agent-tasks", () => ({ useAgentTasks: () => [] }));
+vi.mock("@/features/agent/components/task-activity-card", () => ({ TaskActivityCard: () => null }));
+vi.mock("@/features/agent/components/task-activity-sheet", () => ({ TaskActivitySheet: () => null }));
 
 let container: HTMLDivElement;
 let root: Root;
@@ -94,6 +110,7 @@ beforeEach(() => {
   Object.assign(fileQuery, { data: undefined, isPending: true, isError: false, isFetching: true, error: null });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   saveFile.mockReset();
+  showAlert.mockReset();
   navigate.mockClear();
   state.empty = false;
   state.focus = 0;
@@ -107,17 +124,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-it.each([
-  { name: "Agent", Screen: AgentScreen, loading: "Loading activity", empty: "No activity yet" },
-])("previews loading for two seconds before showing empty content: $name", ({ Screen, loading, empty }) => {
-  act(() => root.render(createElement(Screen)));
-  expect(container.textContent).toContain(loading);
-  expect(container.textContent).not.toContain(empty);
-  act(() => vi.advanceTimersByTime(1999));
-  expect(container.textContent).toContain(loading);
-  act(() => vi.advanceTimersByTime(1));
-  expect(container.textContent).not.toContain(loading);
-  expect(container.textContent).toContain(empty);
+it("shows real empty Agent state without a mocked loading delay", () => {
+  act(() => root.render(createElement(AgentScreen)));
+  expect(container.textContent).not.toContain("Loading activity");
+  expect(container.textContent).toContain("No activity yet");
 });
 
 const renderCode = (path: string | null = "app/page.tsx") => {
@@ -151,7 +161,7 @@ it("shows severity counts in the floating badge and resets them for another file
   renderCode();
   expect(container.textContent).toContain("app/page.tsx");
   const previousAnalysis = state.analysis!;
-  const diagnostic = { from: 0, to: 1, message: "Problem", code: 1 };
+  const diagnostic = { from: 0, to: 1, message: "Problem", source: "TypeScript", code: "TS1" };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [
     { ...diagnostic, severity: "error" }, { ...diagnostic, severity: "warning" }, { ...diagnostic, severity: "info" },
   ] }));
@@ -261,44 +271,45 @@ it.each([
   expect(container.querySelector("textarea")).toBeNull();
 });
 
-it("clears the pending preview when the screen unmounts", () => {
+it("does not schedule a demo loading timer for Agent", () => {
   act(() => root.render(createElement(AgentScreen)));
-  expect(vi.getTimerCount()).toBe(1);
+  expect(vi.getTimerCount()).toBe(0);
   act(() => root.render(null));
   expect(vi.getTimerCount()).toBe(0);
 });
-it("shows loading, debounced saving, success, and failure icons after the diagnostic counts", async () => {
+it("shows save progress in the active tab, then offers retry after failure", async () => {
   renderCode();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   finishLoading();
   renderCode();
   await act(async () => state.ready!());
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')?.getAttribute("data-class")).toBe("text-foreground");
-  const diagnostic = { from: 0, to: 1, message: "Problem", code: 1, severity: "error" as const };
+  expect(container.querySelector('[aria-label="Close app/page.tsx"]')).not.toBeNull();
+  const diagnostic = { from: 0, to: 1, message: "Problem", source: "TypeScript", code: "TS1", severity: "error" as const };
   await act(async () => state.analysis!({ status: "ready", diagnostics: [diagnostic] }));
   const icons = [...container.querySelectorAll('[data-icon]')].map((icon) => icon.getAttribute("data-icon"));
-  expect(icons.slice(-5)).toEqual(["cloud-check-outline", "format-align-left", "sort-alphabetical-ascending", "magnify", "find-replace"]);
+  expect(icons.slice(-5)).toEqual(["format-align-left", "sort-alphabetical-ascending", "magnify", "undo", "redo"]);
   let finish!: (value: unknown) => void;
   saveFile.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await act(async () => state.change!("edited"));
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Close app/page.tsx"]')).toBeNull();
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(3000));
   expect(saveFile).toHaveBeenCalledOnce();
   await act(async () => finish({ error: true, message: "Save failed." }));
-  expect(container.querySelector('[data-icon="alert-circle"]')?.getAttribute("data-class")).toBe("text-foreground");
+  expect(container.querySelector('[aria-label="Retry saving app/page.tsx"]')).not.toBeNull();
+  expect(showAlert).toHaveBeenCalledWith("Couldn't save this file", "Save failed.", expect.any(Array));
   expect(container.querySelector("textarea")?.value).toBe("const value = 1;");
   saveFile.mockResolvedValueOnce({ error: false, message: "Saved.", data: { path: "app/page.tsx", size: 6, contentHash: "a".repeat(64) } });
-  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t save file. Tap to retry."]')!.click());
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Retry saving app/page.tsx"]')!.click());
   expect(saveFile).toHaveBeenCalledTimes(2);
-  expect(container.querySelector('[data-icon="cloud-check-outline"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Close app/page.tsx"]')).not.toBeNull();
 });
 
 
-it("shows file read failures in the badge and retries the read", () => {
+it("shows file read failures in the active tab and retries the read", () => {
   Object.assign(fileQuery, { data: undefined, isError: true, isFetching: false, error: new Error("File unavailable") });
   renderCode();
-  const retry = container.querySelector<HTMLButtonElement>('button[aria-label="Couldn\'t load file. Tap to retry."]');
+  const retry = container.querySelector<HTMLButtonElement>('button[aria-label="Retry opening app/page.tsx"]');
   expect(retry).not.toBeNull();
   act(() => retry!.click());
   expect(fileQuery.refetch).toHaveBeenCalledOnce();
@@ -314,5 +325,47 @@ vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {
 });
 
 vi.mock("@/features/editor/components/editor-problems-sheet", () => ({ EditorProblemsSheet: () => null }));
-vi.mock("@/features/editor/components/editor-search-bar", () => ({ EditorSearchBar: () => null }));
+vi.mock("@/features/editor/components/editor-search-bar", () => ({ EditorSearchBar: ({ onClose }: { onClose: () => void }) => createElement("button", { "aria-label": "Close file search", onClick: onClose }) }));
 vi.mock("expo-clipboard", () => ({ getStringAsync: async () => "", setStringAsync: async () => true }));
+
+it("closing file search returns focus to the same editor without dismissing the keyboard", async () => {
+  finishLoading();
+  renderCode();
+  await act(async () => state.ready!());
+  const original = container.querySelector("textarea");
+  const search = container.querySelector<HTMLButtonElement>('[aria-label="Find in file"]');
+  expect(search).not.toBeNull();
+  act(() => search!.click());
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Close file search"]')!.click());
+  expect(focusEditor).toHaveBeenCalledWith(expect.any(String));
+  expect(dismissKeyboard).not.toHaveBeenCalled();
+  expect(container.querySelector("textarea")).toBe(original);
+});
+
+it("explains a selection through the screen and removes its highlight on dismissal", async () => {
+  finishLoading();
+  renderCode();
+  await act(async () => {
+    await state.ready!();
+    await state.interaction!();
+  });
+  const explain = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Explain selection"]',
+  )!;
+  expect(explain.disabled).toBe(false);
+  await act(async () => explain.click());
+  expect(container.querySelector("[data-explanation]")?.textContent).toContain(
+    "Explained selection",
+  );
+  expect(state.highlight).toMatchObject({ from: 0, to: 5 });
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Close explanation"]')!
+      .click(),
+  );
+  expect(container.querySelector("[data-explanation]")).toBeNull();
+  expect(state.highlight).toBeNull();
+  expect(
+    container.querySelector('[aria-label="Explain selection"]'),
+  ).not.toBeNull();
+});

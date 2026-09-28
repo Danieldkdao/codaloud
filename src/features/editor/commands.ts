@@ -12,6 +12,7 @@ import {
   undoDepth,
 } from "@codemirror/commands";
 import {
+  indentUnit,
   foldable,
   foldedRanges,
   foldEffect,
@@ -103,6 +104,9 @@ export const runEditorCommand = async (
       break;
     case "cursor-down":
       cursorLineDown(view);
+      break;
+    case "tab":
+      insert(state.facet(indentUnit));
       break;
     case "insert":
       insert(text);

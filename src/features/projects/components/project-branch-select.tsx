@@ -248,6 +248,7 @@ export const ProjectBranchSelect = ({
         )}
       </Pressable>
       <ContentSheet
+        scrollable={false}
         open={
           open &&
           (!isWorkspaceBusy ||
@@ -260,8 +261,12 @@ export const ProjectBranchSelect = ({
         backgroundColor={card}
       >
         {/* Native content fitting measures both axes; constrain width while leaving height intrinsic. */}
-        <View style={{ width }}>
-          <View accessibilityViewIsModal onAccessibilityEscape={close}>
+        <View style={{ width, flexShrink: 1 }}>
+          <View
+            style={{ flexShrink: 1 }}
+            accessibilityViewIsModal
+            onAccessibilityEscape={close}
+          >
             <View className="shrink-0 border-b border-border px-5 pt-2 pb-3">
               <View className="flex-row items-center gap-2">
                 <Icon
@@ -288,7 +293,7 @@ export const ProjectBranchSelect = ({
                 />
               </View>
             </View>
-            <View>
+            <View style={{ flexShrink: 1 }}>
               <ProjectBranchCreate
                 name={search}
                 exists={branches.includes(search)}

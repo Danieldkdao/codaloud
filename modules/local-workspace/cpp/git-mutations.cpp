@@ -92,10 +92,11 @@ static Json stash(git_repository *repo, const std::string &operation,
   return {{"stashSha", expected}, {"dropped", false}};
 }
 
-static Json discardPreview(git_repository *repo) {
-  requireMutableBranch(repo);
+static Json discardPreview(git_repository *repo, bool revisionOnly = false) {
+  if (!revisionOnly)
+    requireMutableBranch(repo);
   const auto counts = gitCounts(repo);
-  if (counts.at("headSha").is_null())
+  if (!revisionOnly && counts.at("headSha").is_null())
     throw WorkspaceError(
         "UNBORN_HEAD",
         "Create a first commit before discarding tracked changes.");
@@ -135,6 +136,7 @@ static Json discardPreview(git_repository *repo) {
   const auto indexPath = fs::path(git_repository_path(repo)) / "index";
   const auto fingerprint = sha256(
       Json({{"head", counts.at("headSha")},
+            {"branch", counts.at("currentBranch")},
             {"index", fs::exists(indexPath) ? sha256File(indexPath) : ""},
             {"files", files}})
           .dump());
@@ -249,6 +251,8 @@ Json gitMutation(git_repository *repo, const std::string &operation,
   if (operation == "git/stashes" || operation == "git/stash-save" ||
       operation == "git/stash-apply" || operation == "git/stash-drop")
     return stash(repo, operation, args);
+  if (operation == "git/revision")
+    return discardPreview(repo, true).at("fingerprint");
   if (operation == "git/discard-preview")
     return discardPreview(repo);
   if (operation == "git/discard")

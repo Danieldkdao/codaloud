@@ -2,6 +2,7 @@ import "../global.css";
 
 import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 
+import { AgentTaskRuntime } from "@/features/agent/hooks/use-agent-tasks";
 import { QueryProvider } from "@/components/query-provider";
 import { AppThemeProvider, useTheme } from "@/hooks/use-theme";
 import { SuccessFeedbackProvider } from "@/hooks/use-success-feedback";
@@ -9,7 +10,7 @@ import { useOnboarding } from "@/features/settings/hooks/use-onboarding";
 import { AppWrapper } from "@/components/app-wrapper";
 import { Button } from "@/components/ui/button";
 import { PText } from "@/components/ui/text";
-import { MODAL_SCREEN_OPTIONS } from "@/lib/constants";
+import { FORM_SHEET_OPTIONS, MODAL_SCREEN_OPTIONS } from "@/lib/constants";
 import { fontAssets } from "@/lib/fonts";
 import { subscribeToQueryLifecycle } from "@/lib/query-lifecycle";
 import { useFonts } from "expo-font";
@@ -27,11 +28,7 @@ SplashScreen.setOptions({ duration: 250, fade: true });
 const RootNavigator = () => {
   const { isReady: isThemeReady } = useTheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
-  const {
-    ready: isAppReady,
-    error,
-    retry,
-  } = useOnboarding();
+  const { ready: isAppReady, error, retry } = useOnboarding();
   const session = authClient.useSession();
 
   useEffect(subscribeToQueryLifecycle, []);
@@ -71,6 +68,7 @@ const RootNavigator = () => {
 
   return (
     <QueryProvider>
+      <AgentTaskRuntime />
       <GestureHandlerRootView style={{ flex: 1 }}>
         <KeyboardSymbolsProvider fill>
           <ProjectSearchOverlayProvider>
@@ -101,22 +99,16 @@ const RootNavigator = () => {
                     name="new-project"
                     options={{
                       ...MODAL_SCREEN_OPTIONS,
+                      ...FORM_SHEET_OPTIONS,
                       presentation: "formSheet",
-                      sheetAllowedDetents: "fitToContents",
-                      sheetInitialDetentIndex: 0,
-                      sheetGrabberVisible: true,
-                      sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
                   <Stack.Screen
                     name="edit-project"
                     options={{
                       ...MODAL_SCREEN_OPTIONS,
+                      ...FORM_SHEET_OPTIONS,
                       presentation: "formSheet",
-                      sheetAllowedDetents: "fitToContents",
-                      sheetInitialDetentIndex: 0,
-                      sheetGrabberVisible: true,
-                      sheetExpandsWhenScrolledToEdge: false,
                     }}
                   />
                   <Stack.Screen name="editor" options={editorScreenOptions} />

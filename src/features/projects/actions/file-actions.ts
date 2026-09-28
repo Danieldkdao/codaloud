@@ -136,6 +136,7 @@ export const readProjectFilesAction = async <
     status: number,
     retryAfter: string | null,
     code?: string,
+    message?: string,
   ) => void,
 ): Promise<ReadProjectFilesActionResult<Input> | null> => {
   try {
@@ -160,6 +161,7 @@ export const readProjectFilesAction = async <
           : 500,
         null,
         failure(error).code,
+        failure(error).message,
       );
     return null;
   }

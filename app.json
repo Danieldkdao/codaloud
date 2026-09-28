@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "codaloud",
+    "name": "Codaloud",
     "slug": "codaloud",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,8 +8,12 @@
     "scheme": "codaloud",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/codaloud.icon",
-      "bundleIdentifier": "com.codaloud.development"
+      "icon": "./assets/codaloud-icon.png",
+      "bundleIdentifier": "com.codaloud.development",
+      "bitcode": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +22,17 @@
         "monochromeImage": "./assets/logo.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.codaloud.development"
+      "package": "com.codaloud.development",
+      "permissions": [
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
+      ]
     },
     "platforms": [
       "ios",
@@ -30,6 +44,21 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication",
+            "enableScreenShareService": false
+          }
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "Allow Codaloud to hear you during voice conversations."
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -53,6 +82,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d53f7d0f-8c31-4cd7-a98d-11ff60bd529f"
+      }
+    },
+    "owner": "danieldkdao"
   }
 }

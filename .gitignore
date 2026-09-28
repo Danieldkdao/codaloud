@@ -50,3 +50,6 @@ example
 /compile_commands.json
 /buildServer.json
 /.compile
+
+# Trigger.dev local build and development state
+.trigger

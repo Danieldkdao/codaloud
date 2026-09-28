@@ -46,7 +46,8 @@ export const codeDiagnosticSchema = z
     to: z.number().int().nonnegative(),
     severity: z.enum(diagnosticSeverities),
     message: z.string(),
-    code: z.number().int(),
+    source: z.string().min(1).max(80),
+    code: z.string().min(1).max(128),
   })
   .refine(({ from, to }) => to >= from);
 export type CodeDiagnosticSchema = z.infer<typeof codeDiagnosticSchema>;

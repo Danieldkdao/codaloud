@@ -142,6 +142,18 @@ export const createProjectWorkspaceDiffRows = (
       });
       if (comparison.kind !== "available") continue;
       for (const hunk of comparison.hunks) {
+        rows.push({
+          kind: "hunk",
+          path: file.path,
+          hunk,
+          key: JSON.stringify([
+            file.path,
+            comparison.scope,
+            hunk.oldStart,
+            hunk.newStart,
+            "hunk",
+          ]),
+        });
         for (const [index, line] of hunk.lines.entries()) {
           rows.push({
             kind: "line",

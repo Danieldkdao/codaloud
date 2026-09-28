@@ -25,6 +25,7 @@ import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { ProjectCodeTabIndicator } from "./project-code-tab-indicator";
 import { useProjectFilePaths } from "../hooks/use-project-file-paths";
+import type { SaveSnapshot } from "../lib/project-file-save-document";
 import {
   formatProjectChangeCount,
   formatProjectChangePath,
@@ -41,6 +42,9 @@ type ProjectCodeTabsProps = {
   onOpenFile: () => void;
   disabled?: boolean;
   closingPath?: string | null;
+  save?: SaveSnapshot;
+  onRetry?: () => void;
+  readError?: boolean;
 };
 
 export const ProjectCodeTabs = ({
@@ -52,6 +56,9 @@ export const ProjectCodeTabs = ({
   onOpenFile,
   disabled,
   closingPath,
+  save,
+  onRetry,
+  readError = false,
 }: ProjectCodeTabsProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -173,7 +180,7 @@ export const ProjectCodeTabs = ({
           contentContainerStyle={{ alignItems: "center", gap: 4, padding: 8 }}
           data={paths}
           keyExtractor={(path) => path}
-          extraData={{ activePath, disabled, closingPath }}
+          extraData={{ activePath, disabled, closingPath, save }}
           CellRendererComponent={TabCell}
           removeClippedSubviews={false}
           onScrollToIndexFailed={({ index, averageItemLength }) => {
@@ -236,21 +243,53 @@ export const ProjectCodeTabs = ({
                     </PText>
                   ) : null}
                 </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Close ${path}`}
-                  accessibilityState={{ busy: closingPath === path }}
-                  disabled={disabled || Boolean(closingPath)}
-                  onPress={() => onClose(path)}
-                  className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
-                >
-                  <Icon
-                    family="Feather"
-                    name="x"
-                    size={16}
-                    className="text-muted-foreground"
-                  />
-                </Pressable>
+                {selected && save?.status === "error" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${readError ? "Retry opening" : "Retry saving"} ${path}`}
+                    accessibilityHint={save.message}
+                    disabled={disabled || !onRetry}
+                    onPress={onRetry}
+                    className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
+                  >
+                    <Icon
+                      family="Feather"
+                      name="alert-circle"
+                      size={18}
+                      className="text-destructive"
+                    />
+                  </Pressable>
+                ) : selected && save && save.status !== "saved" ? (
+                  <View
+                    accessible
+                    accessibilityRole="progressbar"
+                    accessibilityLabel={
+                      save.status === "loading" ? "Loading file" : "Saving file"
+                    }
+                    className="min-h-12 w-11 items-center justify-center"
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      className="text-foreground"
+                    />
+                  </View>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Close ${path}`}
+                    accessibilityState={{ busy: closingPath === path }}
+                    disabled={disabled || Boolean(closingPath)}
+                    onPress={() => onClose(path)}
+                    className="min-h-12 w-11 items-center justify-center rounded-full active:bg-secondary"
+                  >
+                    <Icon
+                      family="Feather"
+                      name="x"
+                      size={16}
+                      className="text-muted-foreground"
+                    />
+                  </Pressable>
+                )}
               </View>
             );
             return selected ? (
@@ -294,13 +333,14 @@ export const ProjectCodeTabs = ({
         </View>
       </View>
       <ContentSheet
+        scrollable={false}
         open={open}
         onOpenChange={changeOpen}
         backgroundColor={card}
       >
-        <View className="gap-3 px-4 pb-8 pt-4">
+        <View className="shrink gap-3 px-4 pb-8 pt-4">
           <FlatList
-            style={{ maxHeight: height * 0.45 }}
+            style={{ maxHeight: height * 0.45, flexShrink: 1 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             data={visiblePaths}
@@ -409,43 +449,45 @@ export const ProjectCodeTabs = ({
               No matching paths
             </PText>
           ) : null}
-          <View className="flex-row items-center gap-2 rounded-xl border border-input bg-background pl-3">
-            <Icon
-              family="Feather"
-              name="search"
-              size={20}
-              className="text-muted-foreground"
-              accessible={false}
-            />
-            <Input
-              type="search"
-              variant="ghost"
-              accessibilityLabel="Search project paths"
-              placeholder="Search project paths"
-              value={search}
-              onChangeText={setSearch}
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerClassName="min-w-0 flex-1"
-              className="border-0 bg-background focus:border-transparent focus:outline-0"
-            />
-            {search ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear file search"
-                onPress={() => setSearch("")}
-                className="size-12 items-center justify-center"
-              >
-                <Icon
-                  family="Feather"
-                  name="x"
-                  size={20}
-                  className="text-muted-foreground"
-                  accessible={false}
-                />
-              </Pressable>
-            ) : null}
-          </View>
+          <GlassSurface borderRadius={28}>
+            <View className="flex-row items-center gap-2 pl-4 pr-2">
+              <Icon
+                family="Feather"
+                name="search"
+                size={20}
+                className="text-muted-foreground"
+                accessible={false}
+              />
+              <Input
+                type="search"
+                variant="ghost"
+                accessibilityLabel="Search project paths"
+                placeholder="Search project paths"
+                value={search}
+                onChangeText={setSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                containerClassName="min-w-0 flex-1"
+                className="border-0 focus:border-transparent focus:outline-0"
+              />
+              {search ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear file search"
+                  onPress={() => setSearch("")}
+                  className="size-12 items-center justify-center"
+                >
+                  <Icon
+                    family="Feather"
+                    name="x"
+                    size={20}
+                    className="text-muted-foreground"
+                    accessible={false}
+                  />
+                </Pressable>
+              ) : null}
+            </View>
+          </GlassSurface>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open another file"

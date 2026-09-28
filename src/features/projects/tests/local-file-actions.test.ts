@@ -16,6 +16,12 @@ it("never reaches files for a missing project", async () => {
   expect(await readProjectFilesAction("missing")).toBeNull();
   expect(mocks.execute).not.toHaveBeenCalled();
 });
+it("returns null and reports the native listing failure without losing its message", async () => {
+  const onFailure = vi.fn();
+  mocks.execute.mockRejectedValue(new LocalWorkspaceError("DIRECTORY_NOT_FOUND", "This folder does not exist."));
+  expect(await readProjectFilesAction("project", { path: "tests" }, undefined, undefined, onFailure)).toBeNull();
+  expect(onFailure).toHaveBeenCalledWith(500, null, "DIRECTORY_NOT_FOUND", "This folder does not exist.");
+});
 it("preserves native conflict codes for editor recovery", async () => {
   mocks.execute.mockRejectedValue(new LocalWorkspaceError("FILE_CHANGED", "Reload first"));
   expect(await saveProjectFileContentAction("project", { path: "a.txt", content: "new", expectedContentHash: "a".repeat(64) }))

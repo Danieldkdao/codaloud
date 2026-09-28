@@ -1,9 +1,4 @@
-import {
-  ActivityIndicator,
-  Pressable,
-  View,
-  type ViewProps,
-} from "react-native";
+import { Pressable, View, type ViewProps } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { PText } from "@/components/ui/text";
@@ -13,29 +8,17 @@ import {
   formatCodeAnalysisLabel,
   formatCodeDiagnostic,
   formatCodeDiagnosticCount,
-  formatProjectFileSaveStatus,
 } from "@/features/projects/lib/formatters";
-import type { SaveSnapshot } from "../lib/project-file-save-document";
 
 export const ProjectCodeStatus = ({
-  status: save,
   analysis,
-  onRetry,
   onProblems,
-  readError = false,
   onLayout,
 }: {
   onProblems?: () => void;
   onLayout?: ViewProps["onLayout"];
-  readError?: boolean;
-  status: SaveSnapshot;
   analysis?: CodeEditorAnalysis;
-  onRetry: () => void;
 }) => {
-  const status = save.status;
-  const presentation = formatProjectFileSaveStatus(status);
-  const canRetry = status === "error";
-  const IndicatorContainer = canRetry ? Pressable : View;
   return (
     <GlassSurface borderRadius={24}>
       <View
@@ -97,32 +80,6 @@ export const ProjectCodeStatus = ({
             )}
           </Pressable>
         ) : null}
-        <View>
-          <IndicatorContainer
-            accessible
-            accessibilityRole={canRetry ? "button" : "image"}
-            accessibilityLabel={
-              readError
-                ? "Couldn't load file. Tap to retry."
-                : presentation.label
-            }
-            accessibilityHint={canRetry ? save.message : undefined}
-            accessibilityState={{ busy: presentation.busy }}
-            accessibilityLiveRegion="polite"
-            onPress={canRetry ? onRetry : undefined}
-            className="min-h-11 min-w-11 items-center justify-center"
-          >
-            {presentation.busy ? (
-              <ActivityIndicator size="small" className="text-foreground" />
-            ) : (
-              <Icon
-                {...presentation.icon}
-                size={22}
-                className="text-foreground"
-              />
-            )}
-          </IndicatorContainer>
-        </View>
       </View>
     </GlassSurface>
   );

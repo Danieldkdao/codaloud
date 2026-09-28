@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { useSuccessFeedback } from "@/hooks/use-success-feedback";
-import { ProjectFileCreateSheet } from "@/features/projects/components/project-file-create-sheet";
+import { ProjectFileCreateRow } from "@/features/projects/components/project-file-create-row";
 import { useProjectWorkspaceFileCreation } from "@/features/projects/hooks/use-project-workspace-file-creation";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
@@ -172,34 +172,38 @@ const FilesScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      {fileCreation.kind && !deletion.isPending && renamingPath === null && (
-        <ProjectFileCreateSheet
-          key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
-          disabled={workspace.isWorkspaceBusy}
-          kind={fileCreation.kind}
-          existingNames={existingNames}
-          parentPath={currentDirectory}
-          onCancel={fileCreation.finish}
-          onCreate={async (input) => {
-            await workspace.runWorkspaceOperation(
-              "Creating file…",
-              async (assertCurrent) => {
-                assertCurrent();
-                const createdFile = await creation.mutateAsync(input);
-                assertCurrent();
-                currentFile.refreshFile(createdFile.path);
-                fileCreation.finish();
-                showSuccess(formatProjectFileKind(input.kind).successMessage);
-              },
-            );
-          }}
-        />
-      )}
       <ProjectFilesList
         key={currentDirectory}
         files={directoryFiles}
         existingNames={existingNames}
         parentDirectory={parentDirectory}
+        createRow={
+          fileCreation.kind && !deletion.isPending && renamingPath === null ? (
+            <ProjectFileCreateRow
+              key={`${projectId}/${currentDirectory}/${fileCreation.kind}`}
+              disabled={workspace.isWorkspaceBusy}
+              kind={fileCreation.kind}
+              existingNames={existingNames}
+              parentPath={currentDirectory}
+              onCancel={fileCreation.finish}
+              onSubmit={async (input) => {
+                await workspace.runWorkspaceOperation(
+                  "Creating file…",
+                  async (assertCurrent) => {
+                    assertCurrent();
+                    const createdFile = await creation.mutateAsync(input);
+                    assertCurrent();
+                    currentFile.refreshFile(createdFile.path);
+                    fileCreation.finish();
+                    showSuccess(
+                      formatProjectFileKind(input.kind).successMessage,
+                    );
+                  },
+                );
+              }}
+            />
+          ) : null
+        }
         onDirectoryPress={setCurrentDirectory}
         onFilePress={openFile}
         onUpdate={async (input) => {

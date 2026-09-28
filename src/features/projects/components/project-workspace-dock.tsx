@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { WorkspaceVoiceContext } from "@/features/voice/hooks/workspace-voice-provider";
+import type { VoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { usePathname } from "expo-router";
-import { Pressable, View, useWindowDimensions } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Icon } from "@/components/ui/icon";
+import { TaskStatusBar } from "@/features/agent/components/task-status-bar";
+import { ImplementationPlanReview } from "@/features/agent/components/implementation-plan-review";
 import { GlassSurface } from "@/components/ui/glass-surface";
+import { useVoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
+import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
+import { VoiceTranscriptBubble } from "@/features/voice/components/voice-transcript-bubble";
 
 import {
   ProjectActionButtonsLeft,
@@ -15,9 +21,31 @@ import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-pro
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectBranchMenu } from "./project-branch-menu";
 
-export const ProjectWorkspaceDock = ({
+export const ProjectWorkspaceDock = (props: { tab?: "code" | "git" } = {}) => {
+  const conversation = useContext(WorkspaceVoiceContext);
+  return conversation ? (
+    <WorkspaceDock {...props} conversation={conversation} />
+  ) : (
+    <StandaloneDock {...props} />
+  );
+};
+const StandaloneDock = (props: { tab?: "code" | "git" }) => {
+  const pathname = usePathname();
+  const { projectId } = useProjectWorkspaceBranch();
+  const conversation = useVoiceConversation(
+    props.tab !== "git",
+    `${projectId}:${pathname}`,
+    projectId,
+  );
+  return <WorkspaceDock {...props} conversation={conversation} />;
+};
+const WorkspaceDock = ({
   tab,
-}: { tab?: "code" | "git" } = {}) => {
+  conversation,
+}: {
+  tab?: "code" | "git";
+  conversation: VoiceConversation;
+}) => {
   const keyboardFrame = useKeyboardFrame();
   const { setDockHeight } = useProjectWorkspaceDockHeight();
   const insets = useSafeAreaInsets();
@@ -29,17 +57,13 @@ export const ProjectWorkspaceDock = ({
   // Keep the editor controls stable while a supporting modal covers them.
   const routeName = tab ?? pathname.split("/")[3];
   const activeTab = routeName === "git" ? "git" : "code";
-  // Preserve six 44-point targets plus the 56-point microphone on small phones.
-  // Wider phones share the extra room between larger targets and real gaps.
+  // Give two actions on each side of the microphone matching, flexible space.
   const safeWidth = width - insets.left - insets.right;
   const horizontalPadding =
     activeTab === "code"
-      ? Math.min(12, Math.max(0, (safeWidth - 320) / 2))
+      ? Math.min(20, Math.max(8, (safeWidth - 320) / 2))
       : 16;
-  const actionGap =
-    activeTab === "code"
-      ? Math.min(4, Math.max(0, (safeWidth - horizontalPadding * 2 - 320) / 12))
-      : 0;
+  const actionGap = activeTab === "code" ? 8 : 0;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
   useEffect(() => {
@@ -51,27 +75,50 @@ export const ProjectWorkspaceDock = ({
       testID="project-workspace-dock"
       collapsable={false}
       onLayout={(event) => {
+        // Reserve the whole stack, including live tasks and the transcript, so
+        // the editor's animated accessory row always sits above visible content.
         const height = event.nativeEvent.layout.height;
         if (height > 0) setDockHeight(height);
       }}
       style={{
         position: "absolute",
-        // Android resizes the screen above its keyboard; hide the voice dock
-        // there so the editor accessory is the only row touching the keyboard.
-        display: activeTab === "code" && keyboardFrame ? "none" : "flex",
         // Keep the controls above the native tab screen and its editor WebView.
         zIndex: 10,
         bottom: 0,
         left: 0,
         right: 0,
         pointerEvents: "box-none",
-        paddingLeft: horizontalPadding + insets.left,
-        paddingRight: horizontalPadding + insets.right,
-        paddingTop: 12,
-        paddingBottom: Math.max(insets.bottom, 12),
       }}
     >
-      <View className="w-full" style={{ gap: 10, pointerEvents: "box-none" }}>
+      <View
+        style={{
+          display: activeTab === "code" && keyboardFrame ? "none" : "flex",
+        }}
+      >
+        {!isGit && <TaskStatusBar projectId={branchSelection.projectId} />}
+        <VoiceTranscriptBubble conversation={conversation} />
+      </View>
+      {!isGit && (
+        <ImplementationPlanReview
+          projectId={branchSelection.projectId}
+          triggerVisible={!keyboardFrame}
+        />
+      )}
+      <View
+        className="w-full"
+        collapsable={false}
+        style={{
+          // The native keyboard covers this bottom-aligned dock. Do not hide its
+          // ancestor: settings and other native sheets are owned by its controls,
+          // so display:none would also dismiss their focused inputs and glass.
+          gap: 10,
+          pointerEvents: "box-none",
+          paddingLeft: horizontalPadding + insets.left,
+          paddingRight: horizontalPadding + insets.right,
+          paddingTop: 12,
+          paddingBottom: Math.max(insets.bottom, 12),
+        }}
+      >
         {isGit ? (
           <View
             ref={branchIndicatorRef}
@@ -113,21 +160,7 @@ export const ProjectWorkspaceDock = ({
                     onBranchPickerOpenChange={setBranchPickerOpen}
                   />
                 </View>
-                {!isGit && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Microphone"
-                    className="size-14 shrink-0 items-center justify-center rounded-full bg-primary active:bg-primary/90"
-                  >
-                    <Icon
-                      family="Feather"
-                      name="mic"
-                      size={24}
-                      accessible={false}
-                      className="text-primary-foreground"
-                    />
-                  </Pressable>
-                )}
+                {!isGit && <VoiceMicrophone conversation={conversation} />}
                 <View
                   style={{
                     flex: 1,

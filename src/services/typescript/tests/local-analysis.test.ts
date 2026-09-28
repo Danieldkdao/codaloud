@@ -6,9 +6,11 @@ vi.mock("../generated/compiler", async (original) => {
   return { default: { ...actual.default, createLanguageService: vi.fn(actual.default.createLanguageService) } };
 });
 const analyze = (content: string, files: Record<string, string> = {}, position?: number) => analyzeTypeScript({ path: "src/main.ts", content, position }, async (path) => files[path] ?? null);
+const analyzeJavaScript = (content: string, files: Record<string, string> = {}) => analyzeTypeScript({ path: "src/main.js", content }, async (path) => files[path] ?? null);
 it("reports syntax and semantic errors using bundled standard libraries offline", async () => {
   const result = await analyze('const value: number = "wrong";\nconst list: Array<string> = [];');
-  expect("diagnostics" in result && result.diagnostics.map((item) => item.code)).toContain(2322);
+  expect("diagnostics" in result && result.diagnostics.map((item) => item.code)).toContain("TS2322");
+  expect("diagnostics" in result && result.diagnostics.every((item) => item.source === "TypeScript")).toBe(true);
   expect("diagnostics" in result && result.diagnostics.some((item) => item.message.includes("Cannot find name 'Array'"))).toBe(false);
 });
 it("resolves imported local declarations and tsconfig aliases", async () => {
@@ -16,8 +18,8 @@ it("resolves imported local declarations and tsconfig aliases", async () => {
     "tsconfig.json": JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"] }, strict: true } }),
     "src/value.ts": "export const count = 42;",
   });
-  expect("diagnostics" in result && result.diagnostics.map((item) => item.code)).toContain(2322);
-  expect("diagnostics" in result && result.diagnostics.map((item) => item.code)).not.toContain(2307);
+  expect("diagnostics" in result && result.diagnostics.map((item) => item.code)).toContain("TS2322");
+  expect("diagnostics" in result && result.diagnostics.map((item) => item.code)).not.toContain("TS2307");
 });
 it("offers completions from real types without fetching a compiler", async () => {
   const content = 'const value = "hello"; value.toU';
@@ -32,8 +34,8 @@ it("updates diagnostics and completions across edits in one analysis session", a
   const analyzer = createTypeScriptAnalyzer(async () => null);
   try {
     const input = { path: "src/main.ts", content: 'const value: number = "wrong";' };
-    expect(diagnosticCodes(await analyzer.analyze(input))).toContain(2322);
-    expect(diagnosticCodes(await analyzer.analyze({ ...input, content: "const value: number = 42;" }))).not.toContain(2322);
+    expect(diagnosticCodes(await analyzer.analyze(input))).toContain("TS2322");
+    expect(diagnosticCodes(await analyzer.analyze({ ...input, content: "const value: number = 42;" }))).not.toContain("TS2322");
     const content = "const value = 42; value.toF";
     const completion = await analyzer.analyze({ ...input, content, position: content.length });
     expect("completions" in completion && completion.completions.some((item) => item.label === "toFixed")).toBe(true);
@@ -45,13 +47,13 @@ it("rechecks changed, removed, and newly created imports without changing the ed
   const analyzer = createTypeScriptAnalyzer(async (path) => files[path] ?? null);
   const input = { path: "src/main.ts", content: 'import { count } from "./value"; const text: string = count;' };
   try {
-    expect(diagnosticCodes(await analyzer.analyze(input))).toContain(2307);
+    expect(diagnosticCodes(await analyzer.analyze(input))).toContain("TS2307");
     files["src/value.ts"] = "export const count = 42;";
-    expect(diagnosticCodes(await analyzer.analyze(input))).toContain(2322);
+    expect(diagnosticCodes(await analyzer.analyze(input))).toContain("TS2322");
     files["src/value.ts"] = 'export const count = "hello";';
-    expect(diagnosticCodes(await analyzer.analyze(input))).not.toContain(2322);
+    expect(diagnosticCodes(await analyzer.analyze(input))).not.toContain("TS2322");
     delete files["src/value.ts"];
-    expect(diagnosticCodes(await analyzer.analyze(input))).toContain(2307);
+    expect(diagnosticCodes(await analyzer.analyze(input))).toContain("TS2307");
   } finally { await analyzer.dispose(); }
 });
 
@@ -67,12 +69,12 @@ it("rechecks tsconfig aliases and package entry points between analyses", async 
   const analyzer = createTypeScriptAnalyzer(async (path) => files[path] ?? null);
   const input = { path: "src/main.ts", content: 'import { count } from "@/value"; import { other } from "example"; const text: string = count; const text2: string = other;' };
   try {
-    expect(diagnosticCodes(await analyzer.analyze(input)).filter((code) => code === 2322)).toHaveLength(2);
+    expect(diagnosticCodes(await analyzer.analyze(input)).filter((code) => code === "TS2322")).toHaveLength(2);
     files["tsconfig.json"] = JSON.stringify({ compilerOptions: { paths: { "@/*": ["./lib/*"] } } });
     files["node_modules/example/package.json"] = '{"types":"string.d.ts"}';
     const codes = diagnosticCodes(await analyzer.analyze(input));
-    expect(codes).not.toContain(2322);
-    expect(codes).not.toContain(2307);
+    expect(codes).not.toContain("TS2322");
+    expect(codes).not.toContain("TS2307");
   } finally { await analyzer.dispose(); }
 });
 
@@ -81,10 +83,10 @@ it("isolates workspaces and replaces the active file when switching tabs", async
   const second = createTypeScriptAnalyzer(async (path) => path === "src/value.ts" ? 'export const count = "hello";' : null);
   const input = { path: "src/main.ts", content: 'import { count } from "./value"; const text: string = count;' };
   try {
-    expect(diagnosticCodes(await first.analyze(input))).toContain(2322);
-    expect(diagnosticCodes(await second.analyze(input))).not.toContain(2322);
-    expect(diagnosticCodes(await first.analyze({ path: "src/other.ts", content: "const value: number = true;" }))).toContain(2322);
-    expect(diagnosticCodes(await first.analyze(input))).toContain(2322);
+    expect(diagnosticCodes(await first.analyze(input))).toContain("TS2322");
+    expect(diagnosticCodes(await second.analyze(input))).not.toContain("TS2322");
+    expect(diagnosticCodes(await first.analyze({ path: "src/other.ts", content: "const value: number = true;" }))).toContain("TS2322");
+    expect(diagnosticCodes(await first.analyze(input))).toContain("TS2322");
   } finally { await Promise.all([first.dispose(), second.dispose()]); }
 });
 
@@ -98,7 +100,7 @@ it("serializes overlapping requests and recovers after a read failure", async ()
     const bad = analyzer.analyze({ path: "main.ts", content: 'const value: number = "wrong";' });
     const good = analyzer.analyze({ path: "main.ts", content: "const value: number = 42;" });
     await expect(bad).rejects.toThrow("Read failed");
-    expect(diagnosticCodes(await good)).not.toContain(2322);
+    expect(diagnosticCodes(await good)).not.toContain("TS2322");
   } finally { await analyzer.dispose(); }
 });
 
@@ -110,7 +112,7 @@ it("keeps the compiler warm across tab switches while replacing the active graph
     for (const path of ["a.ts", "b.ts", "a.ts", "b.ts", "a.ts"]) {
       const content = path === "a.ts" ? 'const value: number = "wrong";' : "const value: number = 42;";
       const codes = diagnosticCodes(await analyzer.analyze({ path, content }));
-      expect(codes.includes(2322)).toBe(path === "a.ts");
+      expect(codes.includes("TS2322")).toBe(path === "a.ts");
     }
     expect(createService).toHaveBeenCalledOnce();
   } finally { await analyzer.dispose(); }
@@ -319,4 +321,32 @@ it("refreshes alias configuration and directory contents after the completion ca
     const next = await analyzer.analyze({ path: "src/main.ts", content, position: content.length });
     expect("completions" in next && next.completions.map((entry) => entry.label)).toEqual(["fresh"]);
   } finally { now.mockRestore(); await analyzer.dispose(); }
+});
+
+it("supports JavaScript syntax by default without implicit type-checking noise", async () => {
+  const valid = await analyzeJavaScript("const value = missingName;");
+  expect("diagnostics" in valid && valid.diagnostics).toEqual([]);
+  const malformed = await analyzeJavaScript("const value = ;");
+  expect(
+    "diagnostics" in malformed &&
+      malformed.diagnostics.some((item) => item.severity === "error"),
+  ).toBe(true);
+});
+
+it("enables JavaScript checking for ts-check comments and safe project settings", async () => {
+  const content = "/** @type {number} */\nconst value = \"wrong\";";
+  const byComment = await analyzeJavaScript(`// @ts-check\n${content}`);
+  expect("diagnostics" in byComment && byComment.diagnostics.map((item) => item.code)).toContain("TS2322");
+  const byCommentWithDisabledProjectCheck = await analyzeJavaScript(
+    `// @ts-check\n${content}`,
+    { "jsconfig.json": JSON.stringify({ compilerOptions: { checkJs: false } }) },
+  );
+  expect(
+    "diagnostics" in byCommentWithDisabledProjectCheck &&
+      byCommentWithDisabledProjectCheck.diagnostics.map((item) => item.code),
+  ).toContain("TS2322");
+  const byConfig = await analyzeJavaScript(content, {
+    "jsconfig.json": JSON.stringify({ compilerOptions: { checkJs: true } }),
+  });
+  expect("diagnostics" in byConfig && byConfig.diagnostics.map((item) => item.code)).toContain("TS2322");
 });

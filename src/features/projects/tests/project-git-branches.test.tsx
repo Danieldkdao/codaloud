@@ -1,4 +1,12 @@
 // @vitest-environment happy-dom
+vi.mock("react-native-screens", () => ({ ScreenStack: ({ children }: { children?: ReactNode }) => children, ScreenStackItem: ({ children }: { children?: ReactNode }) => children }));
+vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => createElement("div", { "data-testid": "task-status-bar" }) }));
+vi.mock("@/features/agent/components/implementation-plan-review", () => ({ ImplementationPlanReview: () => null }));
+vi.mock("expo-sqlite/kv-store", () => ({ default: { getItem: vi.fn().mockResolvedValue(null), setItem: vi.fn().mockResolvedValue(undefined) } }));
+// Native voice lifecycle is covered in the voice feature's own integration tests.
+vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({ useVoiceConversation: () => ({ visible: false }) }));
+vi.mock("@/features/voice/components/voice-microphone", () => ({ VoiceMicrophone: () => createElement("button", { "aria-label": "Microphone" }) }));
+vi.mock("@/features/voice/components/voice-transcript-bubble", () => ({ VoiceTranscriptBubble: () => null }));
 vi.mock("@/hooks/use-keyboard-frame", () => ({ useKeyboardFrame: () => undefined }));
 import { ProjectWorkspaceDockHeightProvider } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectWorkspaceFileCreationProvider } from "@/features/projects/hooks/use-project-workspace-file-creation";
@@ -118,14 +126,14 @@ vi.mock("@/components/ui/button", () => ({
     createElement("button", { onClick: onPress, disabled, "aria-label": accessibilityLabel }, children),
 }));
 vi.mock("@expo/vector-icons", () => ({ Feather: {}, Ionicons: {} }));
-const Workspace = () => (
+const Workspace = ({ dockTab }: { dockTab?: "code" | "git" } = {}) => (
   <QueryClientProvider client={queryClient}>
   <ProjectWorkspaceDockHeightProvider>
     <ProjectWorkspaceBranchProvider>
       <ProjectWorkspaceChangesProvider>
         <GitScreen />
         <ProjectWorkspaceFileCreationProvider projectId="demo">
-          {activeTab === "code" || activeTab === "git" ? <ProjectWorkspaceDock /> : null}
+          {activeTab === "code" || activeTab === "git" ? <ProjectWorkspaceDock tab={dockTab} /> : null}
         </ProjectWorkspaceFileCreationProvider>
       </ProjectWorkspaceChangesProvider>
     </ProjectWorkspaceBranchProvider>
@@ -198,6 +206,7 @@ vi.mock("@/components/ui/text", () => {
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ left: 0, right: 0, top: 0, bottom: 0 }) }));
 vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   Switch: ({ value, disabled, accessibilityLabel }: { value: boolean; disabled?: boolean; accessibilityLabel: string }) => createElement("button", { role: "switch", "aria-checked": value, disabled, "aria-label": accessibilityLabel }),
   Alert: { alert: workspaceFiles.alert, prompt: workspaceFiles.alert },
   ActivityIndicator: () => createElement("span", { role: "progressbar" }),
@@ -307,6 +316,17 @@ beforeEach(() => {
   act(() => root.render(createElement(Workspace)));
 });
 afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); });
+
+it.each([
+  { route: "git", dockTab: undefined, visible: false },
+  { route: "code", dockTab: undefined, visible: true },
+  { route: "code", dockTab: "git" as const, visible: false },
+  { route: "git", dockTab: "code" as const, visible: true },
+])("only shows task status in the Code dock with route $route and tab $dockTab", ({ route, dockTab, visible }) => {
+  activeTab = route;
+  act(() => root.render(<Workspace dockTab={dockTab} />));
+  expect(container.querySelector('[data-testid="task-status-bar"]') !== null).toBe(visible);
+});
 
 it("opens each supporting screen directly from Code without the workspace menu", () => {
   for (const [name, label] of [["files", "Files"], ["git", "Git"], ["agent", "Agent log"]]) {
@@ -486,7 +506,9 @@ it("shows only the active screen's controls in the lower bar", () => {
     expect(labels().includes("Microphone")).toBe(tab === "code");
     expect(container.textContent).not.toContain("Current branch:");
     if (tab === "code") {
-      expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools", "Undo", "Redo"]));
+      expect(labels()).toEqual(expect.arrayContaining(["Files", "Git", "Agent log", "Editor tools"]));
+      expect(labels()).not.toContain("Undo");
+      expect(labels()).not.toContain("Redo");
       expect(labels()).not.toContain("Previous file");
       expect(labels()).not.toContain("Next file");
       expect(labels()).not.toContain("Search activity");
@@ -507,7 +529,7 @@ it.each(["app.ts", null])("opens editor settings from the right toolbar with act
   const dock = container.querySelector('[data-testid="project-workspace-dock"]')!;
   expect(dock.querySelector('[aria-label="Editor tools"]')).not.toBeNull();
   expect([...dock.querySelectorAll("button[aria-label]")].map((button) => button.getAttribute("aria-label"))).toEqual([
-    "Files", "Git", "Agent log", "Microphone", "Undo", "Redo", "Editor tools",
+    "Files", "Git", "Microphone", "Agent log", "Editor tools",
   ]);
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   click("Editor tools");

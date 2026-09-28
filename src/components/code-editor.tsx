@@ -18,13 +18,16 @@ import {
   LanguageDescription,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
+import { codeEditorLanguages } from "./code-editor-language-data";
 import {
   createCodeEditorIntelligence,
   type CodeEditorAnalysis,
   type CodeEditorAnalysisRequest,
 } from "./code-editor-intelligence";
-import { CODE_INTELLIGENCE_FILE_PATTERN } from "@/features/projects/constants";
+import {
+  getCodeFileType,
+  hasLocalCodeAnalyzer,
+} from "@/features/code-intelligence/file-type";
 import { tags } from "@lezer/highlight";
 import { editorFontAssets } from "@/features/editor/fonts";
 import { Outfit_400Regular } from "@expo-google-fonts/outfit/400Regular";
@@ -71,6 +74,21 @@ import type {
   EditorCommandState,
 } from "@/features/editor/types";
 import { editorConfiguration } from "@/features/editor/configuration";
+import {
+  inlineSuggestion,
+  updateInlineSuggestion,
+  acceptInlineSuggestion,
+} from "@/features/editor/inline-suggestion";
+import type {
+  EditorSnapshot,
+  EditorExplanationHighlight,
+  InlineSuggestion,
+  InlineSuggestionAction,
+} from "@/features/editor/types";
+import {
+  explanationHighlight,
+  setExplanationHighlight,
+} from "@/features/editor/explanation-highlight";
 import { defaultEditorPreferences } from "@/features/settings/constants";
 import type { EditorPreferences } from "@/features/settings/types";
 import {
@@ -83,6 +101,13 @@ import "@/global.css";
 import "@/styles/code-editor.css";
 
 export type CodeEditorRef = {
+  captureContext(requestId: string): void;
+  previewSuggestion(
+    value: InlineSuggestion | null,
+    key: string,
+    revision: number,
+  ): void;
+  acceptSuggestion(id: string, key: string, revision: number): void;
   revealDiagnostic(
     from: number,
     to: number,
@@ -99,6 +124,7 @@ export type CodeEditorRef = {
   flushChanges(requestId?: string): Promise<void>;
   nextMatch: () => void;
   previousMatch: () => void;
+  focus: (documentKey: string) => void;
   dismissKeyboard: () => void;
 };
 
@@ -106,9 +132,21 @@ export type CodeEditorInteraction = {
   focused: boolean;
   hasSelection: boolean;
   commands?: EditorCommandState;
+  revision?: number;
+  inlineSuggestionId?: string;
 };
 
 type CodeEditorProps = {
+  explanationRange?: EditorExplanationHighlight | null;
+  onContext?: (
+    requestId: string,
+    snapshot: EditorSnapshot | null,
+  ) => Promise<void>;
+  onSuggestionAction?: (
+    id: string,
+    action: InlineSuggestionAction,
+  ) => Promise<void>;
+  onSuggestionApplied?: (id: string, applied: boolean) => Promise<void>;
   searchQuery?: EditorSearchQuery;
   onSearchSummary?: (
     summary: EditorSearchSummary,
@@ -211,6 +249,10 @@ const formatEditorThemeClassName = (
 };
 
 const CodeEditor = ({
+  explanationRange,
+  onContext,
+  onSuggestionAction,
+  onSuggestionApplied,
   preferences = defaultEditorPreferences,
   searchQuery,
   onSearchSummary,
@@ -250,6 +292,17 @@ const CodeEditor = ({
   const activeFilename = useRef(filename);
   activeFilename.current = filename;
   const revision = useRef(0);
+  const inlineRevision = useRef<number | null>(null);
+  const suggestionCallbacks = useRef({
+    onContext,
+    onSuggestionAction,
+    onSuggestionApplied,
+  });
+  suggestionCallbacks.current = {
+    onContext,
+    onSuggestionAction,
+    onSuggestionApplied,
+  };
   const transformPending = useRef(false);
   const activeDocument = useRef(documentKey);
   activeDocument.current = documentKey;
@@ -264,7 +317,6 @@ const CodeEditor = ({
   );
   const openKeys = useRef(openDocumentKeys);
   openKeys.current = openDocumentKeys;
-  const pendingChanges = useRef(new Set<Promise<void>>());
   useEffect(() => {
     if (openDocumentKeys)
       for (const key of buffers.current.keys()) {
@@ -289,8 +341,11 @@ const CodeEditor = ({
   changeCallback.current = onChange;
   const analysisCallbacks = useRef({ onRequestAnalysis, onAnalysis });
   analysisCallbacks.current = { onRequestAnalysis, onAnalysis };
-  const hasAnalysis =
-    Boolean(onRequestAnalysis) && CODE_INTELLIGENCE_FILE_PATTERN.test(filename);
+  const codeFileType = getCodeFileType(filename);
+  const hasNativeAnalysis =
+    Boolean(onRequestAnalysis) &&
+    (codeFileType === "typescript" || codeFileType === "javascript");
+  const hasAnalysis = hasNativeAnalysis || hasLocalCodeAnalyzer(codeFileType);
   const notifiedEditor = useRef<object | null>(null);
   const [preparedEditor, setPreparedEditor] = useState<{
     editor: EditorView;
@@ -319,6 +374,65 @@ const CodeEditor = ({
     (ref ?? null) as Ref<DOMImperativeFactory>,
     () =>
       ({
+        captureContext: (id: string) => {
+          const editor = view.current;
+          const key = activeDocument.current;
+          void suggestionCallbacks.current
+            .onContext?.(
+              id,
+              editor && key
+                ? {
+                    documentKey: key,
+                    revision: revision.current,
+                    content: editor.state.doc.toString(),
+                    from: editor.state.selection.main.from,
+                    to: editor.state.selection.main.to,
+                    focused: editor.hasFocus,
+                  }
+                : null,
+            )
+            .catch(() => {});
+        },
+        previewSuggestion: (
+          value: InlineSuggestion | null,
+          key: string,
+          expectedRevision: number,
+        ) => {
+          const editor = view.current;
+          if (!editor || key !== activeDocument.current) return;
+          const pending = editor.state.field(inlineSuggestion);
+          if (value) {
+            if (readOnlyRef.current) return;
+            if (pending) {
+              if (
+                pending.id !== value.id ||
+                inlineRevision.current !== expectedRevision
+              )
+                return;
+            } else {
+              if (expectedRevision !== revision.current) return;
+              inlineRevision.current = expectedRevision;
+            }
+          }
+          updateInlineSuggestion(editor, value);
+        },
+        acceptSuggestion: (
+          id: string,
+          key: string,
+          expectedRevision: number,
+        ) => {
+          const editor = view.current;
+          const applied = Boolean(
+            editor &&
+            !readOnlyRef.current &&
+            key === activeDocument.current &&
+            expectedRevision === inlineRevision.current &&
+            acceptInlineSuggestion(editor, id),
+          );
+          void suggestionCallbacks.current
+            .onSuggestionApplied?.(id, applied)
+            .catch(() => {});
+        },
         revealDiagnostic: (
           from: number,
           to: number,
@@ -418,8 +532,14 @@ const CodeEditor = ({
         },
         flushChanges: async (requestId?: string) => {
           try {
-            while (pendingChanges.current.size)
-              await Promise.all([...pendingChanges.current]);
+            // Republish the live document rather than draining the change
+            // reports: their untimed replies would stall this acknowledgement.
+            const editor = view.current;
+            const key = activeDocument.current;
+            if (editor && key)
+              void changeCallback
+                .current?.(editor.state.doc.toString(), key)
+                ?.catch(() => {});
             if (requestId) await flushCallback.current?.(requestId, null);
           } catch (error) {
             if (requestId)
@@ -431,6 +551,10 @@ const CodeEditor = ({
               );
             else throw error;
           }
+        },
+        focus: (key: string) => {
+          if (key !== activeDocument.current || readOnlyRef.current) return;
+          view.current?.focus();
         },
         dismissKeyboard: () => {
           // Native Keyboard.dismiss only blurs registered React Native inputs.
@@ -449,6 +573,8 @@ const CodeEditor = ({
 
   const reportInteraction = (editor: EditorView, key?: string) => {
     const state = {
+      revision: revision.current,
+      inlineSuggestionId: editor.state.field(inlineSuggestion)?.id,
       commands: getEditorCommandState(editor),
       focused: editor.hasFocus,
       hasSelection: !editor.state.selection.main.empty,
@@ -457,6 +583,8 @@ const CodeEditor = ({
     if (
       previous &&
       previous.key === key &&
+      previous.revision === state.revision &&
+      previous.inlineSuggestionId === state.inlineSuggestionId &&
       JSON.stringify(previous.commands) === JSON.stringify(state.commands) &&
       previous.focused === state.focused &&
       previous.hasSelection === state.hasSelection
@@ -505,6 +633,19 @@ const CodeEditor = ({
       configuration.of(editorConfiguration(preferencesRef.current)),
       highlightSpecialChars(),
       history(),
+      inlineSuggestion,
+      explanationHighlight,
+      EditorView.domEventHandlers({
+        "codaloud-suggestion": (event) => {
+          const { id, action } = (
+            event as CustomEvent<{ id: string; action: InlineSuggestionAction }>
+          ).detail;
+          void suggestionCallbacks.current
+            .onSuggestionAction?.(id, action)
+            .catch(() => {});
+          return true;
+        },
+      }),
       codeFolding(),
       drawSelection(),
       dropCursor(),
@@ -523,7 +664,7 @@ const CodeEditor = ({
       inlineDiagnostics,
       editorAutocompletion(
         filename,
-        hasAnalysis
+        hasNativeAnalysis
           ? async (input) =>
               analysisCallbacks.current.onRequestAnalysis?.(
                 input,
@@ -534,6 +675,7 @@ const CodeEditor = ({
       // Preserve the file's newline convention when sending edits to native.
       initialValue.includes("\r\n") ? EditorState.lineSeparator.of("\r\n") : [],
       EditorView.updateListener.of((update) => {
+        if (update.docChanged) revision.current++;
         const searchSummary = getEditorSearchSummary(update.view);
         const searchSignature = JSON.stringify([documentKey, searchSummary]);
         if (lastSearchSummary.current !== searchSignature) {
@@ -556,18 +698,14 @@ const CodeEditor = ({
         )
           reportMatches(update.view);
         if (update.docChanged) {
-          revision.current++;
-          const pending = documentKey
+          // Fire-and-forget: the reply leg has no timeout, so awaiting it would
+          // let a single stalled report block everything that follows.
+          const reported = documentKey
             ? changeCallback.current?.(update.state.sliceDoc(), documentKey)
             : changeCallback.current?.(update.state.sliceDoc());
-          if (pending) {
-            pendingChanges.current.add(pending);
-            void pending
-              .catch((error: unknown) => {
-                console.warn("Unable to report editor changes", error);
-              })
-              .finally(() => pendingChanges.current.delete(pending));
-          }
+          void reported?.catch((error: unknown) => {
+            console.warn("Unable to report editor changes", error);
+          });
         }
       }),
       syntaxHighlighting(highlightStyle),
@@ -584,6 +722,8 @@ const CodeEditor = ({
       EditorView.scrollMargins.of(() => ({ bottom: inset.current })),
     ];
     const buffer = documentKey ? buffers.current.get(documentKey) : undefined;
+    // Switching documents invalidates pending cross-bridge responses, including a switch back.
+    revision.current++;
     const state = buffer
       ? buffer.state.update({
           effects: [
@@ -614,7 +754,10 @@ const CodeEditor = ({
       void analysisCallbacks.current
         .onAnalysis?.({ status: "unsupported", diagnostics: [] }, documentKey)
         .catch(() => {});
-    const description = LanguageDescription.matchFilename(languages, filename);
+    const description = LanguageDescription.matchFilename(
+      codeEditorLanguages,
+      filename,
+    );
     setLanguageError(false);
     void description
       ?.load()
@@ -637,6 +780,11 @@ const CodeEditor = ({
     }
     return () => {
       disposed = true;
+      // Roll back pending edits through the normal save callback before caching
+      // or leaving this document. A late native clear cannot target a new tab.
+      if (editor.state.field(inlineSuggestion))
+        updateInlineSuggestion(editor, null);
+      inlineRevision.current = null;
       if (
         documentKey &&
         (!openKeys.current || openKeys.current.includes(documentKey))
@@ -788,6 +936,17 @@ const CodeEditor = ({
       });
     }
   }, [effectiveInset, viewportHeight, fontsLoaded]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    const range =
+      explanationRange?.documentKey === activeDocument.current &&
+      explanationRange?.revision === revision.current
+        ? explanationRange
+        : null;
+    editor.dispatch({ effects: setExplanationHighlight.of(range ?? null) });
+  }, [explanationRange, documentKey]);
 
   return (
     <section

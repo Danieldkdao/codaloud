@@ -14,6 +14,7 @@ import type {
   LanguageServiceHost,
   ScriptElementKind,
 } from "typescript";
+import { normalizeCodeDiagnostics } from "@/features/code-intelligence/diagnostics";
 
 const formatSeverity = (category: DiagnosticCategory) => {
   switch (category) {
@@ -168,18 +169,21 @@ const createTypeScriptSession = (
     if (target !== nextTarget) resetGraph();
     target = nextTarget;
     update(target, input.content);
-    // The editor buffer wins over the saved copy. Revalidate dependencies and
-    // failed lookups so saves, Git operations, and new files cannot go stale.
-    // Typing can reuse a graph validated within the last 250 ms. Diagnostics
-    // and code transformations always refresh it, including failed lookups.
+    // The editor buffer wins over the saved copy. Typing may reuse a graph validated
+    // within 250 ms, but diagnostics and transforms always refresh it.
     if (
       input.position === undefined ||
       Date.now() - dependencyValidationTime >= 250
     ) {
-      for (const path of files.keys()) {
-        if (path !== target)
-          update(path, await readFile(path.slice("/workspace/".length)));
-      }
+      // Every dependency is a round trip through the native boundary; reading
+      // them one at a time is what put device diagnostics past their budget.
+      await Promise.all(
+        [...files.keys()]
+          .filter((path) => path !== target)
+          .map(async (path) => {
+            update(path, await readFile(path.slice("/workspace/".length)));
+          }),
+      );
       directories.clear();
       dependencyValidationTime = Date.now();
     }
@@ -214,7 +218,9 @@ const createTypeScriptSession = (
         jsx: ts.JsxEmit.ReactJSX,
         strict: true,
         allowJs: true,
-        checkJs: true,
+        checkJs:
+          parsed?.options.checkJs ??
+          /(?:^|\r?\n)\s*\/\/\s*@ts-check\b/.test(input.content),
         allowImportingTsExtensions: true,
         ...parsed?.options,
         noEmit: true,
@@ -334,22 +340,29 @@ const createTypeScriptSession = (
         };
       } else {
         result = {
-          diagnostics: [
-            ...service.getSyntacticDiagnostics(target),
-            ...service.getSemanticDiagnostics(target),
-            ...service.getSuggestionDiagnostics(target),
-          ]
-            .filter(
-              (item) =>
-                item.file?.fileName === target && item.start !== undefined,
-            )
-            .map((item) => ({
-              from: item.start!,
-              to: item.start! + (item.length ?? 0),
-              severity: formatSeverity(item.category),
-              code: item.code,
-              message: ts.flattenDiagnosticMessageText(item.messageText, "\n"),
-            })),
+          diagnostics: normalizeCodeDiagnostics(
+            input.content,
+            [
+              ...service.getSyntacticDiagnostics(target),
+              ...service.getSemanticDiagnostics(target),
+              ...service.getSuggestionDiagnostics(target),
+            ]
+              .filter(
+                (item) =>
+                  item.file?.fileName === target && item.start !== undefined,
+              )
+              .map((item) => ({
+                from: item.start!,
+                to: item.start! + (item.length ?? 0),
+                severity: formatSeverity(item.category),
+                source: "TypeScript",
+                code: `TS${item.code}`,
+                message: ts.flattenDiagnosticMessageText(
+                  item.messageText,
+                  "\n",
+                ),
+              })),
+          ),
         };
       }
       invalidatedResolutions = false;
@@ -410,7 +423,7 @@ const createTypeScriptSession = (
       );
       return result;
     },
-    dispose: () => {
+    dispose: async () => {
       closed = true;
       return queued.then(reset);
     },

@@ -5,6 +5,12 @@
 - Codaloud is exclusively an iOS and Android app. Web is not a current or future target; implement and verify application behavior for these two native platforms only. Do not add web-specific components, browser fallbacks, or web app setup.
 - Keep infrastructure required by the mobile app: Expo API routes and their server export configuration, OAuth browser sessions, and the CodeMirror editor embedded through Expo DOM/WebView, including its dependencies.
 
+## Native AbortSignal compatibility
+
+- In native app code and shared code reachable from it, use `new AbortController()`, `controller.abort()`, `signal.aborted`, and abort event listeners. Never use `signal.throwIfAborted()`, `AbortSignal.timeout()`, or `AbortSignal.any()` there; do not rely on `AbortSignal.abort()`, `signal.reason`, or custom abort reasons either. TypeScript DOM types and IDE autocomplete do not prove that the installed Expo/React Native runtime implements these APIs.
+- Check cancellation explicitly with `if (signal.aborted)` and handle or throw an appropriate error. Implement timeouts with `setTimeout(() => controller.abort(), milliseconds)` and clear the timer in `finally`. When forwarding cancellation, handle an already-aborted signal and remove listeners during cleanup. Reuse existing compatible helpers where available.
+- Verify other Web API methods against the installed native implementation before using them. Test cancellation paths with React Native's actual AbortController implementation, not only Node or happy-dom globals, which can hide unsupported methods. These restrictions apply to native execution; server-only Expo API routes, Trigger.dev tasks, and Node workers may use APIs supported by their server runtime.
+
 ## Required filenames — check before creating files and before finishing
 
 - Use lowercase kebab-case for every authored filename, including components, hooks, utilities, tests, scripts, and documentation. Separate words with hyphens: `project-filters.tsx`, `use-projects-filters.ts`, and `project-filters.test.tsx`.
@@ -63,6 +69,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 - Use semantic colors from the theme in `src/global.css` for all UI colors, including icons and inline styles (for example, `text-foreground`, `text-muted-foreground`, and `bg-primary`). Never use Tailwind palette colors, arbitrary color utilities, or hardcoded color values in application components unless an external requirement makes it unavoidable; document the reason for that exception. Define color values centrally in the theme.
 - Name variables holding database query or mutation results after the operation or lookup purpose and the resource: `insertedProject`, `updatedProject`, `deletedProject`, or `existingProject` for an existence lookup. Apply this convention to results from database helper functions too, and use plural resource names for collections, such as `insertedProjects`.
 - Always name database tables with PascalCase and end with `Table`, for example `ProjectTable` The file name for this would be `project.ts` (singular version of the table subject) and the name of the table in the database would be `projects` (plural version of the table subject).
+- When you use comments in the code, make sure to keep them short and concise. No more than 2 lines per comment because then it just gets hard for me to read them. Do not try to stuff all the content on one line, that is equally as bad. Keep comments to the point and make sure they are easy to read and understand. Also do not stack the commments on top of each other just to add more content. Keep things simple and clear.
 
 ## Folder structure
 

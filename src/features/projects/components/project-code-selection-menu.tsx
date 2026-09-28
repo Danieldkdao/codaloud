@@ -40,10 +40,14 @@ import type {
 export const ProjectCodeSelectionMenu = ({
   onCommand,
   commands,
+  onExplain,
+  canExplain = false,
 }: {
   onCommand?: (command: EditorCommand) => void;
   commands?: EditorCommandState;
-} = {}) => {
+  onExplain?: () => void;
+  canExplain?: boolean;
+}) => {
   const foreground = useThemeColor("foreground");
   const [images, setImages] = useState<
     { action: SelectionAction; image: ImageSourcePropType }[]
@@ -80,10 +84,13 @@ export const ProjectCodeSelectionMenu = ({
     value: action,
     label: formatSelectionAction(action).label,
     disabled:
-      action === "explain" || (action === "comment" && !commands?.canComment),
+      (action === "explain" && (!canExplain || !onExplain)) ||
+      (action === "comment" && !commands?.canComment),
     image: images.find((source) => source.action === action)?.image,
     onSelect: () => {
-      if (action !== "explain") onCommand?.(action);
+      if (action === "explain") {
+        if (canExplain) onExplain?.();
+      } else onCommand?.(action);
     },
   });
 

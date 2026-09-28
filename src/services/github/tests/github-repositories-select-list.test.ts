@@ -154,6 +154,9 @@ vi.mock("react-native-svg", () => {
   const Node = ({ children }: { children?: ReactNode }) => createElement("span", null, children);
   return { default: Node, Defs: Node, LinearGradient: Node, Stop: Node, Rect: Node };
 });
+vi.mock("@react-native-masked-view/masked-view", () => ({
+  default: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+}));
 vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({
     isConnected: mocks.connected,

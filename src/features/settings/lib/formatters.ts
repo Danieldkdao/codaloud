@@ -60,3 +60,18 @@ export const formatEditorFontSize = (size: number) => `${size} pt`;
 
 export const formatEditorTabSize = (size: number, useTabs = false) =>
   `${size} ${useTabs ? (size === 1 ? "column" : "columns") : size === 1 ? "space" : "spaces"}`;
+
+export const formatVoicePreviewSource = (id: string) => {
+  switch (id) {
+    case "JBFqnCBsd6RMkjVDRZzb":
+      return require("../../../../assets/voices/george.mp3");
+    case "EXAVITQu4vr4xnSDxMaL":
+      return require("../../../../assets/voices/sarah.mp3");
+    case "IKne3meq5aSn9XLyUdCD":
+      return require("../../../../assets/voices/charlie.mp3");
+    case "SAz9YHcvj6GT2YYXdXww":
+      return require("../../../../assets/voices/river.mp3");
+    case "pFZP5JQG7iQjIQuC4Bku":
+      return require("../../../../assets/voices/lily.mp3");
+  }
+};

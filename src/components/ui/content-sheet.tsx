@@ -2,16 +2,22 @@ import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider"
 import BottomSheet from "@expo/ui/community/bottom-sheet";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { ColorValue } from "react-native";
+import { NativeContentSheet } from "./native-content-sheet";
 
 export type ContentSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDismiss?: () => void;
-  backgroundColor: ColorValue;
+  // Android background override; iOS matches the modal screen background.
+  backgroundColor?: ColorValue;
+  // Opt into the system sheet material on iOS, with Liquid Glass where supported.
+  liquidGlass?: boolean;
+  // iOS may scroll simple forms; self-scrolling layouts need a bounded viewport.
+  scrollable?: boolean;
   children: ReactNode;
 };
 
-export const ContentSheet = ({
+const AndroidContentSheet = ({
   open,
   onOpenChange,
   onDismiss,
@@ -30,7 +36,7 @@ export const ContentSheet = ({
       index={-1}
       enableDynamicSizing
       enablePanDownToClose
-      backgroundStyle={{ backgroundColor }}
+      backgroundStyle={backgroundColor ? { backgroundColor } : undefined}
       onChange={(index) => onOpenChange(index >= 0)}
       onClose={() => {
         onOpenChange(false);
@@ -41,3 +47,8 @@ export const ContentSheet = ({
     </BottomSheet>
   );
 };
+
+// Keep one public entry point for the native presentation on each platform.
+// EXPO_OS is Expo's compile-time platform flag, not application configuration.
+export const ContentSheet =
+  process.env.EXPO_OS === "ios" ? NativeContentSheet : AndroidContentSheet;

@@ -1,5 +1,42 @@
 import type { EditorTheme, EditorFont } from "@/features/settings/types";
 
+/** Markdown is rendered visually, but read aloud it should be plain prose. */
+export const toSpeakableText = (markdown: string) => {
+  const prose = markdown
+    // Fenced and inline code are source, not something to narrate.
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/(\*\*|__|\*|_|~~)/g, "")
+    .replace(/^\s*([-*_])\s*(?:\1\s*){2,}$/gm, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return prose;
+};
+
+/** Split prose into speakable sentences so speech can start before the stream ends. */
+export const toSpeechSentences = (markdown: string, limit = 300) => {
+  const prose = toSpeakableText(markdown);
+  if (!prose) return [];
+  // Keep the terminator with its sentence so the voice lands correctly.
+  const sentences = prose.match(/[^.!?]+[.!?]+[\s"')\]]*|[^.!?]+$/g) ?? [];
+  return sentences
+    .flatMap((sentence) => {
+      const trimmed = sentence.trim();
+      if (trimmed.length <= limit) return trimmed ? [trimmed] : [];
+      // A sentence with no punctuation can still be arbitrarily long.
+      const parts: string[] = [];
+      for (let start = 0; start < trimmed.length; start += limit)
+        parts.push(trimmed.slice(start, start + limit).trim());
+      return parts.filter(Boolean);
+    })
+    .filter(Boolean);
+};
+
 export const formatEditorAppearance = (
   theme: EditorTheme,
 ): "light" | "dark" | null => {
@@ -104,6 +141,9 @@ export const formatCompletionIcon = (type?: string) => {
   }
 };
 
+export const formatSuppressedAnalysisNotice = (count: number) =>
+  `Showing ${count} syntax ${count === 1 ? "error" : "errors"}. This file does not parse, so every other check was skipped. Fix the syntax errors to see the warnings and suggestions for the rest of the file.`;
+
 export const formatProblemFilter = (
   severity:
     | import("@/features/projects/actions/code-intelligence-schemas").DiagnosticSeverity
@@ -121,13 +161,14 @@ export const formatProblemFilter = (
   }
 };
 export const formatProblemLocation = (item: {
-  code: number;
+  code: string;
+  source: string;
   line?: number;
   column?: number;
 }) =>
   item.line
-    ? `Line ${item.line}, column ${item.column ?? 1} · TS${item.code}`
-    : `TS${item.code}`;
+    ? `Line ${item.line}, column ${item.column ?? 1} · ${item.source} ${item.code}`
+    : `${item.source} ${item.code}`;
 
 export const formatNativeEditorFontClass = (font: EditorFont) => {
   switch (font) {

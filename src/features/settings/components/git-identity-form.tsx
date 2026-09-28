@@ -63,7 +63,7 @@ export const GitIdentityForm = ({ settings = false }: GitIdentityFormProps) => {
               invalid={!!error}
               accessibilityHint={error?.message}
               editable={!identity.isPending && !isSubmitting}
-              className="bg-background"
+              className={settings ? "bg-background" : "bg-card/70"}
             />
             {error && (
               <PText accessibilityRole="alert" className="text-destructive">
@@ -93,7 +93,7 @@ export const GitIdentityForm = ({ settings = false }: GitIdentityFormProps) => {
               invalid={!!error}
               accessibilityHint={error?.message}
               editable={!identity.isPending && !isSubmitting}
-              className="bg-background"
+              className={settings ? "bg-background" : "bg-card/70"}
             />
             {error && (
               <PText accessibilityRole="alert" className="text-destructive">

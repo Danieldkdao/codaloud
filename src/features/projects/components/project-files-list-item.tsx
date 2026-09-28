@@ -1,15 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
-import Swipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
+import Swipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { ProjectIcon } from "@/components/project-icon";
 import { Button } from "@/components/ui/button";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
-import type { DeleteProjectFileSchema, ProjectFileEntrySchema, UpdateProjectFileSchema } from "@/features/projects/actions/file-schemas";
+import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
+import type {
+  DeleteProjectFileSchema,
+  ProjectFileEntrySchema,
+  UpdateProjectFileSchema,
+} from "@/features/projects/actions/file-schemas";
 import { ProjectFileNameRow } from "@/features/projects/components/project-file-name-row";
 import { formatProjectFileDeletion } from "@/features/projects/lib/formatters";
 import { confirmAction } from "@/lib/utils";
+import { useSwipePressGuard } from "@/hooks/use-swipe-press-guard";
 
 type ProjectFilesListItemProps = {
   file: ProjectFileEntrySchema;
@@ -22,8 +35,18 @@ type ProjectFilesListItemProps = {
   deleting?: boolean;
 };
 
-export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, onFilePress, onUpdate, onDelete, disabled = false, deleting = false }: ProjectFilesListItemProps) => {
+export const ProjectFilesListItem = ({
+  file,
+  existingNames,
+  onDirectoryPress,
+  onFilePress,
+  onUpdate,
+  onDelete,
+  disabled = false,
+  deleting = false,
+}: ProjectFilesListItemProps) => {
   const swipeable = useRef<SwipeableMethods>(null);
+  const pressGuard = useSwipePressGuard({ allowPressDuringSettling: true });
   const [actionsVisible, setActionsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const isDisabled = disabled || deleting;
@@ -51,7 +74,10 @@ export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, on
       actionText: "Delete",
       onConfirmPress: () => {
         void onDelete({
-          parentPath: file.path.slice(0, Math.max(0, file.path.lastIndexOf("/"))),
+          parentPath: file.path.slice(
+            0,
+            Math.max(0, file.path.lastIndexOf("/")),
+          ),
           name: file.name,
           kind,
         });
@@ -59,25 +85,46 @@ export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, on
     });
   };
 
+  // Renaming uses the same glass field and the same transition as creating, so
+  // the row and the input are one continuous surface rather than two designs.
+  const layout = LinearTransition.duration(220).reduceMotion(
+    ReduceMotion.System,
+  );
   if (isUpdating && !isDisabled) {
     return (
-      <ProjectFileNameRow
-        mode="update"
-        kind={kind}
-        initialName={file.name}
-        existingNames={existingNames}
-        parentPath={file.path.slice(0, Math.max(0, file.path.lastIndexOf("/")))}
-        onCancel={() => setIsUpdating(false)}
-        onSubmit={async (input) => {
-          if (input.name !== file.name) await onUpdate({ ...input, previousName: file.name });
-          setIsUpdating(false);
-        }}
-      />
+      <Animated.View
+        entering={enterGlassSurface}
+        exiting={exitGlassSurface}
+        layout={layout}
+      >
+        <GlassSurface borderRadius={16}>
+          <ProjectFileNameRow
+            mode="update"
+            kind={kind}
+            initialName={file.name}
+            existingNames={existingNames}
+            parentPath={file.path.slice(
+              0,
+              Math.max(0, file.path.lastIndexOf("/")),
+            )}
+            onCancel={() => {
+              pressGuard.onSettleEnd();
+              setIsUpdating(false);
+            }}
+            onSubmit={async (input) => {
+              if (input.name !== file.name)
+                await onUpdate({ ...input, previousName: file.name });
+              pressGuard.onSettleEnd();
+              setIsUpdating(false);
+            }}
+          />
+        </GlassSurface>
+      </Animated.View>
     );
   }
 
   return (
-    <View className="relative">
+    <View className="relative" {...pressGuard.touchHandlers}>
       <View
         pointerEvents={deleting ? "none" : "auto"}
         accessibilityElementsHidden={deleting}
@@ -90,37 +137,69 @@ export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, on
           rightThreshold={48}
           overshootLeft={false}
           overshootRight={false}
-          onSwipeableWillOpen={() => setActionsVisible(true)}
-          onSwipeableWillClose={() => setActionsVisible(false)}
+          onSwipeableOpenStartDrag={pressGuard.onDrag}
+          onSwipeableCloseStartDrag={pressGuard.onDrag}
+          onSwipeableWillOpen={() => {
+            pressGuard.onSettleStart();
+            setActionsVisible(true);
+          }}
+          onSwipeableWillClose={() => {
+            pressGuard.onSettleStart();
+            setActionsVisible(false);
+          }}
+          onSwipeableOpen={pressGuard.onSettleEnd}
+          onSwipeableClose={pressGuard.onSettleEnd}
           renderRightActions={() => (
             <View
               className="h-full flex-row items-stretch"
               accessibilityElementsHidden={!actionsVisible || isDisabled}
-              importantForAccessibility={actionsVisible && !isDisabled ? "auto" : "no-hide-descendants"}
+              importantForAccessibility={
+                actionsVisible && !isDisabled ? "auto" : "no-hide-descendants"
+              }
             >
               <Button
                 variant="secondary"
                 className="h-full min-h-12 w-16 shrink-0 rounded-none p-0"
                 accessibilityLabel={`Update ${file.name}`}
                 disabled={isDisabled}
-                onPress={updateFile}
+                onPress={() => {
+                  if (!pressGuard.shouldSuppressPress()) updateFile();
+                }}
               >
-                <Icon family="Feather" name="edit-2" size={22} className="text-foreground" accessible={false} />
+                <Icon
+                  family="Feather"
+                  name="edit-2"
+                  size={22}
+                  className="text-foreground"
+                  accessible={false}
+                />
               </Button>
               <Button
                 variant="destructive"
                 className="h-full min-h-12 w-16 shrink-0 rounded-l-none rounded-r-2xl p-0"
                 accessibilityLabel={`Delete ${file.name}`}
                 disabled={isDisabled}
-                onPress={deleteFile}
+                onPress={() => {
+                  if (!pressGuard.shouldSuppressPress()) deleteFile();
+                }}
               >
-                <Icon family="Feather" name="trash-2" size={22} className="text-destructive" accessible={false} />
+                <Icon
+                  family="Feather"
+                  name="trash-2"
+                  size={22}
+                  className="text-destructive"
+                  accessible={false}
+                />
               </Button>
             </View>
           )}
         >
           <Pressable
-            onPress={() => file.isDir ? onDirectoryPress(file.path) : onFilePress(file.path)}
+            onPress={() => {
+              if (isDisabled || pressGuard.shouldSuppressPress()) return;
+              if (file.isDir) onDirectoryPress(file.path);
+              else onFilePress(file.path);
+            }}
             disabled={isDisabled}
             accessibilityState={{ disabled: isDisabled, busy: deleting }}
             accessibilityRole="button"
@@ -138,7 +217,11 @@ export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, on
             style={{ minHeight: 56 }}
           >
             <ProjectIcon name={file.path} isDirectory={file.isDir} />
-            <PText className="flex-1 text-foreground text-lg font-medium" numberOfLines={1} ellipsizeMode="middle">
+            <PText
+              className="flex-1 text-foreground text-lg font-medium"
+              numberOfLines={1}
+              ellipsizeMode="middle"
+            >
               {file.name}
             </PText>
           </Pressable>
@@ -153,7 +236,11 @@ export const ProjectFilesListItem = ({ file, existingNames, onDirectoryPress, on
           accessibilityState={{ busy: true }}
           accessibilityLiveRegion="polite"
         >
-          <ActivityIndicator size="large" className="text-primary" accessible={false} />
+          <ActivityIndicator
+            size="large"
+            className="text-primary"
+            accessible={false}
+          />
         </View>
       )}
     </View>

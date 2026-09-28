@@ -1,8 +1,27 @@
+import { EditorExplanationBubble } from "@/features/editor/components/editor-explanation-bubble";
+import { useEditorExplanation } from "@/features/editor/hooks/use-editor-explanation";
+import Animated, {
+  LinearTransition,
+  ReduceMotion,
+} from "react-native-reanimated";
+import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
+import { registerAgentWorkspace } from "@/features/agent/workspace-access";
+import { useVoiceEditor } from "@/features/voice/hooks/use-voice-editor";
+import { inlineAcceptanceOperation } from "@/features/voice/constants";
 import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { WorkspaceVoiceContext } from "@/features/voice/hooks/workspace-voice-provider";
+import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
 import { createEditorFlush } from "@/features/editor/flush";
-import { useEditorControls } from "@/features/editor/use-editor-controls";
 import { EditorProblemsSheet } from "@/features/editor/components/editor-problems-sheet";
 import { EditorSearchBar } from "@/features/editor/components/editor-search-bar";
 import type {
@@ -11,7 +30,7 @@ import type {
 } from "@/features/editor/types";
 import * as Clipboard from "expo-clipboard";
 import type { EditorCommand } from "@/features/editor/types";
-import { Alert, Keyboard, View } from "react-native";
+import { Alert, View, useWindowDimensions } from "react-native";
 import CodeEditor, {
   type CodeEditorRef,
   type CodeEditorInteraction,
@@ -40,26 +59,60 @@ import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-sh
 import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { useTheme } from "@/hooks/use-theme";
 
+const InlineVoiceControls = lazy(async () => ({
+  default: (await import("@/features/voice/components/inline-voice-controls"))
+    .InlineVoiceControls,
+}));
 const CodeScreen = () => {
+  const conversation = useContext(WorkspaceVoiceContext);
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
   const files = useProjectWorkspaceCurrentFile();
   const query = useProjectFile(projectId, files.activeFilePath);
   const documents = useProjectEditorDocuments(files, query.data?.content);
   const { dockHeight } = useProjectWorkspaceDockHeight();
-  const { isWorkspaceBusy } = useProjectWorkspaceBranch();
+  const { isWorkspaceBusy, branch, workspaceOperation, runWorkspaceOperation } =
+    useProjectWorkspaceBranch();
+  const editorBusy =
+    isWorkspaceBusy && workspaceOperation !== inlineAcceptanceOperation;
   const { isDarkMode } = useTheme();
   const { preferences } = useEditorPreferences();
   const editor = useRef<CodeEditorRef>(null);
+  const voiceEditor = useVoiceEditor({
+    projectId,
+    branch,
+    busy: editorBusy,
+    activePath: files.activeFilePath,
+    documentKey: documents.activeKey,
+    editor,
+    getOpenFiles: documents.getOpenFiles,
+    runWorkspaceOperation,
+  });
+  const voiceEditorRef = useRef(voiceEditor);
+  voiceEditorRef.current = voiceEditor;
+  // The native flush is a script injection whose result the platform discards,
+  // so a lost injection is re-sent instead of burning one long timeout.
   const [editorFlush] = useState(() =>
-    createEditorFlush((requestId) => {
-      if (!editor.current?.flushChanges) throw new Error("Editor not ready");
-      void editor.current.flushChanges(requestId);
-    }),
+    createEditorFlush(
+      (requestId) => {
+        if (!editor.current?.flushChanges) throw new Error("Editor not ready");
+        void editor.current.flushChanges(requestId);
+      },
+      { attempts: 3, timeout: 1700 },
+    ),
   );
   useEffect(() => () => editorFlush.dispose(), [editorFlush]);
   const current = useRef({ files, documents });
   current.current = { files, documents };
+  useEffect(
+    () =>
+      registerAgentWorkspace(projectId, async () => {
+        if (current.current.files.activeFilePath) await editorFlush.flush();
+        for (const path of current.current.files.openFilePaths)
+          await current.current.documents.flushFile(path);
+      }),
+    [projectId, editorFlush],
+  );
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -89,8 +142,28 @@ const CodeScreen = () => {
   const [interaction, setInteraction] = useState<
     CodeEditorInteraction & { key?: string }
   >();
+  const explanation = useEditorExplanation({
+    editor,
+    documentKey: documents.activeKey,
+    path: files.activeFilePath,
+    revision:
+      interaction?.key === documents.activeKey
+        ? interaction?.revision
+        : undefined,
+    enabled:
+      Boolean(documents.activeKey && readyKey === documents.activeKey) &&
+      !editorBusy &&
+      !closingPath &&
+      !conversation?.visible &&
+      !interaction?.inlineSuggestionId,
+  });
+  useFocusEffect(
+    useCallback(() => () => explanation.close(), [explanation.close]),
+  );
+  const { height: screenHeight } = useWindowDimensions();
   const onInteractionChange = useCallback(
     async (state: CodeEditorInteraction, key?: string) => {
+      voiceEditorRef.current.onInteraction(state, key);
       if (key === current.current.documents.activeKey)
         setInteraction({ ...state, key });
     },
@@ -104,6 +177,7 @@ const CodeScreen = () => {
     [documents.activeKey, isWorkspaceBusy],
   );
   const [badgeHeight, setBadgeHeight] = useState(48);
+  const [voiceAccessoryHeight, setVoiceAccessoryHeight] = useState(160);
   useEditorDevelopmentShortcuts();
 
   const isReady = Boolean(
@@ -114,24 +188,33 @@ const CodeScreen = () => {
     !isWorkspaceBusy &&
     !closingPath &&
     interaction?.key === documents.activeKey;
+  useEffect(() => {
+    if (documents.activeKey && documents.status.status === "error")
+      Alert.alert(
+        "Couldn't save this file",
+        documents.status.message ??
+          "Your changes are still in the editor. Try saving again.",
+        [
+          { text: "Later", style: "cancel" },
+          { text: "Try again", onPress: documents.retry },
+        ],
+      );
+  }, [
+    documents.activeKey,
+    documents.status.status,
+    documents.status.message,
+    documents.retry,
+  ]);
   const showKeyboardAccessory = Boolean(
     canShowEditorControls &&
     !searchOpen &&
+    !explanation.state &&
     keyboardFrame &&
     interaction?.focused,
   );
   const showSelectionMenu = Boolean(
     canShowEditorControls && interaction?.hasSelection,
   );
-  const setControls = useEditorControls()?.setState;
-  useEffect(() => {
-    setControls?.({
-      canUndo: Boolean(canShowEditorControls && interaction?.commands?.canUndo),
-      canRedo: Boolean(canShowEditorControls && interaction?.commands?.canRedo),
-      run: runCommand,
-    });
-    return () => setControls?.(null);
-  }, [setControls, canShowEditorControls, interaction?.commands, runCommand]);
   const bottomInset = dockHeight + badgeHeight + 20;
   const activeAnalysis =
     analysis?.key === documents.activeKey
@@ -163,8 +246,11 @@ const CodeScreen = () => {
     setClosingPath(path);
     const version = files.getFileVersion(path);
     try {
-      // Native imperative methods are fire-and-forget; wait for the DOM acknowledgement.
-      await editorFlush.flush();
+      // The DOM editor holds only the active document, and its native flush is
+      // fire-and-forget, so wait for the acknowledgement just for that document.
+      // Skip the native flush when the editor hasn't reported ready — there are
+      // no native-side edits to deliver, and the injection would time out.
+      if (path === files.activeFilePath && isReady) await editorFlush.flush();
       await documents.flushFile(path);
       if (
         alive.current &&
@@ -190,6 +276,46 @@ const CodeScreen = () => {
       if (alive.current) setClosingPath(null);
     }
   };
+
+  const projectSelectionMenu = (
+    <ProjectCodeSelectionMenu
+      onCommand={runCommand}
+      canExplain={
+        showSelectionMenu &&
+        !conversation?.visible &&
+        !interaction?.inlineSuggestionId
+      }
+      onExplain={() => {
+        setSearchOpen(false);
+        void explanation.start();
+      }}
+      commands={interaction?.commands}
+    />
+  );
+
+  const toolbar = (
+    <ProjectCodeToolbar
+      onProblems={() => setProblemsOpen(true)}
+      disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
+      onFormat={() => {
+        if (documents.activeKey)
+          editor.current?.transform("format", documents.activeKey);
+      }}
+      onOrganize={() => {
+        if (documents.activeKey)
+          editor.current?.transform("organize-imports", documents.activeKey);
+      }}
+      onFind={() => {
+        setReplaceOpen(false);
+        setSearchOpen(true);
+      }}
+      onUndo={() => runCommand("undo")}
+      onRedo={() => runCommand("redo")}
+      canUndo={Boolean(canShowEditorControls && interaction?.commands?.canUndo)}
+      canRedo={Boolean(canShowEditorControls && interaction?.commands?.canRedo)}
+      analysis={documents.activeKey ? activeAnalysis : undefined}
+    />
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -221,6 +347,17 @@ const CodeScreen = () => {
           onOpenFile={openFile}
           disabled={isWorkspaceBusy}
           closingPath={closingPath}
+          save={
+            documents.activeKey
+              ? documents.status
+              : query.isError && !query.isFetching
+                ? { status: "error", message: query.error.message }
+                : { status: "loading" }
+          }
+          onRetry={
+            documents.activeKey ? documents.retry : () => void query.refetch()
+          }
+          readError={!documents.activeKey && query.isError}
         />
       ) : null}
       <View className="flex-1">
@@ -234,6 +371,14 @@ const CodeScreen = () => {
           importantForAccessibility={isReady ? "auto" : "no-hide-descendants"}
         >
           <CodeEditor
+            explanationRange={explanation.highlight}
+            onContext={async (id, snapshot) => {
+              if (id.startsWith("explain:"))
+                await explanation.onContext(id, snapshot);
+              else await voiceEditor.onContext(id, snapshot);
+            }}
+            onSuggestionAction={voiceEditor.onSuggestionAction}
+            onSuggestionApplied={voiceEditor.onSuggestionApplied}
             ref={editor}
             preferences={preferences}
             searchQuery={searchOpen ? searchQuery : undefined}
@@ -257,7 +402,7 @@ const CodeScreen = () => {
             filename={documents.editor?.path ?? ""}
             initialValue={documents.editor?.initialValue ?? ""}
             readOnly={
-              isWorkspaceBusy || !documents.activeKey || Boolean(closingPath)
+              editorBusy || !documents.activeKey || Boolean(closingPath)
             }
             colorScheme={isDarkMode ? "dark" : "light"}
             onReady={onReady}
@@ -265,7 +410,13 @@ const CodeScreen = () => {
             onRequestAnalysis={requestAnalysis}
             onAnalysis={onAnalysis}
             bottomInset={bottomInset}
-            keyboardAccessoryHeight={showKeyboardAccessory ? 96 : 0}
+            keyboardAccessoryHeight={
+              explanation.state && keyboardFrame
+                ? badgeHeight + 8
+                : showKeyboardAccessory
+                  ? voiceAccessoryHeight
+                  : 0
+            }
             onInteractionChange={onInteractionChange}
             dom={{
               onLoadStart: () => {
@@ -313,13 +464,38 @@ const CodeScreen = () => {
           <CodeEditorLoading bottomInset={bottomInset} />
         ) : null}
       </View>
-      {files.activeFilePath && (searchOpen || !keyboardFrame) ? (
+      {files.activeFilePath &&
+      (explanation.state || searchOpen || !keyboardFrame) ? (
         <EditorBottomBar
-          frame={searchOpen ? keyboardFrame : undefined}
+          frame={explanation.state || searchOpen ? keyboardFrame : undefined}
           dockHeight={dockHeight}
           onHeight={setBadgeHeight}
         >
-          {searchOpen ? (
+          {explanation.state ? (
+            <Animated.View
+              key="explanation"
+              entering={enterGlassSurface}
+              exiting={exitGlassSurface}
+              layout={LinearTransition.duration(220).reduceMotion(
+                ReduceMotion.System,
+              )}
+            >
+              <EditorExplanationBubble
+                state={explanation.state}
+                speaking={explanation.speaking}
+                onToggleReadAloud={explanation.toggleReadAloud}
+                maxHeight={Math.min(
+                  360,
+                  (keyboardFrame?.screenY ?? screenHeight) * 0.5,
+                )}
+                onClose={() => {
+                  explanation.close();
+                  if (keyboardFrame && documents.activeKey)
+                    editor.current?.focus(documents.activeKey);
+                }}
+              />
+            </Animated.View>
+          ) : searchOpen ? (
             <EditorSearchBar
               query={searchQuery}
               summary={searchSummary}
@@ -328,7 +504,8 @@ const CodeScreen = () => {
               onChange={setSearchQuery}
               onClose={() => {
                 setSearchOpen(false);
-                Keyboard.dismiss();
+                if (documents.activeKey)
+                  editor.current?.focus(documents.activeKey);
               }}
               onCommand={(command) => {
                 if (documents.activeKey && !isWorkspaceBusy)
@@ -340,71 +517,45 @@ const CodeScreen = () => {
               }}
             />
           ) : (
-            <ProjectCodeToolbar
-              onProblems={() => setProblemsOpen(true)}
-              disabled={!isReady || isWorkspaceBusy || Boolean(closingPath)}
-              onFormat={() => {
-                if (documents.activeKey)
-                  editor.current?.transform("format", documents.activeKey);
-              }}
-              onOrganize={() => {
-                if (documents.activeKey)
-                  editor.current?.transform(
-                    "organize-imports",
-                    documents.activeKey,
-                  );
-              }}
-              onFind={() => {
-                setReplaceOpen(false);
-                setSearchOpen(true);
-              }}
-              onReplace={() => {
-                setReplaceOpen(true);
-                setSearchOpen(true);
-              }}
-              readError={!documents.activeKey && query.isError}
-              status={
-                !documents.activeKey && query.isError && !query.isFetching
-                  ? { status: "error", message: query.error.message }
-                  : isReady
-                    ? documents.status
-                    : { status: "loading" }
-              }
-              analysis={documents.activeKey ? activeAnalysis : undefined}
-              onRetry={
-                documents.activeKey
-                  ? documents.retry
-                  : () => {
-                      void query.refetch();
-                    }
-              }
-            />
+            <Animated.View
+              key="toolbar"
+              layout={LinearTransition.duration(220).reduceMotion(
+                ReduceMotion.System,
+              )}
+            >
+              {toolbar}
+            </Animated.View>
           )}
         </EditorBottomBar>
       ) : null}
       {showKeyboardAccessory ? (
         <ProjectCodeKeyboardAccessory
+          status={toolbar}
+          voiceActive={Boolean(conversation?.visible)}
+          onHeight={setVoiceAccessoryHeight}
+          voice={
+            conversation ? (
+              <VoiceMicrophone conversation={conversation} compact />
+            ) : null
+          }
+          feedback={
+            conversation ? (
+              <Suspense fallback={null}>
+                <InlineVoiceControls conversation={conversation} />
+              </Suspense>
+            ) : null
+          }
           frame={keyboardFrame}
           onCommand={runCommand}
           canComment={interaction?.commands?.canComment}
           fold={interaction?.commands?.fold}
           onDismissKeyboard={() => editor.current?.dismissKeyboard()}
         >
-          {showSelectionMenu ? (
-            <ProjectCodeSelectionMenu
-              onCommand={runCommand}
-              commands={interaction?.commands}
-            />
-          ) : null}
+          {showSelectionMenu ? projectSelectionMenu : null}
         </ProjectCodeKeyboardAccessory>
-      ) : showSelectionMenu && !keyboardFrame ? (
+      ) : showSelectionMenu && !keyboardFrame && !explanation.state ? (
         <View className="absolute right-4 top-16">
-          <GlassSurface borderRadius={24}>
-            <ProjectCodeSelectionMenu
-              onCommand={runCommand}
-              commands={interaction?.commands}
-            />
-          </GlassSurface>
+          <GlassSurface borderRadius={24}>{projectSelectionMenu}</GlassSurface>
         </View>
       ) : null}
     </View>

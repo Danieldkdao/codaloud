@@ -118,6 +118,8 @@
     "dotenv": "^18.0.1",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.27.7",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~57.0.2",
     "happy-dom": "^20.14.0",
     "material-icon-theme": "^5.38.1",
     "postcss": "^8.5.28",

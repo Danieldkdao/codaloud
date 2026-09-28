@@ -30,6 +30,7 @@ allowBuilds:
   tree-sitter-python: false
   tree-sitter-ruby: false
   tree-sitter-rust: false
+  unrs-resolver: false
 
 patchedDependencies:
   # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.

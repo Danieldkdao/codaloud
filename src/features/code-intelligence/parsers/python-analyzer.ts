@@ -3,13 +3,20 @@ import {
   type NativeLanguageAnalysis,
   type NativeLanguageAnalyzer,
 } from "./native-diagnostics";
-import { resolveNativeAssetUrl } from "./native-runtime";
 import {
   PYTHON_CHECK_EXPRESSION,
   PYTHON_CHECK_INSTALL_SOURCE,
   parsePythonCheckResult,
   toPythonDiagnostics,
 } from "./python-diagnostics";
+import { warnAnalyzerFailure } from "./analyzer-diagnostics-log";
+import { withTreeSitterNodeDetectionDisabled } from "./tree-sitter-globals";
+import type { AnalyzerWasmLoader } from "./analyzer-asset-url";
+import type { AnalyzerWasmAsset } from "./vendored-asset";
+import {
+  analyzerAssetSpecifiers,
+  resolveVendoredAsset,
+} from "./vendored-asset";
 // The package lock file is JSON, so Metro bundles it as a module instead of an
 // asset. Importing it directly avoids treating the parsed object as an asset id.
 import pyodideLockFile from "./runtimes/pyodide-lock.json";
@@ -27,97 +34,96 @@ type PyodideModuleFactory = (settings: unknown) => Promise<unknown>;
 // the real type through rather than a hand-written approximation.
 type Lockfile = import("pyodide").Lockfile;
 
-// Pyodide is built for the browser and refuses to start unless it can identify
-// a runtime environment. The editor runs inside a DOM WebView, which already
-// provides window, document, and location, while the non-DOM paths provide
-// none of them. Provide only what is missing, so the browser main-thread branch
-// is selected in both cases.
+// The vendored build's Node bindings are stripped, so every host boots Pyodide
+// through its browser branch; these globals satisfy it and are removed after boot.
 const installPyodideEnvironmentShims = () => {
   const scope = globalThis as Record<string, unknown>;
   const noop = () => {};
-  if (typeof scope.window === "undefined") scope.window = globalThis;
-  if (typeof scope.document === "undefined")
-    scope.document = { createElement: () => ({}) };
-  // Pyodide resolves the standard library with `new URL(stdLibURL, location)`.
-  // A relative or non-absolute value would be joined onto this, so it needs a
-  // real absolute base. Metro's asset URLs are already absolute, so this is only
-  // reached when nothing else provides a location.
-  if (typeof scope.location === "undefined")
-    scope.location = { toString: () => "http://localhost/" };
-  if (typeof scope.sessionStorage === "undefined") scope.sessionStorage = {};
+  const created: string[] = [];
+  const define = (key: string, value: unknown) => {
+    if (typeof scope[key] !== "undefined") return;
+    scope[key] = value;
+    created.push(key);
+  };
+  define("window", globalThis);
+  define("self", globalThis);
+  define("document", { createElement: () => ({}) });
+  // Pyodide resolves the standard library with `new URL(stdLibURL, location)`,
+  // so it needs a real absolute base to join against.
+  define("location", { toString: () => "http://localhost/" });
+  define("sessionStorage", {});
   // The Emscripten module registers listeners on the global object during boot.
-  if (typeof scope.addEventListener === "undefined")
-    scope.addEventListener = noop;
-  if (typeof scope.removeEventListener === "undefined")
-    scope.removeEventListener = noop;
-  // Pyodide's own detection reads process.versions.node to decide it is not
-  // running under Node. React Native's process polyfill has no versions, so
-  // leave it as an empty object rather than claiming a Node version, which
-  // would send it down a filesystem path that does not exist.
+  define("addEventListener", noop);
+  define("removeEventListener", noop);
+  // React Native and Metro's web bundle expose a `process` with no `versions`;
+  // give it an empty one so Pyodide reads a missing Node version, not a throw.
   const processScope = scope.process as
-    { versions?: Record<string, string> } | undefined;
+    | { versions?: Record<string, string> }
+    | undefined;
   if (processScope && !processScope.versions) processScope.versions = {};
+  return () => {
+    for (const key of created) delete scope[key];
+  };
 };
 
-// Pyodide resolves a url as `new URL(value, location)` before fetching it.
-// A resolved React Native asset url is already absolute, so this only guards the
-// non-DOM paths where location may be a stub and the value needs a real base.
-const toAbsoluteUrl = (url: string) => {
-  try {
-    return new URL(url, String(globalThis.location)).toString();
-  } catch {
-    return url;
-  }
+// The bytes are read through the host's loader; the locations are kept so each
+// host can be handed the form its own binary loader expects.
+type PyodideRuntimeBytes = {
+  stdLib: Uint8Array<ArrayBuffer>;
+  wasm: Uint8Array<ArrayBuffer>;
+  stdLibLocation: AnalyzerWasmAsset;
+  wasmLocation: AnalyzerWasmAsset;
 };
+
+let loadRuntimeBytes: AnalyzerWasmLoader | undefined;
 
 // Resolved once and reported on failure, so a broken asset path is visible in
 // development rather than surfacing as a null dereference inside the runtime.
-let assetUrls: { stdLib: string; wasm: string } | undefined;
+let runtimeBytes: PyodideRuntimeBytes | undefined;
 
-const resolvePyodideAssetUrls = () => {
-  assetUrls ??= (() => {
-    const stdLib = resolveNativeAssetUrl(
-      require("./runtimes/pyodide-stdlib.zip"),
-    );
-    const wasm = resolveNativeAssetUrl(require("./runtimes/pyodide.asm.wasm"));
-    if (!stdLib || !wasm) throw new Error("Pyodide assets unavailable");
-    return { stdLib: toAbsoluteUrl(stdLib), wasm: toAbsoluteUrl(wasm) };
-  })();
-  return assetUrls;
+export const setPyodideRuntimeLoader = (load: AnalyzerWasmLoader) => {
+  if (runtimeBytes) return;
+  loadRuntimeBytes = load;
 };
 
-// The wasm is fetched with arrayBuffer and instantiated directly, so no
-// content-type rewriting is needed and the app's own fetch is left untouched.
-
-// Pyodide resolves the standard library through its own binary loader, which
-// calls fetch(new URL(stdLibURL, location)) and reports only a generic
-// "request failed". Reading the archive here instead uses the same helper as the
-// wasm, produces a precise error, and hands Pyodide the bytes directly so its
-// url handling never applies.
-const fetchPyodideBytes = async (url: string) => {
-  const response = await fetch(url);
-  if (!response.ok)
-    throw new Error(
-      `Pyodide asset fetch failed with status ${response.status} for ${url}`,
-    );
-  return new Uint8Array(await response.arrayBuffer());
+const loadPyodideRuntimeBytes = async () => {
+  if (runtimeBytes) return runtimeBytes;
+  if (!loadRuntimeBytes)
+    throw new Error("Pyodide has no runtime loader for this host.");
+  // The literal requires stay for Metro. Node has no loader for `.zip` or
+  // `.wasm` and throws, so the wrapper falls back to the worker's path resolver.
+  const stdLibLocation = resolveVendoredAsset(
+    analyzerAssetSpecifiers.pyodideStdlib,
+    () => require("./runtimes/pyodide-stdlib.zip"),
+  );
+  const wasmLocation = resolveVendoredAsset(
+    analyzerAssetSpecifiers.pyodideWasm,
+    () => require("./runtimes/pyodide.asm.wasm"),
+  );
+  const [stdLib, wasm] = await Promise.all([
+    loadRuntimeBytes(stdLibLocation),
+    loadRuntimeBytes(wasmLocation),
+  ]);
+  runtimeBytes = { stdLib, wasm, stdLibLocation, wasmLocation };
+  return runtimeBytes;
 };
 
-// Pyodide fetches its artifacts itself, eagerly, while building its Emscripten
-// settings: the standard library through its own binary loader and the wasm
-// through the response it later hands to instantiateStreaming. Neither can be
-// redirected after the fact. Metro serves each asset from its own url carrying
-// an unstable_path query, so the urls Pyodide builds are not fetchable as-is.
-// Intercept just those two requests and answer them from the resolved assets,
-// passing everything else the app fetches during the load straight through. The
-// original fetch is restored as soon as the runtime has booted.
+/** Synthetic absolute urls: joinable, and carrying the names the fetch override
+ * below matches; a real path or "/" base would make `new URL` throw. */
+const pyodideAssetUrls = () => ({
+  indexURL: "https://pyodide.invalid/",
+  stdLibURL: "https://pyodide.invalid/python_stdlib.zip",
+});
+
+// Answer Pyodide's runtime fetches from the bytes already in hand, so its own
+// url handling (which cannot read a `file:` url in the worker) never applies.
 const withPyodideAssets = async <T>(
-  assets: { stdLib: string; wasm: string },
+  assets: PyodideRuntimeBytes,
   run: () => Promise<T>,
 ): Promise<T> => {
   const originalFetch = globalThis.fetch;
-  const stdLibBytes = fetchPyodideBytes(assets.stdLib);
-  const wasmBytes = fetchPyodideBytes(assets.wasm);
+  const stdLibBytes = Promise.resolve(assets.stdLib);
+  const wasmBytes = Promise.resolve(assets.wasm);
   const isPyodideRequest = (url: string) =>
     url.includes("python_stdlib.zip") ||
     url.includes("pyodide-stdlib") ||
@@ -141,81 +147,84 @@ const withPyodideAssets = async <T>(
 };
 
 let pyodideInstance: Promise<Pyodide> | undefined;
+let pyodideReady = false;
+
+/** Whether the interpreter is booted: a warm compile is milliseconds, a cold
+ * boot seconds, so callers use a faster engine until this flips. */
+export const isPyodideRuntimeReady = () => pyodideReady;
+
+/** Boots ahead of the next analysis; not tied to any analyzer instance, so a
+ * boot paid for by one request survives a host that disposes per request. */
+export const warmPyodideRuntime = () => loadPyodide().then(() => {});
 
 const loadPyodide = () => {
   pyodideInstance ??= (async () => {
-    installPyodideEnvironmentShims();
-    // Only the binary assets need resolving to a url. The lock file is JSON, so
-    // Metro inlines it as a module and require returns the parsed object rather
-    // than an asset id, which is why it is imported here instead.
-    const urls = resolvePyodideAssetUrls();
-    // Proof the interpreter is up.
-    // A missing standard library is only reported by Pyodide through a
-    // console.error during boot, so this is the earliest point where the
-    // failure can be detected and reported usefully.
+    // The lock file is JSON, so Metro inlines it as a module; the binaries are
+    // read through the host's loader and do not touch environment detection.
+    const assets = await loadPyodideRuntimeBytes();
+    // A missing stdlib only surfaces as a console.error during boot, so this is
+    // the earliest point the failure can be detected and reported usefully.
     const assertRuntimeReady = (instance: Pyodide) => {
       if (!instance.runPython || !instance.globals)
         throw new Error("Pyodide booted without a Python runtime");
       return instance;
     };
-    // The lock file is a generated artifact with a stable top-level shape;
-    // loadPyodide only reads its package metadata.
+    // The lock file is a generated artifact with a stable top-level shape.
     const lockFileContents = pyodideLockFile as unknown as Lockfile;
 
-    // The runtime normally fetches its Emscripten module by url and imports it.
-    // Metro cannot dynamic-import a url, so the module is imported statically
-    // and handed to the loader as a factory instead.
-    const asmModule = (
-      (await import("pyodide/pyodide.asm.mjs")) as {
-        default: PyodideModuleFactory;
+    // Boot through the browser branch: hide the Node version while the runtime
+    // module and Emscripten factory evaluate, and undo both once booted.
+    const ready = await withTreeSitterNodeDetectionDisabled(async () => {
+      const restoreShims = installPyodideEnvironmentShims();
+      try {
+        // Metro cannot dynamic-import a url, so the Emscripten module is
+        // imported statically and handed to the loader as a factory.
+        const asmModule = (
+          (await import("pyodide/pyodide.asm.mjs")) as {
+            default: PyodideModuleFactory;
+          }
+        ).default;
+
+        const { loadPyodide: createPyodide } = await import("pyodide");
+        const urls = pyodideAssetUrls();
+        const pyodide = (await withPyodideAssets(assets, () =>
+          createPyodide({
+            // Synthetic absolute urls; the fetch override answers both.
+            ...urls,
+            lockFileContents,
+            // Skipping the check also stops Pyodide replacing locateFile with
+            // one that throws, which would break the override.
+            checkAPIVersion: false,
+            createPyodideModule: (settings) => {
+              // Keep Pyodide's own instantiateWasm: it injects the Jsv error
+              // imports and reaches the bytes via instantiateStreaming.
+              const { instantiateWasm, ...rest } = settings as unknown as {
+                instantiateWasm?: (
+                  imports: WebAssembly.Imports,
+                  receiveInstance: (
+                    instance: WebAssembly.Instance,
+                    module: WebAssembly.Module,
+                  ) => void,
+                ) => { then: (onDone: (exports: unknown) => void) => void };
+              };
+              return asmModule({
+                ...rest,
+                instantiateWasm,
+              }) as never;
+            },
+          }),
+        )) as unknown as Pyodide;
+
+        // Silence output and let the app own diagnostics.
+        pyodide.setStdout(() => {});
+        pyodide.runPython(PYTHON_CHECK_INSTALL_SOURCE);
+        return assertRuntimeReady(pyodide);
+      } finally {
+        restoreShims();
       }
-    ).default;
-
-    const { loadPyodide: createPyodide } = await import("pyodide");
-    const pyodide = (await withPyodideAssets(urls, () =>
-      createPyodide({
-        // indexURL is a placeholder: Pyodide appends a trailing slash and joins
-        // file names onto it, which Metro's per-asset urls cannot satisfy. The
-        // stdlib and wasm are both supplied directly below.
-        indexURL: "/",
-        // Still required: Pyodide resolves the standard library from this value
-        // when it builds its preRun hooks, and falls back to
-        // indexURL + "python_stdlib.zip" when it is absent.
-        stdLibURL: urls.stdLib,
-        lockFileContents,
-        // The lock file is vendored alongside the wasm, so the ABI always
-        // matches. Skipping the check also stops Pyodide from replacing
-        // locateFile with one that throws, which would break the override.
-        checkAPIVersion: false,
-        createPyodideModule: (settings) => {
-          // Keep Pyodide's own instantiateWasm and feed it the wasm bytes. It
-          // injects the Jsv error-marshalling imports the module needs before
-          // instantiating; replacing it drops those, which still yields a live
-          // instance but leaves the interpreter's error bridge unbound so
-          // API._pyodide never becomes available. It reaches the bytes through
-          // instantiateStreaming, so the response is returned as a promise the
-          // same way fetch would, with a wasm content type it requires.
-          const { instantiateWasm, ...rest } = settings as unknown as {
-            instantiateWasm?: (
-              imports: WebAssembly.Imports,
-              receiveInstance: (
-                instance: WebAssembly.Instance,
-                module: WebAssembly.Module,
-              ) => void,
-            ) => { then: (onDone: (exports: unknown) => void) => void };
-          };
-          return asmModule({
-            ...rest,
-            instantiateWasm,
-          }) as never;
-        },
-      }),
-    )) as unknown as Pyodide;
-
-    // Silence output and let the app own diagnostics.
-    pyodide.setStdout(() => {});
-    pyodide.runPython(PYTHON_CHECK_INSTALL_SOURCE);
-    return assertRuntimeReady(pyodide);
+    });
+    pyodideReady = true;
+    return ready;
   })();
   return pyodideInstance;
 };
@@ -238,26 +247,11 @@ export const createPythonAnalyzer = (): NativeLanguageAnalyzer => {
           diagnostics: toPythonDiagnostics(content, check),
         };
       } catch (error) {
-        // The stdlib is installed during boot inside a try/catch that logs to
-        // console.error and continues, so a failure there shows up much later as
-        // an undefined API. Verify the runtime actually came up and report it
-        // as unavailable.
-        //
-        // The cached promise is cleared unconditionally: leaving it rejected
-        // would replay this same failure on every keystroke forever, and the
-        // editor would report the file as having no problems rather than as
-        // unavailable. Rejections here are not always Error instances (a fetch
-        // can reject with a DOMException from another realm), so the reason is
-        // derived defensively rather than by narrowing on instanceof.
+        // Clear the cached promise so a boot failure is not replayed on every
+        // keystroke; rejections here are not always Error instances.
         pyodideInstance = undefined;
-        if (__DEV__)
-          console.warn(
-            "Pyodide failed",
-            error instanceof Error
-              ? `${error.name}: ${error.message}`
-              : String(error),
-            assetUrls,
-          );
+        pyodideReady = false;
+        warnAnalyzerFailure("Pyodide failed", error);
         return { status: "unavailable", diagnostics: [] };
       }
     },

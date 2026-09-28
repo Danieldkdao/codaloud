@@ -1,52 +1,66 @@
-import { Image } from "react-native";
 import { treeSitterGrammars, type TreeSitterGrammarId } from "./grammars";
 import { createTreeSitterAnalyzer } from "./tree-sitter-runtime";
+import {
+  analyzerAssetSpecifiers,
+  resolveVendoredAsset,
+  type AnalyzerAssetSpecifier,
+  type AnalyzerWasmAsset,
+} from "./vendored-asset";
+import type { AnalyzerWasmLoader } from "./analyzer-asset-url";
 
-// Resolve a bundled asset to a URL the wasm runtime can fetch. Expo's own DOM
-// base URL is not readable from the React Native side, so use the React Native
-// asset resolver, which returns a dev-server URL in development and a local
-// asset path in release. Returns null when the asset cannot be resolved so the
-// analyzer degrades to "unavailable" instead of throwing while the module loads.
-const resolveWasmAsset = (asset: number | string): string | null => {
-  if (typeof asset === "string") return asset;
-  try {
-    return Image.resolveAssetSource(asset)?.uri ?? null;
-  } catch {
-    return null;
-  }
+// Imported by the Node worker too, so it may not import React Native or name a
+// wasm file directly; the caller resolves both through the loader.
+
+const grammarAssets: Record<TreeSitterGrammarId, AnalyzerAssetSpecifier> = {
+  python: analyzerAssetSpecifiers.pythonGrammar,
+  java: analyzerAssetSpecifiers.javaGrammar,
+  c: analyzerAssetSpecifiers.cGrammar,
+  cpp: analyzerAssetSpecifiers.cppGrammar,
+  csharp: analyzerAssetSpecifiers.csharpGrammar,
+  go: analyzerAssetSpecifiers.goGrammar,
+  php: analyzerAssetSpecifiers.phpGrammar,
+  rust: analyzerAssetSpecifiers.rustGrammar,
+  ruby: analyzerAssetSpecifiers.rubyGrammar,
+  shell: analyzerAssetSpecifiers.shellGrammar,
+  dockerfile: analyzerAssetSpecifiers.dockerfileGrammar,
 };
 
-const grammarAssets: Record<TreeSitterGrammarId, number | string> = {
-  python: require("./grammars/python.wasm"),
-  java: require("./grammars/java.wasm"),
-  c: require("./grammars/c.wasm"),
-  cpp: require("./grammars/cpp.wasm"),
-  csharp: require("./grammars/csharp.wasm"),
-  go: require("./grammars/go.wasm"),
-  php: require("./grammars/php.wasm"),
-  rust: require("./grammars/rust.wasm"),
-  ruby: require("./grammars/ruby.wasm"),
-  shell: require("./grammars/bash.wasm"),
-  dockerfile: require("./grammars/containerfile.wasm"),
-};
+// Each literal require is written out because Metro only bundles an asset it
+// can see named in a literal argument; Node falls back to the host resolver.
+const metroGrammarAssets: Record<TreeSitterGrammarId, () => AnalyzerWasmAsset> =
+  {
+    python: () => require("./grammars/python.wasm"),
+    java: () => require("./grammars/java.wasm"),
+    c: () => require("./grammars/c.wasm"),
+    cpp: () => require("./grammars/cpp.wasm"),
+    csharp: () => require("./grammars/csharp.wasm"),
+    go: () => require("./grammars/go.wasm"),
+    php: () => require("./grammars/php.wasm"),
+    rust: () => require("./grammars/rust.wasm"),
+    ruby: () => require("./grammars/ruby.wasm"),
+    shell: () => require("./grammars/bash.wasm"),
+    dockerfile: () => require("./grammars/containerfile.wasm"),
+  };
 
-// web-tree-sitter uses FinalizationRegistry for lookaheads, but catches its
-// absence internally, so a missing registry only costs that convenience.
-const unavailableWasmUrl = "unavailable.wasm";
+const metroTreeSitterRuntime = () =>
+  resolveVendoredAsset(analyzerAssetSpecifiers.treeSitterRuntime, () =>
+    require("web-tree-sitter/web-tree-sitter.wasm"),
+  );
 
+/** Resolves the runtime and grammar to whatever this host calls an asset, then
+ * reads them as bytes so one module serves WebView, worker and server route. */
 export const createTreeSitterLanguageAnalyzer = (
   grammarId: TreeSitterGrammarId,
+  loadWasmBytes: AnalyzerWasmLoader,
 ) => {
-  const runtimeWasmUrl =
-    resolveWasmAsset(require("web-tree-sitter/web-tree-sitter.wasm")) ??
-    unavailableWasmUrl;
-  const wasmUrl =
-    resolveWasmAsset(grammarAssets[grammarId]) ?? unavailableWasmUrl;
-  return createTreeSitterAnalyzer(
-    {
-      ...treeSitterGrammars[grammarId],
-      wasmUrl,
-    },
-    runtimeWasmUrl,
+  const runtimeAsset = metroTreeSitterRuntime();
+  const grammarAsset = resolveVendoredAsset(
+    grammarAssets[grammarId],
+    metroGrammarAssets[grammarId],
   );
+
+  return createTreeSitterAnalyzer(treeSitterGrammars[grammarId], {
+    loadRuntimeBytes: () => loadWasmBytes(runtimeAsset),
+    loadGrammarBytes: () => loadWasmBytes(grammarAsset),
+  });
 };

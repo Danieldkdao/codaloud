@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { createTreeSitterAnalyzer } from "../parsers/tree-sitter-runtime";
 
-const runtimeWasmUrl = require.resolve("web-tree-sitter/web-tree-sitter.wasm");
+const runtimeWasmPath = require.resolve("web-tree-sitter/web-tree-sitter.wasm");
+
+// The analyzer takes both wasm payloads as bytes, so read them off disk rather
+// than passing a url for web-tree-sitter to resolve.
+const bytes = (path: string) => async () =>
+  new Uint8Array(readFileSync(path));
 
 const parserFixtures = [
   {
@@ -81,12 +87,16 @@ const analyzers = parserFixtures.map((grammar) => ({
     {
       id: grammar.id,
       label: grammar.label,
-      wasmUrl: new URL(
-        `../parsers/grammars/${"wasmFile" in grammar ? grammar.wasmFile : grammar.id}.wasm`,
-        import.meta.url,
-      ).pathname,
     },
-    runtimeWasmUrl,
+    {
+      loadRuntimeBytes: bytes(runtimeWasmPath),
+      loadGrammarBytes: bytes(
+        new URL(
+          `../parsers/grammars/${"wasmFile" in grammar ? grammar.wasmFile : grammar.id}.wasm`,
+          import.meta.url,
+        ).pathname,
+      ),
+    },
   ),
 }));
 

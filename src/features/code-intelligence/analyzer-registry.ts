@@ -9,6 +9,14 @@ import {
   type CodeFileType,
 } from "./file-type";
 import { normalizeCodeDiagnostics } from "./diagnostics";
+import { createNativeWasmLoader } from "./parsers/analyzer-asset-url";
+import type { AnalyzerWasmLoader } from "./parsers/analyzer-asset-url";
+import { createWarmPreferredAnalyzer } from "./parsers/analyzer-fallback";
+import {
+  analyzerAssetSpecifiers,
+  resolveVendoredAsset,
+} from "./parsers/vendored-asset";
+import type { ResolveAssetLocation } from "./parsers/vendored-asset";
 import type { TreeSitterGrammarId } from "./parsers/grammars";
 
 export type CodeAnalyzerInput = {
@@ -39,7 +47,38 @@ type LocalAnalyzer = {
 
 type LocalAnalyzerLoader = (
   fileType: TreeSitterGrammarId | CodeFileType,
+  options: AnalyzerLoaderOptions,
 ) => Promise<LocalAnalyzer>;
+
+export type { AnalyzerWasmLoader };
+export type { ResolveAssetLocation };
+
+export type AnalyzerLoaderOptions = {
+  loadWasmBytes: AnalyzerWasmLoader;
+  resolveAssetLocation: ResolveAssetLocation;
+};
+
+const prismRuntime = () =>
+  resolveVendoredAsset(analyzerAssetSpecifiers.prismRuntime, () =>
+    require("./parsers/runtimes/prism.wasm"),
+  );
+const shellcheckRuntime = () =>
+  resolveVendoredAsset(analyzerAssetSpecifiers.shellcheckRuntime, () =>
+    require("./parsers/runtimes/shellcheck.wasm"),
+  );
+
+// The editor's default reader: a Metro asset id turned into a fetchable url.
+const loadEditorWasmBytes: AnalyzerWasmLoader = async (asset) => {
+  const load = await createNativeWasmLoader();
+  return load(asset);
+};
+
+// React Native is imported dynamically, so this module stays loadable in the Node
+// worker, which resolves assets from disk instead.
+const resolveEditorAssetLocation: ResolveAssetLocation = async (asset) => {
+  const { resolveNativeAssetUrl } = await import("./parsers/native-runtime");
+  return resolveNativeAssetUrl(asset);
+};
 
 const treeSitterGrammarIds = new Set<string>([
   "python",
@@ -53,54 +92,66 @@ const treeSitterGrammarIds = new Set<string>([
   "ruby",
 ]);
 
-// Languages with a real compiler or linter running in-process. These are
-// preferred over tree-sitter because they report the same messages the language
-// itself would, including type and lint errors a grammar cannot see. Each is
-// loaded lazily so opening a file never pays for a runtime it does not use.
 const nativeLanguageLoaders: Partial<
   Record<TreeSitterGrammarId | CodeFileType, LocalAnalyzerLoader>
 > = {
-  ruby: async () => {
+  ruby: async (_fileType, options) => {
     const { createPrismAnalyzer } = await import("./parsers/prism-analyzer");
-    return createPrismAnalyzer();
+    return createPrismAnalyzer(() => options.loadWasmBytes(prismRuntime()));
   },
-  python: async () => {
-    const { createPythonAnalyzer } = await import("./parsers/python-analyzer");
-    return createPythonAnalyzer();
+  python: async (_fileType, options) => {
+    const [
+      {
+        createPythonAnalyzer,
+        setPyodideRuntimeLoader,
+        isPyodideRuntimeReady,
+        warmPyodideRuntime,
+      },
+      grammarLoader,
+    ] = await Promise.all([
+      import("./parsers/python-analyzer"),
+      import("./parsers/grammar-loader"),
+    ]);
+    setPyodideRuntimeLoader(options.loadWasmBytes);
+    const treeSitter = grammarLoader.createTreeSitterLanguageAnalyzer(
+      "python",
+      options.loadWasmBytes,
+    );
+    // CPython's messages are the ones worth reading; the grammar only covers
+    // the window while Pyodide is still booting.
+    return createWarmPreferredAnalyzer(createPythonAnalyzer(), treeSitter, {
+      isReady: isPyodideRuntimeReady,
+      bootstrap: warmPyodideRuntime,
+    });
   },
-  shell: async () => {
+  shell: async (_fileType, options) => {
     const { createShellCheckAnalyzer } =
       await import("./parsers/shellcheck-analyzer");
-    return createShellCheckAnalyzer();
+    return createShellCheckAnalyzer(() =>
+      options.loadWasmBytes(shellcheckRuntime()),
+    );
   },
 };
 
-const loadLocalAnalyzer: LocalAnalyzerLoader = async (fileType) => {
+const loadLocalAnalyzer: LocalAnalyzerLoader = async (fileType, options) => {
   const nativeLanguageLoader = nativeLanguageLoaders[fileType];
-  if (nativeLanguageLoader) return nativeLanguageLoader(fileType);
+  if (nativeLanguageLoader) return nativeLanguageLoader(fileType, options);
   if (isFormatFileType(fileType)) {
     const { createFormatAnalyzer } = await import("./format-analyzer");
-    return createFormatAnalyzer(fileType);
+    return createFormatAnalyzer(fileType, options.loadWasmBytes);
   }
   const { createTreeSitterLanguageAnalyzer } =
     await import("./parsers/grammar-loader");
-  return createTreeSitterLanguageAnalyzer(fileType as TreeSitterGrammarId);
+  return createTreeSitterLanguageAnalyzer(
+    fileType as TreeSitterGrammarId,
+    options.loadWasmBytes,
+  );
 };
 
-// A native runtime is much slower than a tree-sitter parse. Pyodide in
-// particular boots a full CPython interpreter on first use, which takes
-// seconds, so a short debounce would restart that work on every keystroke.
-// These languages settle for a longer pause before analysis, which keeps typing
-// responsive and lets the runtime finish once the user stops.
 const nativeLanguageDebounceMs: Partial<
   Record<TreeSitterGrammarId | CodeFileType, number>
 > = {
-  python: 900,
-  c: 900,
-  cpp: 900,
-  php: 900,
   shell: 400,
-  ruby: 250,
 };
 
 const getDebounceMs = (fileType: CodeFileType) => {
@@ -131,6 +182,10 @@ export const createCodeAnalyzerRegistry = (
   path: string,
   request: CodeAnalysisRequest,
   loadAnalyzer: LocalAnalyzerLoader = loadLocalAnalyzer,
+  options: AnalyzerLoaderOptions = {
+    loadWasmBytes: loadEditorWasmBytes,
+    resolveAssetLocation: resolveEditorAssetLocation,
+  },
 ) => {
   const fileType = getCodeFileType(path);
   let disposed = false;
@@ -169,6 +224,7 @@ export const createCodeAnalyzerRegistry = (
     try {
       localAnalyzerPromise ??= loadAnalyzer(
         fileType as TreeSitterGrammarId | CodeFileType,
+        options,
       );
       const analyzer = await localAnalyzerPromise;
       localAnalyzer = analyzer;

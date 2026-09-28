@@ -7,15 +7,18 @@ import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-pr
 import { flushAgentWorkspace } from "../workspace-access";
 import { formatFileActivity } from "../lib/formatters";
 import type { FileActivitySchema } from "../schemas";
+import { cn } from "@/lib/utils";
 
 export const FileActivity = ({
   projectId,
   files,
   onNavigate,
+  className,
 }: {
   projectId: string;
   files: FileActivitySchema[];
   onNavigate?: (navigate: () => void) => void;
+  className?: string;
 }) => {
   const router = useRouter();
   const workspace = useProjectWorkspaceCurrentFile();
@@ -26,7 +29,7 @@ export const FileActivity = ({
     else action();
   };
   return (
-    <View className="gap-2">
+    <View className={cn("gap-2", className)}>
       {files.map((file) => {
         const presentation = formatFileActivity(file.status);
         return (

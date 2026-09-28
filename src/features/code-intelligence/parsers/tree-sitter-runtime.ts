@@ -1,14 +1,19 @@
 import type { Language, Parser, Tree } from "web-tree-sitter";
 import { MAX_PROJECT_FILE_SIZE_BYTES } from "@/features/projects/constants";
 import type { CodeDiagnosticSchema } from "@/features/projects/actions/code-intelligence-schemas";
-import { ensureTreeSitterGlobals } from "./tree-sitter-globals";
+import { warnAnalyzerFailure } from "./analyzer-diagnostics-log";
+import {
+  ensureTreeSitterGlobals,
+  withTreeSitterNodeDetectionDisabled,
+} from "./tree-sitter-globals";
 import {
   getTreeSitterDiagnostics,
   type TreeSitterLanguage,
 } from "./tree-sitter-analyzer";
 
-export type TreeSitterGrammar = TreeSitterLanguage & {
-  wasmUrl: string;
+export type TreeSitterSources = {
+  loadRuntimeBytes: () => Promise<Uint8Array>;
+  loadGrammarBytes: () => Promise<Uint8Array>;
 };
 
 export type TreeSitterAnalysis = {
@@ -31,31 +36,41 @@ const loadRuntimeModule = () => {
   return runtimeModule;
 };
 
-const initializeRuntime = (runtimeWasmUrl: string) => {
-  runtimeInitialization ??= loadRuntimeModule().then(({ Parser }) =>
-    Parser.init({ locateFile: () => runtimeWasmUrl }),
-  );
+const initializeRuntime = (loadRuntimeBytes: () => Promise<Uint8Array>) => {
+  runtimeInitialization ??= (async () => {
+    const { Parser } = await loadRuntimeModule();
+    const wasmBinary = await loadRuntimeBytes();
+    await withTreeSitterNodeDetectionDisabled(() =>
+      Parser.init({
+        wasmBinary,
+      } as unknown as Parameters<typeof Parser.init>[0]),
+    );
+  })();
   return runtimeInitialization;
 };
 
-const loadGrammarLanguage = (wasmUrl: string) => {
-  let languagePromise = grammarLanguages.get(wasmUrl);
+const loadGrammarLanguage = (
+  grammarId: string,
+  loadGrammarBytes: () => Promise<Uint8Array>,
+) => {
+  let languagePromise = grammarLanguages.get(grammarId);
   if (!languagePromise) {
-    languagePromise = loadRuntimeModule().then(({ Language }) =>
-      Language.load(wasmUrl),
-    );
-    grammarLanguages.set(wasmUrl, languagePromise);
+    languagePromise = (async () => {
+      const { Language } = await loadRuntimeModule();
+      return Language.load(await loadGrammarBytes());
+    })();
+    grammarLanguages.set(grammarId, languagePromise);
     void languagePromise.catch(() => {
-      if (grammarLanguages.get(wasmUrl) === languagePromise)
-        grammarLanguages.delete(wasmUrl);
+      if (grammarLanguages.get(grammarId) === languagePromise)
+        grammarLanguages.delete(grammarId);
     });
   }
   return languagePromise;
 };
 
 export const createTreeSitterAnalyzer = (
-  grammar: TreeSitterGrammar,
-  runtimeWasmUrl: string,
+  language: TreeSitterLanguage,
+  sources: TreeSitterSources,
 ) => {
   let parser: Parser | undefined;
   let initialization: Promise<void> | undefined;
@@ -63,12 +78,15 @@ export const createTreeSitterAnalyzer = (
 
   const initialize = () => {
     initialization ??= (async () => {
-      await initializeRuntime(runtimeWasmUrl);
-      const language = await loadGrammarLanguage(grammar.wasmUrl);
+      await initializeRuntime(sources.loadRuntimeBytes);
+      const grammar = await loadGrammarLanguage(
+        language.id,
+        sources.loadGrammarBytes,
+      );
       if (disposed) return;
       const { Parser } = await loadRuntimeModule();
       parser = new Parser();
-      parser.setLanguage(language);
+      parser.setLanguage(grammar);
     })();
     return initialization;
   };
@@ -103,21 +121,18 @@ export const createTreeSitterAnalyzer = (
 
       return {
         status: "ready",
-        diagnostics: getTreeSitterDiagnostics(content, tree.rootNode, grammar),
+        diagnostics: getTreeSitterDiagnostics(content, tree.rootNode, language),
       };
     } catch (error) {
-      // Log the message and the resolved asset URLs. The failure name alone
-      // ("TypeError") does not identify whether the wasm fetch or the parse
-      // broke, and these are development-only diagnostics.
-      if (__DEV__)
-        console.warn(
-          `Tree-sitter failed for ${grammar.id}: ${
-            error instanceof Error
-              ? `${error.name}: ${error.message}`
-              : "unknown error"
-          }`,
-          { runtimeWasmUrl, grammarWasmUrl: grammar.wasmUrl },
-        );
+      // The error name alone does not say whether the wasm fetch or the parse
+      // broke, so the message and resolved asset URLs are logged together.
+      warnAnalyzerFailure(
+        `Tree-sitter failed for ${language.id}: ${
+          error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : "unknown error"
+        }`,
+      );
       return { status: "unavailable", diagnostics: [] };
     } finally {
       tree?.delete();

@@ -169,18 +169,21 @@ const createTypeScriptSession = (
     if (target !== nextTarget) resetGraph();
     target = nextTarget;
     update(target, input.content);
-    // The editor buffer wins over the saved copy. Revalidate dependencies and
-    // failed lookups so saves, Git operations, and new files cannot go stale.
-    // Typing can reuse a graph validated within the last 250 ms. Diagnostics
-    // and code transformations always refresh it, including failed lookups.
+    // The editor buffer wins over the saved copy. Typing may reuse a graph validated
+    // within 250 ms, but diagnostics and transforms always refresh it.
     if (
       input.position === undefined ||
       Date.now() - dependencyValidationTime >= 250
     ) {
-      for (const path of files.keys()) {
-        if (path !== target)
-          update(path, await readFile(path.slice("/workspace/".length)));
-      }
+      // Every dependency is a round trip through the native boundary; reading
+      // them one at a time is what put device diagnostics past their budget.
+      await Promise.all(
+        [...files.keys()]
+          .filter((path) => path !== target)
+          .map(async (path) => {
+            update(path, await readFile(path.slice("/workspace/".length)));
+          }),
+      );
       directories.clear();
       dependencyValidationTime = Date.now();
     }

@@ -11,6 +11,7 @@ import {
   type CodeFileType,
 } from "./file-type";
 import type { TreeSitterGrammarId } from "./parsers/grammars";
+import type { AnalyzerWasmLoader } from "./parsers/analyzer-asset-url";
 
 type FormatAnalysis = {
   status: "ready" | "unavailable";
@@ -362,12 +363,21 @@ export const isFormatAnalyzerType = (fileType: CodeFileType) =>
 
 export const createFormatAnalyzer = async (
   fileType: CodeFileType,
+  loadWasmBytes?: AnalyzerWasmLoader,
 ): Promise<FormatAnalyzer> => {
   if (treeSitterFormatTypes.has(fileType)) {
     const { createTreeSitterLanguageAnalyzer } =
       await import("./parsers/grammar-loader");
+    // Without a host loader there is nothing to read the wasm grammar bytes with,
+    // so the analyzer degrades to "unavailable" instead of throwing at load time.
+    const load =
+      loadWasmBytes ??
+      ((async () => {
+        throw new Error("This host has no wasm loader for tree-sitter.");
+      }) satisfies AnalyzerWasmLoader);
     const treeSitterAnalyzer = createTreeSitterLanguageAnalyzer(
       fileType as TreeSitterGrammarId,
+      load,
     );
     return {
       analyze: async (content) => {

@@ -13,41 +13,50 @@ export type PythonCheckResult = {
   errors: PythonCheckError[];
 };
 
-// The checker and the code that decodes it are a single wire format, so both
-// halves live here. The analyzer only wires Pyodide up and calls them.
-//
-// compile() raises one SyntaxError and stops, so a plain try/except reports a
-// single mistake no matter how many the file contains. To surface them all the
-// checker repairs the construct CPython complained about, recompiles, and
-// repeats. The repairs are deliberately surgical: they insert the missing colon
-// or blank a stray bracket rather than deleting a line, because removing a line
-// makes the compiler blame the line after it and produces a cascade of errors
-// that are consequences of the repair rather than faults in the file.
-//
-// Every repair rewrites characters inside a single line and never adds or
-// removes one, so the line numbers reported across iterations stay valid
-// against the original document. An error the repairs do not cover ends the
-// scan, and the cap bounds the work a badly broken file can cost.
+// compile() stops at the first SyntaxError, so the checker repairs that construct
+// (same line count, so line numbers stay valid) and recompiles to surface the rest.
 export const PYTHON_CHECK_INSTALL_SOURCE = `
 import json
 
 MAX_ERRORS = 10
+CLOSERS = {"(": ")", "[": "]", "{": "}"}
 REPAIRS = {
     "expected ':'": "insert",
     "unmatched ')'": "blank",
     "unmatched ']'": "blank",
     "unmatched '}'": "blank",
+    "'(' was never closed": "close",
+    "'[' was never closed": "close",
+    "'{' was never closed": "close",
+    "unterminated string literal": "quote",
+    "unterminated triple-quoted string literal": "quote",
 }
 
 def _codaloud_repair(source, error):
     kind = REPAIRS.get(error.msg)
-    if kind is None or error.lineno is None or error.offset is None:
+    if kind is None and error.msg.startswith("expected an indented block"):
+        kind = "indent"
+    if kind is None or error.lineno is None:
         return None
     lines = source.split("\\n")
     index = error.lineno - 1
     if index < 0 or index >= len(lines):
         return None
     line = lines[index]
+    if kind == "indent":
+        lines[index] = "    " + line
+        return "\\n".join(lines)
+    if kind in ("close", "quote"):
+        if kind == "close":
+            add = CLOSERS.get(error.msg[1] if len(error.msg) > 1 else "")
+        else:
+            add = '"""' if "triple" in error.msg else '"'
+        if not add:
+            return None
+        lines[index] = line + add
+        return "\\n".join(lines)
+    if error.offset is None:
+        return None
     column = error.offset - 1
     if column < 0 or column > len(line):
         return None
@@ -92,16 +101,12 @@ def _codaloud_check_json(source):
     return json.dumps({"ok": not errors, "errors": errors})
 `;
 
-// What the analyzer hands to runPython. It calls the checker directly because
-// the checker already returns JSON text; encoding that text a second time here
-// would hand the decoder a JSON string literal instead of a result.
+// Calls the checker directly: it already returns JSON text, and re-encoding it
+// here would hand the decoder a JSON string literal instead of a result.
 export const PYTHON_CHECK_EXPRESSION = "_codaloud_check_json(source)";
 
-// Pyodide can only reliably hand strings across the boundary, so the checker
-// returns json.dumps output and this is where it becomes data again. Decoding
-// is strict on purpose. Returning a lenient result here would look identical to
-// a file with no errors: the editor would show zero diagnostics and say nothing,
-// which is far harder to diagnose than a thrown error naming the broken bridge.
+// Decoding is strict on purpose: a lenient result would look identical to a
+// clean file, which is far harder to diagnose than a thrown error.
 export const parsePythonCheckResult = (raw: unknown): PythonCheckResult => {
   let value: unknown = raw;
   if (typeof value === "string") {
@@ -150,9 +155,8 @@ const toDiagnostic = (
   lineStartOffsets: number[],
   error: PythonCheckError,
 ): CodeDiagnosticSchema | null => {
-  // An error with no line, such as the null byte case, still has a message
-  // worth showing, so it is anchored at the top of the document rather than
-  // dropped.
+  // An error with no line (e.g. a null byte) still has a message worth showing,
+  // so it is anchored at the top of the document rather than dropped.
   if (error.lineno === undefined) {
     return {
       from: 0,
@@ -169,10 +173,8 @@ const toDiagnostic = (
   const lineStart = lineStartOffsets[lineIndex];
   const nextLineStart = lineStartOffsets[lineIndex + 1];
 
-  // CPython reports a one-based column. When the reported column is past the end
-  // of the line, as it is for errors like "expected ':'", the marker is pulled
-  // back to the line's last character. That character is one before the newline
-  // itself, so a squiggle never spills onto the line break.
+  // A column past the line's end (as for "expected ':'") is pulled back to the
+  // line's last character so a squiggle never spills onto the line break.
   const lastIndex =
     nextLineStart === undefined
       ? content.length - 1

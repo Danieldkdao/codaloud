@@ -38,23 +38,29 @@ describe("createCodeAnalyzerRegistry", () => {
       loadPythonAnalyzer,
     );
 
-    // Python runs through Pyodide, so it waits longer than a tree-sitter parse
-    // before analysis starts.
-    expect(registry.debounceMs).toBe(900);
+    // Python parses with tree-sitter first, so it no longer waits on a CPython
+    // boot and settles at the default debounce.
+    expect(registry.debounceMs).toBe(250);
     expect(loadPythonAnalyzer).not.toHaveBeenCalled();
     await registry.analyzeFile({
       path: "src/main.py",
       content: "print(1)",
       revision: 2,
     });
-    expect(loadPythonAnalyzer).toHaveBeenCalledWith("python");
+    expect(loadPythonAnalyzer).toHaveBeenCalledWith(
+      "python",
+      expect.objectContaining({
+        loadWasmBytes: expect.any(Function),
+        resolveAssetLocation: expect.any(Function),
+      }),
+    );
     expect(pythonAnalyzer.analyze).toHaveBeenCalledWith("print(1)");
     registry.dispose();
     expect(pythonAnalyzer.dispose).toHaveBeenCalledOnce();
   });
 
   it.each([
-    ["main.py", 900],
+    ["main.py", 250],
     ["main.rb", 250],
     ["deploy.sh", 400],
     ["main.go", 250],
@@ -89,7 +95,15 @@ describe("createCodeAnalyzerRegistry", () => {
     );
 
     await registry.analyzeFile({ path, content: "valid", revision: 3 });
-    expect(loadLocalAnalyzer).toHaveBeenCalledWith(grammarId);
+    // The loader also receives the host's asset resolvers, so a worker can find
+    // the vendored runtimes the app reaches through Metro.
+    expect(loadLocalAnalyzer).toHaveBeenCalledWith(
+      grammarId,
+      expect.objectContaining({
+        loadWasmBytes: expect.any(Function),
+        resolveAssetLocation: expect.any(Function),
+      }),
+    );
     expect(localAnalyzer.analyze).toHaveBeenCalledWith("valid");
     registry.dispose();
   });
@@ -115,7 +129,15 @@ describe("createCodeAnalyzerRegistry", () => {
     await expect(
       registry.analyzeFile({ path, content: "passive input", revision: 8 }),
     ).resolves.toMatchObject({ status: "ready", revision: 8 });
-    expect(loadAnalyzer).toHaveBeenCalledWith(fileType);
+    // The loader also receives the host's asset resolvers, so a worker can find
+    // the vendored runtimes the app reaches through Metro.
+    expect(loadAnalyzer).toHaveBeenCalledWith(
+      fileType,
+      expect.objectContaining({
+        loadWasmBytes: expect.any(Function),
+        resolveAssetLocation: expect.any(Function),
+      }),
+    );
     expect(request).not.toHaveBeenCalled();
     registry.dispose();
   });

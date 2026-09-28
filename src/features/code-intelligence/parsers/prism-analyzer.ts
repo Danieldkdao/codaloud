@@ -3,15 +3,12 @@ import {
   type NativeLanguageAnalysis,
   type NativeLanguageAnalyzer,
 } from "./native-diagnostics";
-import { resolveNativeAssetUrl } from "./native-runtime";
-import { instantiateWasiModule, loadWasmBytes } from "./wasm-instance";
+import { instantiateWasiModule } from "./wasm-instance";
+import { warnAnalyzerFailure } from "./analyzer-diagnostics-log";
 import { toPrismDiagnostics, type PrismError } from "./prism-diagnostics";
 
-// Prism's published entry point loads the wasm through node:fs, which does not
-// exist in React Native. Import the parser directly instead: it drives the same
-// serializer, it only needs the instantiated exports, and it pulls in no Node
-// builtins. The wasm itself is vendored alongside the other runtimes because
-// the package does not expose it through its exports map.
+// Prism's published entry point loads its wasm through node:fs, which React Native
+// lacks, so the parser is imported directly and the wasm vendored like the others.
 type ParsePrism = (
   exports: Record<string, unknown>,
   source: string,
@@ -27,17 +24,29 @@ const importPrismModule = () =>
 
 let prismExports: Promise<PrismExports> | undefined;
 
+// The cached instance is dropped when the host loader changes, so a reader
+// supplied for the worker can never be reused by the editor.
+let prismLoad: PrismLoader | undefined;
+
+type PrismLoader = () => Promise<Uint8Array>;
+
 const loadPrism = () => {
   prismExports ??= (async () => {
-    const url = resolveNativeAssetUrl(require("./runtimes/prism.wasm"));
-    if (!url) throw new Error("Prism asset unavailable");
-    const instance = await instantiateWasiModule(await loadWasmBytes(url));
+    if (!prismLoad)
+      throw new Error("Prism has no runtime loader for this host.");
+    const instance = await instantiateWasiModule(await prismLoad());
     return instance.exports as unknown as PrismExports;
   })();
   return prismExports;
 };
 
-export const createPrismAnalyzer = (): NativeLanguageAnalyzer => {
+export const createPrismAnalyzer = (
+  loadBytes: PrismLoader,
+): NativeLanguageAnalyzer => {
+  if (prismLoad !== loadBytes) {
+    prismLoad = loadBytes;
+    prismExports = undefined;
+  }
   let disposed = false;
   return {
     analyze: async (content): Promise<NativeLanguageAnalysis> => {
@@ -56,17 +65,10 @@ export const createPrismAnalyzer = (): NativeLanguageAnalyzer => {
           ]),
         };
       } catch (error) {
-        // The cached promise is cleared unconditionally: leaving it rejected
-        // would replay this same failure on every keystroke forever, and the
-        // editor would report the file as having no problems rather than as
-        // unavailable.
+        // A rejected cached promise would replay this failure on every keystroke
+        // forever, so it is cleared unconditionally.
         prismExports = undefined;
-        if (__DEV__)
-          console.warn(
-            `Prism failed: ${
-              error instanceof Error ? error.message : "unknown error"
-            }`,
-          );
+        warnAnalyzerFailure("Prism failed", error);
         return { status: "unavailable", diagnostics: [] };
       }
     },

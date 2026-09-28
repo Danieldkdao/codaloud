@@ -1,14 +1,22 @@
+import { readFileSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { createTreeSitterAnalyzer } from "../parsers/tree-sitter-runtime";
 
+// The analyzer reads both wasm payloads as bytes through the host loader, so the
+// test hands it real disk reads rather than a url for web-tree-sitter to fetch.
+const bytes = (path: string) => async () =>
+  new Uint8Array(readFileSync(path));
+
 const analyzer = createTreeSitterAnalyzer(
+  { id: "python", label: "Python" },
   {
-    id: "python",
-    label: "Python",
-    wasmUrl: new URL("../parsers/grammars/python.wasm", import.meta.url)
-      .pathname,
+    loadRuntimeBytes: bytes(
+      require.resolve("web-tree-sitter/web-tree-sitter.wasm"),
+    ),
+    loadGrammarBytes: bytes(
+      new URL("../parsers/grammars/python.wasm", import.meta.url).pathname,
+    ),
   },
-  require.resolve("web-tree-sitter/web-tree-sitter.wasm"),
 );
 
 afterAll(() => analyzer.dispose());

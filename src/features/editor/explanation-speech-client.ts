@@ -43,10 +43,14 @@ const hashText = (text: string) => {
  * conversation, matching how the voice previews coordinate with WebRTC.
  */
 let activePlayer: { pause: () => void; remove: () => void } | null = null;
+let playbackGeneration = 0;
 
 const playSpeech = async (uri: string) => {
   if (voiceAudioSession.getSnapshot()) return;
+  const run = ++playbackGeneration;
   const { createAudioPlayer } = await import("expo-audio");
+  // Stop was called while the module was loading; discard this playback.
+  if (run !== playbackGeneration) return;
   const player = createAudioPlayer({ uri }, { keepAudioSessionActive: true });
   activePlayer = player;
   // Nothing bounds playback indefinitely: a player that never loads or never
@@ -87,13 +91,16 @@ const playSpeech = async (uri: string) => {
       armDeadline(MAX_PLAYBACK_MS / 1000);
     });
   } finally {
-    activePlayer = null;
+    // Only clean up if this is still the active player; a newer playback may
+    // have already replaced it, and clearing the reference would orphan it.
+    if (activePlayer === player) activePlayer = null;
     player.pause();
     player.remove();
   }
 };
 
 const stopPlayback = () => {
+  playbackGeneration++;
   if (activePlayer) {
     activePlayer.pause();
     activePlayer.remove();

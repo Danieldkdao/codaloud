@@ -107,6 +107,11 @@ export const createVoiceReply = (
     // failed or empty generations reach LiveKit's provider-error channel.
     const iterator = result.stream[Symbol.asyncIterator]();
     let hasText = false;
+    // A step ending on a tool call narrates the model's next move, so steps are
+    // buffered until "stop" proves one is the answer. No tools means no preamble.
+    const holdSteps = Boolean(tools);
+    let step = "";
+    let stepIsPreamble = false;
     return {
       next: async () => {
         while (true) {
@@ -117,7 +122,18 @@ export const createVoiceReply = (
             return { done: true as const, value: undefined };
           }
           if (part.value.type === "error") throw part.value.error;
-          if (part.value.type === "start-step") hasText = false;
+          if (part.value.type === "start-step") {
+            step = "";
+            stepIsPreamble = false;
+            hasText = false;
+          }
+          if (part.value.type === "finish-step") {
+            stepIsPreamble = part.value.finishReason !== "stop";
+            if (!stepIsPreamble && step)
+              return { done: false as const, value: step };
+            step = "";
+            continue;
+          }
           if (
             part.value.type === "finish" &&
             part.value.finishReason !== "stop"
@@ -132,8 +148,12 @@ export const createVoiceReply = (
           )
             throw new Error("Model response timed out.");
           if (part.value.type === "text-delta") {
-            hasText ||= part.value.text.trim().length > 0;
-            return { done: false as const, value: part.value.text };
+            const text = part.value.text;
+            if (!text.trim().length) continue;
+            hasText = true;
+            if (!holdSteps) return { done: false as const, value: text };
+            if (stepIsPreamble) continue;
+            step += text;
           }
         }
       },

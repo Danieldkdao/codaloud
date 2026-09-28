@@ -11,6 +11,18 @@ export const explanationRequestSchema = z.object({
   after: z.string().max(1000),
 });
 export type ExplanationRequestSchema = z.infer<typeof explanationRequestSchema>;
+
+export const explanationSpeechRequestSchema = z.object({
+  text: z
+    .string()
+    .min(1)
+    .max(600)
+    .refine((value) => Boolean(value.trim())),
+  voiceId: z.string().min(1).max(64),
+});
+export type ExplanationSpeechRequestSchema = z.infer<
+  typeof explanationSpeechRequestSchema
+>;
 export const explanationEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("delta"), text: z.string().max(16000) }),
   z.object({ type: z.literal("done") }),

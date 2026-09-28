@@ -4,8 +4,16 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import { useEditorExplanation } from "../hooks/use-editor-explanation";
-const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  speak: vi.fn(),
+  stop: vi.fn(),
+}));
 vi.mock("expo/fetch", () => ({ fetch: mocks.fetch }));
+// Narration is a client concern; these tests cover streaming and lifecycle.
+vi.mock("../explanation-speech-client", () => ({
+  explanationSpeech: () => ({ speak: mocks.speak, stop: mocks.stop }),
+}));
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { getCookie: async () => "session" },
 }));
@@ -174,4 +182,46 @@ it("cancels an open stream on close and never restores its partial answer", asyn
   });
   expect(cancelled).toHaveBeenCalled();
   expect(context.bridge.state).toBeNull();
+});
+it("stays silent until the user asks to read it aloud", async () => {
+  mocks.fetch.mockResolvedValue(
+    new Response(
+      '{"type":"delta","text":"It parses JSON."}\n{"type":"done"}\n',
+    ),
+  );
+  const context = await mount();
+  await act(async () => context.bridge.start());
+  expect(context.bridge.state).toMatchObject({ status: "ready" });
+  // Reading aloud is opt-in. Auto-speaking made every explanation start talking
+  // and produced failures the user could only see in a log.
+  expect(mocks.speak).not.toHaveBeenCalled();
+  expect(context.bridge.speaking).toBe(false);
+
+  await act(async () => context.bridge.toggleReadAloud());
+  expect(mocks.speak).toHaveBeenCalledWith("It parses JSON.");
+  expect(context.bridge.speaking).toBe(false);
+});
+
+it("stops reading aloud on a second press and when the bubble closes", async () => {
+  mocks.fetch.mockResolvedValue(
+    new Response(
+      '{"type":"delta","text":"It parses JSON."}\n{"type":"done"}\n',
+    ),
+  );
+  const context = await mount();
+  await act(async () => context.bridge.start());
+
+  const before = mocks.stop.mock.calls.length;
+  await act(async () => context.bridge.close());
+  // Closing must not leave speech playing behind the dismissed bubble.
+  expect(mocks.stop.mock.calls.length).toBeGreaterThan(before);
+});
+it("does not narrate a failed explanation", async () => {
+  mocks.fetch.mockResolvedValue(
+    new Response('{"type":"error","message":"No selection."}\n'),
+  );
+  const context = await mount();
+  await act(async () => context.bridge.start());
+  expect(context.bridge.state).toMatchObject({ status: "error" });
+  expect(mocks.speak).not.toHaveBeenCalled();
 });

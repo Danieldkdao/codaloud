@@ -38,6 +38,66 @@ vi.mock("react-native-reanimated", () => ({
   withRepeat: () => 1,
   withTiming: () => 1,
 }));
+it("offers read aloud only once a finished explanation has prose", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const onToggleReadAloud = vi.fn();
+  try {
+    const render = (
+      state: Parameters<typeof EditorExplanationBubble>[0]["state"],
+      speaking = false,
+    ) =>
+      act(async () =>
+        root.render(
+          createElement(EditorExplanationBubble, {
+            state,
+            maxHeight: 240,
+            onClose: vi.fn(),
+            speaking,
+            onToggleReadAloud,
+          }),
+        ),
+      );
+    const label = () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Read aloud"], [aria-label="Stop reading aloud"]',
+        )
+        ?.getAttribute("aria-label");
+
+    // Nothing to read while it is still streaming, and nothing to read for a
+    // failed explanation, so the control must not be offered at all.
+    await render({ status: "streaming", text: "Partial", highlight: null });
+    expect(label()).toBeUndefined();
+    await render({
+      status: "error",
+      text: "",
+      error: "No selection.",
+      highlight: null,
+    });
+    expect(label()).toBeUndefined();
+
+    await render({ status: "ready", text: "It parses JSON.", highlight: null });
+    expect(label()).toBe("Read aloud");
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Read aloud"]')!
+        .click(),
+    );
+    expect(onToggleReadAloud).toHaveBeenCalledOnce();
+
+    // While it is playing the same control stops it, rather than stacking a
+    // second run on top of the first.
+    await render(
+      { status: "ready", text: "It parses JSON.", highlight: null },
+      true,
+    );
+    expect(label()).toBe("Stop reading aloud");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("keeps close available while loading and streams Markdown into a bounded scroller", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
@@ -50,6 +110,8 @@ it("keeps close available while loading and streams Markdown into a bounded scro
           state: { status: "loading", text: "", highlight: null },
           maxHeight: 240,
           onClose: close,
+          speaking: false,
+          onToggleReadAloud: vi.fn(),
         }),
       ),
     );
@@ -66,6 +128,8 @@ it("keeps close available while loading and streams Markdown into a bounded scro
           state: { status: "streaming", text: "**Code**", highlight: null },
           maxHeight: 240,
           onClose: close,
+          speaking: false,
+          onToggleReadAloud: vi.fn(),
         }),
       ),
     );

@@ -47,12 +47,20 @@ export const EditorExplanationBubble = ({
   state,
   maxHeight,
   onClose,
+  speaking,
+  onToggleReadAloud,
 }: {
   state: EditorExplanationState;
   maxHeight: number;
   onClose: () => void;
+  /** Whether the explanation is currently being read aloud. */
+  speaking: boolean;
+  onToggleReadAloud: () => void;
 }) => {
   const busy = state.status === "loading" || state.status === "streaming";
+  // Only a finished explanation has something to read, and only prose does.
+  const readable =
+    state.status === "ready" && !state.error && Boolean(state.text.trim());
 
   return (
     <GlassSurface borderRadius={28}>
@@ -74,6 +82,24 @@ export const EditorExplanationBubble = ({
           >
             {busy ? "Explaining…" : "Explanation"}
           </HeadingText>
+          {readable ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                speaking ? "Stop reading aloud" : "Read aloud"
+              }
+              accessibilityState={{ selected: speaking, busy: speaking }}
+              onPress={onToggleReadAloud}
+              className="size-11 items-center justify-center rounded-full"
+            >
+              <Icon
+                family="MaterialCommunityIcons"
+                name={speaking ? "stop-circle-outline" : "volume-high"}
+                size={22}
+                className={speaking ? "text-primary" : "text-foreground"}
+              />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close explanation"

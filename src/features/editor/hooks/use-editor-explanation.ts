@@ -8,6 +8,7 @@ import {
 import type { CodeEditorRef } from "@/components/code-editor";
 import { createEditorFlush } from "../flush";
 import { streamEditorExplanation } from "../explanation-actions";
+import { explanationSpeech } from "../explanation-speech-client";
 import type { EditorExplanationState, EditorSnapshot } from "../types";
 
 type ExplanationOptions = {
@@ -24,6 +25,8 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
   const snapshot = useRef<EditorSnapshot | null>(null);
   const pendingId = useRef<string | undefined>(undefined);
   const [state, setState] = useState<EditorExplanationState | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const [capture] = useState(() =>
     createEditorFlush((id) => {
       pendingId.current = `explain:${id}`;
@@ -37,6 +40,9 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
     pendingId.current = undefined;
     snapshot.current = null;
     capture.dispose();
+    // Stop narrating before the bubble leaves, so speech never outlives it.
+    explanationSpeech().stop();
+    setSpeaking(false);
     setState(null);
   }, [capture]);
   useEffect(() => close(), [options.documentKey, options.enabled, close]);
@@ -65,6 +71,7 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
     if (!before.enabled || !before.documentKey || !before.path) return;
     const controller = new AbortController();
     active.current = controller;
+    const spokenText = { current: "" };
     const isCurrent = () =>
       active.current === controller &&
       !controller.signal.aborted &&
@@ -97,11 +104,11 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
         },
         controller.signal,
         (text) => {
+          spokenText.current = text;
           if (isCurrent()) setState({ status: "streaming", text, highlight });
         },
       );
-      if (isCurrent())
-        setState((value) => value && { ...value, status: "ready" });
+      setState((value) => value && { ...value, status: "ready" });
     } catch (error) {
       if (active.current === controller)
         setState(
@@ -120,8 +127,35 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
       clearTimeout(timeout);
     }
   };
+  // Reading aloud is opt-in. Speaking on its own fought the voice conversation for
+  // the audio session and produced failures only visible in a log.
+  const readAloud = useCallback(async (text: string) => {
+    const speech = explanationSpeech();
+    speech.stop();
+    setSpeechError(null);
+    setSpeaking(true);
+    try {
+      await speech.speak(text);
+    } finally {
+      setSpeaking(false);
+    }
+  }, []);
+  const toggleReadAloud = useCallback(() => {
+    if (speaking) {
+      explanationSpeech().stop();
+      setSpeaking(false);
+      return;
+    }
+    const text = state?.text ?? "";
+    if (!text.trim()) return;
+    void readAloud(text);
+  }, [readAloud, speaking, state?.text]);
   return {
     state,
+    speaking,
+    speechError,
+    readAloud,
+    toggleReadAloud,
     highlight: state?.highlight ?? null,
     start,
     close,

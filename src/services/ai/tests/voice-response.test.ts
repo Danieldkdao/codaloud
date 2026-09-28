@@ -120,6 +120,58 @@ it.each([1, 5, 6, 20])(
   },
 );
 
+it("never speaks or transcribes the preamble that precedes a tool call", async () => {
+  // Text in a step that ends on a tool call is the model narrating its next move,
+  // so it must not be spoken ahead of the real reply.
+  const { tool } = await vi.importActual<typeof import("ai")>("ai");
+  const read = vi.fn(async () => ({ content: "excerpt" }));
+  mocks.stream.mockReturnValue({
+    stream: (async function* () {
+      yield { type: "start-step" };
+      yield {
+        type: "text-delta",
+        text: "I'll search for shell and Ruby files. ",
+      };
+      yield { type: "finish-step", finishReason: "tool-calls" };
+      yield { type: "start-step" };
+      yield { type: "text-delta", text: "I'll read both files. " };
+      yield { type: "finish-step", finishReason: "tool-calls" };
+      yield { type: "start-step" };
+      yield {
+        type: "text-delta",
+        text: "You have shell and Ruby files.",
+      };
+      yield { type: "finish-step", finishReason: "stop" };
+    })(),
+  });
+  const spoken: string[] = [];
+  for await (const text of createVoiceReply([], "room", undefined, {
+    readFile: tool({
+      inputSchema: z.object({ offset: z.number() }),
+      execute: read,
+    }),
+  }))
+    spoken.push(text);
+  expect(spoken.join("")).toBe("You have shell and Ruby files.");
+  expect(spoken.join("")).not.toMatch(/I'll (search|read)/);
+});
+
+it("streams a tool-free reply as fast as it arrives", async () => {
+  // Without tools there is no preamble to suppress, so the whole reply is the
+  // answer and must not be buffered: that buffering is time-to-first-audio.
+  mocks.stream.mockReturnValue({
+    stream: (async function* () {
+      yield { type: "start-step" };
+      yield { type: "text-delta", text: "First half. " };
+      yield { type: "text-delta", text: "Second half." };
+      yield { type: "finish-step", finishReason: "stop" };
+    })(),
+  });
+  const iterator = createVoiceReply([], "room")[Symbol.asyncIterator]();
+  expect((await iterator.next()).value).toBe("First half. ");
+  await iterator.return?.();
+});
+
 it.each(["empty", "length", "tool-calls"])(
   "does not mistake an earlier preamble for a completed answer when the last step is %s",
   async (ending) => {

@@ -43,3 +43,24 @@ ALTER TABLE projects DROP COLUMN user_id;
 CREATE INDEX projects_updated_at_idx ON projects (updated_at DESC);
 DROP TABLE workspace;
 `;
+
+// Idempotent because fresh installs and upgraded databases both run it at version 8.
+export const draftsMigration = `
+CREATE TABLE IF NOT EXISTS drafts (
+  id TEXT PRIMARY KEY NOT NULL,
+  filename TEXT CHECK (filename IS NULL OR length(trim(filename)) > 0),
+  search_title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  search_content TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK (length(content) > 0 OR filename IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS drafts_updated_at_idx ON drafts (updated_at DESC);
+CREATE INDEX IF NOT EXISTS drafts_created_at_idx ON drafts (created_at DESC);
+`;
+
+// The sandbox is a resumable execution copy. Project files remain on this device.
+export const sandboxReferenceMigration = `
+ALTER TABLE projects ADD COLUMN sandbox_id TEXT;
+`;

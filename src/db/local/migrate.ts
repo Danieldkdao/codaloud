@@ -7,6 +7,8 @@ import {
   removeImportHistoryMigration,
   removeSandboxReferenceMigration,
   removeLocalOwnershipMigration,
+  draftsMigration,
+  sandboxReferenceMigration,
 } from "./migrations";
 
 let migration: Promise<void> | undefined;
@@ -20,7 +22,7 @@ const runMigrations = async () => {
       user_version: number;
     }>("PRAGMA user_version");
     const version = existingVersion?.user_version ?? 0;
-    if (version > 7)
+    if (version > 9)
       throw new Error("This database requires a newer version of Codaloud.");
     if (version === 0) {
       await transaction.execAsync(projectsMigration);
@@ -63,6 +65,16 @@ const runMigrations = async () => {
       await transaction.execAsync(removeLocalOwnershipMigration);
     }
     if (version < 7) await transaction.execAsync("PRAGMA user_version = 7");
+    // Version 0 skips the upgrade chain, so drafts are created outside it and
+    // both fresh and upgraded databases reach version 8.
+    if (version < 8) {
+      await transaction.execAsync(draftsMigration);
+      await transaction.execAsync("PRAGMA user_version = 8");
+    }
+    if (version < 9) {
+      await transaction.execAsync(sandboxReferenceMigration);
+      await transaction.execAsync("PRAGMA user_version = 9");
+    }
   });
 };
 

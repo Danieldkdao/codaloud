@@ -101,7 +101,7 @@ export type ProjectWorkspaceDiffData = Omit<
 // Action responses expose database timestamps as ISO strings.
 export type ProjectResponseData = Omit<
   ProjectSelectData,
-  "createdAt" | "updatedAt" | "lastOpenedAt" | "searchName"
+  "createdAt" | "updatedAt" | "lastOpenedAt" | "searchName" | "sandboxId"
 > & {
   deletionRequested?: boolean;
   createdAt: string;

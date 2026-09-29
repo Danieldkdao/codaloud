@@ -13,6 +13,7 @@ export const ProjectTable = sqliteTable(
     setupStatus: text("setup_status", { enum: projectSetupStatuses }).notNull(),
     setupError: text("setup_error"),
     githubRepositoryId: text("github_repository_id"),
+    sandboxId: text("sandbox_id"),
     lastOpenedFilePath: text("last_opened_file_path"),
     lastOpenedAt: text("last_opened_at"),
     createdAt,

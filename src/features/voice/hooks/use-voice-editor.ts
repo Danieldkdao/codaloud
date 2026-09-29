@@ -14,6 +14,7 @@ import { inlineAcceptanceOperation } from "../constants";
 
 export const useVoiceEditor = (options: {
   projectId: string;
+  draft?: boolean;
   branch: string | null;
   busy: boolean;
   activePath: string | null;
@@ -69,10 +70,13 @@ export const useVoiceEditor = (options: {
             throw new Error("Wait for the workspace operation to finish.");
           if (before.activePath && before.documentKey) await capture.flush();
           // The history picker can display a branch that is not checked out.
-          const { readProjectGitCountsAction } =
-            await import("@/features/projects/actions/git-actions");
-          const checkout = await readProjectGitCountsAction(before.projectId);
-          if (!checkout)
+          const checkout = before.draft
+            ? null
+            : await import("@/features/projects/actions/git-actions").then(
+                ({ readProjectGitCountsAction }) =>
+                  readProjectGitCountsAction(before.projectId),
+              );
+          if (!before.draft && !checkout)
             throw new Error("Could not confirm the current branch.");
           const after = current.current;
           if (
@@ -90,7 +94,7 @@ export const useVoiceEditor = (options: {
               : null;
           return {
             projectId: after.projectId,
-            branch: checkout.currentBranch ?? checkout.headSha ?? "",
+            branch: before.draft ? "" : checkout?.currentBranch ?? checkout?.headSha ?? "",
             activeFile,
             openFiles: after
               .getOpenFiles()
@@ -116,16 +120,17 @@ export const useVoiceEditor = (options: {
           return current.current.runWorkspaceOperation(
             inlineAcceptanceOperation,
             async (assertCurrent) => {
-              const { readProjectGitCountsAction } =
-                await import("@/features/projects/actions/git-actions");
-              const checkout = await readProjectGitCountsAction(
-                context.projectId,
-              );
+              const checkout = current.current.draft
+                ? null
+                : await import("@/features/projects/actions/git-actions").then(
+                    ({ readProjectGitCountsAction }) =>
+                      readProjectGitCountsAction(context.projectId),
+                  );
               assertCurrent();
               if (
-                !checkout ||
-                (checkout.currentBranch ?? checkout.headSha ?? "") !==
-                  context.branch ||
+                (!current.current.draft &&
+                  (!checkout ||
+                    (checkout.currentBranch ?? checkout.headSha ?? "") !== context.branch)) ||
                 inlineSession.getSnapshot()?.id !== value.id
               )
                 return false;

@@ -84,6 +84,29 @@ export const readVoiceWorkspace = async (
       throw new Error("Request cancelled or workspace changed.");
   };
   check();
+  if (projectId.startsWith("draft:")) {
+    if (input.name !== "readFile")
+      throw new Error("Draft voice can read only the open draft.");
+    const args = inlineReadSchema.parse(input.args);
+    const active = request!.context?.activeFile;
+    if (!active || args.path !== active.path)
+      throw new Error("Draft voice can read only the open draft.");
+    const content = active.content.replace(/\r\n/g, "\n");
+    const excerpt = content.slice(args.offset, args.offset + args.length);
+    return {
+      path: active.path,
+      source: "editor",
+      offset: args.offset,
+      content: excerpt,
+      nextOffset: args.offset + excerpt.length < content.length
+        ? args.offset + excerpt.length : null,
+      totalLength: content.length,
+      diagnostics: {
+        engine: "none", status: "unsupported", items: [],
+        total: null, truncated: false,
+      },
+    };
+  }
   const { readProjectFileContentAction, readProjectFilesAction } =
     await import("@/features/projects/actions/file-actions");
   let readingPath: string | undefined;

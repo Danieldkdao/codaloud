@@ -132,7 +132,7 @@ class VoiceLanguageModelStream extends llm.LLMStream {
     const tools =
       context && this.workspace
         ? {
-            ...this.tools,
+            ...(context.projectId.startsWith("draft:") ? {} : this.tools),
             ...createInlineVoiceTools(context, async (method, payload) => {
               if (this.abortController.signal.aborted)
                 throw new Error("Request cancelled.");
@@ -170,6 +170,14 @@ class VoiceLanguageModelStream extends llm.LLMStream {
             this.workspace.rpc,
             this.abortController.signal,
           );
+          if (!this.abortController.signal.aborted)
+            this.queue.put({
+              id,
+              delta: {
+                role: "assistant",
+                content: "The edit is ready to review.",
+              },
+            });
           return;
         }
       }
@@ -197,15 +205,35 @@ class VoiceLanguageModelStream extends llm.LLMStream {
           type: "answer",
         }).catch(() => {});
     } catch (error) {
-      if (context)
-        await this.workspace!.rpc("codaloud.voice.suggestion", {
-          id: context.id,
-          type: "error",
-          message:
-            context.mode === "quick-edit" && error instanceof Error
-              ? error.message.slice(0, 1000)
-              : "Response interrupted. Cancel and try again.",
-        }).catch(() => {});
+      const reported = context
+        ? await this.workspace!.rpc("codaloud.voice.suggestion", {
+            id: context.id,
+            type: "error",
+            message:
+              context.mode === "quick-edit" && error instanceof Error
+                ? error.message.slice(0, 1000)
+                : "Response interrupted. Cancel and try again.",
+          }).then(
+            () => true,
+            () => false,
+          )
+        : false;
+      if (
+        reported &&
+        context?.mode === "quick-edit" &&
+        !this.abortController.signal.aborted
+      ) {
+        // The inline request already holds the precise failure. Completing the
+        // turn keeps LiveKit from closing the whole room with a generic error.
+        this.queue.put({
+          id,
+          delta: {
+            role: "assistant",
+            content: "I couldn’t finish that edit. Please try again.",
+          },
+        });
+        return;
+      }
       if (!this.abortController.signal.aborted) throw error;
     }
   };

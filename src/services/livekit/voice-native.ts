@@ -182,7 +182,10 @@ export const connectNativeVoice: ConnectVoice = (
           current.projectId !== projectId ||
           ["answered", "accepted", "error"].includes(current.status)
         ) {
-          beginning ??= inlineSession.begin(projectId).finally(() => {
+          beginning ??= inlineSession.begin(
+            projectId,
+            options?.draftOnly ? "quick-edit" : undefined,
+          ).finally(() => {
             beginning = undefined;
           });
           await beginning;
@@ -224,6 +227,8 @@ export const connectNativeVoice: ConnectVoice = (
       });
       room.registerRpcMethod("codaloud.plan.propose", async (data) => {
         authorizeWorkspace(data);
+        if (options?.draftOnly)
+          throw new Error("Draft voice can edit only the open draft.");
         if (
           !agentIdentity ||
           data.callerIdentity !== agentIdentity ||
@@ -427,7 +432,10 @@ export const connectNativeVoice: ConnectVoice = (
               options?.projectId &&
               snapshot?.status !== "listening"
             )
-              await inlineSession.begin(options.projectId);
+              await inlineSession.begin(
+                options.projectId,
+                options.draftOnly ? "quick-edit" : undefined,
+              );
             // Leave ownedRequestId and turnClaimed alone while a turn is in
             // flight so the agent keeps streaming into the request it owns.
             if (enable && !inFlight) {

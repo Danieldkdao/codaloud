@@ -74,13 +74,13 @@ export const InlineVoiceControls = ({
         )}
         <PText
           numberOfLines={2}
-          ellipsizeMode="head"
+          ellipsizeMode="tail"
           className="text-foreground"
         >
           {transcript ||
             (state.connection === "connecting"
               ? "Connecting…"
-              : "Describe your edit…")}
+              : "Tap to speak or describe your edit…")}
         </PText>
         {error ? (
           <PText

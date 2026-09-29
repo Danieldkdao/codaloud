@@ -51,14 +51,38 @@ const Harness = ({
   enabled = true,
   projectId,
   compact = false,
+  draftOnly = false,
 }: {
   enabled?: boolean;
   projectId?: string;
   compact?: boolean;
+  draftOnly?: boolean;
 }) => {
-  current = useVoiceConversation(enabled, "project", projectId);
+  current = useVoiceConversation(enabled, "project", projectId, draftOnly);
   return <VoiceMicrophone conversation={current} compact={compact} />;
 };
+it("keeps a draft conversation in inline edit mode even without editor focus", async () => {
+  const scope = "draft:123";
+  const unregister = inlineSession.register(scope, {
+    capture: async () => ({
+      projectId: scope, branch: "", openFiles: [],
+      activeFile: {
+        path: "idea.py", documentKey: "doc", revision: 1,
+        content: "print(1)", from: 0, to: 0, focused: false,
+      },
+    }),
+    preview: vi.fn(), apply: vi.fn(async () => true),
+  });
+  await act(async () => root.render(<Harness projectId={scope} draftOnly />));
+  await act(async () => current.startHandsFree());
+  expect(inlineSession.getSnapshot()?.mode).toBe("quick-edit");
+  expect(mocks.connect).toHaveBeenCalledWith(
+    "hands-free", expect.anything(), expect.anything(),
+    { projectId: scope, draftOnly: true },
+  );
+  await act(async () => current.stop());
+  unregister();
+});
 let root: Root;
 beforeEach(async () => {
   vi.clearAllMocks();

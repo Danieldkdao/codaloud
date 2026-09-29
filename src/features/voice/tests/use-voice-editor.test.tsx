@@ -17,7 +17,7 @@ afterEach(() => {
   inlineSession.cancel();
   vi.unstubAllGlobals();
 });
-const mount = async (blocked = false) => {
+const mount = async (blocked = false, draft = false) => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.branch.mockReset().mockResolvedValue({ currentBranch: "main" });
   let locked = false;
@@ -62,6 +62,7 @@ const mount = async (blocked = false) => {
     };
     const bridge = useVoiceEditor({
       projectId: "p",
+      draft,
       branch: "history-only",
       busy: false,
       activePath: "a.ts",
@@ -95,6 +96,14 @@ it("captures the actual checkout and applies under the workspace operation lock"
   expect(apply).toHaveBeenCalledOnce();
   expect(runWorkspaceOperation).toHaveBeenCalledOnce();
   expect(inlineSession.getSnapshot()?.status).toBe("accepted");
+});
+it("captures and applies an isolated draft without reading project Git", async () => {
+  const { request, apply } = await mount(false, true);
+  expect(request.context?.branch).toBe("");
+  expect(mocks.branch).not.toHaveBeenCalled();
+  await inlineSession.accept(request.id);
+  expect(apply).toHaveBeenCalledOnce();
+  expect(mocks.branch).not.toHaveBeenCalled();
 });
 it("cannot accept while another workspace operation owns the lock", async () => {
   const { request, apply } = await mount(true);

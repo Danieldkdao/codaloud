@@ -25,6 +25,9 @@ export const formatWorkspaceActionIcon = (
   name: WorkspaceToolName,
 ): IconProps<"Feather">["name"] => {
   switch (name) {
+    case "readTerminalOutput":
+    case "runTerminalCommand":
+      return "terminal";
     case "readFile":
       return "file-text";
     case "listFiles":
@@ -199,6 +202,10 @@ export const formatTaskActivityState = (
 
 export const formatWorkspaceAction = (name: WorkspaceToolName) => {
   switch (name) {
+    case "readTerminalOutput":
+      return "Read terminal output";
+    case "runTerminalCommand":
+      return "Run terminal command";
     case "readFile":
       return "Read file";
     case "listFiles":

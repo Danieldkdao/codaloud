@@ -1,4 +1,5 @@
 import { randomUUID } from "expo-crypto";
+import { getDeviceId } from "@/lib/device-id";
 import Storage from "expo-sqlite/kv-store";
 import { z } from "zod";
 import {
@@ -382,11 +383,7 @@ export const agentTasks = {
         );
       await flushAgentWorkspace(projectId);
       const revision = await readWorkspaceRevision(projectId);
-      let deviceId = await Storage.getItem("codaloud.agent.device-id");
-      if (!deviceId) {
-        deviceId = randomUUID();
-        await Storage.setItem("codaloud.agent.device-id", deviceId);
-      }
+      const deviceId = await getDeviceId();
       if (owner !== userId || !active)
         throw new Error("Your session changed. Please try again.");
       const input = agentTaskRequestSchema.parse({

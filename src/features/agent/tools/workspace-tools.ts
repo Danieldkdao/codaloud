@@ -36,6 +36,19 @@ import { publishProjectSchema } from "@/features/projects/actions/publish-schema
 const empty = z.strictObject({});
 // Definitions stay platform-neutral. Native actions are imported only by the phone.
 export const workspaceTools = {
+  readTerminalOutput: {
+    description: "Read the most recent visible output from this project's terminal, including command errors and sync status. Output is bounded and may be truncated.",
+    schema: z.strictObject({}),
+    mutation: false,
+  },
+  runTerminalCommand: {
+    description: "Run a command in this project's Daytona execution sandbox, show its output in the same terminal panel, then sync file changes back to the device. Use a bounded command and inspect the exit code. Commands can install dependencies or change files.",
+    schema: z.strictObject({
+      command: z.string().min(1).max(2000).describe("Shell command to run in the project workspace."),
+      timeout: z.number().int().min(1).max(120).default(60).describe("Maximum execution time in seconds."),
+    }),
+    mutation: true,
+  },
   readFile: {
     description:
       "Read a bounded text file excerpt, its hash, and available on-device diagnostics for supported code and config files. Each diagnostic includes its source, severity, code, and one-based line/column positions. TypeScript files include compiler diagnostics; other code and config formats report parser findings. Diagnostics report ready, unavailable or unsupported and may be truncated. They are not ESLint results or full compiler checks for every language. Lines are one-based. Read before editing.",

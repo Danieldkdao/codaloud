@@ -8,6 +8,9 @@ import { useRouter } from "expo-router";
 import { TabTrigger, type TabTriggerSlotProps } from "expo-router/ui";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { NativeSelect } from "@/components/ui/native-select";
+import { NEW_DRAFT_PARAM } from "@/features/drafts/constants";
+import { useImportDraftFile } from "@/features/drafts/hooks/use-import-draft-file";
 
 type TabButtonProps = TabTriggerSlotProps & {
   label: string;
@@ -50,6 +53,7 @@ const TabButton = ({ isFocused, label, icon, ...props }: TabButtonProps) => (
 
 export const MainTabBar = () => {
   const router = useRouter();
+  const { importFile } = useImportDraftFile();
   const insets = useSafeAreaInsets();
 
   const tabs = (
@@ -101,7 +105,49 @@ export const MainTabBar = () => {
             {tabs}
           </GlassSurface>
         </View>
-        <CreateProjectButton onPress={() => router.push("/new-project")} />
+        <NativeSelect
+          label="Create"
+          trigger={<CreateProjectButton />}
+          sections={[
+            {
+              label: "Create",
+              value: "",
+              kind: "actions",
+              options: [
+                {
+                  value: "project",
+                  label: "Project",
+                  image: "folder",
+                  onSelect: () => router.push("/new-project"),
+                },
+                {
+                  value: "draft",
+                  label: "Draft",
+                  image: "doc.text",
+                  onSelect: () => {},
+                  subactions: [
+                    {
+                      value: "new",
+                      label: "New Draft",
+                      image: "square.and.pencil",
+                      onSelect: () =>
+                        router.push({
+                          pathname: "/draft/[draftId]",
+                          params: { draftId: NEW_DRAFT_PARAM },
+                        }),
+                    },
+                    {
+                      value: "import",
+                      label: "Import File",
+                      image: "square.and.arrow.down",
+                      onSelect: () => void importFile(),
+                    },
+                  ],
+                },
+              ],
+            },
+          ]}
+        />
       </View>
     </View>
   );

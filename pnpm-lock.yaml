@@ -192,6 +192,7 @@ overrides:
 
 patchedDependencies:
   '@trigger.dev/core@4.6.3': e4fca8c6446223e1e4205e6c4c894fadcc73827d087328960f94fe3980c1ebb7
+  expo-libghostty@0.8.1: 46a86d158684ba4c60b212ec5f910b07040a6131d4b1d3ebd900737a05ccae83
   jsonc-parser@3.3.1: 214a1d1597125c6dd199fda4607cf12c0ccf8d387395af8536a78c86b1e74063
   livekit-client@2.22.3: 90eeff8ce57ee32263784e264330188bfa0fba436d52e2beb6a95b4d1c8ba7a1
   pyodide@314.0.7: e0cf558cd7a7d050ffedfb4eba8e4d6a9a4519e856dd1a2ccada5c3a359d2ded
@@ -393,6 +394,9 @@ importers:
       expo-image:
         specifier: ~57.0.5
         version: 57.0.5(expo@57.0.23)(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      expo-libghostty:
+        specifier: 0.8.1
+        version: 0.8.1(patch_hash=46a86d158684ba4c60b212ec5f910b07040a6131d4b1d3ebd900737a05ccae83)(expo@57.0.23)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       expo-linking:
         specifier: ~57.0.10
         version: 57.0.10(expo@57.0.23)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2)
@@ -5800,6 +5804,13 @@ packages:
       expo: '*'
       react: '*'
 
+  expo-libghostty@0.8.1:
+    resolution: {integrity: sha512-LcWO2ydkXM0RWy0sFhp7Xc2OpeqAyy5s9IGAd1u6y1luoli7MFHXE4RCafuA6YwkUYWekb22Sd4SsfOBFaLfbw==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
+
   expo-linking@57.0.10:
     resolution: {integrity: sha512-RzRi4l4pIYzjgoCJKnqkO+lUI+M2YX6qgcMIQkIbLAXdcWrykBoKYwHGlmAkdFHQm89GaYcq329yfxG+c1hv8w==}
     peerDependencies:
@@ -8342,6 +8353,7 @@ packages:
   trigger.dev@4.6.3:
     resolution: {integrity: sha512-bCb01ImZ+CG6VkYidax7iPaE2gBWFMNNa6Oh9fRp97LiOBrT3LmTeysLOEhQwPQ4TsJumPku5N3JdR1LVBvyBg==}
     engines: {node: '>=18.20.0'}
+    deprecated: 'This version can delay warm starts by approximately five minutes when using npm with Zod 3 pinned in package.json. Upgrade to 4.6.4 or later and redeploy your tasks. Details: https://trigger.dev/changelog/v4-6-4'
     hasBin: true
 
   ts-api-utils@2.5.0:
@@ -14533,6 +14545,12 @@ snapshots:
     dependencies:
       expo: 57.0.23(a411159f5c8065f19d11d6e1cfe1c6a9)
       react: 19.2.3
+
+  expo-libghostty@0.8.1(patch_hash=46a86d158684ba4c60b212ec5f910b07040a6131d4b1d3ebd900737a05ccae83)(expo@57.0.23)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
+    dependencies:
+      expo: 57.0.23(a411159f5c8065f19d11d6e1cfe1c6a9)
+      react: 19.2.3
+      react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2)
 
   expo-linking@57.0.10(expo@57.0.23)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(bufferutil@4.1.0)(supports-color@10.2.2))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2):
     dependencies:

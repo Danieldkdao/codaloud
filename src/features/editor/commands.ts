@@ -111,6 +111,18 @@ export const runEditorCommand = async (
     case "insert":
       insert(text);
       break;
+    case "insert-after-selection": {
+      // Leave the selection where it is and put the text just past its end.
+      const { to } = state.selection.main;
+      view.dispatch({
+        changes: { from: to, insert: text },
+        selection: { anchor: to + text.length },
+        annotations: isolateHistory.of("full"),
+        userEvent: "input",
+        scrollIntoView: true,
+      });
+      break;
+    }
     case "copy-line":
       await clipboard.write(state.doc.lineAt(selection.main.head).text);
       break;

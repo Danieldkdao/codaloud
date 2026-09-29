@@ -180,6 +180,7 @@ vi.mock("react-native-reanimated", () => {
 const files = [
   { name: "app", path: "app", isDir: true, size: 0 },
   { name: "package.json", path: "package.json", isDir: false, size: 0 },
+  { name: "logo.png", path: "logo.png", isDir: false, size: 12 },
   { name: "layout.tsx", path: "app/layout.tsx", isDir: false, size: 0 },
   { name: "page.tsx", path: "app/page.tsx", isDir: false, size: 0 },
   { name: "dashboard", path: "app/dashboard", isDir: true, size: 0 },
@@ -409,6 +410,15 @@ it("selects the full file path and dismisses Files to the existing editor from a
   click("page.tsx, file");
   expect(mocks.selectFile).toHaveBeenLastCalledWith("app/page.tsx");
   expect(mocks.dismissTo).toHaveBeenCalledTimes(2);
+});
+
+it("opens an image in the same editor tab strip as code", () => {
+  click("logo.png, file");
+  expect(mocks.selectFile).toHaveBeenLastCalledWith("logo.png");
+  expect(mocks.dismissTo).toHaveBeenLastCalledWith({
+    pathname: "/projects/[projectId]/code",
+    params: { projectId: "project-one" },
+  });
 });
 
 it("shows a parent row only below the root and goes up exactly one level", () => {

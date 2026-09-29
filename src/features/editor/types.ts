@@ -1,5 +1,7 @@
 export type EditorCommand =
   | "insert"
+  /** Pastes over the cursor when the selection is empty, otherwise after its end. */
+  | "insert-after-selection"
   | "tab"
   | "cursor-left"
   | "cursor-right"

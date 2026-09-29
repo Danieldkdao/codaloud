@@ -39,8 +39,10 @@ type ProjectCodeKeyboardAccessoryProps = {
   feedback?: ReactNode;
   status?: ReactNode;
   voiceActive?: boolean;
+  voiceFeedbackAboveRows?: boolean;
   onHeight?: (height: number) => void;
   onDismissKeyboard: () => void;
+  symbolsOnly?: boolean;
 };
 
 const transition = LinearTransition.duration(280).reduceMotion(
@@ -75,8 +77,10 @@ export const ProjectCodeKeyboardAccessory = ({
   feedback,
   status,
   voiceActive = false,
+  voiceFeedbackAboveRows = false,
   onHeight,
   onDismissKeyboard,
+  symbolsOnly = false,
 }: ProjectCodeKeyboardAccessoryProps) => {
   const viewport = useRef<View>(null);
   const latestFrame = useRef(frame);
@@ -118,6 +122,11 @@ export const ProjectCodeKeyboardAccessory = ({
             paddingBottom: 4,
           }}
         >
+          {voiceActive && voiceFeedbackAboveRows && feedback ? (
+            <Animated.View key="voice-feedback" layout={transition}>
+              <GlassSurface borderRadius={24}>{feedback}</GlassSurface>
+            </Animated.View>
+          ) : null}
           {!voiceActive && status ? (
             // Mount the toolbar's scroll-contained glass at full size. Scaling
             // its ancestor on entry can leave UIKit drawing only the icons.
@@ -125,178 +134,172 @@ export const ProjectCodeKeyboardAccessory = ({
               {status}
             </Animated.View>
           ) : null}
-          <Animated.View layout={transition}>
-            <GlassSurface borderRadius={24}>
-              {voiceActive ? (
-                <Animated.View key="voice" entering={reveal} exiting={conceal}>
-                  {feedback}
-                </Animated.View>
-              ) : (
-                <Animated.View
-                  key="actions"
-                  entering={reveal}
-                  exiting={conceal}
-                >
-                  <View
-                    testID="editor-keyboard-actions"
-                    className="h-12 flex-row items-center"
+          {!symbolsOnly ? (
+            <Animated.View layout={transition}>
+              <GlassSurface borderRadius={24}>
+                {voiceActive && !voiceFeedbackAboveRows ? (
+                  <Animated.View
+                    key="voice"
+                    entering={reveal}
+                    exiting={conceal}
                   >
-                    {voice}
-                    <ScrollView
-                      testID="editor-keyboard-action-scroll"
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      keyboardShouldPersistTaps="always"
-                      accessibilityLabel="Editor actions"
-                      accessibilityHint="Swipe horizontally for more actions"
-                      style={{ flex: 1 }}
-                      contentContainerStyle={{
-                        flexGrow: 1,
-                        alignItems: "center",
-                      }}
+                    {feedback}
+                  </Animated.View>
+                ) : (
+                  <Animated.View
+                    key="actions"
+                    entering={reveal}
+                    exiting={conceal}
+                  >
+                    <View
+                      testID="editor-keyboard-actions"
+                      className="h-12 flex-row items-center"
                     >
-                      {children}
-                      <View className="flex-1" />
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Move cursor left"
-                        onPress={() => onCommand?.("cursor-left")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="Feather"
-                          name="arrow-left"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Move cursor right"
-                        onPress={() => onCommand?.("cursor-right")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="Feather"
-                          name="arrow-right"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Move cursor up"
-                        onPress={() => onCommand?.("cursor-up")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="Feather"
-                          name="arrow-up"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Move cursor down"
-                        onPress={() => onCommand?.("cursor-down")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="Feather"
-                          name="arrow-down"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={formatCursorFoldAction(fold).label}
-                        disabled={fold === "unavailable"}
-                        accessibilityState={{
-                          disabled: fold === "unavailable",
+                      {voice}
+                      <ScrollView
+                        testID="editor-keyboard-action-scroll"
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyboardShouldPersistTaps="always"
+                        accessibilityLabel="Editor actions"
+                        accessibilityHint="Swipe horizontally for more actions"
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{
+                          flexGrow: 1,
+                          alignItems: "center",
                         }}
-                        onPress={() => onCommand?.("fold")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50 disabled:opacity-40"
                       >
-                        <Icon
-                          family="MaterialCommunityIcons"
-                          name={formatCursorFoldAction(fold).icon}
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Copy current line"
-                        onPress={() => onCommand?.("copy-line")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="Feather"
-                          name="copy"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Delete current line"
-                        onPress={() => onCommand?.("delete-line")}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="Feather"
-                          name="trash-2"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Toggle comment"
-                        onPress={() => onCommand?.("comment")}
-                        disabled={!canComment}
-                        accessibilityState={{ disabled: !canComment }}
-                        className="h-12 w-11 items-center justify-center active:opacity-50"
-                      >
-                        <Icon
-                          family="MaterialCommunityIcons"
-                          name="comment-text-outline"
-                          size={22}
-                          className="text-foreground"
-                          accessible={false}
-                        />
-                      </Pressable>
-                    </ScrollView>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Hide keyboard"
-                      onPress={onDismissKeyboard}
-                      className="size-12 items-center justify-center active:opacity-50"
-                    >
-                      <Icon
-                        family="MaterialCommunityIcons"
-                        name="keyboard-close-outline"
-                        size={24}
-                        className="text-foreground"
-                        accessible={false}
-                      />
-                    </Pressable>
-                  </View>
-                </Animated.View>
-              )}
-            </GlassSurface>
-          </Animated.View>
-          {!voiceActive ? (
+                        {children}
+                        <View className="flex-1" />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Move cursor left"
+                          onPress={() => onCommand?.("cursor-left")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="Feather"
+                            name="arrow-left"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Move cursor right"
+                          onPress={() => onCommand?.("cursor-right")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="Feather"
+                            name="arrow-right"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Move cursor up"
+                          onPress={() => onCommand?.("cursor-up")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="Feather"
+                            name="arrow-up"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Move cursor down"
+                          onPress={() => onCommand?.("cursor-down")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="Feather"
+                            name="arrow-down"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            formatCursorFoldAction(fold).label
+                          }
+                          disabled={fold === "unavailable"}
+                          accessibilityState={{
+                            disabled: fold === "unavailable",
+                          }}
+                          onPress={() => onCommand?.("fold")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50 disabled:opacity-40"
+                        >
+                          <Icon
+                            family="MaterialCommunityIcons"
+                            name={formatCursorFoldAction(fold).icon}
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Copy current line"
+                          onPress={() => onCommand?.("copy-line")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="Feather"
+                            name="copy"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete current line"
+                          onPress={() => onCommand?.("delete-line")}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="Feather"
+                            name="trash-2"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Toggle comment"
+                          onPress={() => onCommand?.("comment")}
+                          disabled={!canComment}
+                          accessibilityState={{ disabled: !canComment }}
+                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                        >
+                          <Icon
+                            family="MaterialCommunityIcons"
+                            name="comment-text-outline"
+                            size={22}
+                            className="text-foreground"
+                            accessible={false}
+                          />
+                        </Pressable>
+                      </ScrollView>
+                    </View>
+                  </Animated.View>
+                )}
+              </GlassSurface>
+            </Animated.View>
+          ) : null}
+          {!voiceActive || voiceFeedbackAboveRows ? (
             <Animated.View
               key="symbols"
               entering={enterGlassSurface}
@@ -308,6 +311,7 @@ export const ProjectCodeKeyboardAccessory = ({
                   testID="editor-keyboard-symbols"
                   onTab={() => onCommand?.("tab")}
                   onInsert={(symbol) => onCommand?.("insert", symbol)}
+                  onDismiss={onDismissKeyboard}
                 />
               </GlassSurface>
             </Animated.View>

@@ -23,7 +23,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { codeEditorMatches } from "@/components/code-editor-matches";
 import CodeEditor, { type CodeEditorRef } from "@/components/code-editor";
 
-vi.mock("@/features/editor/fonts", () => ({ editorFontAssets: {} }));
+vi.mock("@/features/editor/fonts", () => ({
+  editorFontAssets: {},
+}));
 vi.mock("expo/dom", async () => ({
   useDOMImperativeHandle: (await import("react")).useImperativeHandle,
 }));
@@ -450,9 +452,7 @@ it("prefers CPython's own messages once the Pyodide runtime is warm", async () =
     expect(onAnalysis).toHaveBeenLastCalledWith(
       expect.objectContaining({
         status: "ready",
-        diagnostics: [
-          expect.objectContaining({ code: "python:syntax-error" }),
-        ],
+        diagnostics: [expect.objectContaining({ code: "python:syntax-error" })],
       }),
     ),
   );

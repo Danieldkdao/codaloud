@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   alert: vi.fn(),
   success: vi.fn(),
+  uploadItems: [] as { relativePath: string; name: string; uri: string; size: number }[],
 }));
 vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => mocks.success }));
 vi.mock("@/features/projects/actions/actions", () => ({
@@ -28,6 +29,16 @@ vi.mock("expo-router", () => ({
 vi.mock("@/lib/utils", () => ({ alert: mocks.alert }));
 vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({ isConnected: true }),
+}));
+vi.mock("@/features/projects/hooks/use-project-file-upload", () => ({
+  useProjectFileUpload: () => ({
+    items: mocks.uploadItems,
+    totalBytes: mocks.uploadItems.reduce((total, item) => total + item.size, 0),
+    isPicking: false,
+    pickFiles: vi.fn(),
+    pickFolder: vi.fn(),
+    clear: vi.fn(),
+  }),
 }));
 vi.mock("@/services/github/components/github-repositories-select-list", () => ({
   GitHubRepositoriesSelectList: ({ onValueChange }: { onValueChange: (repository: { id: number; defaultBranch: string } | null) => void }) =>
@@ -90,6 +101,7 @@ const loadProjects = vi.fn();
 
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  mocks.uploadItems = [];
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -131,6 +143,15 @@ const submit = async () => {
 };
 
 describe("project creation cache updates", () => {
+  it("submits picked files when creating an uploaded project", async () => {
+    mocks.uploadItems = [{ relativePath: "src/app.ts", name: "app.ts", uri: "file:///picked/app.ts", size: 12 }];
+    await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="upload"]')!.click(); });
+    await submit();
+    expect(mocks.createProject).toHaveBeenCalledExactlyOnceWith({
+      name: "New project", source: "upload", items: mocks.uploadItems,
+    });
+  });
+
   it("imports the selected repository without asking for a branch", async () => {
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-source="github"]')!.click(); });
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-repository="456"]')!.click(); });

@@ -27,10 +27,21 @@ import {
 } from "../lib/project-params";
 import type { ProjectPageData } from "../types";
 
-const { searchName: _searchName, ...projectColumns } =
+const { searchName: _searchName, sandboxId: _sandboxId, ...projectColumns } =
   getTableColumns(ProjectTable);
 
 export const localProjectStore = {
+  getSandboxId: (projectId: string) =>
+    db.select({ sandboxId: ProjectTable.sandboxId })
+      .from(ProjectTable)
+      .where(eq(ProjectTable.id, projectId))
+      .get()?.sandboxId ?? null,
+
+  setSandboxId: (projectId: string, sandboxId: string | null) =>
+    db.update(ProjectTable)
+      .set({ sandboxId })
+      .where(eq(ProjectTable.id, projectId))
+      .run(),
   read: (projectId: string) =>
     db
       .select(projectColumns)

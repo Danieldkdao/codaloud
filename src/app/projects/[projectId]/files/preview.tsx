@@ -11,6 +11,8 @@ import { useProjectFile } from "@/features/projects/hooks/use-project-file";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
 import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { ProjectFilePreviewContent } from "@/features/projects/components/project-file-preview-content";
+import { ProjectImagePreviewContent } from "@/features/projects/components/project-image-preview-content";
+import { isProjectImagePath } from "@/features/projects/lib/image-files";
 import { projectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
 
 const FilePreviewScreen = () => {
@@ -28,7 +30,11 @@ const FilePreviewScreen = () => {
   const search = parsedSearch.success ? parsedSearch.data : null;
   const parsedPath = projectFilePathSchema.safeParse(pathParam);
   const filePath = parsedPath.success ? parsedPath.data : null;
-  const query = useProjectFile(projectId, filePath, { freshOnMount: true });
+  const isImage = filePath !== null && isProjectImagePath(filePath);
+  // The engine reads text only, so an image never asks for a document read.
+  const query = useProjectFile(projectId, isImage ? null : filePath, {
+    freshOnMount: true,
+  });
   const currentFile = useProjectWorkspaceCurrentFile();
   const router = useRouter();
   const { dockHeight } = useProjectWorkspaceDockHeight();
@@ -65,7 +71,7 @@ const FilePreviewScreen = () => {
             {filePath ?? "File preview"}
           </PText>
         </View>
-        {query.isFetching && query.data ? (
+        {!isImage && query.isFetching && query.data ? (
           <ActivityIndicator
             className="text-muted-foreground"
             accessibilityLabel="Refreshing file"
@@ -121,6 +127,13 @@ const FilePreviewScreen = () => {
               {query.isFetching ? "Retrying…" : "Try again"}
             </Button>
           </View>
+        ) : isImage ? (
+          <ProjectImagePreviewContent
+            key={`${projectId}:${filePath}`}
+            projectId={projectId}
+            filePath={filePath}
+            dockHeight={dockHeight}
+          />
         ) : query.data ? (
           <ProjectFilePreviewContent
             key={JSON.stringify([projectId, filePath, search])}

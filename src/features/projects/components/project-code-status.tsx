@@ -19,67 +19,66 @@ export const ProjectCodeStatus = ({
   onLayout?: ViewProps["onLayout"];
   analysis?: CodeEditorAnalysis;
 }) => {
+  if (!analysis || analysis.status === "unsupported") return null;
   return (
     <GlassSurface borderRadius={24}>
       <View
         onLayout={onLayout}
         className="min-h-12 flex-row items-center gap-2 px-3"
       >
-        {analysis && analysis.status !== "unsupported" ? (
-          <Pressable
-            onPress={onProblems}
-            accessible
-            accessibilityRole="button"
-            accessibilityLabel={formatCodeAnalysisLabel(analysis)}
-            className="min-h-11 flex-row items-center gap-3"
-          >
-            {analysis.status === "unavailable" ? (
-              <View className="flex-row items-center gap-1.5">
-                <Icon
-                  family="Feather"
-                  name="alert-circle"
-                  size={18}
-                  className="text-foreground"
-                />
-                <PText className="text-base text-foreground">Unavailable</PText>
-              </View>
-            ) : (
-              diagnosticSeverities.map((severity) => {
-                const count = analysis.diagnostics.filter(
-                  (item) => item.severity === severity,
-                ).length;
-                const presentation = formatCodeDiagnostic(severity);
-                return (
-                  <View
-                    key={severity}
-                    className="flex-row items-center gap-1"
-                    accessible={false}
-                  >
+        <Pressable
+          onPress={onProblems}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={formatCodeAnalysisLabel(analysis)}
+          className="min-h-11 flex-row items-center gap-3"
+        >
+          {analysis.status === "unavailable" ? (
+            <View className="flex-row items-center gap-1.5">
+              <Icon
+                family="Feather"
+                name="alert-circle"
+                size={18}
+                className="text-foreground"
+              />
+              <PText className="text-base text-foreground">Unavailable</PText>
+            </View>
+          ) : (
+            diagnosticSeverities.map((severity) => {
+              const count = analysis.diagnostics.filter(
+                (item) => item.severity === severity,
+              ).length;
+              const presentation = formatCodeDiagnostic(severity);
+              return (
+                <View
+                  key={severity}
+                  className="flex-row items-center gap-1"
+                  accessible={false}
+                >
+                  <Icon
+                    family="Feather"
+                    name={presentation.icon}
+                    size={16}
+                    className="text-foreground"
+                  />
+                  {analysis.status === "checking" ? (
                     <Icon
-                      family="Feather"
-                      name={presentation.icon}
-                      size={16}
+                      family="Octicons"
+                      name="dot-fill"
+                      size={8}
                       className="text-foreground"
+                      accessible={false}
                     />
-                    {analysis.status === "checking" ? (
-                      <Icon
-                        family="Octicons"
-                        name="dot-fill"
-                        size={8}
-                        className="text-foreground"
-                        accessible={false}
-                      />
-                    ) : (
-                      <PText className="text-base text-foreground">
-                        {formatCodeDiagnosticCount(count)}
-                      </PText>
-                    )}
-                  </View>
-                );
-              })
-            )}
-          </Pressable>
-        ) : null}
+                  ) : (
+                    <PText className="text-base text-foreground">
+                      {formatCodeDiagnosticCount(count)}
+                    </PText>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </Pressable>
       </View>
     </GlassSurface>
   );

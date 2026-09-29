@@ -11,14 +11,18 @@ export const createInlineVoiceTools = (
   context: VoiceContextSchema,
   rpc: (method: string, payload: unknown) => Promise<unknown>,
 ): ToolSet => {
-  return {
-    readFile: tool({
+  const readFile = tool({
       description:
-        "Read a bounded excerpt of a project file with full-file TypeScript diagnostics, including errors, warnings, codes and one-based line/column positions. Open files use frozen editor contents, including unsaved edits; dependencies use saved project files. Diagnostics are bounded and report ready, unavailable or unsupported, not ESLint results. Offsets are zero-based UTF-16 characters; follow nextOffset for more.",
+        context.projectId.startsWith("draft:")
+          ? "Read a bounded excerpt of this open draft only. No project or other draft is available. Offsets are zero-based UTF-16 characters; follow nextOffset for more."
+          : "Read a bounded excerpt of a project file with full-file TypeScript diagnostics, including errors, warnings, codes and one-based line/column positions. Open files use frozen editor contents, including unsaved edits; dependencies use saved project files. Diagnostics are bounded and report ready, unavailable or unsupported, not ESLint results. Offsets are zero-based UTF-16 characters; follow nextOffset for more.",
       inputSchema: inlineReadSchema,
       execute: (args) =>
         rpc("codaloud.voice.read", { id: context.id, name: "readFile", args }),
-    }),
+    });
+  if (context.projectId.startsWith("draft:")) return { readFile };
+  return {
+    readFile,
     searchFiles: tool({
       description:
         "Find project file names or content references. Search open unsaved buffers as well as saved files. Use readFile to inspect results.",

@@ -1,4 +1,20 @@
 export const MAX_PROJECT_FILE_SIZE_BYTES = 1024 * 1024;
+
+/** Folder the native workspace engine uses under the app's documents directory. */
+export const WORKSPACE_FOLDER_NAME = "codaloud-workspaces";
+
+/** Uploads bypass the editor limit, so they carry their own larger bounds. */
+export const MAX_IMPORT_FILE_BYTES = 32 * 1024 * 1024;
+export const MAX_IMPORT_TOTAL_BYTES = 256 * 1024 * 1024;
+export const MAX_IMPORT_ENTRIES = 2_000;
+export const MAX_IMPORT_DEPTH = 16;
+
+/** How a destination path that already exists is handled. */
+export const projectImportModes = ["fail", "replace", "skip"] as const;
+export type ProjectImportMode = (typeof projectImportModes)[number];
+
+/** Entries the workspace must never receive, whatever the user picked. */
+export const importBlockedNames = [".git"] as const;
 export const CODE_INTELLIGENCE_FILE_PATTERN = /\.(?:[cm]?[jt]s|[jt]sx)$/i;
 
 export const projectFileSearchLimits = {

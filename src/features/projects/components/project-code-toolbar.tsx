@@ -11,12 +11,16 @@ const actions: {
   { label: "Format code", icon: "format-align-left" },
   { label: "Organize imports", icon: "sort-alphabetical-ascending" },
   { label: "Find in file", icon: "magnify" },
+  { label: "Insert from draft", icon: "book-plus" },
+  { label: "Terminal", icon: "console" },
   { label: "Undo", icon: "undo" },
   { label: "Redo", icon: "redo" },
 ];
 
 export const ProjectCodeToolbar = ({
   onFind,
+  onInsertFromDraft,
+  onTerminal,
   onFormat,
   onOrganize,
   onUndo,
@@ -24,9 +28,12 @@ export const ProjectCodeToolbar = ({
   canUndo = false,
   canRedo = false,
   disabled = false,
+  draft = false,
   ...props
 }: ComponentProps<typeof ProjectCodeStatus> & {
   onFind?: () => void;
+  onInsertFromDraft?: () => void;
+  onTerminal?: () => void;
   onFormat?: () => void;
   onOrganize?: () => void;
   onUndo?: () => void;
@@ -34,11 +41,18 @@ export const ProjectCodeToolbar = ({
   canUndo?: boolean;
   canRedo?: boolean;
   disabled?: boolean;
+  draft?: boolean;
 }) => {
   const run = (label: string) => {
     switch (label) {
       case "Find in file":
         onFind?.();
+        break;
+      case "Insert from draft":
+        onInsertFromDraft?.();
+        break;
+      case "Terminal":
+        onTerminal?.();
         break;
       case "Undo":
         onUndo?.();
@@ -70,7 +84,7 @@ export const ProjectCodeToolbar = ({
         gap: 8,
       }}
     >
-      {props.analysis ? (
+      {props.analysis && props.analysis.status !== "unsupported" ? (
         <View
           testID="editor-status-measure"
           onLayout={({ nativeEvent }) =>
@@ -80,36 +94,43 @@ export const ProjectCodeToolbar = ({
           <ProjectCodeStatus {...props} />
         </View>
       ) : null}
-      {actions.map((action) => (
-        <GlassSurface key={action.label} borderRadius={badgeHeight / 2}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            disabled={
-              disabled ||
-              (action.label === "Undo" && !canUndo) ||
-              (action.label === "Redo" && !canRedo)
-            }
-            accessibilityState={{
-              disabled:
+      {actions
+        .filter(
+          (action) =>
+            !draft ||
+            (action.label !== "Insert from draft" &&
+              action.label !== "Terminal"),
+        )
+        .map((action) => (
+          <GlassSurface key={action.label} borderRadius={badgeHeight / 2}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+              disabled={
                 disabled ||
                 (action.label === "Undo" && !canUndo) ||
-                (action.label === "Redo" && !canRedo),
-            }}
-            onPress={() => run(action.label)}
-            className="items-center justify-center rounded-full active:opacity-60"
-            style={{ width: badgeHeight, height: badgeHeight }}
-          >
-            <Icon
-              family="MaterialCommunityIcons"
-              name={action.icon}
-              size={22}
-              className="text-foreground"
-              accessible={false}
-            />
-          </Pressable>
-        </GlassSurface>
-      ))}
+                (action.label === "Redo" && !canRedo)
+              }
+              accessibilityState={{
+                disabled:
+                  disabled ||
+                  (action.label === "Undo" && !canUndo) ||
+                  (action.label === "Redo" && !canRedo),
+              }}
+              onPress={() => run(action.label)}
+              className="items-center justify-center rounded-full active:opacity-60"
+              style={{ width: badgeHeight, height: badgeHeight }}
+            >
+              <Icon
+                family="MaterialCommunityIcons"
+                name={action.icon}
+                size={22}
+                className="text-foreground"
+                accessible={false}
+              />
+            </Pressable>
+          </GlassSurface>
+        ))}
     </ScrollView>
   );
 };

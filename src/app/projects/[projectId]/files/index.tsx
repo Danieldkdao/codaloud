@@ -17,6 +17,7 @@ import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 import { useProjectFileSearch } from "@/features/projects/hooks/use-project-file-search";
 import { useProjectFileSaveRegistry } from "@/features/projects/hooks/use-project-file-save";
 import { getDirectoryFiles } from "@/features/projects/lib/files";
+import { isProjectImagePath } from "@/features/projects/lib/image-files";
 
 const FilesScreen = () => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -87,7 +88,11 @@ const FilesScreen = () => {
         isFetchingNextPage={search.isFetchingNextPage}
         isPaused={search.fetchStatus === "paused"}
         error={search.validationError ?? search.error?.message}
-        onFilePress={(filePath) =>
+        onFilePress={(filePath) => {
+          if (isProjectImagePath(filePath)) {
+            openFile(filePath);
+            return;
+          }
           router.push({
             pathname: "/projects/[projectId]/files/preview",
             params: {
@@ -97,8 +102,8 @@ const FilesScreen = () => {
                 ? {}
                 : { search: fileSearch.debouncedQuery }),
             },
-          })
-        }
+          });
+        }}
         onLoadMore={() => {
           if (canFetch && search.hasNextPage && !search.error)
             void search.fetchNextPage({ cancelRefetch: false });

@@ -95,6 +95,7 @@ const RootNavigator = () => {
                     name="projects/[projectId]"
                     options={{ title: "Project" }}
                   />
+                  <Stack.Screen name="draft" options={{ headerShown: false }} />
                   <Stack.Screen
                     name="new-project"
                     options={{

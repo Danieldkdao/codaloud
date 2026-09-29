@@ -56,7 +56,9 @@ export const EditorBottomBar = ({
         )}
         className="absolute left-4 right-4"
         style={{
-          bottom: (frame ? keyboardInset + symbolInset : dockHeight) + 8,
+          bottom:
+            (frame ? keyboardInset + symbolInset : dockHeight) +
+            (frame ? 16 : 8),
         }}
         onLayout={({ nativeEvent }) => onHeight(nativeEvent.layout.height)}
       >

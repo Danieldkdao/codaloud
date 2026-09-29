@@ -18,6 +18,12 @@ export type NativeSelectProps = {
       disabled?: boolean;
       image?: MenuAction["image"];
       onSelect: () => void;
+      subactions?: readonly {
+        value: string;
+        label: string;
+        image?: MenuAction["image"];
+        onSelect: () => void;
+      }[];
     }[];
   }[];
 };
@@ -46,6 +52,11 @@ export const NativeSelect = ({
               : option.value === section.value
                 ? "on"
                 : "off",
+          subactions: option.subactions?.map((child) => ({
+            id: `${sectionIndex}:${option.value}:${child.value}`,
+            title: child.label,
+            image: child.image,
+          })),
         })),
       }))}
       onPressAction={({ nativeEvent }) => {
@@ -56,6 +67,17 @@ export const NativeSelect = ({
           if (option && !option.disabled) {
             option.onSelect();
             return;
+          }
+          for (const parent of section.options) {
+            const child = parent.subactions?.find(
+              (item) =>
+                `${sectionIndex}:${parent.value}:${item.value}` ===
+                nativeEvent.event,
+            );
+            if (child) {
+              child.onSelect();
+              return;
+            }
           }
         }
       }}

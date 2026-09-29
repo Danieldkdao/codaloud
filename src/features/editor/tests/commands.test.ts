@@ -198,3 +198,25 @@ it.each(["  ", "    ", "\t"])("inserts the configured indentation unit %j at the
   undo(view);
   expect(view.state.doc.toString()).toBe("hello");
 });
+it("inserts after a selection without replacing it", async () => {
+  const view = await make();
+  view.dispatch({ selection: { anchor: 0, head: 3 } });
+  await runEditorCommand(view, "insert-after-selection", clipboard(), "!");
+  expect(view.state.doc.toString()).toBe("one!\ntwo\nthree");
+  // The caret lands after the inserted text and the insert undoes as one step.
+  expect(view.state.selection.main.empty).toBe(true);
+  expect(view.state.selection.main.head).toBe(4);
+  await runEditorCommand(view, "undo", clipboard());
+  expect(view.state.doc.toString()).toBe("one\ntwo\nthree");
+});
+it("inserts after an empty selection, which is a plain cursor insert", async () => {
+  const view = await make();
+  view.dispatch({ selection: { anchor: 5 } });
+  await runEditorCommand(view, "insert-after-selection", clipboard(), "X");
+  expect(view.state.doc.toString()).toBe("one\ntXwo\nthree");
+});
+it("refuses to insert after a selection in a read-only document", async () => {
+  const view = await make("locked", true);
+  await runEditorCommand(view, "insert-after-selection", clipboard(), "nope");
+  expect(view.state.doc.toString()).toBe("locked");
+});

@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/expo-sqlite/driver";
 import type { SQLiteDatabase } from "expo-sqlite";
-import { projectsMigration } from "@/db/local/migrations";
+import { projectsMigration, sandboxReferenceMigration } from "@/db/local/migrations";
 import * as schema from "@/db/local/schema";
 import { localProjectStore } from "../local/projects";
 
@@ -24,6 +24,7 @@ describe("local project storage", () => {
   beforeEach(() => {
     sqlite = new DatabaseSync(":memory:");
     sqlite.exec(projectsMigration);
+    sqlite.exec(sandboxReferenceMigration);
     // Run the production Drizzle queries against actual SQLite, without loading
     // React Native. Only Expo's native statement boundary is adapted here.
     const client = {

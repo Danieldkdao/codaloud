@@ -1,0 +1,122 @@
+diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputBarKey.swift b/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputBarKey.swift
+--- a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputBarKey.swift
++++ b/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputBarKey.swift
+@@ -10,6 +10,7 @@
+         case alt
+         case command
+         case tab
++        case enter
+         case arrowLeft
+         case arrowUp
+         case arrowDown
+@@ -21,6 +22,7 @@
+         public static let defaultItems: [TerminalInputAccessoryItem] = [
+             .esc,
+             .tab,
++            .enter,
+             .ctrl,
+             .alt,
+             .command,
+@@ -45,6 +47,7 @@
+     enum TerminalInputBarKey {
+         case esc
+         case tab
++        case enter
+         case arrowLeft
+         case arrowUp
+         case arrowDown
+diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift b/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift
+--- a/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift
++++ b/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift
+@@ -28,6 +28,9 @@
+             case .esc:
+                 let mods = stickyModifiers.consumeForNextKey()
+                 sendSyntheticKey(usage: 0x29, additionalMods: mods)
++
++            case .enter:
++                _ = handleStickyTextInput("\n")
+ 
+             case .tab:
+                 let mods = stickyModifiers.consumeForNextKey()
+diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryView.swift b/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryView.swift
+--- a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryView.swift
++++ b/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryView.swift
+@@ -176,6 +176,9 @@
+             case .tab:
+                 makeTrackedKeyButton(title: "Tab", systemImage: "arrow.right.to.line", key: .tab)
+ 
++            case .enter:
++                makeTrackedKeyButton(title: "Enter", key: .enter)
++
+             case .arrowLeft:
+                 makeTrackedKeyButton(title: "Left", systemImage: "arrowtriangle.left.fill", key: .arrowLeft)
+ 
+@@ -228,7 +231,7 @@
+             systemImage: String,
+             modifier: TerminalStickyModifierState.Modifier
+         ) -> AccessoryButton {
+-            let button = AccessoryButton(size: buttonSize) { [weak terminalView] in
++            let button = AccessoryButton(size: buttonSize, width: buttonSize) { [weak terminalView] in
+                 terminalView?.stickyModifiers.toggle(modifier)
+             }
+             button.accessibilityLabel = title
+@@ -241,7 +244,11 @@
+             systemImage: String? = nil,
+             key: TerminalInputBarKey
+         ) -> AccessoryButton {
+-            let button = AccessoryButton(size: buttonSize) { [weak terminalView] in
++            let width: CGFloat = switch key {
++            case .enter: 52
++            default: buttonSize
++            }
++            let button = AccessoryButton(size: buttonSize, width: width) { [weak terminalView] in
+                 terminalView?.handleInputBarKey(key)
+             }
+             button.accessibilityLabel = title
+@@ -327,7 +334,7 @@
+         private let handler: () -> Void
+         private let lockIndicator = UIView()
+ 
+-        init(size: CGFloat, handler: @escaping () -> Void) {
++        init(size: CGFloat, width: CGFloat, handler: @escaping () -> Void) {
+             self.size = size
+             self.handler = handler
+             super.init(frame: .zero)
+@@ -344,7 +351,7 @@
+             imageView?.contentMode = .scaleAspectFit
+ 
+             NSLayoutConstraint.activate([
+-                widthAnchor.constraint(equalToConstant: size),
++                widthAnchor.constraint(equalToConstant: width),
+                 heightAnchor.constraint(equalToConstant: size),
+             ])
+ 
+diff --git a/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt b/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt
+--- a/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt
++++ b/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt
+@@ -50,6 +50,7 @@
+ 
+     addKey("⎋") { onKey?.invoke(KeyEvent.KEYCODE_ESCAPE) }
+     addKey("⇥") { onKey?.invoke(KeyEvent.KEYCODE_TAB) }
++    addKey("Enter", widthDp = 52f) { onKey?.invoke(KeyEvent.KEYCODE_ENTER) }
+     ctrlButton = addKey("⌃") { toggleCtrl() }
+     altButton = addKey("⌥") { toggleAlt() }
+     addDivider()
+@@ -104,7 +105,7 @@
+     altButton.setActivation(alt != Activation.INACTIVE, alt == Activation.LOCKED)
+   }
+ 
+-  private fun addKey(label: String, onTap: () -> Unit): KeyButton {
++  private fun addKey(label: String, widthDp: Float = BUTTON_SIZE_DP, onTap: () -> Unit): KeyButton {
+     val key = KeyButton(context)
+     key.text = label
+     key.setOnClickListener {
+@@ -112,7 +113,7 @@
+       onTap()
+     }
+     val size = dp(BUTTON_SIZE_DP)
+-    val params = LinearLayout.LayoutParams(size, size)
++    val params = LinearLayout.LayoutParams(dp(widthDp), size)
+     params.marginEnd = dp(ITEM_SPACING_DP)
+     row.addView(key, params)
+     return key

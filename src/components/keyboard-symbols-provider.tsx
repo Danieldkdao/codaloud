@@ -7,7 +7,7 @@ import {
   type ContextType,
   type ReactNode,
 } from "react";
-import { Platform, View, useWindowDimensions } from "react-native";
+import { Keyboard, Platform, View, useWindowDimensions } from "react-native";
 import { KeyboardExtender } from "react-native-keyboard-controller";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import {
@@ -56,7 +56,11 @@ const SymbolHostProvider = ({
   }, [frame]);
   useEffect(measure, [measure, width, height, target]);
   const symbols = (
-    <KeyboardSymbols onInsert={(symbol) => target?.insert(symbol)} />
+    <KeyboardSymbols
+      onInsert={(symbol) => target?.insert(symbol)}
+      onTab={() => target?.insert("\t")}
+      onDismiss={() => Keyboard.dismiss()}
+    />
   );
   return (
     <KeyboardSymbolsContext value={host}>

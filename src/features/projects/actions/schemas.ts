@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { projectSetupStatuses } from "@/db/local/shared";
+import { projectImportItemSchema } from "./import-schemas";
 import { projectCursorTokenSchema } from "@/features/projects/lib/project-params";
 import type {
   ProjectPageData,
@@ -78,6 +79,14 @@ export const createProjectSchema = z.discriminatedUnion(
         .string({ error: "Select a GitHub repository." })
         .regex(/^[1-9]\d*$/, "Select a GitHub repository."),
     }),
+    z.strictObject({
+      ...projectFields,
+      source: z.literal("upload"),
+      repositoryId: z.never().optional(),
+      items: z
+        .array(projectImportItemSchema)
+        .min(1, "Choose the files to upload."),
+    }),
   ],
   { error: "Choose how to start your project." },
 );
@@ -94,7 +103,17 @@ export const updateProjectSchema = z
 
 export type UpdateProjectSchema = z.infer<typeof updateProjectSchema>;
 
-export const createProjectFormSchema = createProjectSchema;
+// Picked files live in the upload hook until submit. Form validation must not
+// reject the upload source before the submit handler can attach those files.
+export const createProjectFormSchema = z.discriminatedUnion("source", [
+  createProjectSchema.options[0],
+  createProjectSchema.options[1],
+  z.strictObject({
+    ...projectFields,
+    source: z.literal("upload"),
+    repositoryId: z.never().optional(),
+  }),
+]);
 
 export type CreateProjectFormSchema = z.infer<typeof createProjectFormSchema>;
 

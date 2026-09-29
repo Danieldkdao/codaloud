@@ -77,7 +77,7 @@ export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
     }
   };
   console.info(
-    "[dev] Starting Expo and the codaloud-voice worker. Wait for the worker's registration log before testing voice.",
+    "[dev] Starting Expo, voice, and the terminal gateway.",
   );
   start(
     "Voice worker",
@@ -90,6 +90,12 @@ export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
     ],
     ["ignore", "inherit", "inherit"],
   );
+  if (!stopping)
+    start(
+      "Terminal gateway",
+      ["--env-file=.env", "--import", "tsx", "src/services/daytona/terminal-gateway.ts"],
+      ["ignore", "inherit", "inherit"],
+    );
   if (!stopping)
     start("Expo", [require.resolve("expo/bin/cli"), ...commandArgs], "inherit");
   return () => stop();

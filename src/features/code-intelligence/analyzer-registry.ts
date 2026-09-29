@@ -67,6 +67,25 @@ const shellcheckRuntime = () =>
     require("./parsers/runtimes/shellcheck.wasm"),
   );
 
+let scheduledPyodideWarm: Promise<void> | undefined;
+const warmPythonWhenIdle = () => {
+  scheduledPyodideWarm ??= new Promise<void>((resolve) => {
+    const start = () => resolve();
+    if (typeof requestIdleCallback === "function")
+      requestIdleCallback(start, { timeout: 1800 });
+    else setTimeout(start, 900);
+  })
+    .then(async () => {
+      const python = await import("./parsers/python-analyzer");
+      await python.warmPyodideRuntime();
+    })
+    .catch((error) => {
+      scheduledPyodideWarm = undefined;
+      throw error;
+    });
+  return scheduledPyodideWarm;
+};
+
 // The editor's default reader: a Metro asset id turned into a fetchable url.
 const loadEditorWasmBytes: AnalyzerWasmLoader = async (asset) => {
   const load = await createNativeWasmLoader();
@@ -101,12 +120,7 @@ const nativeLanguageLoaders: Partial<
   },
   python: async (_fileType, options) => {
     const [
-      {
-        createPythonAnalyzer,
-        setPyodideRuntimeLoader,
-        isPyodideRuntimeReady,
-        warmPyodideRuntime,
-      },
+      { createPythonAnalyzer, setPyodideRuntimeLoader, isPyodideRuntimeReady },
       grammarLoader,
     ] = await Promise.all([
       import("./parsers/python-analyzer"),
@@ -121,7 +135,7 @@ const nativeLanguageLoaders: Partial<
     // the window while Pyodide is still booting.
     return createWarmPreferredAnalyzer(createPythonAnalyzer(), treeSitter, {
       isReady: isPyodideRuntimeReady,
-      bootstrap: warmPyodideRuntime,
+      bootstrap: warmPythonWhenIdle,
     });
   },
   shell: async (_fileType, options) => {
@@ -249,6 +263,14 @@ export const createCodeAnalyzerRegistry = (
   return {
     debounceMs: getDebounceMs(fileType),
     analyzeFile,
+    whenPreferredReady: async () => {
+      if (fileType !== "python" || disposed) return false;
+      const python = await import("./parsers/python-analyzer");
+      python.setPyodideRuntimeLoader(options.loadWasmBytes);
+      if (python.isPyodideRuntimeReady()) return false;
+      await warmPythonWhenIdle();
+      return !disposed;
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;

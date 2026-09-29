@@ -72,6 +72,27 @@ export const NativeSelect = (props: NativeSelectProps) => {
                   }
                 />
               );
+              if (option.subactions)
+                return (
+                  <Menu key={option.value} label={label}>
+                    {option.subactions.map((child) => (
+                      <Button
+                        key={child.value}
+                        onPress={child.onSelect}
+                        modifiers={[tint(foreground)]}
+                      >
+                        <Label
+                          title={child.label}
+                          systemImage={
+                            typeof child.image === "string"
+                              ? child.image
+                              : undefined
+                          }
+                        />
+                      </Button>
+                    ))}
+                  </Menu>
+                );
               return section.kind === "actions" ? (
                 <Button
                   key={option.value}

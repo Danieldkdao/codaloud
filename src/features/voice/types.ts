@@ -80,5 +80,5 @@ export type ConnectVoice = (
   mode: VoiceMode,
   signal: AbortSignal,
   events: VoiceEvents,
-  options?: { projectId: string },
+  options?: { projectId: string; draftOnly?: boolean },
 ) => Promise<VoiceConnection>;

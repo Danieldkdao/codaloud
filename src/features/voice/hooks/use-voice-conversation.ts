@@ -11,10 +11,13 @@ export const useVoiceConversation = (
   enabled: boolean,
   scopeKey: string,
   projectId?: string,
+  draftOnly = false,
 ) => {
   const project = useRef(projectId);
+  const draft = useRef(draftOnly);
   const requestedMode = useRef<"quick-edit" | undefined>(undefined);
   project.current = projectId;
+  draft.current = draftOnly;
   const [controller] = useState(() =>
     createVoiceController(
       async (mode, signal, events) => {
@@ -36,12 +39,17 @@ export const useVoiceConversation = (
           mode,
           signal,
           events,
-          project.current ? { projectId: project.current } : undefined,
+          project.current
+            ? { projectId: project.current, ...(draft.current ? { draftOnly: true } : {}) }
+            : undefined,
         );
       },
       async () => {
         if (project.current)
-          await inlineSession.begin(project.current, requestedMode.current);
+          await inlineSession.begin(
+            project.current,
+            draft.current ? "quick-edit" : requestedMode.current,
+          );
       },
       () => {
         // A turn that already failed keeps its specific message on screen.
@@ -160,7 +168,7 @@ export const useVoiceConversation = (
     },
     startHandsFree: () => {
       if (enabled) {
-        requestedMode.current = undefined;
+        requestedMode.current = draft.current ? "quick-edit" : undefined;
         setOpen(true);
         void controller.start("hands-free");
       }
@@ -176,7 +184,7 @@ export const useVoiceConversation = (
       held.current = true;
       suppressTap.current = true;
       previousTap.current = 0;
-      requestedMode.current = undefined;
+      requestedMode.current = draft.current ? "quick-edit" : undefined;
       setOpen(true);
       void controller.start("hold");
     },
@@ -200,7 +208,7 @@ export const useVoiceConversation = (
       }
       const now = Date.now();
       if (previousTap.current && now - previousTap.current <= 300) {
-        requestedMode.current = undefined;
+        requestedMode.current = draft.current ? "quick-edit" : undefined;
         previousTap.current = 0;
         setOpen(true);
         void controller.start("hands-free");

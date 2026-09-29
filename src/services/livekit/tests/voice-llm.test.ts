@@ -61,7 +61,62 @@ it("generates an inline edit directly without asking the conversation model to c
     id: "inline",
     type: "complete",
   });
-  expect(chunks.filter((part) => part.delta?.content)).toEqual([]);
+  expect(
+    chunks
+      .filter((part) => part.delta?.content)
+      .map((part) => part.delta?.content)
+      .join(""),
+  ).toBe("The edit is ready to review.");
+  stream.close();
+});
+
+it("reports a draft edit failure without closing the voice session", async () => {
+  mocks.classify.mockResolvedValueOnce("edit");
+  mocks.edit.mockImplementationOnce(
+    async (_messages, _instruction, id, send) => {
+      await send({ id, type: "start" });
+      await send({ id, type: "delta", offset: 0, text: "partial" });
+      throw new Error("The edit target is ambiguous. Select a unique section.");
+    },
+  );
+  const rpc = vi.fn(async () => ({ ok: true }));
+  const chat = new llm.ChatContext();
+  chat.addMessage({ role: "user", content: "Change the function" });
+  const stream = new VoiceLanguageModel("room", undefined, {
+    context: async () => ({
+      id: "inline",
+      projectId: "draft:one",
+      branch: "",
+      mode: "quick-edit",
+      openFiles: [],
+      openFilesTruncated: false,
+      activeFile: {
+        path: "a.ts",
+        documentKey: "doc",
+        revision: 1,
+        from: 0,
+        to: 0,
+        before: "",
+        selected: "",
+        after: "",
+        selectionTruncated: false,
+      },
+    }),
+    rpc,
+  }).chat({ chatCtx: chat });
+  const chunks = [];
+  for await (const part of stream) chunks.push(part);
+  expect(rpc).toHaveBeenLastCalledWith("codaloud.voice.suggestion", {
+    id: "inline",
+    type: "error",
+    message: "The edit target is ambiguous. Select a unique section.",
+  });
+  expect(
+    chunks
+      .map((part) => part.delta?.content)
+      .filter(Boolean)
+      .join(""),
+  ).toContain("couldn’t finish");
   stream.close();
 });
 it("passes a concise title with the instruction and accepts each turn only once", async () => {

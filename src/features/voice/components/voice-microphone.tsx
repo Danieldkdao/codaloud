@@ -7,6 +7,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { Icon } from "@/components/ui/icon";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import { useThemeColor } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
@@ -14,9 +15,11 @@ import type { VoiceConversation } from "../hooks/use-voice-conversation";
 export const VoiceMicrophone = ({
   conversation,
   compact = false,
+  liquidGlass = false,
 }: {
   conversation: VoiceConversation;
   compact?: boolean;
+  liquidGlass?: boolean;
 }) => {
   const { state, pressed } = conversation;
   const foreground = useThemeColor("foreground");
@@ -32,9 +35,8 @@ export const VoiceMicrophone = ({
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
-  return (
-    <Animated.View style={animatedStyle}>
-      <Pressable
+  const button = (
+    <Pressable
         accessibilityRole="button"
         accessibilityLabel={
           state.mode === "hands-free" ? "Stop listening" : "Microphone"
@@ -91,7 +93,11 @@ export const VoiceMicrophone = ({
             />
           )}
         </View>
-      </Pressable>
+    </Pressable>
+  );
+  return (
+    <Animated.View style={animatedStyle}>
+      {liquidGlass ? <GlassSurface borderRadius={24}>{button}</GlassSurface> : button}
     </Animated.View>
   );
 };

@@ -16,6 +16,7 @@ allowBuilds:
   "@livekit/local-inference": false
   bufferutil: false
   esbuild: false
+  expo-libghostty: true
   protobufjs: false
   react-native-enriched-markdown: true
   tree-sitter-bash: false
@@ -35,6 +36,8 @@ allowBuilds:
 patchedDependencies:
   # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.
   '@trigger.dev/core@4.6.3': patches/@trigger.dev__core@4.6.3.patch
+  # Keep an explicit Enter key in the native terminal accessory on iOS and Android.
+  expo-libghostty@0.8.1: patches/expo-libghostty-0-8-1.patch
   # Add file extensions to the ESM build so Metro resolves its relative imports.
   jsonc-parser@3.3.1: patches/jsonc-parser@3.3.1.patch
   # Signal/track lifecycle fixes in SDK source and both published JS builds.

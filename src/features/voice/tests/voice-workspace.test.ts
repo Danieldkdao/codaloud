@@ -93,6 +93,32 @@ it("reads frozen unsaved contents and never exposes mutation tools", async () =>
   ).rejects.toThrow();
   unregister();
 });
+it("limits draft voice reads to the open draft buffer", async () => {
+  const scope = "draft:123";
+  const unregister = inlineSession.register(scope, {
+    capture: async () => ({
+      projectId: scope, branch: "", openFiles: [],
+      activeFile: {
+        path: "idea.py", documentKey: "draft-document", revision: 1,
+        content: "print('draft')", from: 0, to: 0, focused: false,
+      },
+    }),
+    preview: () => {}, apply: async () => true,
+  });
+  const request = await inlineSession.begin(scope, "quick-edit");
+  expect(await readVoiceWorkspace(scope, {
+    id: request.id, name: "readFile", args: { path: "idea.py", length: 100 },
+  })).toMatchObject({ content: "print('draft')", source: "editor" });
+  await expect(readVoiceWorkspace(scope, {
+    id: request.id, name: "readFile", args: { path: "other.py" },
+  })).rejects.toThrow(/draft/i);
+  await expect(readVoiceWorkspace(scope, {
+    id: request.id, name: "listFiles", args: { path: "" },
+  })).rejects.toThrow(/draft/i);
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.list).not.toHaveBeenCalled();
+  unregister();
+});
 it("rejects diagnostics that arrive after the voice request is cancelled", async () => {
   const { request, unregister } = await begin();
   mocks.analyze.mockImplementationOnce(async () => {
@@ -139,7 +165,7 @@ it("fits diagnostic metadata beside long Unicode paths without breaking read pag
   });
   expect(() => encodeVoicePayload(result)).not.toThrow();
   expect(result).toHaveProperty("content");
-  if ("content" in result) {
+  if ("content" in result && typeof result.content === "string") {
     expect(result.content.length).toBeGreaterThan(0);
     expect(result.nextOffset).toBe(result.content.length);
   }

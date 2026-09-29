@@ -212,6 +212,23 @@ vi.mock("@/features/projects/hooks/use-project-workspace-file-search", () => ({
   }),
 }));
 
+// Upload controls added to the Files toolbar: stub their device dependencies.
+vi.mock("@/features/projects/hooks/use-project-file-upload", () => ({
+  useProjectFileUpload: () => ({
+    items: [],
+    totalBytes: 0,
+    isPicking: false,
+    pickFiles: vi.fn(async () => []),
+    pickFolder: vi.fn(async () => []),
+    clear: vi.fn(),
+    setItems: vi.fn(),
+  }),
+}));
+vi.mock("@/features/projects/hooks/use-import-project-files", () => ({
+  useImportProjectFiles: () => ({ isPending: false, mutateAsync: vi.fn() }),
+}));
+vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
+
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {

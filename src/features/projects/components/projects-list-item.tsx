@@ -228,7 +228,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
                     />
                   )}
                 </View>
-                <View className="min-w-0 flex-1">
+                <View className="min-w-0 flex-1 gap-0.5">
                   <HeadingText
                     className="text-xl font-medium text-card-foreground"
                     numberOfLines={1}

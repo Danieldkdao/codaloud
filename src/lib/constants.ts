@@ -2,6 +2,10 @@ export const MAIN_TAB_BAR_HEIGHT = 64;
 
 export const themePreferences = ["light", "dark", "system"] as const;
 
+/** Shared by every searchable list that offers an ascending or descending sort. */
+export const sortOrders = ["asc", "desc"] as const;
+export type SortOrder = (typeof sortOrders)[number];
+
 export const MODAL_SCREEN_OPTIONS = {
   presentation: "modal",
   headerTitleStyle: {

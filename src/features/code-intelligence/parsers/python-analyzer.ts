@@ -225,7 +225,11 @@ const loadPyodide = () => {
     });
     pyodideReady = true;
     return ready;
-  })();
+  })().catch((error: unknown) => {
+    pyodideInstance = undefined;
+    pyodideReady = false;
+    throw error;
+  });
   return pyodideInstance;
 };
 

@@ -1,4 +1,4 @@
-import { linter } from "@codemirror/lint";
+import { forceLinting, linter } from "@codemirror/lint";
 import type {
   CodeDiagnosticSchema,
   CodeIntelligenceRequestSchema,
@@ -23,6 +23,7 @@ export const createCodeEditorIntelligence = (
   let active = true;
   let generation = 0;
   let hasAnalysis = false;
+  let pythonRefreshRequested = false;
   let pending = Promise.resolve();
   const analyzer = createCodeAnalyzerRegistry(filename, request);
   const analyze = async (
@@ -58,6 +59,17 @@ export const createCodeEditorIntelligence = (
           current,
           () => view.state.doc === doc && current === generation,
         );
+        // The first Python pass stays fast with tree-sitter. Once CPython's
+        // shared runtime has booted, refresh the current document even if the
+        // user has not typed again so its precise messages replace the fallback.
+        if (!pythonRefreshRequested && /\.py$/i.test(filename)) {
+          pythonRefreshRequested = true;
+          void analyzer.whenPreferredReady().then((becameReady) => {
+            if (active && becameReady) forceLinting(view);
+          }).catch(() => {
+            pythonRefreshRequested = false;
+          });
+        }
         if (!active || view.state.doc !== doc || current !== generation)
           return [];
         if (!result) {

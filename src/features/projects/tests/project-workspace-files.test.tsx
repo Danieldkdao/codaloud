@@ -2,19 +2,54 @@
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProjectWorkspaceCurrentFileProvider, useProjectWorkspaceCurrentFile } from "../hooks/use-project-workspace-current-file";
+const stored = vi.hoisted(() => new Map<string, string>());
+vi.mock("expo-sqlite/kv-store", () => ({
+  default: {
+    getItemSync: (key: string) => stored.get(key) ?? null,
+    setItemSync: (key: string, value: string) => {
+      stored.set(key, value);
+    },
+  },
+}));
+import {
+  ProjectWorkspaceCurrentFileProvider,
+  useProjectWorkspaceCurrentFile,
+} from "../hooks/use-project-workspace-current-file";
 
 let files: ReturnType<typeof useProjectWorkspaceCurrentFile>;
 let root: Root;
-const Probe = () => { files = useProjectWorkspaceCurrentFile(); return null; };
-const render = (projectId = "one", children: ReactNode = createElement(Probe)) => act(() => {
-  root.render(createElement(ProjectWorkspaceCurrentFileProvider, { projectId, children }));
+const Probe = () => {
+  files = useProjectWorkspaceCurrentFile();
+  return null;
+};
+const render = (
+  projectId = "one",
+  children: ReactNode = createElement(Probe),
+) =>
+  act(() => {
+    root.render(
+      createElement(ProjectWorkspaceCurrentFileProvider, {
+        projectId,
+        children,
+      }),
+    );
+  });
+beforeEach(() => {
+  stored.clear();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  root = createRoot(document.createElement("div"));
+  render();
 });
-beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); root = createRoot(document.createElement("div")); render(); });
-afterEach(() => { act(() => root.unmount()); });
+afterEach(() => {
+  act(() => root.unmount());
+});
 
 it("keeps every opened path in order and activates existing tabs without duplicates", () => {
-  act(() => { files.openFile("src/a.ts"); files.openFile("b.ts"); files.openFile("src/a.ts"); });
+  act(() => {
+    files.openFile("src/a.ts");
+    files.openFile("b.ts");
+    files.openFile("src/a.ts");
+  });
   expect([...files.openFilePaths]).toEqual(["src/a.ts", "b.ts"]);
   expect(files.activeFilePath).toBe("src/a.ts");
 });
@@ -27,8 +62,32 @@ it("preserves tabs when a workspace section unmounts and remounts", () => {
   expect(files.activeFilePath).toBe("a.ts");
 });
 
+it("restores tabs after the provider remounts and ignores corrupt saved data", () => {
+  act(() => {
+    files.openFile("src/a.ts");
+    files.openFile("images/icon.png");
+  });
+  act(() => root.unmount());
+  root = createRoot(document.createElement("div"));
+  render();
+  expect([...files.openFilePaths]).toEqual(["src/a.ts", "images/icon.png"]);
+  expect(files.activeFilePath).toBe("images/icon.png");
+  stored.set(
+    "project-open-tabs:two",
+    '{"paths":["../secret","ok.py","ok.py"],"active":"../secret"}',
+  );
+  render("two");
+  expect([...files.openFilePaths]).toEqual(["ok.py"]);
+  expect(files.activeFilePath).toBe("ok.py");
+});
+
 it("closes inactive tabs without moving selection and selects a neighbor for active tabs", () => {
-  act(() => { files.openFile("a.ts"); files.openFile("b.ts"); files.openFile("c.ts"); files.openFile("b.ts"); });
+  act(() => {
+    files.openFile("a.ts");
+    files.openFile("b.ts");
+    files.openFile("c.ts");
+    files.openFile("b.ts");
+  });
   act(() => files.closeFile("a.ts"));
   expect(files.activeFilePath).toBe("b.ts");
   act(() => files.closeFile("b.ts"));
@@ -39,23 +98,37 @@ it("closes inactive tabs without moving selection and selects a neighbor for act
 });
 
 it("renames every open descendant and removes only the deleted subtree", () => {
-  act(() => { files.openFile("src/a.ts"); files.openFile("src/nested/b.ts"); files.openFile("src-other/c.ts"); });
+  act(() => {
+    files.openFile("src/a.ts");
+    files.openFile("src/nested/b.ts");
+    files.openFile("src-other/c.ts");
+  });
   act(() => files.renameFiles("src", "lib"));
-  expect([...files.openFilePaths]).toEqual(["lib/a.ts", "lib/nested/b.ts", "src-other/c.ts"]);
+  expect([...files.openFilePaths]).toEqual([
+    "lib/a.ts",
+    "lib/nested/b.ts",
+    "src-other/c.ts",
+  ]);
   expect(files.activeFilePath).toBe("src-other/c.ts");
   act(() => files.removeFiles("lib"));
   expect([...files.openFilePaths]).toEqual(["src-other/c.ts"]);
 });
 
 it("refreshes inactive documents and gives reopened paths a new generation", () => {
-  act(() => { files.openFile("a.ts"); files.openFile("b.ts"); });
+  act(() => {
+    files.openFile("a.ts");
+    files.openFile("b.ts");
+  });
   const original = files.getFileVersion("a.ts");
   act(() => files.refreshFile("a.ts"));
   expect(files.getFileVersion("a.ts")).toBeGreaterThan(original);
   act(() => files.refreshFiles());
   expect(files.getFileVersion("b.ts")).toBeGreaterThan(0);
   const refreshed = files.getFileVersion("a.ts");
-  act(() => { files.closeFile("a.ts"); files.openFile("a.ts"); });
+  act(() => {
+    files.closeFile("a.ts");
+    files.openFile("a.ts");
+  });
   expect(files.getFileVersion("a.ts")).toBeGreaterThan(refreshed);
 });
 
@@ -63,11 +136,14 @@ it("isolates projects and ignores actions captured by a previous project", () =>
   act(() => files.openFile("a.ts"));
   const previous = files;
   render("two");
-  act(() => { files.openFile("b.ts"); previous.openFile("late.ts"); previous.renameFiles("a.ts", "old.ts"); });
+  act(() => {
+    files.openFile("b.ts");
+    previous.openFile("late.ts");
+    previous.renameFiles("a.ts", "old.ts");
+  });
   expect([...files.openFilePaths]).toEqual(["b.ts"]);
   expect(files.activeFilePath).toBe("b.ts");
 });
-
 
 it("stores paths in a Set and never mutates previously published state", () => {
   const empty = files.openFilePaths;
@@ -87,21 +163,26 @@ it("stores paths in a Set and never mutates previously published state", () => {
   expect(files.openFilePaths.size).toBe(0);
 });
 
-
-it.each(["constructor", "__proto__"])("tracks generations for the file path %s without changing earlier state", (path) => {
-  act(() => files.openFile(path));
-  const opened = files;
-  expect(files.getFileVersion(path)).toBe(0);
-  act(() => files.refreshFile(path));
-  expect(files.getFileVersion(path)).toBe(1);
-  expect(opened.getFileVersion(path)).toBe(0);
-  const refreshed = files;
-  act(() => files.renameFiles(path, "renamed.ts"));
-  expect(files.getFileVersion("renamed.ts")).toBe(1);
-  expect(files.getFileVersion(path)).toBe(2);
-  expect(refreshed.getFileVersion(path)).toBe(1);
-  act(() => { files.closeFile("renamed.ts"); files.openFile("renamed.ts"); });
-  expect(files.getFileVersion("renamed.ts")).toBe(2);
-  act(() => files.refreshFiles());
-  expect(files.getFileVersion("renamed.ts")).toBe(3);
-});
+it.each(["constructor", "__proto__"])(
+  "tracks generations for the file path %s without changing earlier state",
+  (path) => {
+    act(() => files.openFile(path));
+    const opened = files;
+    expect(files.getFileVersion(path)).toBe(0);
+    act(() => files.refreshFile(path));
+    expect(files.getFileVersion(path)).toBe(1);
+    expect(opened.getFileVersion(path)).toBe(0);
+    const refreshed = files;
+    act(() => files.renameFiles(path, "renamed.ts"));
+    expect(files.getFileVersion("renamed.ts")).toBe(1);
+    expect(files.getFileVersion(path)).toBe(2);
+    expect(refreshed.getFileVersion(path)).toBe(1);
+    act(() => {
+      files.closeFile("renamed.ts");
+      files.openFile("renamed.ts");
+    });
+    expect(files.getFileVersion("renamed.ts")).toBe(2);
+    act(() => files.refreshFiles());
+    expect(files.getFileVersion("renamed.ts")).toBe(3);
+  },
+);

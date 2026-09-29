@@ -146,7 +146,7 @@ export const formatProjectSource = (
   source: CreateProjectSchema["source"],
 ): {
   value: CreateProjectSchema["source"];
-  icon: "box" | "github";
+  icon: "box" | "github" | "upload";
   title: string;
   description: string;
 } => {
@@ -164,6 +164,13 @@ export const formatProjectSource = (
         icon: "github",
         title: "Import from GitHub",
         description: "Start with an existing GitHub repository.",
+      };
+    case "upload":
+      return {
+        value: source,
+        icon: "upload",
+        title: "Upload File",
+        description: "Start with files already on this device.",
       };
     default:
       throw new Error(`Unsupported project source: ${source satisfies never}`);
@@ -815,3 +822,17 @@ export const formatProjectRepositoryVisibility = (isPrivate: boolean) =>
           "Anyone can view this repository and its committed history.",
         icon: "globe" as const,
       };
+
+/** Byte sizes are read by people deciding whether a transfer is sensible. */
+export const formatByteSize = (bytes: number) => {
+  const units = ["B", "KB", "MB", "GB"] as const;
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  // One decimal only helps below ten of a unit, and ".0" is never worth reading.
+  const rounded = unit === 0 || value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${units[unit]}`;
+};

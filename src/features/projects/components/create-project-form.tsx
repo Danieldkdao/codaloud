@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { RadioItem } from "@/components/ui/radio-item";
 import { PText } from "@/components/ui/text";
 import { createProjectAction } from "@/features/projects/actions/actions";
-import { formatProjectSource } from "@/features/projects/lib/formatters";
+import {
+  formatProjectSource,
+  formatByteSize,
+} from "@/features/projects/lib/formatters";
 import { alert } from "@/lib/utils";
 import { useGitHubConnected } from "@/services/github/hooks/use-github-connected";
 import {
@@ -19,10 +22,12 @@ import {
   type CreateProjectFormSchema,
 } from "@/features/projects/actions/schemas";
 import { GitHubRepositoriesSelectList } from "@/services/github/components/github-repositories-select-list";
+import { useProjectFileUpload } from "@/features/projects/hooks/use-project-file-upload";
 
 const projectSources = [
   "new",
   "github",
+  "upload",
 ] as const satisfies readonly CreateProjectFormSchema["source"][];
 
 export const CreateProjectForm = () => {
@@ -45,13 +50,19 @@ export const CreateProjectForm = () => {
     },
   });
   const [source, name] = useWatch({ control, name: ["source", "name"] });
+  const upload = useProjectFileUpload({ accumulate: true });
   const { isConnected, isPending, isChecking, handleConnect, connectionError } =
     useGitHubConnected(
       `/new-project?${new URLSearchParams({ source: "github", name })}`,
     );
 
   const onSubmit = async (data: CreateProjectFormSchema) => {
-    const createdProject = await createProjectAction(data);
+    // Uploads are held outside the form: the picker returns device paths, not text.
+    const payload =
+      data.source === "upload"
+        ? { ...data, items: upload.items.map((item) => ({ ...item })) }
+        : data;
+    const createdProject = await createProjectAction(payload);
 
     if (createdProject.error) {
       if (createdProject.code === "GITHUB_RECONNECT_REQUIRED") {
@@ -64,6 +75,7 @@ export const CreateProjectForm = () => {
       return;
     }
 
+    upload.clear();
     void queryClient.invalidateQueries({ queryKey: ["projects"] });
     router.replace({
       pathname: "/projects/[projectId]/code",
@@ -233,10 +245,54 @@ export const CreateProjectForm = () => {
             )}
           />
         )}
+        {source === "upload" && (
+          <View className="min-h-0 shrink gap-3">
+            <PText className="font-medium text-foreground">
+              Files to start this project
+            </PText>
+            <View className="flex-row gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                loading={upload.isPicking}
+                accessibilityLabel="Choose files to upload"
+                onPress={() => void upload.pickFiles()}
+              >
+                Choose files
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                loading={upload.isPicking}
+                accessibilityLabel="Choose a folder to upload"
+                onPress={() => void upload.pickFolder()}
+              >
+                Choose folder
+              </Button>
+            </View>
+            <PText accessibilityLiveRegion="polite" className="text-base">
+              {upload.items.length === 0
+                ? "Nothing chosen yet. Files and folders already on this device are copied into the new project."
+                : `${upload.items.length} file${upload.items.length === 1 ? "" : "s"} chosen (${formatByteSize(upload.totalBytes)}).`}
+            </PText>
+            {upload.items.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={upload.clear}
+                accessibilityLabel="Remove the chosen files"
+              >
+                Remove all
+              </Button>
+            ) : null}
+          </View>
+        )}
         <View className="shrink-0">
           <Button
             size="lg"
-            disabled={isSubmitting}
+            disabled={
+              isSubmitting || (source === "upload" && upload.items.length === 0)
+            }
             loading={isSubmitting}
             onPress={() => void handleSubmit(onSubmit)()}
           >

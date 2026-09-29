@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import type { ProjectOpenFilesState } from "../types";
 import {
   openWorkspaceFile,
@@ -6,6 +12,7 @@ import {
   renameWorkspaceFiles,
 } from "../lib/workspace-files";
 import { isProjectFilePathWithin } from "../lib/files";
+import { loadOpenTabs, saveOpenTabs } from "../lib/open-tabs-storage";
 
 type ProjectWorkspaceCurrentFileState = {
   openFilePaths: ReadonlySet<string>;
@@ -22,12 +29,20 @@ type ProjectWorkspaceCurrentFileState = {
 const ProjectWorkspaceCurrentFileContext =
   createContext<ProjectWorkspaceCurrentFileState | null>(null);
 
-const WorkspaceFiles = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<ProjectOpenFilesState>({
-    openFilePaths: new Set(),
-    activeFilePath: null,
-    versions: new Map(),
-  });
+const WorkspaceFiles = ({
+  children,
+  projectId,
+}: {
+  children: ReactNode;
+  projectId: string;
+}) => {
+  const [state, setState] = useState<ProjectOpenFilesState>(() =>
+    loadOpenTabs(projectId),
+  );
+  useEffect(
+    () => saveOpenTabs(projectId, state),
+    [projectId, state.openFilePaths, state.activeFilePath],
+  );
   const refresh = (paths?: string[]) =>
     setState((current) => {
       const versions = new Map(current.versions);
@@ -75,7 +90,9 @@ export const ProjectWorkspaceCurrentFileProvider = ({
 }) => (
   // This provider sits above every workspace section. A different project gets
   // a fresh owner, so late callbacks from the previous project cannot edit it.
-  <WorkspaceFiles key={projectId}>{children}</WorkspaceFiles>
+  <WorkspaceFiles key={projectId} projectId={projectId}>
+    {children}
+  </WorkspaceFiles>
 );
 
 export const useProjectWorkspaceCurrentFile = () => {

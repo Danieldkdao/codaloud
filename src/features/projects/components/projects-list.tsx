@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { ActivityIndicator, FlatList, View } from "react-native";
 
 import { ProjectsListItem } from "@/features/projects/components/projects-list-item";
@@ -8,6 +7,11 @@ import { HeadingText, PText } from "@/components/ui/text";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import type { ProjectParamsSchema } from "@/features/projects/lib/project-params";
 import { cn } from "@/lib/utils";
+import { useUniquePaginatedItems } from "@/hooks/use-unique-paginated-items";
+import type { ProjectPageData, ProjectResponseData } from "../types";
+
+const pageProjects = (page: ProjectPageData) => page.projects;
+const projectKey = (project: ProjectResponseData) => project.id;
 
 type ProjectsListProps = {
   filters?: Partial<ProjectParamsSchema>;
@@ -29,15 +33,7 @@ export const ProjectsList = ({ filters, onClearSearch, className }: ProjectsList
     fetchNextPage,
     refetch,
   } = useProjects(filters);
-  const projects = useMemo(() => {
-    // A previously loaded project can still move past the cursor after an update.
-    const seen = new Set<string>();
-    return (data?.pages.flatMap((page) => page.projects) ?? []).filter((project) => {
-      if (seen.has(project.id)) return false;
-      seen.add(project.id);
-      return true;
-    });
-  }, [data]);
+  const projects = useUniquePaginatedItems(data?.pages, pageProjects, projectKey);
   const isPaused = fetchStatus === "paused";
   const hasSearch = Boolean(filters?.search?.trim());
 

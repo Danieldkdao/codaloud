@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FilePreviewScreen from "@/app/projects/[projectId]/files/preview";
 import type CodeEditor from "@/components/code-editor";
+vi.mock("@/features/projects/components/project-image-preview-content", () => ({
+  ProjectImagePreviewContent: () => null,
+}));
 
 const mocks = vi.hoisted(() => ({
   params: { projectId: "project-one", filePath: "src/My File [id].tsx" } as { projectId: string; filePath?: string | string[]; search?: string | string[] },

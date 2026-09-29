@@ -1,8 +1,8 @@
 import { randomUUID } from "expo-crypto";
 import {
-  createProjectFormSchema,
+  createProjectSchema,
+  type CreateProjectSchema,
   updateProjectSchema,
-  type CreateProjectFormSchema,
   type UpdateProjectSchema,
 } from "./schemas";
 import {
@@ -55,10 +55,10 @@ export const readProjectsAction = async (
 };
 
 export const createProjectAction = async (
-  unsafeData: CreateProjectFormSchema,
+  unsafeData: CreateProjectSchema,
 ) => {
   try {
-    const input = createProjectFormSchema.parse(unsafeData);
+    const input = createProjectSchema.parse(unsafeData);
     const store = await getLocalProjects();
     const id = randomUUID();
     if (input.source === "github") {
@@ -74,6 +74,21 @@ export const createProjectAction = async (
     } else await executeWorkspace(id, "initialize");
     const now = new Date().toISOString();
     try {
+      if (input.source === "upload") {
+        const { copyProjectImportItems } = await import("../lib/file-imports");
+        const copied = await copyProjectImportItems({
+          projectId: id,
+          directoryPath: "",
+          items: input.items,
+          overwrite: false,
+        });
+        // A half-created workspace is worse than a failed start: nothing lands
+        // unless every chosen file copied.
+        if (copied.failed.length > 0 || copied.imported.length !== input.items.length)
+          throw new Error(
+            copied.failed[0]?.reason ?? "Unable to copy the chosen files.",
+          );
+      }
       store.insert({
         id,
         name: input.name,

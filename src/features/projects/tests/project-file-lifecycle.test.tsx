@@ -1,4 +1,10 @@
 // @vitest-environment happy-dom
+vi.mock("expo-sqlite/kv-store", () => ({
+  default: { getItemSync: () => null, setItemSync: vi.fn() },
+}));
+vi.mock("@/features/projects/components/project-image-preview-content", () => ({
+  ProjectImagePreviewContent: () => null,
+}));
 vi.mock("@/features/agent/hooks/use-agent-workspace", () => ({
   AgentWorkspaceBridge: () => null,
 }));
@@ -210,18 +216,25 @@ vi.mock("@/features/projects/components/project-code-tabs", () => ({
   ProjectCodeTabs: ({
     paths,
     onSelect,
+    onClose,
   }: {
     paths: string[];
     onSelect: (path: string) => void;
+    onClose: (path: string) => void;
   }) =>
     createElement(
       "div",
       null,
       paths.map((path) =>
         createElement(
-          "button",
-          { key: path, onClick: () => onSelect(path) },
-          path,
+          Fragment,
+          { key: path },
+          createElement("button", { onClick: () => onSelect(path) }, path),
+          createElement(
+            "button",
+            { onClick: () => onClose(path) },
+            "Close " + path,
+          ),
         ),
       ),
     ),
@@ -295,6 +308,25 @@ let creation: ReturnType<typeof useProjectWorkspaceFileCreation>;
 let fileList: ComponentProps<typeof ProjectFilesList>;
 let createRow: ComponentProps<typeof ProjectFileCreateRow>;
 let client: QueryClient;
+// Upload controls added to the Files toolbar: stub their device dependencies.
+vi.mock("@/features/projects/hooks/use-project-file-upload", () => ({
+  useProjectFileUpload: () => ({
+    items: [],
+    totalBytes: 0,
+    isPicking: false,
+    pickFiles: vi.fn(async () => []),
+    pickFolder: vi.fn(async () => []),
+    clear: vi.fn(),
+    setItems: vi.fn(),
+  }),
+}));
+vi.mock("@/features/projects/hooks/use-import-project-files", () => ({
+  useImportProjectFiles: () => ({ isPending: false, mutateAsync: vi.fn() }),
+}));
+vi.mock("@/hooks/use-success-feedback", () => ({
+  useSuccessFeedback: () => vi.fn(),
+}));
+
 let container: HTMLDivElement;
 let root: Root;
 const flush = async () => {
@@ -378,6 +410,18 @@ it("opens projects in Code and makes it the system-back destination for supporti
     pathname: "/projects/[projectId]/code",
     params: { projectId: mocks.projectId },
   });
+});
+
+it("closes the first clean active tab even when the native editor bridge has not attached", async () => {
+  await select("first.ts");
+  await act(async () => {
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Close first.ts")!
+      .click();
+  });
+  await flush();
+  expect(selection.activeFilePath).toBeNull();
+  expect(selection.openFilePaths.size).toBe(0);
 });
 
 it("waits for pending and subsequently queued edits before renaming", async () => {

@@ -424,7 +424,14 @@ it("opens Problems from diagnostic counts without a save control", () => {
         analysis: {
           status: "ready",
           diagnostics: [
-            { from: 0, to: 1, message: "Bad type", severity: "error", source: "TypeScript", code: "TS1" },
+            {
+              from: 0,
+              to: 1,
+              message: "Bad type",
+              severity: "error",
+              source: "TypeScript",
+              code: "TS1",
+            },
           ],
         },
       }),
@@ -815,13 +822,15 @@ it("keeps font and tab steppers within their supported mock ranges", () => {
   ).toBe(true);
 });
 
-it("places five icon-only glass actions beside diagnostics and matches the measured badge height", () => {
+it("places seven icon-only glass actions beside diagnostics and matches the measured badge height", () => {
   const onUndo = vi.fn();
   const onRedo = vi.fn();
+  const onInsertFromDraft = vi.fn();
   act(() =>
     root.render(
       createElement(ProjectCodeToolbar, {
         onUndo,
+        onInsertFromDraft,
         onRedo,
         canUndo: true,
         canRedo: false,
@@ -829,7 +838,7 @@ it("places five icon-only glass actions beside diagnostics and matches the measu
       }),
     ),
   );
-  expect(container.querySelectorAll('[data-glass="true"]')).toHaveLength(6);
+  expect(container.querySelectorAll('[data-glass="true"]')).toHaveLength(8);
   act(() =>
     layoutEvents.get("editor-status-measure")!({
       nativeEvent: { layout: { x: 0, y: 0, width: 180, height: 56 } },
@@ -839,6 +848,8 @@ it("places five icon-only glass actions beside diagnostics and matches the measu
     "Format code",
     "Organize imports",
     "Find in file",
+    "Insert from draft",
+    "Terminal",
     "Undo",
     "Redo",
   ]) {
@@ -851,12 +862,37 @@ it("places five icon-only glass actions beside diagnostics and matches the measu
     expect(button.querySelector("[data-icon]")).not.toBeNull();
   }
   expect(container.querySelector('[aria-label="Replace in file"]')).toBeNull();
+  click("Insert from draft");
+  expect(onInsertFromDraft).toHaveBeenCalledOnce();
   click("Undo");
   expect(onUndo).toHaveBeenCalledOnce();
   expect(
     container.querySelector<HTMLButtonElement>('[aria-label="Redo"]')?.disabled,
   ).toBe(true);
   expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("shows only single-file editor actions in draft mode", () => {
+  act(() =>
+    root.render(
+      createElement(ProjectCodeToolbar, {
+        draft: true,
+        analysis: undefined,
+      }),
+    ),
+  );
+  for (const label of [
+    "Format code",
+    "Organize imports",
+    "Find in file",
+    "Undo",
+    "Redo",
+  ])
+    expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull();
+  expect(
+    container.querySelector('[aria-label="Insert from draft"]'),
+  ).toBeNull();
+  expect(container.querySelector('[aria-label="Terminal"]')).toBeNull();
 });
 
 vi.mock("@/features/settings/hooks/use-editor-preferences", async () => {

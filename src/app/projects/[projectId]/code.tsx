@@ -48,6 +48,7 @@ import { ProjectCodeSelectionMenu } from "@/features/projects/components/project
 import { ProjectCodeKeyboardAccessory } from "@/features/projects/components/project-code-keyboard-accessory";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { ProjectCodeToolbar } from "@/features/projects/components/project-code-toolbar";
+import type { DraftInsertMode } from "@/features/drafts/constants";
 import { ProjectWorkspaceState } from "@/features/projects/components/project-workspace-state";
 import { readProjectCodeIntelligence } from "@/features/projects/actions/code-intelligence-actions";
 import { useProjectWorkspaceCurrentFile } from "@/features/projects/hooks/use-project-workspace-current-file";
@@ -58,7 +59,20 @@ import { useProjectEditorDocuments } from "@/features/projects/hooks/use-project
 import { useEditorDevelopmentShortcuts } from "@/hooks/use-editor-development-shortcuts";
 import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { useTheme } from "@/hooks/use-theme";
+import { useQueryClient } from "@tanstack/react-query";
+import { isProjectImagePath } from "@/features/projects/lib/image-files";
+import { ProjectImagePreviewContent } from "@/features/projects/components/project-image-preview-content";
+import { getCodeFileType } from "@/features/code-intelligence/file-type";
 
+// The sheet reads the drafts table, so it stays out of the editor's first graph.
+const DraftInsertSheet = lazy(async () => ({
+  default: (await import("@/features/drafts/components/draft-insert-sheet"))
+    .DraftInsertSheet,
+}));
+const TerminalPanel = lazy(async () => ({
+  default: (await import("@/features/terminal/components/terminal-panel"))
+    .TerminalPanel,
+}));
 const InlineVoiceControls = lazy(async () => ({
   default: (await import("@/features/voice/components/inline-voice-controls"))
     .InlineVoiceControls,
@@ -67,9 +81,18 @@ const CodeScreen = () => {
   const conversation = useContext(WorkspaceVoiceContext);
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const files = useProjectWorkspaceCurrentFile();
-  const query = useProjectFile(projectId, files.activeFilePath);
-  const documents = useProjectEditorDocuments(files, query.data?.content);
+  const activeImagePath =
+    files.activeFilePath && isProjectImagePath(files.activeFilePath)
+      ? files.activeFilePath
+      : null;
+  const textPath = activeImagePath ? null : files.activeFilePath;
+  const query = useProjectFile(projectId, textPath);
+  const documents = useProjectEditorDocuments(
+    { ...files, activeFilePath: textPath },
+    query.data?.content,
+  );
   const { dockHeight } = useProjectWorkspaceDockHeight();
   const { isWorkspaceBusy, branch, workspaceOperation, runWorkspaceOperation } =
     useProjectWorkspaceBranch();
@@ -82,7 +105,7 @@ const CodeScreen = () => {
     projectId,
     branch,
     busy: editorBusy,
-    activePath: files.activeFilePath,
+    activePath: textPath,
     documentKey: documents.activeKey,
     editor,
     getOpenFiles: documents.getOpenFiles,
@@ -107,7 +130,7 @@ const CodeScreen = () => {
   useEffect(
     () =>
       registerAgentWorkspace(projectId, async () => {
-        if (current.current.files.activeFilePath) await editorFlush.flush();
+        if (current.current.documents.activeKey) await editorFlush.flush();
         for (const path of current.current.files.openFilePaths)
           await current.current.documents.flushFile(path);
       }),
@@ -142,6 +165,7 @@ const CodeScreen = () => {
   const [interaction, setInteraction] = useState<
     CodeEditorInteraction & { key?: string }
   >();
+  const initialRevisions = useRef(new Map<string, number>());
   const explanation = useEditorExplanation({
     editor,
     documentKey: documents.activeKey,
@@ -164,6 +188,12 @@ const CodeScreen = () => {
   const onInteractionChange = useCallback(
     async (state: CodeEditorInteraction, key?: string) => {
       voiceEditorRef.current.onInteraction(state, key);
+      if (
+        key &&
+        typeof state.revision === "number" &&
+        !initialRevisions.current.has(key)
+      )
+        initialRevisions.current.set(key, state.revision);
       if (key === current.current.documents.activeKey)
         setInteraction({ ...state, key });
     },
@@ -175,6 +205,62 @@ const CodeScreen = () => {
       editor.current?.command(command, text ?? "", documents.activeKey);
     },
     [documents.activeKey, isWorkspaceBusy],
+  );
+  const [insertOpen, setInsertOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(260);
+  const refreshAfterTerminalSync = useCallback(
+    (changes: { downloaded: string[]; deleted: string[] }) => {
+      for (const path of changes.deleted)
+        current.current.files.removeFiles(path);
+      void (async () => {
+        for (const path of changes.downloaded) {
+          // Let the query receive the sandbox bytes before creating a new editor
+          // document version; otherwise the cached pre-sync text would win.
+          await queryClient.refetchQueries({
+            queryKey: ["projects", "file", projectId, path],
+            type: "active",
+          });
+          current.current.files.refreshFile(path);
+        }
+        await queryClient.invalidateQueries({
+          queryKey: ["projects", "files", projectId],
+        });
+      })();
+    },
+    [projectId, queryClient],
+  );
+  const [insertTarget, setInsertTarget] = useState<{
+    from: number;
+    to: number;
+  } | null>(null);
+  const insertRequest = useRef<string | null>(null);
+  const openInsertFromDraft = useCallback(() => {
+    if (!documents.activeKey || isWorkspaceBusy || closing.current) return;
+    // The sheet needs the caret or selection at the moment it opens, so ask the
+    // DOM editor for one snapshot instead of trusting a possibly stale mirror.
+    insertRequest.current = `insert:${documents.activeKey}`;
+    setInsertTarget(null);
+    editor.current?.captureContext(insertRequest.current);
+    setInsertOpen(true);
+  }, [documents.activeKey, isWorkspaceBusy]);
+  const applyDraftInsert = useCallback(
+    async (text: string, mode: DraftInsertMode) => {
+      const key = documents.activeKey;
+      const path = files.activeFilePath;
+      if (!key || !path)
+        throw new Error("Open a file before inserting a draft.");
+      runCommand(
+        mode === "after-selection" ? "insert-after-selection" : "insert",
+        text,
+      );
+      // The insert lands in the DOM first; flush both hops so the sheet can
+      // promise the project file was really written before offering deletion.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await editorFlush.flush();
+      await documents.flushFile(path);
+    },
+    [documents, editorFlush, files, runCommand],
   );
   const [badgeHeight, setBadgeHeight] = useState(48);
   const [voiceAccessoryHeight, setVoiceAccessoryHeight] = useState(160);
@@ -246,11 +332,25 @@ const CodeScreen = () => {
     setClosingPath(path);
     const version = files.getFileVersion(path);
     try {
+      if (isProjectImagePath(path)) {
+        current.current.files.closeFile(path);
+        return;
+      }
       // The DOM editor holds only the active document, and its native flush is
       // fire-and-forget, so wait for the acknowledgement just for that document.
       // Skip the native flush when the editor hasn't reported ready — there are
       // no native-side edits to deliver, and the injection would time out.
-      if (path === files.activeFilePath && isReady) await editorFlush.flush();
+      const activeKey = documents.activeKey;
+      const nativeEdits =
+        Boolean(activeKey && interaction?.key === activeKey) &&
+        typeof interaction?.revision === "number" &&
+        interaction.revision !== initialRevisions.current.get(activeKey!);
+      if (
+        path === files.activeFilePath &&
+        isReady &&
+        (documents.status.status !== "saved" || nativeEdits)
+      )
+        await editorFlush.flush();
       await documents.flushFile(path);
       if (
         alive.current &&
@@ -309,11 +409,19 @@ const CodeScreen = () => {
         setReplaceOpen(false);
         setSearchOpen(true);
       }}
+      onInsertFromDraft={openInsertFromDraft}
+      onTerminal={() => setTerminalOpen(true)}
       onUndo={() => runCommand("undo")}
       onRedo={() => runCommand("redo")}
       canUndo={Boolean(canShowEditorControls && interaction?.commands?.canUndo)}
       canRedo={Boolean(canShowEditorControls && interaction?.commands?.canRedo)}
-      analysis={documents.activeKey ? activeAnalysis : undefined}
+      analysis={
+        documents.activeKey &&
+        textPath &&
+        getCodeFileType(textPath) !== "unsupported"
+          ? activeAnalysis
+          : undefined
+      }
     />
   );
 
@@ -334,6 +442,17 @@ const CodeScreen = () => {
             );
         }}
       />
+      {/* Mounted only while open so the drafts table stays out of the editor's graph. */}
+      {insertOpen ? (
+        <Suspense fallback={null}>
+          <DraftInsertSheet
+            open={insertOpen}
+            onOpenChange={setInsertOpen}
+            projectSelection={insertTarget}
+            onApply={applyDraftInsert}
+          />
+        </Suspense>
+      ) : null}
       {files.openFilePaths.size > 0 ? (
         <ProjectCodeTabs
           key={projectId}
@@ -348,16 +467,18 @@ const CodeScreen = () => {
           disabled={isWorkspaceBusy}
           closingPath={closingPath}
           save={
-            documents.activeKey
-              ? documents.status
-              : query.isError && !query.isFetching
-                ? { status: "error", message: query.error.message }
-                : { status: "loading" }
+            activeImagePath
+              ? { status: "saved" }
+              : documents.activeKey
+                ? documents.status
+                : query.isError && !query.isFetching
+                  ? { status: "error", message: query.error.message }
+                  : { status: "loading" }
           }
           onRetry={
             documents.activeKey ? documents.retry : () => void query.refetch()
           }
-          readError={!documents.activeKey && query.isError}
+          readError={!activeImagePath && !documents.activeKey && query.isError}
         />
       ) : null}
       <View className="flex-1">
@@ -365,17 +486,27 @@ const CodeScreen = () => {
             document. The empty editor stays hidden, read-only, and unfocused. */}
         <View
           className="absolute inset-0"
-          style={{ opacity: isReady ? 1 : 0 }}
-          pointerEvents={isReady ? "auto" : "none"}
-          accessibilityElementsHidden={!isReady}
-          importantForAccessibility={isReady ? "auto" : "no-hide-descendants"}
+          style={{ opacity: isReady && !activeImagePath ? 1 : 0 }}
+          pointerEvents={isReady && !activeImagePath ? "auto" : "none"}
+          accessibilityElementsHidden={!isReady || Boolean(activeImagePath)}
+          importantForAccessibility={
+            isReady && !activeImagePath ? "auto" : "no-hide-descendants"
+          }
         >
           <CodeEditor
             explanationRange={explanation.highlight}
             onContext={async (id, snapshot) => {
-              if (id.startsWith("explain:"))
+              if (id.startsWith("explain:")) {
                 await explanation.onContext(id, snapshot);
-              else await voiceEditor.onContext(id, snapshot);
+                return;
+              }
+              if (id.startsWith("insert:")) {
+                if (snapshot && insertRequest.current === id)
+                  setInsertTarget({ from: snapshot.from, to: snapshot.to });
+                insertRequest.current = null;
+                return;
+              }
+              await voiceEditor.onContext(id, snapshot);
             }}
             onSuggestionAction={voiceEditor.onSuggestionAction}
             onSuggestionApplied={voiceEditor.onSuggestionApplied}
@@ -409,7 +540,7 @@ const CodeScreen = () => {
             onChange={documents.onChange}
             onRequestAnalysis={requestAnalysis}
             onAnalysis={onAnalysis}
-            bottomInset={bottomInset}
+            bottomInset={bottomInset + (terminalOpen ? terminalHeight : 0)}
             keyboardAccessoryHeight={
               explanation.state && keyboardFrame
                 ? badgeHeight + 8
@@ -433,7 +564,14 @@ const CodeScreen = () => {
             }}
           />
         </View>
-        {!files.activeFilePath ? (
+        {activeImagePath ? (
+          <ProjectImagePreviewContent
+            key={`${activeImagePath}:${files.getFileVersion(activeImagePath)}`}
+            projectId={projectId}
+            filePath={activeImagePath}
+            dockHeight={bottomInset}
+          />
+        ) : !files.activeFilePath ? (
           <ProjectWorkspaceState
             centerInWindow
             icon="code"
@@ -464,8 +602,7 @@ const CodeScreen = () => {
           <CodeEditorLoading bottomInset={bottomInset} />
         ) : null}
       </View>
-      {files.activeFilePath &&
-      (explanation.state || searchOpen || !keyboardFrame) ? (
+      {textPath && (explanation.state || searchOpen || !keyboardFrame) ? (
         <EditorBottomBar
           frame={explanation.state || searchOpen ? keyboardFrame : undefined}
           dockHeight={dockHeight}
@@ -557,6 +694,19 @@ const CodeScreen = () => {
         <View className="absolute right-4 top-16">
           <GlassSurface borderRadius={24}>{projectSelectionMenu}</GlassSurface>
         </View>
+      ) : null}
+      {terminalOpen ? (
+        <Suspense fallback={null}>
+          <TerminalPanel
+            projectId={projectId}
+            activeFilePath={textPath}
+            dockHeight={dockHeight}
+            height={terminalHeight}
+            onHeightChange={setTerminalHeight}
+            onClose={() => setTerminalOpen(false)}
+            onSyncFiles={refreshAfterTerminalSync}
+          />
+        </Suspense>
       ) : null}
     </View>
   );

@@ -28,7 +28,13 @@ type ThemeColor =
   | "primary-foreground"
   | "secondary"
   | "secondary-foreground"
-  | "muted-foreground";
+  | "muted-foreground"
+  | "syntax-function"
+  | "syntax-keyword"
+  | "syntax-number"
+  | "syntax-property"
+  | "syntax-string"
+  | "syntax-tag";
 
 // NativeWind's default declarations describe its web stub, which has no arguments.
 const useNativeThemeVariable =

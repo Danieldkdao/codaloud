@@ -15,8 +15,8 @@ import { ProjectCodeSelectionMenu } from "../components/project-code-selection-m
 import { keyboardSymbols } from "@/components/keyboard-symbols";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 
-// The symbols row renders one button per symbol plus a leading Tab button.
-const symbolButtons = keyboardSymbols.length + 1;
+// The symbols row includes Tab and a fixed keyboard dismiss button.
+const symbolButtons = keyboardSymbols.length + 2;
 
 const state = vi.hoisted(() => ({
   listeners: new Map<string, (event: KeyboardEvent) => void>(),
@@ -209,15 +209,48 @@ it("replaces every keyboard toolbar row with voice controls until closed", () =>
       }),
     ),
   );
-  const status = container.querySelector("[data-status]")!;
   const actions = container.querySelector(
     '[data-testid="editor-keyboard-actions"]',
   )!;
+  const status = container.querySelector("[data-status]")!;
   expect(status).not.toBeNull();
   expect(
     status.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(container.querySelector("[data-feedback]")).toBeNull();
+});
+it("can show voice feedback above both editor rows without hiding them", () => {
+  act(() =>
+    root.render(
+      createElement(ProjectCodeKeyboardAccessory, {
+        frame: { screenY: 544, screenX: 0, height: 300, width: 390 },
+        onDismissKeyboard: state.dismissKeyboard,
+        voiceActive: true,
+        voiceFeedbackAboveRows: true,
+        status: createElement("div", { "data-status": true }, "Tools"),
+        feedback: createElement("div", { "data-feedback": true }, "Voice"),
+      }),
+    ),
+  );
+  const feedback = container.querySelector("[data-feedback]")!;
+  const actions = container.querySelector(
+    '[data-testid="editor-keyboard-actions"]',
+  )!;
+  const symbols = container.querySelector(
+    '[data-testid="editor-keyboard-symbols"]',
+  )!;
+  expect(feedback).not.toBeNull();
+  expect(container.querySelector("[data-status]")).toBeNull();
+  expect(actions).not.toBeNull();
+  expect(symbols).not.toBeNull();
+  expect(
+    feedback.compareDocumentPosition(actions) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    feedback.compareDocumentPosition(symbols) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 it("shows a glass strip flush with the keyboard, follows frame changes, and hides on dismissal", () => {
   act(() => root.render(createElement(Probe)));
@@ -377,17 +410,17 @@ it("keeps line and selection actions above a full-width, scrollable symbol row",
   ).toBeNull();
 });
 
-it("offers a working keyboard-close command at the end of the action row", () => {
+it("offers a fixed keyboard-close command beside the symbols", () => {
   act(() => root.render(createElement(Probe)));
   show(544);
-  const actions = container.querySelector(
-    '[data-testid="editor-keyboard-actions"]',
+  const symbols = container.querySelector(
+    '[data-testid="editor-keyboard-symbols"]',
   )!;
-  const button = actions.querySelector(
+  const button = symbols.querySelector(
     '[aria-label="Hide keyboard"]',
   ) as HTMLButtonElement;
   expect(button).not.toBeNull();
-  expect(actions.querySelectorAll("button")[8]).toBe(button);
+  expect(symbols.querySelectorAll("button")[symbolButtons - 1]).toBe(button);
   expect(
     button.querySelector('[data-icon="keyboard-close-outline"]'),
   ).not.toBeNull();

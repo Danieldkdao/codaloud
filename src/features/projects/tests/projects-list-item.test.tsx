@@ -111,6 +111,7 @@ it.each([
 it("waits for explicit confirmation before deleting the selected project", async () => {
   openConfirmation();
   expect(mocks.confirm).toHaveBeenCalledWith("Delete project?", expect.stringContaining(project.name), expect.objectContaining({ actionText: "Delete", onConfirmPress: expect.any(Function) }));
+  expect(mocks.confirm.mock.calls.at(-1)?.[1]).toContain("cloud sandbox");
   expect(mocks.remove).not.toHaveBeenCalled();
   expect(loadList).not.toHaveBeenCalled();
   await confirm();

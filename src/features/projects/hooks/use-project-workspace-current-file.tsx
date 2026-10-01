@@ -13,6 +13,7 @@ import {
 } from "../lib/workspace-files";
 import { isProjectFilePathWithin } from "../lib/files";
 import { loadOpenTabs, saveOpenTabs } from "../lib/open-tabs-storage";
+import { registerCommandFiles } from "@/features/voice/command-navigation";
 
 type ProjectWorkspaceCurrentFileState = {
   openFilePaths: ReadonlySet<string>;
@@ -38,6 +39,13 @@ const WorkspaceFiles = ({
 }) => {
   const [state, setState] = useState<ProjectOpenFilesState>(() =>
     loadOpenTabs(projectId),
+  );
+  useEffect(
+    () =>
+      registerCommandFiles(projectId, (path) =>
+        setState((current) => openWorkspaceFile(current, path)),
+      ),
+    [projectId],
   );
   useEffect(
     () => saveOpenTabs(projectId, state),

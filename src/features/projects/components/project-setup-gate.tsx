@@ -2,6 +2,7 @@ import {
   Stack,
   useLocalSearchParams,
   useRouter,
+  useSegments,
 } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
@@ -18,6 +19,7 @@ import { useThemeColor } from "@/hooks/use-theme";
 export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
   const router = useRouter();
+  const segments = useSegments();
   const insets = useSafeAreaInsets();
   const verticalPadding = Math.max(insets.top, insets.bottom) + 24;
   const horizontalPadding = Math.max(insets.left, insets.right) + 24;
@@ -52,7 +54,7 @@ export const ProjectSetupGate = ({ children }: { children: ReactNode }) => {
           headerStyle: { backgroundColor: background },
           headerTintColor: foreground,
           headerShadowVisible: false,
-          headerShown: true,
+          headerShown: !ready || segments[2] === "code" || segments.length < 3,
           headerTransparent: !ready,
           headerTitle: ready ? project?.name : "",
           headerTitleStyle: {

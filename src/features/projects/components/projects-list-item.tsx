@@ -59,7 +59,7 @@ export const ProjectsListItem = ({ project }: ProjectsListItemProps) => {
     swipeable.current?.close();
     confirmAction(
       "Delete project?",
-      `Are you sure you want to delete "${project.name}"? This action cannot be undone.`,
+      `Are you sure you want to delete "${project.name}"? Its linked cloud sandbox will also be deleted. This action cannot be undone.`,
       {
         actionText: "Delete",
         onConfirmPress: async () => {

@@ -1,4 +1,10 @@
 // @vitest-environment happy-dom
+vi.mock("@/lib/auth/auth-client", () => ({
+  authClient: { useSession: () => ({ data: { user: { id: "test-user" } } }) },
+}));
+vi.mock("@/features/billing/hooks/use-billing-status", () => ({
+  useBillingStatus: () => ({ data: { tier: "tier_1" } }),
+}));
 import {
   act,
   createElement,

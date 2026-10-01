@@ -19,7 +19,8 @@ export const useImportProjectFiles = (projectId: string) => {
     retry: false,
     mutationFn: (input) => importProjectFilesAction(projectId, input),
     onSuccess: async (result) => {
-      if (result.error) return;
+      const imported = result.error ? result.imported ?? [] : result.data.imported;
+      if (imported.length === 0 && result.error) return;
       await queryClient.cancelQueries({
         queryKey: ["projects", "files", projectId],
       });
@@ -27,7 +28,7 @@ export const useImportProjectFiles = (projectId: string) => {
         queryKey: ["projects", "files", projectId],
       });
       // An upload can replace a file an editor tab already holds open.
-      for (const path of result.data.imported)
+      for (const path of imported)
         void queryClient.invalidateQueries({
           queryKey: ["projects", "file", projectId, path],
           exact: true,

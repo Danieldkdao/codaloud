@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Minimal in-memory filesystem so the real copy step runs without a device. */
 const fs = vi.hoisted(() => {
-  const state = { entries: new Set<string>(), sizes: new Map<string, number>(), failures: new Set<string>() };
+  const state = { entries: new Set<string>(), sizes: new Map<string, number>(), failures: new Set<string>(), afterCopy: null as (() => void) | null };
   class Directory {
     uri: string;
     constructor(...uris: (string | { uri: string })[]) {
@@ -31,6 +31,7 @@ const fs = vi.hoisted(() => {
         throw new Error("The destination already exists.");
       state.entries.add(destination.uri);
       state.sizes.set(destination.uri, this.size);
+      state.afterCopy?.();
     }
   }
   return {
@@ -58,6 +59,7 @@ vi.mock("../local/file-paths", () => ({ readLocalFilePaths: vi.fn() }));
 
 import { importProjectFilesAction } from "../actions/import-actions";
 import { readLocalFilePaths } from "../local/file-paths";
+import { subscribeWorkspaceChanges } from "@/services/local-workspace/change-events";
 
 const projectId = "00000000-0000-4000-8000-0000000000aa";
 const workspace = "file:///var/mobile/Documents/codaloud-workspaces/" + projectId;
@@ -84,6 +86,7 @@ beforeEach(() => {
   fs.state.entries = new Set([`${workspace}/`]);
   fs.state.sizes = new Map();
   fs.state.failures = new Set();
+  fs.state.afterCopy = null;
   listing.mockReset();
   // One listing before the copy (collisions) and one after (verification).
   listing.mockImplementation(async () => projectPaths());
@@ -91,6 +94,8 @@ beforeEach(() => {
 
 describe("importProjectFilesAction", () => {
   it("copies picked files into the project root and reports them", async () => {
+    const changed = vi.fn();
+    const release = subscribeWorkspaceChanges(projectId, changed);
     const result = await run([file("a.ts"), file("b.md", 8)]);
     expect(result).toMatchObject({ error: false, message: "Uploaded 2 files to this project." });
     if (!result.error)
@@ -100,6 +105,8 @@ describe("importProjectFilesAction", () => {
         skipped: [],
       });
     expect(fs.state.entries.has(`${workspace}/a.ts`)).toBe(true);
+    expect(changed).toHaveBeenCalledOnce();
+    release();
   });
 
   it("creates the folder chain for a picked directory tree", async () => {
@@ -155,6 +162,37 @@ describe("importProjectFilesAction", () => {
     fs.state.failures.add(item.uri);
     const result = await run([item]);
     expect(result).toMatchObject({ error: true, code: "IMPORT_FAILED", message: "Out of storage." });
+  });
+
+  it("reports a partial upload as a failure with the files that landed", async () => {
+    const first = file("a.ts");
+    const second = file("b.ts");
+    fs.state.failures.add(second.uri);
+    const result = await run([first, second]);
+    expect(result).toMatchObject({
+      error: true,
+      code: "IMPORT_PARTIAL",
+      imported: ["a.ts"],
+      message: expect.stringMatching(/b\.ts.*Out of storage/i),
+    });
+    expect(projectPaths()).toEqual(["a.ts"]);
+  });
+
+  it("reports cancellation after a copy as a partial upload", async () => {
+    const controller = new AbortController();
+    fs.state.afterCopy = () => controller.abort();
+    const result = await importProjectFilesAction(
+      projectId,
+      { directoryPath: "", items: [file("a.ts"), file("b.ts")] },
+      controller.signal,
+    );
+    expect(result).toMatchObject({
+      error: true,
+      code: "CANCELLED",
+      imported: ["a.ts"],
+      message: expect.stringMatching(/cancelled.*1 of 2/i),
+    });
+    expect(projectPaths()).toEqual(["a.ts"]);
   });
 
   it("refuses a source that vanished after picking", async () => {

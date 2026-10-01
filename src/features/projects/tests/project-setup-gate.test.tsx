@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { focusManager, onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ProjectSetupGate } from "@/features/projects/components/project-setup-gate";
@@ -10,10 +15,18 @@ import { useProjectFiles } from "@/features/projects/hooks/use-project-files";
 const state = vi.hoisted(() => ({
   projectId: "project-one",
   segments: ["projects", "[projectId]", "files"],
-  commitParams: {} as { commitSha?: string | string[]; source?: string | string[] },
+  commitParams: {} as {
+    commitSha?: string | string[];
+    source?: string | string[];
+  },
   dismissTo: vi.fn(),
   navigate: vi.fn(),
-  headerOptions: {} as { headerTitle?: string; headerBackVisible?: boolean; headerLeft?: () => ReactNode },
+  headerOptions: {} as {
+    headerTitle?: string;
+    headerShown?: boolean;
+    headerBackVisible?: boolean;
+    headerLeft?: () => ReactNode;
+  },
   readFiles: vi.fn(),
   query: {
     data: undefined as { name: string; setupStatus: string } | undefined,
@@ -28,37 +41,88 @@ vi.mock("expo-router", () => ({
   useGlobalSearchParams: () => state.commitParams,
   useSegments: () => state.segments,
   useRouter: () => ({ dismissTo: state.dismissTo, navigate: state.navigate }),
-  Stack: { Screen: ({ options }: { options: typeof state.headerOptions }) => { state.headerOptions = options; return null; } },
+  Stack: {
+    Screen: ({ options }: { options: typeof state.headerOptions }) => {
+      state.headerOptions = options;
+      return null;
+    },
+  },
 }));
 vi.mock("react-native", () => ({
-  ActivityIndicator: ({ accessibilityLabel }: { accessibilityLabel: string }) => <span role="progressbar" aria-label={accessibilityLabel} />,
-  View: ({ children, style }: { children?: ReactNode; style?: Record<string, unknown> }) => createElement("div", { style }, children),
-  Pressable: ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress: () => void; accessibilityLabel?: string }) => <button aria-label={accessibilityLabel} onClick={onPress}>{children}</button>,
+  ActivityIndicator: ({
+    accessibilityLabel,
+  }: {
+    accessibilityLabel: string;
+  }) => <span role="progressbar" aria-label={accessibilityLabel} />,
+  View: ({
+    children,
+    style,
+  }: {
+    children?: ReactNode;
+    style?: Record<string, unknown>;
+  }) => createElement("div", { style }, children),
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress: () => void;
+    accessibilityLabel?: string;
+  }) => (
+    <button aria-label={accessibilityLabel} onClick={onPress}>
+      {children}
+    </button>
+  ),
 }));
-vi.mock("@/components/ui/icon", () => ({ Icon: ({ name }: { name: string }) => <span data-icon={name} /> }));
+vi.mock("@/components/ui/icon", () => ({
+  Icon: ({ name }: { name: string }) => <span data-icon={name} />,
+}));
 vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 60, bottom: 34, left: 0, right: 0 }),
 }));
 vi.mock("@/hooks/use-theme", () => ({ useThemeColor: () => "transparent" }));
 vi.mock("@/components/app-wrapper", () => ({
-  AppWrapper: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+  AppWrapper: ({ children }: { children?: ReactNode }) =>
+    createElement("div", null, children),
 }));
 vi.mock("@/components/ui/text", () => ({
-  PText: ({ children }: { children?: ReactNode }) => createElement("p", null, children),
-  HeadingText: ({ children }: { children?: ReactNode }) => createElement("h1", null, children),
+  PText: ({ children }: { children?: ReactNode }) =>
+    createElement("p", null, children),
+  HeadingText: ({ children }: { children?: ReactNode }) =>
+    createElement("h1", null, children),
 }));
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, onPress, disabled }: { children?: ReactNode; onPress: () => void; disabled?: boolean }) => createElement("button", { onClick: onPress, disabled }, children),
+  Button: ({
+    children,
+    onPress,
+    disabled,
+  }: {
+    children?: ReactNode;
+    onPress: () => void;
+    disabled?: boolean;
+  }) => createElement("button", { onClick: onPress, disabled }, children),
 }));
-vi.mock("@/features/projects/hooks/use-project", () => ({ useProject: () => state.query }));
-vi.mock("@/features/projects/actions/file-actions", () => ({ readProjectFilesAction: state.readFiles }));
+vi.mock("@/features/projects/hooks/use-project", () => ({
+  useProject: () => state.query,
+}));
+vi.mock("@/features/projects/actions/file-actions", () => ({
+  readProjectFilesAction: state.readFiles,
+}));
 vi.mock("react-native-reanimated", () => ({
-  default: { View: ({ children }: { children?: ReactNode }) => createElement("div", null, children) },
+  default: {
+    View: ({ children }: { children?: ReactNode }) =>
+      createElement("div", null, children),
+  },
   FadeIn: { duration: () => ({ reduceMotion: () => undefined }) },
   ReduceMotion: { System: "system" },
 }));
-vi.mock("@/features/projects/components/sandbox-scaffold", () => ({ SandboxScaffold: () => null }));
-vi.mock("@/features/projects/components/sandbox-files", () => ({ SandboxFiles: () => null }));
+vi.mock("@/features/projects/components/sandbox-scaffold", () => ({
+  SandboxScaffold: () => null,
+}));
+vi.mock("@/features/projects/components/sandbox-files", () => ({
+  SandboxFiles: () => null,
+}));
 
 const Workspace = () => {
   useProjectFiles(state.projectId, "");
@@ -69,10 +133,20 @@ let container: HTMLDivElement;
 let root: Root;
 let client: QueryClient;
 const advance = async (ms = 1) => {
-  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 };
 const render = async () => {
-  await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(ProjectSetupGate, null, createElement(Workspace)))));
+  await act(async () =>
+    root.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(ProjectSetupGate, null, createElement(Workspace)),
+      ),
+    ),
+  );
   await advance();
 };
 beforeEach(() => {
@@ -87,32 +161,45 @@ beforeEach(() => {
   state.dismissTo.mockClear();
   state.navigate.mockClear();
   state.readFiles.mockReset().mockResolvedValue([]);
-  Object.assign(state.query, { data: undefined, isError: false, isFetching: false });
+  Object.assign(state.query, {
+    data: undefined,
+    isError: false,
+    isFetching: false,
+  });
 });
 
 it("provides an explicit home action while the workspace is loading", async () => {
   await render();
   expect(state.headerOptions.headerBackVisible).toBe(false);
   act(() => root.render(state.headerOptions.headerLeft?.()));
-  const home = container.querySelector<HTMLButtonElement>('[aria-label="Home"]');
+  const home = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Home"]',
+  );
   expect(home?.querySelector('[data-icon="home"]')).not.toBeNull();
   act(() => home!.click());
   expect(state.dismissTo).toHaveBeenCalledWith("/(main)");
 });
 
-it.each(["code", "files", "git", "agent"])("keeps the editor header stable behind %s and nested modal diffs", async (section) => {
-  state.query.data = { name: "Example", setupStatus: "ready" };
-  state.segments = ["projects", "[projectId]", section];
-  await render();
-  expect(state.headerOptions.headerTitle).toBe("Example");
-  state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
-  state.commitParams = { commitSha: "a".repeat(40), source: "local" };
-  await render();
-  expect(state.headerOptions.headerTitle).toBe("Example");
-  act(() => root.render(state.headerOptions.headerLeft?.()));
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Home"]')!.click());
-  expect(state.dismissTo).toHaveBeenLastCalledWith("/(main)");
-});
+it.each(["code", "files", "git", "agent"])(
+  "keeps the editor header stable behind %s and nested modal diffs",
+  async (section) => {
+    state.query.data = { name: "Example", setupStatus: "ready" };
+    state.segments = ["projects", "[projectId]", section];
+    await render();
+    expect(state.headerOptions.headerTitle).toBe("Example");
+    state.segments = ["projects", "[projectId]", "git", "workspace-diff"];
+    state.commitParams = { commitSha: "a".repeat(40), source: "local" };
+    await render();
+    expect(state.headerOptions.headerTitle).toBe("Example");
+    act(() => root.render(state.headerOptions.headerLeft?.()));
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Home"]')!
+        .click(),
+    );
+    expect(state.dismissTo).toHaveBeenLastCalledWith("/(main)");
+  },
+);
 
 afterEach(() => {
   act(() => root.unmount());
@@ -124,19 +211,30 @@ afterEach(() => {
 
 it("does not mount a requested child route before the project loads", async () => {
   await render();
-  expect(container.querySelector('[aria-label="Opening local workspace"]')).not.toBeNull();
+  expect(
+    container.querySelector('[aria-label="Opening local workspace"]'),
+  ).not.toBeNull();
   expect(state.readFiles).not.toHaveBeenCalled();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
 });
 
-it.each(["pending", "running", "failed"])("blocks workspace routes while setup is %s, even with a sandbox ID", async (setupStatus) => {
-  state.query.data = { name: "Example", setupStatus };
-  await render();
-  expect(state.readFiles).not.toHaveBeenCalled();
-  expect(state.renderWorkspace).not.toHaveBeenCalled();
-  if (setupStatus === "failed") expect(container.textContent).toContain("Workspace setup couldn’t finish");
-  else expect(container.querySelector('[aria-label="Opening local workspace"]')).not.toBeNull();
-});
+it.each(["pending", "running", "failed"])(
+  "blocks workspace routes while setup is %s, even with a sandbox ID",
+  async (setupStatus) => {
+    state.query.data = { name: "Example", setupStatus };
+    await render();
+    expect(state.readFiles).not.toHaveBeenCalled();
+    expect(state.renderWorkspace).not.toHaveBeenCalled();
+    if (setupStatus === "failed")
+      expect(container.textContent).toContain(
+        "Workspace setup couldn’t finish",
+      );
+    else
+      expect(
+        container.querySelector('[aria-label="Opening local workspace"]'),
+      ).not.toBeNull();
+  },
+);
 
 it("opens the requested child when setup and the workspace become ready, and removes it if setup regresses", async () => {
   state.query.data = { name: "Example", setupStatus: "running" };
@@ -178,7 +276,9 @@ it("keeps terminal workspace errors outside the tabs without automatic retries",
   await advance(30_000);
   expect(state.readFiles).toHaveBeenCalledOnce();
   expect(state.renderWorkspace).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Unable to open this local workspace");
+  expect(container.textContent).toContain(
+    "Unable to open this local workspace",
+  );
 });
 
 it("keeps workspace routes mounted during ordinary background folder refreshes", async () => {
@@ -186,8 +286,26 @@ it("keeps workspace routes mounted during ordinary background folder refreshes",
   await render();
   const workspace = container.querySelector("p");
   state.readFiles.mockImplementationOnce(() => new Promise(() => {}));
-  await act(async () => { void client.invalidateQueries({ queryKey: ["projects", "files", "project-one", ""] }); });
+  await act(async () => {
+    void client.invalidateQueries({
+      queryKey: ["projects", "files", "project-one", ""],
+    });
+  });
   await advance();
   expect(container.textContent).toBe("Requested workspace route");
   expect(container.querySelector("p")).toBe(workspace);
 });
+
+it.each(["files", "git", "agent"])(
+  "uses the %s route's own header without duplicating the project header",
+  async (section) => {
+    state.query.data = { name: "Example", setupStatus: "ready" };
+    state.segments = ["projects", "[projectId]", section];
+    await render();
+    expect(state.headerOptions.headerShown).toBe(false);
+    state.segments = ["projects", "[projectId]", "code"];
+    await render();
+    expect(state.headerOptions.headerShown).toBe(true);
+    expect(state.headerOptions.headerTitle).toBe("Example");
+  },
+);

@@ -5,7 +5,11 @@ import {
   type ModelMessage,
   type PrepareStepFunction,
 } from "ai";
-import { openrouter } from "./server";
+import { meteredChatModel } from "./server";
+import {
+  modelCostUsd,
+  reportedModelCostUsd,
+} from "@/features/billing/credit-cost";
 import { voiceModel } from "@/features/voice/constants";
 import { quickEditModel } from "@/features/voice/constants";
 import type { VoiceContextSchema } from "@/features/voice/schemas";
@@ -17,6 +21,10 @@ export const createVoiceReply = (
   signal?: AbortSignal,
   tools?: ToolSet,
   context?: VoiceContextSchema,
+  onUsage?: (
+    model: string,
+    usage: { inputTokens?: number; outputTokens?: number; costUsd?: number },
+  ) => Promise<void>,
 ): AsyncIterable<string> => ({
   [Symbol.asyncIterator]: () => {
     const controller = new AbortController();
@@ -41,10 +49,10 @@ export const createVoiceReply = (
               "\nThe inline tool budget is exhausted. Give a concise final answer now using only the context and results already received. Explicitly disclose any incomplete file read or failed tool. Do not claim a full review or promise further work. If more investigation is needed, explain that limitation and ask whether the user wants to continue.",
           }
         : undefined;
+    const modelId =
+      context?.mode === "quick-edit" ? quickEditModel : voiceModel;
     const result = streamText({
-      model: openrouter.chat(
-        context?.mode === "quick-edit" ? quickEditModel : voiceModel,
-      ),
+      model: meteredChatModel(modelId),
       instructions,
       ...(tools
         ? { tools, stopWhen: stepCountIs(toolStepBudget + 1), prepareStep }
@@ -122,6 +130,27 @@ export const createVoiceReply = (
           if (part.done) {
             if (!hasText && !controller.signal.aborted && !signal?.aborted)
               throw new Error("Model returned an empty response.");
+            if (
+              hasText &&
+              onUsage &&
+              !controller.signal.aborted &&
+              !signal?.aborted
+            ) {
+              const usage = await result.usage;
+              const steps = await result.steps;
+              const costUsd = Array.isArray(steps)
+                ? steps.reduce(
+                    (sum, step) =>
+                      sum +
+                      (reportedModelCostUsd(step.providerMetadata) ??
+                        modelCostUsd(modelId, step.usage) * 1.2),
+                    0,
+                  )
+                : reportedModelCostUsd(
+                    (await result.finalStep).providerMetadata,
+                  );
+              await onUsage(modelId, { ...usage, costUsd });
+            }
             return { done: true as const, value: undefined };
           }
           if (part.value.type === "error") throw part.value.error;

@@ -11,7 +11,7 @@ vi.mock("ai", async (importOriginal) => ({
   ...(await importOriginal<typeof import("ai")>()),
   streamText: mocks.stream,
 }));
-vi.mock("../server", () => ({ openrouter: { chat: mocks.model } }));
+vi.mock("../server", () => ({ meteredChatModel: mocks.model }));
 beforeEach(() => {
   mocks.stream.mockReset();
   mocks.model.mockReturnValue("free-model");
@@ -154,6 +154,37 @@ it("never speaks or transcribes the preamble that precedes a tool call", async (
     spoken.push(text);
   expect(spoken.join("")).toBe("You have shell and Ruby files.");
   expect(spoken.join("")).not.toMatch(/I'll (search|read)/);
+});
+
+it("reports final model usage after a usable reply", async () => {
+  const settle = vi.fn(async () => {});
+  mocks.stream.mockReturnValue({
+    stream: (async function* () {
+      yield { type: "start-step" };
+      yield { type: "text-delta", text: "Done." };
+      yield { type: "finish-step", finishReason: "stop" };
+    })(),
+    usage: Promise.resolve({ inputTokens: 10_000, outputTokens: 1_000 }),
+    finalStep: Promise.resolve({
+      providerMetadata: { openrouter: { usage: { cost: 0.008 } } },
+    }),
+  });
+  const chunks: string[] = [];
+  for await (const chunk of createVoiceReply(
+    [],
+    "room",
+    undefined,
+    undefined,
+    undefined,
+    settle,
+  ))
+    chunks.push(chunk);
+  expect(chunks).toEqual(["Done."]);
+  expect(settle).toHaveBeenCalledWith("deepseek/deepseek-v4.1-flash", {
+    inputTokens: 10_000,
+    outputTokens: 1_000,
+    costUsd: 0.008,
+  });
 });
 
 it("streams a tool-free reply as fast as it arrives", async () => {

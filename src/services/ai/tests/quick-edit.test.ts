@@ -4,7 +4,7 @@ vi.mock("ai", async (original) => ({
   ...(await original<typeof import("ai")>()),
   streamText: mocks.stream,
 }));
-vi.mock("../server", () => ({ openrouter: { chat: mocks.chat } }));
+vi.mock("../server", () => ({ meteredChatModel: mocks.chat }));
 import { streamQuickEdit } from "../quick-edit";
 import type { InlineEvent } from "@/features/voice/types";
 const source = "const n = Math.floor(Math.random * 10);";
@@ -54,6 +54,42 @@ it("streams replacement code only after identifying the exact source range", asy
   ).toBe("Math.random()");
   expect(events.at(-1)).toEqual({ id: "one", type: "complete" });
   expect(mocks.stream.mock.lastCall?.[0].output).toBeDefined();
+});
+it("settles the model charge before marking a suggestion complete", async () => {
+  const events: InlineEvent[] = [];
+  const settle = vi.fn(async () => {});
+  mocks.stream.mockReturnValue({
+    partialOutputStream: (async function* () {
+      yield { oldText: "Math.random", newText: "Math.random()" };
+    })(),
+    output: Promise.resolve({
+      oldText: "Math.random",
+      newText: "Math.random()",
+    }),
+    finishReason: Promise.resolve("stop"),
+    usage: Promise.resolve({ inputTokens: 10_000, outputTokens: 2_000 }),
+    finalStep: Promise.resolve({
+      providerMetadata: { openrouter: { usage: { cost: 0.018 } } },
+    }),
+  });
+  await streamQuickEdit(
+    [],
+    "fix",
+    "one",
+    async (event) => {
+      events.push(event);
+      if (event.type === "complete") expect(settle).toHaveBeenCalledOnce();
+    },
+    new AbortController().signal,
+    target,
+    settle,
+  );
+  expect(settle).toHaveBeenCalledWith({
+    inputTokens: 10_000,
+    outputTokens: 2_000,
+    costUsd: 0.018,
+  });
+  expect(events.at(-1)?.type).toBe("complete");
 });
 it("rejects absent or ambiguous excerpts instead of falling back to insertion", async () => {
   await expect(run([{ oldText: "missing", newText: "fixed" }])).rejects.toThrow(

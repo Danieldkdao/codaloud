@@ -1,46 +1,13 @@
-import { tool, type ModelMessage, type ToolSet } from "ai";
+import type { ModelMessage, ToolSet } from "ai";
 import { z } from "zod";
-import {
-  inlineReadSchema,
-  inlineSearchSchema,
-  type VoiceContextSchema,
-} from "@/features/voice/schemas";
-import { workspaceTools } from "@/features/agent/tools/workspace-tools";
+import { type VoiceContextSchema } from "@/features/voice/schemas";
+import { createCommandTools } from "@/features/voice/command-tools";
 
 export const createInlineVoiceTools = (
   context: VoiceContextSchema,
   rpc: (method: string, payload: unknown) => Promise<unknown>,
 ): ToolSet => {
-  const readFile = tool({
-      description:
-        context.projectId.startsWith("draft:")
-          ? "Read a bounded excerpt of this open draft only. No project or other draft is available. Offsets are zero-based UTF-16 characters; follow nextOffset for more."
-          : "Read a bounded excerpt of a project file with full-file TypeScript diagnostics, including errors, warnings, codes and one-based line/column positions. Open files use frozen editor contents, including unsaved edits; dependencies use saved project files. Diagnostics are bounded and report ready, unavailable or unsupported, not ESLint results. Offsets are zero-based UTF-16 characters; follow nextOffset for more.",
-      inputSchema: inlineReadSchema,
-      execute: (args) =>
-        rpc("codaloud.voice.read", { id: context.id, name: "readFile", args }),
-    });
-  if (context.projectId.startsWith("draft:")) return { readFile };
-  return {
-    readFile,
-    searchFiles: tool({
-      description:
-        "Find project file names or content references. Search open unsaved buffers as well as saved files. Use readFile to inspect results.",
-      inputSchema: inlineSearchSchema,
-      execute: (args) =>
-        rpc("codaloud.voice.read", {
-          id: context.id,
-          name: "searchFiles",
-          args,
-        }),
-    }),
-    listFiles: tool({
-      description: workspaceTools.listFiles.description,
-      inputSchema: workspaceTools.listFiles.schema,
-      execute: (args) =>
-        rpc("codaloud.voice.read", { id: context.id, name: "listFiles", args }),
-    }),
-  };
+  return createCommandTools(context, rpc);
 };
 
 // Inline voice is an edit command: dispatch directly instead of asking a
@@ -51,6 +18,12 @@ export const generateInlineVoiceEdit = async (
   instruction: string,
   rpc: (method: string, payload: unknown) => Promise<unknown>,
   signal: AbortSignal,
+  onComplete?: (usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    costUsd?: number;
+  }) => Promise<void>,
+  modelId?: string,
 ) => {
   const file = context.activeFile;
   if (!file) throw new Error("Open a file before requesting an inline edit.");
@@ -97,5 +70,7 @@ export const generateInlineVoiceEdit = async (
       offset: file.from - file.before.length,
       caret: file.from,
     },
+    onComplete,
+    modelId,
   );
 };

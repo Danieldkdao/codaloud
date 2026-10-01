@@ -1,7 +1,8 @@
 import { Output, streamText, type ModelMessage } from "ai";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { openrouter } from "./server";
+import { meteredChatModel } from "./server";
+import { reportedModelCostUsd } from "@/features/billing/credit-cost";
 import { quickEditModel } from "@/features/voice/constants";
 import { inlineEditSchema } from "@/features/voice/schemas";
 import type { InlineEvent } from "@/features/voice/types";
@@ -14,6 +15,12 @@ export const streamQuickEdit = async (
   send: (event: InlineEvent) => Promise<void>,
   signal: AbortSignal,
   target: { source: string; offset: number; caret: number },
+  onComplete?: (usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    costUsd?: number;
+  }) => Promise<void>,
+  modelId = quickEditModel,
 ) => {
   const check = () => {
     if (signal.aborted) throw new Error("Suggestion cancelled.");
@@ -21,7 +28,7 @@ export const streamQuickEdit = async (
   check();
   await send({ id, type: "start" });
   const result = streamText({
-    model: openrouter.chat(quickEditModel),
+    model: meteredChatModel(modelId),
     output: Output.object({ schema: inlineEditSchema }),
     instructions: quickEditInstructions,
     messages: [
@@ -101,5 +108,10 @@ export const streamQuickEdit = async (
   const final = await result.output;
   await forward(final.oldText, final.newText, true);
   check();
+  if (onComplete)
+    await onComplete({
+      ...(await result.usage),
+      costUsd: reportedModelCostUsd((await result.finalStep).providerMetadata),
+    });
   await send({ id, type: "complete" });
 };

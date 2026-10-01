@@ -18,6 +18,11 @@ import {
 import { getGitHubAccessToken } from "@/services/github/credentials";
 import { verifyGitHubRepositoryAccess } from "@/services/github/server/repositories";
 import { z } from "zod";
+import {
+  prepareProjectSandboxCleanup,
+  cancelProjectSandboxCleanup,
+  drainProjectSandboxCleanup,
+} from "@/features/terminal/actions/sandbox-cleanup";
 
 const failure = (error: unknown) => ({
   error: true as const,
@@ -54,9 +59,7 @@ export const readProjectsAction = async (
   }
 };
 
-export const createProjectAction = async (
-  unsafeData: CreateProjectSchema,
-) => {
+export const createProjectAction = async (unsafeData: CreateProjectSchema) => {
   try {
     const input = createProjectSchema.parse(unsafeData);
     const store = await getLocalProjects();
@@ -84,7 +87,10 @@ export const createProjectAction = async (
         });
         // A half-created workspace is worse than a failed start: nothing lands
         // unless every chosen file copied.
-        if (copied.failed.length > 0 || copied.imported.length !== input.items.length)
+        if (
+          copied.failed.length > 0 ||
+          copied.imported.length !== input.items.length
+        )
           throw new Error(
             copied.failed[0]?.reason ?? "Unable to copy the chosen files.",
           );
@@ -142,13 +148,24 @@ export const deleteProjectAction = async (projectId: string) => {
     const id = z.uuid().parse(projectId).toLowerCase();
     const store = await getLocalProjects();
     if (!store.read(id)) throw new Error("This project is not on this device.");
-    await executeWorkspace(id, "archive-project");
+    const sandboxId = store.getSandboxId(id);
+    const cleanup = sandboxId
+      ? await prepareProjectSandboxCleanup(id, sandboxId)
+      : null;
     try {
-      if (!store.remove(id)) throw new Error("Unable to remove this project.");
+      await executeWorkspace(id, "archive-project");
+      try {
+        if (!store.remove(id))
+          throw new Error("Unable to remove this project.");
+      } catch (error) {
+        await executeWorkspace(id, "restore-project");
+        throw error;
+      }
     } catch (error) {
-      await executeWorkspace(id, "restore-project");
+      if (cleanup) cancelProjectSandboxCleanup(cleanup);
       throw error;
     }
+    if (cleanup) void drainProjectSandboxCleanup().catch(() => undefined);
     // The rename and metadata removal are complete. Cleanup failure must not
     // invite a second deletion of a project that has already been removed.
     await executeWorkspace(id, "purge-project").catch(() => undefined);

@@ -40,7 +40,7 @@ export const SettingsSection = ({
       >
         {title}
       </HeadingText>
-      {description && <PText>{description}</PText>}
+      {description && <PText className="text-lg">{description}</PText>}
     </View>
     {children}
   </View>

@@ -135,6 +135,9 @@ export const LinkedAccounts = () => {
   const githubAccount = accounts.find(
     (account) => account.providerId === "github",
   );
+  const appleAccount = accounts.find(
+    (account) => account.providerId === "apple",
+  );
 
   return (
     <SettingsSection
@@ -185,7 +188,13 @@ export const LinkedAccounts = () => {
               accessible={false}
             />
           }
-          connected={false}
+          connected={Boolean(appleAccount)}
+          loading={pendingProvider === "apple"}
+          onPress={() =>
+            appleAccount
+              ? void unlinkAccount(appleAccount, "apple")
+              : void linkAccount("apple")
+          }
           last
         />
       </View>

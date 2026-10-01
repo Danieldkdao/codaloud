@@ -5,23 +5,28 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { formatWorkspaceSearch } from "@/features/projects/lib/formatters";
 import { cn } from "@/lib/utils";
+import { useCommandBubbleAnchor } from "@/features/voice/hooks/use-command-bubble-layout";
 
 type ProjectAgentSearchProps = {
   query: string;
   onQueryChange: (query: string) => void;
   floating?: boolean;
+  commandScope?: string;
 };
 
 export const ProjectAgentSearch = ({
   query,
   onQueryChange,
   floating = false,
+  commandScope,
 }: ProjectAgentSearchProps) => {
   const insets = useSafeAreaInsets();
+  const anchor = useCommandBubbleAnchor(commandScope);
   const presentation = formatWorkspaceSearch("agent");
 
   return (
     <View
+      {...anchor}
       testID="agent-activity-search"
       pointerEvents="box-none"
       className={cn(!floating && "bg-background")}

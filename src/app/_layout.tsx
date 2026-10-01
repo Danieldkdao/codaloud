@@ -21,6 +21,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ProjectSearchOverlayProvider } from "@/features/projects/components/project-search-overlay";
 import { editorScreenOptions } from "@/features/settings/constants";
 import { authClient } from "@/lib/auth/auth-client";
+import { configureRevenueCat } from "@/features/billing/revenuecat-client";
+import { AppCommandProvider } from "@/features/voice/hooks/app-command-provider";
+import { subscribeProjectSandboxCleanup } from "@/features/terminal/actions/sandbox-cleanup";
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 250, fade: true });
@@ -31,7 +34,17 @@ const RootNavigator = () => {
   const { ready: isAppReady, error, retry } = useOnboarding();
   const session = authClient.useSession();
 
+  useEffect(() => {
+    if (session.data?.user.id)
+      void configureRevenueCat(session.data.user.id).catch(() => undefined);
+  }, [session.data?.user.id]);
+
   useEffect(subscribeToQueryLifecycle, []);
+
+  useEffect(() => {
+    if (isAppReady && session.data?.user.id)
+      return subscribeProjectSandboxCleanup(session.data.user.id);
+  }, [isAppReady, session.data?.user.id]);
 
   useEffect(() => {
     if (fontError) {
@@ -73,58 +86,67 @@ const RootNavigator = () => {
         <KeyboardSymbolsProvider fill>
           <ProjectSearchOverlayProvider>
             <SuccessFeedbackProvider>
-              <Stack
-                screenOptions={{
-                  headerBackButtonDisplayMode: "minimal",
-                  headerTitleStyle: {
-                    fontFamily: "Fraunces_400Regular",
-                    fontWeight: "400",
-                  },
-                  headerLargeTitleStyle: {
-                    fontFamily: "Fraunces_400Regular",
-                    fontWeight: "400",
-                  },
-                }}
-              >
-                <Stack.Protected guard={Boolean(session.data)}>
+              <AppCommandProvider enabled={Boolean(session.data)}>
+                <Stack
+                  screenOptions={{
+                    headerBackButtonDisplayMode: "minimal",
+                    headerTitleStyle: {
+                      fontFamily: "Fraunces_400Regular",
+                      fontWeight: "400",
+                    },
+                    headerLargeTitleStyle: {
+                      fontFamily: "Fraunces_400Regular",
+                      fontWeight: "400",
+                    },
+                  }}
+                >
+                  <Stack.Protected guard={Boolean(session.data)}>
+                    <Stack.Screen
+                      name="(main)"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="projects/[projectId]"
+                      options={{ title: "Project" }}
+                    />
+                    <Stack.Screen
+                      name="draft"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="new-project"
+                      options={{
+                        ...MODAL_SCREEN_OPTIONS,
+                        ...FORM_SHEET_OPTIONS,
+                        presentation: "formSheet",
+                      }}
+                    />
+                    <Stack.Screen
+                      name="edit-project"
+                      options={{
+                        ...MODAL_SCREEN_OPTIONS,
+                        ...FORM_SHEET_OPTIONS,
+                        presentation: "formSheet",
+                      }}
+                    />
+                    <Stack.Screen name="editor" options={editorScreenOptions} />
+                    <Stack.Screen
+                      name="billing"
+                      options={{ title: "Billing" }}
+                    />
+                  </Stack.Protected>
+                  <Stack.Protected guard={!session.data}>
+                    <Stack.Screen
+                      name="(auth)"
+                      options={{ headerShown: false }}
+                    />
+                  </Stack.Protected>
                   <Stack.Screen
-                    name="(main)"
+                    name="github-connect"
                     options={{ headerShown: false }}
                   />
-                  <Stack.Screen
-                    name="projects/[projectId]"
-                    options={{ title: "Project" }}
-                  />
-                  <Stack.Screen name="draft" options={{ headerShown: false }} />
-                  <Stack.Screen
-                    name="new-project"
-                    options={{
-                      ...MODAL_SCREEN_OPTIONS,
-                      ...FORM_SHEET_OPTIONS,
-                      presentation: "formSheet",
-                    }}
-                  />
-                  <Stack.Screen
-                    name="edit-project"
-                    options={{
-                      ...MODAL_SCREEN_OPTIONS,
-                      ...FORM_SHEET_OPTIONS,
-                      presentation: "formSheet",
-                    }}
-                  />
-                  <Stack.Screen name="editor" options={editorScreenOptions} />
-                </Stack.Protected>
-                <Stack.Protected guard={!session.data}>
-                  <Stack.Screen
-                    name="(auth)"
-                    options={{ headerShown: false }}
-                  />
-                </Stack.Protected>
-                <Stack.Screen
-                  name="github-connect"
-                  options={{ headerShown: false }}
-                />
-              </Stack>
+                </Stack>
+              </AppCommandProvider>
             </SuccessFeedbackProvider>
           </ProjectSearchOverlayProvider>
         </KeyboardSymbolsProvider>

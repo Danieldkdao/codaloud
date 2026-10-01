@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { handleVoiceSessionRequest } from "../server/session-api";
+import { InsufficientCreditsError } from "@/features/billing/server/billing-service";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -7,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   deleteRoom: vi.fn(),
   dispatch: vi.fn(),
   token: vi.fn(),
+  credits: vi.fn(),
 }));
 vi.mock("@/lib/auth/auth", () => ({
   auth: { api: { getSession: mocks.session } },
@@ -21,6 +23,10 @@ vi.mock("@/services/livekit/server", () => ({
 vi.mock("@/data/env/server", () => ({
   serverEnv: { LIVEKIT_URL: "wss://voice.test" },
 }));
+vi.mock("@/features/billing/server/billing-service", () => ({
+  requireAvailableCredits: mocks.credits,
+  InsufficientCreditsError: class extends Error {},
+}));
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.session.mockResolvedValue({ user: { id: "user-one" } });
@@ -28,6 +34,12 @@ beforeEach(() => {
   mocks.dispatch.mockResolvedValue({});
   mocks.token.mockResolvedValue("signed-token");
   mocks.deleteRoom.mockResolvedValue(undefined);
+  mocks.credits.mockResolvedValue({ tier: "free", monthlyCredits: 50 });
+});
+it("blocks a voice session before allocation when credits are exhausted", async () => {
+  mocks.credits.mockRejectedValue(new InsufficientCreditsError());
+  expect((await handleVoiceSessionRequest(request({ mode: "hold" }))).status).toBe(402);
+  expect(mocks.createRoom).not.toHaveBeenCalled();
 });
 const request = (body: unknown, method = "POST") =>
   new Request("https://test/api/voice/session", {

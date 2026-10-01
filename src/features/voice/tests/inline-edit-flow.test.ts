@@ -1,4 +1,15 @@
 // @vitest-environment happy-dom
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  editorPreferencesStore: {
+    load: async () => {},
+    getSnapshot: () => ({
+      preferences: {
+        aiDisabledPaths: "",
+        inlineModel: "openai/gpt-5.4-mini",
+      },
+    }),
+  },
+}));
 import { afterEach, expect, it, vi } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -17,7 +28,7 @@ vi.mock("ai", async (original) => ({
   streamText: mocks.stream,
 }));
 vi.mock("@/services/ai/server", () => ({
-  openrouter: { chat: () => "model" },
+  meteredChatModel: () => "model",
 }));
 vi.mock("@/features/agent/tools/workspace-tools", () => ({
   workspaceTools: {},

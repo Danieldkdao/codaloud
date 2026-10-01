@@ -5,12 +5,17 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useVoiceConversation } from "../hooks/use-voice-conversation";
 import { VoiceMicrophone } from "../components/voice-microphone";
 import { inlineSession } from "../inline-session";
+import { commandCenter } from "../command-center";
 const mocks = vi.hoisted(() => ({
+  textMode: false,
   control: vi.fn(),
   close: vi.fn(),
   connect: vi.fn(),
   background: undefined as undefined | ((state: string) => void),
   button: {} as Record<string, any>,
+}));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  useEditorPreferences: () => ({ preferences: { textMode: mocks.textMode } }),
 }));
 vi.mock("@/services/livekit/voice-native", () => ({
   connectNativeVoice: mocks.connect,
@@ -52,39 +57,60 @@ const Harness = ({
   projectId,
   compact = false,
   draftOnly = false,
+  launcher = false,
 }: {
   enabled?: boolean;
   projectId?: string;
   compact?: boolean;
   draftOnly?: boolean;
+  launcher?: boolean;
 }) => {
   current = useVoiceConversation(enabled, "project", projectId, draftOnly);
-  return <VoiceMicrophone conversation={current} compact={compact} />;
+  return (
+    <VoiceMicrophone
+      conversation={current}
+      compact={compact}
+      launcher={launcher}
+    />
+  );
 };
 it("keeps a draft conversation in inline edit mode even without editor focus", async () => {
   const scope = "draft:123";
   const unregister = inlineSession.register(scope, {
     capture: async () => ({
-      projectId: scope, branch: "", openFiles: [],
+      projectId: scope,
+      branch: "",
+      openFiles: [],
       activeFile: {
-        path: "idea.py", documentKey: "doc", revision: 1,
-        content: "print(1)", from: 0, to: 0, focused: false,
+        path: "idea.py",
+        documentKey: "doc",
+        revision: 1,
+        content: "print(1)",
+        from: 0,
+        to: 0,
+        focused: false,
       },
     }),
-    preview: vi.fn(), apply: vi.fn(async () => true),
+    preview: vi.fn(),
+    apply: vi.fn(async () => true),
   });
   await act(async () => root.render(<Harness projectId={scope} draftOnly />));
   await act(async () => current.startHandsFree());
   expect(inlineSession.getSnapshot()?.mode).toBe("quick-edit");
   expect(mocks.connect).toHaveBeenCalledWith(
-    "hands-free", expect.anything(), expect.anything(),
+    "hands-free",
+    expect.anything(),
+    expect.anything(),
     { projectId: scope, draftOnly: true },
   );
   await act(async () => current.stop());
   unregister();
 });
 let root: Root;
+let container: HTMLDivElement;
 beforeEach(async () => {
+  mocks.textMode = false;
+  commandCenter.clear();
   vi.clearAllMocks();
   mocks.control.mockResolvedValue(undefined);
   mocks.close.mockResolvedValue(undefined);
@@ -93,8 +119,84 @@ beforeEach(async () => {
     close: mocks.close,
   });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  root = createRoot(document.createElement("div"));
+  container = document.createElement("div");
+  root = createRoot(container);
   await act(async () => root.render(<Harness />));
+});
+it("keeps the dock launcher mounted before, during, and after a spoken turn", async () => {
+  await act(async () => root.render(<Harness launcher />));
+  const originalButton = container.querySelector("button");
+  await act(async () => {
+    mocks.button.onPressIn();
+    mocks.button.onLongPress();
+  });
+  expect(current.visible).toBe(true);
+  expect(current.pressed).toBe(true);
+  expect(container.querySelector("button")).not.toBeNull();
+  await act(async () => mocks.button.onTouchEnd());
+  expect(mocks.control).toHaveBeenLastCalledWith("commit");
+  expect(current.state.listening).toBe(false);
+  expect(container.querySelector("button")).toBe(originalButton);
+  await act(async () => mocks.button.onPressIn());
+  expect(container.querySelector("button")).not.toBeNull();
+  await act(async () => mocks.button.onLongPress());
+  expect(current.state.listening).toBe(true);
+  await act(async () => mocks.button.onTouchEnd());
+  expect(mocks.control.mock.calls.map(([action]) => action)).toEqual([
+    "start",
+    "commit",
+    "start",
+    "commit",
+  ]);
+});
+
+it("keeps the dock control available through voice to text and back", async () => {
+  await act(async () => root.render(<Harness launcher />));
+  await act(async () => current.startHandsFree());
+  expect(container.querySelector("button")).not.toBeNull();
+  await act(async () => {
+    current.pause();
+    commandCenter.open("p");
+    mocks.textMode = true;
+    root.render(<Harness launcher />);
+  });
+  expect(container.querySelector("button")).not.toBeNull();
+  expect(mocks.button.accessibilityLabel).toBe("Type a command");
+  expect(commandCenter.getSnapshot().input?.projectId).toBe("p");
+  await act(async () => {
+    commandCenter.closeInput();
+    mocks.textMode = false;
+    root.render(<Harness launcher />);
+  });
+  expect(container.querySelector("button")).not.toBeNull();
+  expect(mocks.button.accessibilityLabel).toBe("Microphone");
+  await act(async () => current.startHandsFree());
+  expect(current.state.listening).toBe(true);
+});
+it("opens typed commands and quick edits without importing or connecting the voice SDK", async () => {
+  mocks.textMode = true;
+  await act(async () => root.render(<Harness projectId="p" />));
+  expect(mocks.button.accessibilityLabel).toBe("Type a command");
+  await act(async () => mocks.button.onPress());
+  expect(commandCenter.getSnapshot().input).toEqual({
+    projectId: "p",
+    mode: "agent",
+  });
+  expect(mocks.connect).not.toHaveBeenCalled();
+  await act(async () => root.render(<Harness projectId="p" compact />));
+  await act(async () => mocks.button.onPress());
+  expect(current.visible).toBe(true);
+  expect(commandCenter.getSnapshot().input?.mode).toBe("quick-edit");
+  expect(mocks.connect).not.toHaveBeenCalled();
+});
+it("closes an existing audio connection when text mode is enabled and blocks new voice starts", async () => {
+  await act(async () => current.startHandsFree());
+  expect(mocks.connect).toHaveBeenCalledOnce();
+  mocks.textMode = true;
+  await act(async () => root.render(<Harness />));
+  expect(mocks.close).toHaveBeenCalledOnce();
+  await act(async () => current.startHandsFree());
+  expect(mocks.connect).toHaveBeenCalledOnce();
 });
 it("stops inline recording without discarding the request, then allows another edit after generation", async () => {
   const unregister = inlineSession.register("p", {
@@ -381,4 +483,19 @@ it("ends skipped inline capture and can immediately start another request", asyn
   expect(current.state.listening).toBe(true);
   await act(async () => current.stop());
   unregister();
+});
+
+it("uses text input for accessibility actions when text mode is enabled", async () => {
+  mocks.textMode = true;
+  await act(async () => root.render(<Harness projectId="p" />));
+  await act(async () =>
+    mocks.button.onAccessibilityAction({
+      nativeEvent: { actionName: "type-command" },
+    }),
+  );
+  expect(commandCenter.getSnapshot().input).toEqual({
+    projectId: "p",
+    mode: "agent",
+  });
+  expect(mocks.connect).not.toHaveBeenCalled();
 });

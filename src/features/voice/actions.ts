@@ -2,6 +2,7 @@ import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-pre
 import { authClient } from "@/lib/auth/auth-client";
 import { fetchBase } from "@/lib/utils";
 import { voiceSessionResponseSchema, type VoiceMode } from "./schemas";
+import { BillingRequiredError } from "@/features/billing/client-error";
 
 export const createVoiceSession = async (
   mode: VoiceMode,
@@ -23,10 +24,12 @@ export const createVoiceSession = async (
         voiceId: editorPreferencesStore.getSnapshot().preferences.voiceId,
       }),
     });
+    if (response.status === 402) throw new BillingRequiredError();
     if (!response.ok) return null;
     const parsed = voiceSessionResponseSchema.safeParse(await response.json());
     return parsed.success ? parsed.data : null;
-  } catch {
+  } catch (error) {
+    if (error instanceof BillingRequiredError) throw error;
     return null;
   }
 };

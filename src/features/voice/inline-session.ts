@@ -55,14 +55,19 @@ export const createInlineSession = () => {
         if (owner === bridge) cancel();
       };
     },
-    begin: async (projectId: string, requestedMode?: InlineRequest["mode"]) => {
+    begin: async (
+      projectId: string,
+      requestedMode?: InlineRequest["mode"],
+      options?: { captureEditor?: boolean },
+    ) => {
       if (request && ["generating", "applying"].includes(request.status))
         throw new Error(
           "Accept, decline, or cancel the current suggestion first.",
         );
       clearPreview();
       const id = `${Date.now()}-${++sequence}`;
-      owner = editors.get(projectId);
+      owner =
+        options?.captureEditor === false ? undefined : editors.get(projectId);
       const bridge = owner;
       publish({
         id,

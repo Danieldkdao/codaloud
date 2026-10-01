@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  picked: { canceled: false as boolean, result: { uri: "file:///picked/a.ts", name: "a.ts", size: 9 } as { uri: string; name: string; size: number } | null },
+  picked: { canceled: false as boolean, result: { uri: "file:///picked/a.ts", name: "a.ts", size: 9 } as { uri: string; name: string; size?: number } | null },
+  actualSize: null as number | null,
   text: "let a = 1",
   copy: vi.fn(),
   remove: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("expo-file-system", () => {
     constructor(...parts: (string | { uri: string })[]) {
       this.uri = parts.map((part) => typeof part === "string" ? part : part.uri).join("/");
       this.name = this.uri.split("/").at(-1) ?? "";
-      this.size = mocks.picked.result?.size ?? 0;
+      this.size = mocks.actualSize ?? mocks.picked.result?.size ?? 0;
     }
     text = async () => mocks.text;
     copy = mocks.copy;
@@ -37,6 +38,7 @@ import { importDraftFileAction } from "../actions/import-draft-file";
 beforeEach(() => {
   mocks.picked = { canceled: false, result: { uri: "file:///picked/a.ts", name: "a.ts", size: 9 } };
   mocks.text = "let a = 1";
+  mocks.actualSize = null;
   mocks.copy.mockReset();
   mocks.remove.mockReset();
   mocks.create.mockReset();
@@ -87,5 +89,13 @@ describe("draft file import", () => {
     await expect(importDraftFileAction()).resolves.toMatchObject({ error: true, message: "Copy failed" });
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.remove).toHaveBeenCalledOnce();
+  });
+
+  it.each(["large.ts", "large.png"])("checks the opened %s size when the picker omits it", async (name) => {
+    mocks.picked.result = { uri: `file:///picked/${name}`, name };
+    mocks.actualSize = 32 * 1024 * 1024 + 1;
+    await expect(importDraftFileAction()).resolves.toMatchObject({ error: true, message: expect.stringMatching(/too large/i) });
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.copy).not.toHaveBeenCalled();
   });
 });

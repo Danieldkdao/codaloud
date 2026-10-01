@@ -37,8 +37,10 @@ import { useTheme } from "@/hooks/use-theme";
 import { alert, confirmAction, isValidIds } from "@/lib/utils";
 import { useVoiceEditor } from "@/features/voice/hooks/use-voice-editor";
 import { useVoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
-import { InlineVoiceControls } from "@/features/voice/components/inline-voice-controls";
 import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
+import { VoiceTranscriptBubble } from "@/features/voice/components/voice-transcript-bubble";
+import { VoiceCommandOverlay } from "@/features/voice/components/voice-command-overlay";
+import { useCommandBubbleAnchor } from "@/features/voice/hooks/use-command-bubble-layout";
 import { useKeyboardFrame } from "@/hooks/use-keyboard-frame";
 import { ProjectCodeKeyboardAccessory } from "@/features/projects/components/project-code-keyboard-accessory";
 import { ProjectCodeToolbar } from "@/features/projects/components/project-code-toolbar";
@@ -109,6 +111,7 @@ const DraftEditorScreen = () => {
   const hasAsset = storedId ? draftHasAsset(storedId) : false;
   const isReady = Boolean(seed) && (hasAsset || readyKey === seed?.key);
   const voiceScope = `draft:${storedId ?? seed?.key ?? "loading"}`;
+  const commandAnchor = useCommandBubbleAnchor(voiceScope);
   const voiceEnabled = isReady && !hasAsset && !deletion.isPending;
   const voiceEditor = useVoiceEditor({
     projectId: voiceScope,
@@ -370,6 +373,7 @@ const DraftEditorScreen = () => {
       </View>
       {isReady && !hasAsset && (searchOpen || !keyboardFrame) ? (
         <EditorBottomBar
+          commandScope={voiceScope}
           frame={searchOpen ? keyboardFrame : undefined}
           dockHeight={dockHeight}
           onHeight={setBarHeight}
@@ -397,16 +401,10 @@ const DraftEditorScreen = () => {
       {isReady && !hasAsset && editorFocused && keyboardFrame && !searchOpen ? (
         <ProjectCodeKeyboardAccessory
           status={toolbar}
-          voiceActive={Boolean(conversation?.visible)}
-          voiceFeedbackAboveRows
+          commandScope={voiceScope}
           voice={
-            voiceEnabled && conversation && !conversation.visible ? (
-              <VoiceMicrophone conversation={conversation} compact />
-            ) : null
-          }
-          feedback={
-            conversation?.visible ? (
-              <InlineVoiceControls conversation={conversation} />
+            voiceEnabled && conversation ? (
+              <VoiceMicrophone conversation={conversation} compact launcher />
             ) : null
           }
           frame={keyboardFrame}
@@ -418,8 +416,24 @@ const DraftEditorScreen = () => {
         />
       ) : null}
       {!isReady ? <CodeEditorLoading bottomInset={dockHeight} /> : null}
+      {voiceEnabled ? (
+        <VoiceCommandOverlay scope={voiceScope}>
+          {(maxHeight) => (
+            <VoiceTranscriptBubble
+              conversation={conversation}
+              projectId={voiceScope}
+              maxHeight={maxHeight}
+            />
+          )}
+        </VoiceCommandOverlay>
+      ) : null}
       <View
-        onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
+        ref={commandAnchor.ref}
+        collapsable={false}
+        onLayout={(event) => {
+          setDockHeight(event.nativeEvent.layout.height);
+          commandAnchor.onLayout();
+        }}
       >
         <DraftEditorDock
           analysis={language.diagnostics ? analysis : undefined}
@@ -427,7 +441,6 @@ const DraftEditorScreen = () => {
           onProblems={analysis ? () => setProblemsOpen(true) : undefined}
           onCopyToProject={() => void copyToProject()}
           conversation={voiceEnabled ? conversation : undefined}
-          showVoiceFeedback={!(editorFocused && keyboardFrame && !searchOpen)}
         />
         {storedId ? (
           <View className="items-center pb-3">

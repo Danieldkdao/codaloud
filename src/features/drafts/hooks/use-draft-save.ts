@@ -5,7 +5,7 @@ import {
   createDraftAction,
   updateDraftAction,
 } from "@/features/drafts/actions/draft-actions";
-import { parseDraftFilename } from "@/features/drafts/lib/draft-filename";
+import { draftFilenameSchema } from "@/features/drafts/lib/draft-filename";
 import { draftSaveDebounceMs } from "@/features/drafts/constants";
 import type {
   DraftMutationResult,
@@ -20,9 +20,15 @@ export const isSavableDraft = (input: DraftSaveInput) =>
   input.content.length > 0 || Boolean(input.filename);
 
 const normalizeDraftSaveInput = (input: DraftSaveInput): DraftSaveInput => ({
-  filename: parseDraftFilename(input.filename),
+  filename: input.filename?.trim() || null,
   content: input.content,
 });
+
+const draftSaveValidationError = (input: DraftSaveInput) => {
+  if (!input.filename) return null;
+  const result = draftFilenameSchema.safeParse(input.filename);
+  return result.success ? null : result.error.issues[0]?.message ?? "Invalid filename.";
+};
 
 const sameDraftSaveInput = (
   first: DraftSaveInput | null,
@@ -79,8 +85,9 @@ export const useDraftSave = (savedDraftId: string | null) => {
             ? await updateDraftAction(identifier.current, input)
             : await createDraftAction(input);
           if (savedDraft.error) {
-            // Requeue so a newer edit or an explicit retry writes it again.
-            queue.current ??= input;
+            // A newer buffer already supersedes this failed write.
+            if (queue.current) continue;
+            queue.current = input;
             report({ state: "error", message: savedDraft.message });
             return;
           }
@@ -115,6 +122,7 @@ export const useDraftSave = (savedDraftId: string | null) => {
       }
       if (
         latest.current &&
+        !draftSaveValidationError(latest.current) &&
         !sameDraftSaveInput(written.current, latest.current)
       )
         queue.current = latest.current;
@@ -126,6 +134,12 @@ export const useDraftSave = (savedDraftId: string | null) => {
     (input: DraftSaveInput) => {
       const next = normalizeDraftSaveInput(input);
       latest.current = next;
+      const validationError = draftSaveValidationError(next);
+      if (validationError) {
+        queue.current = null;
+        report({ state: "error", message: validationError });
+        return false;
+      }
       if (!isSavableDraft(next)) {
         report({ message: "Add content or a filename to save this draft." });
         return false;
@@ -144,6 +158,13 @@ export const useDraftSave = (savedDraftId: string | null) => {
       // Record the buffer now: leaving before the timer fires still saves it.
       latest.current = normalizeDraftSaveInput(input);
       if (timer.current) clearTimeout(timer.current);
+      const validationError = draftSaveValidationError(latest.current);
+      if (validationError) {
+        timer.current = null;
+        queue.current = null;
+        report({ state: "error", message: validationError });
+        return;
+      }
       timer.current = setTimeout(() => {
         timer.current = null;
         save(input);
@@ -161,6 +182,12 @@ export const useDraftSave = (savedDraftId: string | null) => {
       }
       const next = normalizeDraftSaveInput(input);
       latest.current = next;
+      const validationError = draftSaveValidationError(next);
+      if (validationError) {
+        queue.current = null;
+        report({ state: "error", message: validationError });
+        return null;
+      }
       if (!isSavableDraft(next)) return null;
       queue.current = next;
       await drain();

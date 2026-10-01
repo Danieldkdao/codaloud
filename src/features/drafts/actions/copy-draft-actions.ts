@@ -176,6 +176,7 @@ export const copyDraftToProjectAction = async (
         parentPath: rollback.directoryPath,
         name: rollback.filename,
         kind: "file",
+        expectedContentHash: sha256Hex(""),
       }).catch(() => undefined);
     return failure(error);
   }

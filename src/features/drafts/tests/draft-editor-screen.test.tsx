@@ -111,7 +111,12 @@ vi.mock("@/features/voice/hooks/use-voice-conversation", () => ({
   },
 }));
 vi.mock("@/features/voice/components/voice-transcript-bubble", () => ({
-  VoiceTranscriptBubble: () => null,
+  VoiceTranscriptBubble: () =>
+    createElement("div", { "data-command-bubble": true }),
+}));
+vi.mock("@/features/voice/components/voice-command-overlay", () => ({
+  VoiceCommandOverlay: ({ children }: any) =>
+    createElement("div", { "data-command-overlay": true }, children(420)),
 }));
 vi.mock("@/features/voice/components/voice-microphone", () => ({
   VoiceMicrophone: () => createElement("div", { "data-microphone": true }),
@@ -291,7 +296,19 @@ describe("draft editor screen", () => {
     expect(mocks.search.onCommand).toBeTypeOf("function");
   });
 
-  it("puts active draft voice feedback above the keyboard rows", async () => {
+  it("keeps draft commands in one floating bubble when its input owns the keyboard", async () => {
+    mocks.keyboardFrame = { screenY: 544, screenX: 0, height: 300, width: 390 };
+    mocks.conversationVisible = true;
+    await render();
+    await act(async () => {
+      await (mocks.editor.onReady as (key: string) => Promise<void>)(
+        mocks.editor.documentKey as string,
+      );
+    });
+    expect(container.querySelector("[data-command-bubble]")).not.toBeNull();
+  });
+
+  it("keeps keyboard actions available without a second inline voice strip", async () => {
     mocks.keyboardFrame = { screenY: 544, screenX: 0, height: 300, width: 390 };
     mocks.conversationVisible = true;
     await render();
@@ -306,10 +323,9 @@ describe("draft editor screen", () => {
         ) => Promise<void>
       )({ focused: true }, mocks.editor.documentKey as string);
     });
-    expect(mocks.accessory.voiceActive).toBe(true);
-    expect(mocks.accessory.voiceFeedbackAboveRows).toBe(true);
-    expect(mocks.accessory.feedback).toBeTruthy();
-    expect(mocks.accessory.voice).toBeNull();
-    expect(mocks.dock.showVoiceFeedback).toBe(false);
+    expect(mocks.accessory.voiceActive).not.toBe(true);
+    expect(mocks.accessory.feedback).toBeUndefined();
+    expect(mocks.accessory.voice).not.toBeNull();
+    expect(mocks.dock.showVoiceFeedback).toBeUndefined();
   });
 });

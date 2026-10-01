@@ -53,6 +53,8 @@ export const formatAccountProvider = (
       return "GitHub";
     case "google":
       return "Google";
+    case "apple":
+      return "Apple";
   }
 };
 
@@ -73,5 +75,21 @@ export const formatVoicePreviewSource = (id: string) => {
       return require("../../../../assets/voices/river.mp3");
     case "pFZP5JQG7iQjIQuC4Bku":
       return require("../../../../assets/voices/lily.mp3");
+  }
+};
+export const formatAiModel = (model: string) => {
+  switch (model) {
+    case "openai/gpt-5.4-mini":
+      return "GPT-5.4 mini";
+    case "deepseek/deepseek-v4.1-flash":
+      return "DeepSeek V4.1 Flash";
+    case "google/gemini-3-flash-preview":
+      return "Gemini 3 Flash";
+    case "anthropic/claude-haiku-4.5":
+      return "Claude Haiku 4.5";
+    case "anthropic/claude-sonnet-4.5":
+      return "Claude Sonnet 4.5";
+    default:
+      return "Unknown model";
   }
 };

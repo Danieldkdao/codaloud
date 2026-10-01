@@ -26,6 +26,35 @@ describe("workspace editor preferences", () => {
       theme: "Dracula",
     });
   });
+  it("keeps large-sync and AI exclusion settings on the device", async () => {
+    const disk = storage();
+    const state = createEditorPreferences(disk);
+    await state.load();
+    expect(state.getSnapshot().preferences).toMatchObject({
+      allowLargeSync: false,
+      syncAllowedPaths: expect.stringContaining("node_modules"),
+      aiDisabledPaths: expect.stringContaining(".env"),
+      inlineModel: "openai/gpt-5.4-mini",
+      agentModel: "deepseek/deepseek-v4.1-flash",
+    });
+    await state.update({
+      allowLargeSync: true,
+      syncAllowedPaths: "node_modules\n__pycache__\n",
+      aiDisabledPaths: ".env*\nnode_modules\n",
+      inlineModel: "anthropic/claude-haiku-4.5",
+      agentModel: "google/gemini-3-flash-preview",
+    });
+    disk.getItem.mockResolvedValue(disk.setItem.mock.calls.at(-1)![1]);
+    const restored = createEditorPreferences(disk);
+    await restored.load();
+    expect(restored.getSnapshot().preferences).toMatchObject({
+      allowLargeSync: true,
+      syncAllowedPaths: "node_modules\n__pycache__\n",
+      aiDisabledPaths: ".env*\nnode_modules\n",
+      inlineModel: "anthropic/claude-haiku-4.5",
+      agentModel: "google/gemini-3-flash-preview",
+    });
+  });
   it("merges a change made during hydration without losing stored fields", async () => {
     const disk = storage();
     let resolve!: (value: string) => void;
@@ -159,6 +188,17 @@ it("persists speech settings without losing the selected voice when muted", asyn
   expect(restored.getSnapshot().preferences.voiceId).toBe(
     "SAz9YHcvj6GT2YYXdXww",
   );
+});
+
+it("persists text mode while keeping voice preferences available", async () => {
+  const disk = storage();
+  const state = createEditorPreferences(disk);
+  await state.update({ textMode: true });
+  disk.getItem.mockResolvedValue(disk.setItem.mock.calls.at(-1)![1]);
+  const restored = createEditorPreferences(disk);
+  await restored.load();
+  expect(restored.getSnapshot().preferences.textMode).toBe(true);
+  expect(restored.getSnapshot().preferences.speechEnabled).toBe(true);
 });
 it("restores invalid or missing voice preferences to George with speech enabled", async () => {
   const disk = storage();

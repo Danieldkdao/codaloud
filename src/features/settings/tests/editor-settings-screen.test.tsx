@@ -7,6 +7,12 @@ import { editorScreenOptions } from "@/features/settings/constants";
 import { SettingsScreen } from "@/features/settings/components/settings-screen";
 
 const mocks = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  useEditorPreferences: () => ({
+    preferences: { textMode: false },
+    update: vi.fn(),
+  }),
+}));
 
 vi.mock("react-native", () => ({
   Pressable: ({

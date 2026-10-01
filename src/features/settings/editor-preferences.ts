@@ -5,6 +5,10 @@ import {
   voicePresets,
 } from "./constants";
 import type { EditorPreferences } from "./types";
+import {
+  agentModelIds,
+  inlineModelIds,
+} from "@/features/billing/model-catalog";
 
 const restorePreferences = (raw: string | null): EditorPreferences => {
   let saved: Partial<EditorPreferences> = {};
@@ -14,6 +18,13 @@ const restorePreferences = (raw: string | null): EditorPreferences => {
     /* Recover malformed device data. */
   }
   const preferences = { ...defaultEditorPreferences };
+  if (inlineModelIds.some((model) => model === saved.inlineModel))
+    preferences.inlineModel = saved.inlineModel!;
+  if (agentModelIds.some((model) => model === saved.agentModel))
+    preferences.agentModel = saved.agentModel!;
+  for (const key of ["syncAllowedPaths", "aiDisabledPaths"] as const)
+    if (typeof saved[key] === "string" && saved[key]!.length <= 4096)
+      preferences[key] = saved[key]!;
   if (voicePresets.some((voice) => voice.id === saved.voiceId))
     preferences.voiceId = saved.voiceId!;
   if (editorThemes.includes(saved.theme!)) preferences.theme = saved.theme!;
@@ -31,7 +42,9 @@ const restorePreferences = (raw: string | null): EditorPreferences => {
   )
     preferences.tabSize = saved.tabSize!;
   for (const key of [
+    "allowLargeSync",
     "speechEnabled",
+    "textMode",
     "wordWrap",
     "lineNumbers",
     "minimap",

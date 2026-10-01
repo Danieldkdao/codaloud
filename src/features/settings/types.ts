@@ -12,9 +12,15 @@ export type OnboardingStorage = {
 
 export type EditorTheme = (typeof import("./constants").editorThemes)[number];
 export type EditorFont = (typeof import("./constants").editorFonts)[number];
-export type SupportedAccountProvider = "github" | "google";
+export type SupportedAccountProvider = "github" | "google" | "apple";
 export type EditorPreferences = {
+  inlineModel: import("@/features/billing/model-catalog").InlineModelId;
+  agentModel: import("@/features/billing/model-catalog").AgentModelId;
+  allowLargeSync: boolean;
+  syncAllowedPaths: string;
+  aiDisabledPaths: string;
   speechEnabled: boolean;
+  textMode: boolean;
   voiceId: string;
   theme: EditorTheme;
   font: EditorFont;

@@ -5,15 +5,41 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { VoiceTranscriptBubble } from "../components/voice-transcript-bubble";
 import { InlineVoiceControls } from "../components/inline-voice-controls";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
+import { commandCenter } from "../command-center";
+import { inlineSession } from "../inline-session";
+vi.mock("@/features/agent/components/file-activity", () => ({
+  FileActivity: () => {
+    throw new Error(
+      "Project provider is unavailable outside the project screen.",
+    );
+  },
+}));
 const mocks = vi.hoisted(() => ({
+  textMode: false,
   scroll: vi.fn(),
   props: {} as Record<string, any>,
   bubbleProps: {} as Record<string, any>,
   viewportProps: {} as Record<string, any>,
   contentProps: {} as Record<string, any>,
+  inputProps: {} as Record<string, any>,
+  textInputProps: {} as Record<string, any>,
+  segmentProps: [] as Record<string, any>[],
+  send: vi.fn(async () => {}),
+  update: vi.fn(async () => {}),
   pan: {} as Record<string, any>,
 }));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  useEditorPreferences: () => ({
+    preferences: { textMode: mocks.textMode },
+    update: mocks.update,
+  }),
+}));
+vi.mock("../components/voice-microphone", () => ({
+  VoiceMicrophone: () =>
+    createElement("button", { "aria-label": "Microphone" }),
+}));
 vi.mock("react-native", () => ({
+  Keyboard: { dismiss: vi.fn() },
   Text: ({
     children,
     className,
@@ -30,6 +56,7 @@ vi.mock("react-native", () => ({
   },
   View: ({ children, ...props }: any) => {
     if (props.testID === "voice-transcript-content") mocks.contentProps = props;
+    if (props.testID === "command-input-accessory") mocks.inputProps = props;
     return createElement("div", null, children);
   },
   Pressable: ({
@@ -60,6 +87,16 @@ vi.mock("@/components/ui/glass-surface", () => ({
     createElement("section", { "data-glass-surface": true }, children),
 }));
 vi.mock("@/components/ui/icon", () => ({ Icon: () => null }));
+vi.mock("@/components/project-icon", () => ({ ProjectIcon: () => null }));
+vi.mock("@/components/ui/input", () => ({
+  Input: (props: any) => {
+    mocks.textInputProps = props;
+    return null;
+  },
+}));
+vi.mock("../text-command", () => ({ sendTextCommand: mocks.send }));
+vi.mock("@/components/ui/button", () => ({ Button: () => null }));
+vi.mock("expo-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 vi.mock("@/components/markdown-text", () => ({
   MarkdownText: ({ text, streaming }: any) =>
     createElement("article", { "data-streaming": streaming }, text),
@@ -86,6 +123,8 @@ vi.mock("react-native-reanimated", async () => {
   return {
     default: {
       View: ({ children, ...props }: any) => {
+        if (props.testID === "voice-transcript-segment")
+          mocks.segmentProps.push(props);
         if (props.style?.alignSelf === "center") mocks.bubbleProps = props;
         if (props.testID === "voice-transcript-viewport")
           mocks.viewportProps = props;
@@ -106,7 +145,11 @@ vi.mock("react-native-reanimated", async () => {
       return box.current;
     },
     withSpring: (value: number, config: object) => ({ value, config }),
-    withTiming: (value: number, config: object) => ({ value, config }),
+    withTiming: (value: number, config: object) => ({
+      value,
+      config,
+      valueOf: () => value,
+    }),
     Easing: { inOut: (easing: unknown) => easing, cubic: "cubic" },
     FadeIn: transition,
     FadeInDown: transition,
@@ -133,7 +176,9 @@ const bottomEvent = {
   },
 };
 beforeEach(() => {
+  commandCenter.clear();
   vi.clearAllMocks();
+  mocks.segmentProps = [];
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   container = document.createElement("div");
   root = createRoot(container);
@@ -152,6 +197,112 @@ beforeEach(() => {
   act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
 });
 afterEach(() => act(() => root.unmount()));
+it("renders a draft edit result without requiring a project provider", async () => {
+  const snapshot = vi.spyOn(inlineSession, "getSnapshot").mockReturnValue({
+    id: "draft-edit",
+    projectId: "draft:one",
+    context: null,
+    mode: "quick-edit",
+    status: "ready",
+    text: "preview",
+    transcript: "edit",
+    files: [{ path: "note.txt", status: "changed" }],
+  });
+  try {
+    await act(async () =>
+      root.render(
+        <VoiceTranscriptBubble
+          conversation={conversation}
+          projectId="draft:one"
+        />,
+      ),
+    );
+    await vi.waitFor(() => expect(container.textContent).toContain("note.txt"));
+    expect(container.querySelector('[aria-label="Open note.txt"]')).toBeNull();
+  } finally {
+    snapshot.mockRestore();
+  }
+});
+it("labels typed quick edits without offering voice instructions", () => {
+  act(() => commandCenter.open("draft:one", "quick-edit"));
+  expect(container.textContent).toContain("Quick edit");
+  expect(container.textContent).not.toContain("Hold to talk");
+});
+it("keeps the voice header short and puts gesture instructions in the wider content area", () => {
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble
+        conversation={{
+          ...conversation,
+          state: {
+            ...conversation.state,
+            connection: "idle",
+            listening: false,
+            transcript: [],
+          },
+        }}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("Ready to listen");
+  expect(container.textContent).not.toContain(
+    "Hold to talk · Double-tap for hands-free",
+  );
+  expect(container.textContent).toContain("Hold the microphone to talk");
+});
+it("toggles typing back to voice without clearing previous results or starting capture", () => {
+  const pause = vi.fn();
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble
+        conversation={{ ...conversation, pause }}
+        projectId="draft:one"
+      />,
+    ),
+  );
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Text mode"]')!
+      .click(),
+  );
+  expect(commandCenter.getSnapshot().input).toEqual({
+    projectId: "draft:one",
+    mode: "quick-edit",
+  });
+  expect(
+    container
+      .querySelector('[aria-label="Text mode"]')
+      ?.classList.contains("bg-primary/10"),
+  ).toBe(true);
+  expect(mocks.textInputProps.keyboardSymbols).not.toBe(false);
+  act(() =>
+    commandCenter.show({
+      kind: "output",
+      projectId: "draft:one",
+      title: "Result",
+      text: "Saved response",
+    }),
+  );
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Text mode"]')!
+      .click(),
+  );
+  expect(commandCenter.getSnapshot().input).toBeNull();
+  expect(container.textContent).toContain("Saved response");
+  expect(container.querySelector('[aria-label="Microphone"]')).toBeNull();
+  expect(mocks.update.mock.calls).toEqual([
+    [{ textMode: true }],
+    [{ textMode: false }],
+  ]);
+  expect(conversation.stop).not.toHaveBeenCalled();
+});
+it("keeps the quick-edit text input out of the bottom voice controls", () => {
+  act(() => commandCenter.open("draft:one", "quick-edit"));
+  mocks.textInputProps = {};
+  act(() => root.render(<InlineVoiceControls conversation={conversation} />));
+  expect(mocks.textInputProps.accessibilityLabel).toBeUndefined();
+});
 it("keeps inline feedback minimal and lets recording stop without closing the controls", () => {
   const pause = vi.fn();
   const startInline = vi.fn();
@@ -376,7 +527,7 @@ it("shows a destructive failure after the transcript without a retry button", ()
   expect(text.indexOf(error)).toBeGreaterThan(
     text.findIndex((node) => node.textContent === "Hello"),
   );
-  expect(container.querySelectorAll("button")).toHaveLength(2);
+  expect(container.querySelector('[aria-label="Retry voice"]')).toBeNull();
 });
 
 it("collapses without stopping voice and reopens with text received while hidden", () => {
@@ -434,6 +585,55 @@ const viewportHeight = () => {
   return style.height;
 };
 
+it("leaves the microphone in the dock instead of adding a second press target", () => {
+  expect(container.querySelector('[aria-label="Microphone"]')).toBeNull();
+  conversation.pressed = true;
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  expect(container.querySelector('[aria-label="Microphone"]')).toBeNull();
+});
+
+it("keeps the text input visible after changing modes without another layout event", () => {
+  act(() => mocks.props.onContentSizeChange(300, 180));
+  conversation.state = {
+    ...conversation.state,
+    connection: "connecting",
+    listening: false,
+  };
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Text mode"]')!
+      .click(),
+  );
+  conversation.state = { ...conversation.state, connection: "idle" };
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  expect(commandCenter.getSnapshot().input).not.toBeNull();
+  const restored = viewportHeight();
+  expect(
+    typeof restored === "number" ? restored : restored.value,
+  ).toBeGreaterThanOrEqual(120);
+});
+
+it("restores the transcript viewport after reconnecting without another content-size event", () => {
+  act(() => mocks.props.onContentSizeChange(300, 180));
+  conversation.state = {
+    ...conversation.state,
+    connection: "connecting",
+    listening: false,
+  };
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  conversation.state = {
+    ...conversation.state,
+    connection: "connected",
+    listening: true,
+  };
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  const restored = viewportHeight();
+  expect(
+    typeof restored === "number" ? restored : restored.value,
+  ).toBeGreaterThanOrEqual(120);
+});
+
 it("grows the viewport with the reply, capped so a long reply scrolls", () => {
   const rerender = () =>
     act(() =>
@@ -448,6 +648,42 @@ it("grows the viewport with the reply, capped so a long reply scrolls", () => {
   expect(viewportHeight().value).toBe(120);
 });
 
+it("reserves room for the input as well as results so they cannot overlap", () => {
+  act(() => commandCenter.open("p"));
+  act(() =>
+    mocks.inputProps.onLayout({ nativeEvent: { layout: { height: 100 } } }),
+  );
+  act(() => mocks.props.onContentSizeChange(0, 140));
+  act(() => root.render(<VoiceTranscriptBubble conversation={conversation} />));
+  expect(viewportHeight().value).toBeGreaterThanOrEqual(240);
+});
+
+it("lets native transcript rows keep their height while the input and keyboard constrain the scroll area", () => {
+  act(() => commandCenter.open("p"));
+  act(() =>
+    root.render(
+      <VoiceTranscriptBubble conversation={conversation} maxHeight={180} />,
+    ),
+  );
+  expect(mocks.props.style).toMatchObject({ flex: 1, minHeight: 0 });
+  expect(mocks.segmentProps.length).toBeGreaterThan(0);
+  for (const segment of mocks.segmentProps) {
+    expect(segment.style).toMatchObject({ flexShrink: 0 });
+    expect(segment.layout).toBeUndefined();
+  }
+});
+
+it("submits the native keyboard's final text even when the last character has not rerendered", async () => {
+  act(() => commandCenter.open("p"));
+  act(() => mocks.textInputProps.onChangeText("Open termina"));
+  await act(async () =>
+    mocks.textInputProps.onSubmitEditing({
+      nativeEvent: { text: "Open terminal" },
+    }),
+  );
+  expect(mocks.send).toHaveBeenCalledWith("p", "Open terminal", "agent");
+});
+
 it("drags between the floor and the cap and never below the floor", () => {
   const rerender = () =>
     act(() =>
@@ -458,7 +694,7 @@ it("drags between the floor and the cap and never below the floor", () => {
     mocks.pan.onPanResponderMove({}, { dy: -200 });
   });
   rerender();
-  expect(viewportHeight()).toBe(200);
+  expect(viewportHeight()).toBe(320);
   act(() => mocks.pan.onPanResponderMove({}, { dy: 600 }));
   rerender();
   expect(viewportHeight()).toBe(120);

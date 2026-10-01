@@ -14,6 +14,7 @@ import {
 } from "react";
 import {
   PanResponder,
+  Keyboard,
   Pressable,
   ScrollView,
   useWindowDimensions,
@@ -22,20 +23,31 @@ import {
 import Animated, {
   Easing,
   FadeIn,
-  LinearTransition,
   ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
-import { formatVoiceStatus, formatVoiceTranscript } from "../lib/formatters";
+import {
+  formatCommandInputTitle,
+  formatVoiceStatus,
+  formatVoiceInstructions,
+  formatVoiceTranscript,
+} from "../lib/formatters";
 
 import { microphoneTrack } from "@/services/livekit/voice-track";
 import { inlineSession } from "../inline-session";
-const FileActivity = lazy(async () => ({
-  default: (await import("@/features/agent/components/file-activity"))
-    .FileActivity,
+import { commandCenter } from "../command-center";
+import {
+  CommandFileActivity,
+  CommandResults,
+  CommandTextInput,
+} from "./command-content";
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
+const TaskStatusBar = lazy(async () => ({
+  default: (await import("@/features/agent/components/task-status-bar"))
+    .TaskStatusBar,
 }));
 
 // Evaluate the native SDK only after a real microphone track exists.
@@ -52,10 +64,31 @@ const slideMs = 300;
 export const VoiceTranscriptBubble = ({
   conversation,
   compact = false,
+  projectId = "app",
+  hasTasks = false,
+  maxHeight: availableHeight = Infinity,
 }: {
   conversation: VoiceConversation;
   compact?: boolean;
+  projectId?: string;
+  hasTasks?: boolean;
+  maxHeight?: number;
 }) => {
+  const { update } = useEditorPreferences();
+  const commands = useSyncExternalStore(
+    commandCenter.subscribe,
+    commandCenter.getSnapshot,
+  );
+  const visible =
+    conversation.visible ||
+    Boolean(
+      commands.input ||
+      commands.result ||
+      commands.transcript.length ||
+      commands.busy ||
+      commands.error ||
+      hasTasks,
+    );
   const track = useSyncExternalStore(
     microphoneTrack.subscribe,
     microphoneTrack.getSnapshot,
@@ -64,6 +97,8 @@ export const VoiceTranscriptBubble = ({
     inlineSession.subscribe,
     inlineSession.getSnapshot,
   );
+  const quickEdit =
+    projectId.startsWith("draft:") || inline?.mode === "quick-edit";
   const { width, height } = useWindowDimensions();
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
@@ -78,13 +113,19 @@ export const VoiceTranscriptBubble = ({
   const viewportHeight = useSharedValue(0);
   const sized = useRef(false);
   const contentHeight = useRef(0);
+  const inputHeight = useRef(0);
   const dragFrom = useRef(0);
-  const maxHeight = compact
-    ? Math.min(160, height * 0.22)
-    : Math.min(420, height * 0.45);
+  const maxHeight = Math.min(
+    availableHeight,
+    compact ? Math.min(160, height * 0.22) : Math.min(420, height * 0.45),
+  );
   const clampHeight = (value: number) =>
-    Math.max(DRAG_MIN_HEIGHT, Math.min(maxHeight, value));
-  const autoHeight = () => clampHeight(contentHeight.current);
+    Math.min(
+      maxHeight,
+      Math.max(DRAG_MIN_HEIGHT, inputHeight.current + 40, value),
+    );
+  const autoHeight = () =>
+    clampHeight(contentHeight.current + inputHeight.current);
   const slideTo = (value: number) => {
     viewportHeight.value = withTiming(value, {
       duration: slideMs,
@@ -112,7 +153,11 @@ export const VoiceTranscriptBubble = ({
   });
   const { state } = conversation;
   useEffect(() => {
-    if (!conversation.visible || state.connection === "connecting") {
+    if (visible && !collapsed && viewportHeight.value > maxHeight)
+      slideTo(maxHeight);
+  }, [maxHeight, visible, collapsed]);
+  useEffect(() => {
+    if (!visible) {
       follow.current = true;
       userGesture.current = false;
       userScrolling.current = false;
@@ -120,9 +165,12 @@ export const VoiceTranscriptBubble = ({
       viewportHeight.value = 0;
       setShowLatest(false);
       setCollapsed(false);
+    } else if (!collapsed && !sized.current) {
+      // Reconnecting can reuse native content without another size event.
+      slideTo(autoHeight());
     }
-  }, [conversation.visible, state.connection]);
-  if (!conversation.visible) return null;
+  }, [visible, state.connection, commands.input]);
+  if (!visible) return null;
   return (
     <Animated.View
       entering={enterGlassSurface}
@@ -136,23 +184,57 @@ export const VoiceTranscriptBubble = ({
       <GlassSurface borderRadius={28}>
         <Animated.View entering={revealContent} className="px-4 py-2">
           <View className="flex-row items-center gap-2">
-            <View
-              className={cn(
-                "size-2 rounded-full bg-muted-foreground",
-                state.listening && "bg-primary",
-              )}
-            />
             <PText
               className="min-w-0 flex-1 text-foreground font-medium"
               numberOfLines={2}
               accessibilityLiveRegion="polite"
             >
-              {inline?.status === "generating"
-                ? "Writing suggestion…"
-                : inline?.status === "ready"
-                  ? "Review suggestion in editor"
-                  : formatVoiceStatus(state)}
+              {commands.busy
+                ? "Working…"
+                : commands.input
+                  ? formatCommandInputTitle(commands.input.mode)
+                  : inline?.status === "generating"
+                    ? "Writing suggestion…"
+                    : inline?.status === "ready"
+                      ? "Review suggestion in editor"
+                      : formatVoiceStatus(state, quickEdit)}
             </PText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Text mode"
+              accessibilityHint="Switch between typing and speaking."
+              accessibilityState={{ selected: Boolean(commands.input) }}
+              onPress={() => {
+                conversation.pause?.();
+                setCollapsed(false);
+                sized.current = false;
+                if (commands.input) {
+                  Keyboard.dismiss();
+                  commandCenter.closeInput();
+                  void update({ textMode: false });
+                } else {
+                  commandCenter.open(
+                    projectId,
+                    projectId.startsWith("draft:") ? "quick-edit" : "agent",
+                  );
+                  void update({ textMode: true });
+                }
+                slideTo(autoHeight());
+              }}
+              className={cn(
+                "size-11 shrink-0 items-center justify-center rounded-full active:bg-muted",
+                commands.input && "bg-primary/10",
+              )}
+            >
+              <Icon
+                family="Feather"
+                name="type"
+                size={22}
+                className={cn(
+                  commands.input ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -185,7 +267,10 @@ export const VoiceTranscriptBubble = ({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close voice conversation"
-              onPress={conversation.stop}
+              onPress={() => {
+                commandCenter.clear();
+                conversation.stop();
+              }}
               className="size-12 shrink-0 items-center justify-center rounded-full active:bg-muted"
             >
               <Icon
@@ -224,9 +309,19 @@ export const VoiceTranscriptBubble = ({
                   <VoiceFrequencyBars track={track} />
                 </Suspense>
               ) : null}
+              <View
+                testID="command-input-accessory"
+                style={{ flexShrink: 0 }}
+                onLayout={({ nativeEvent: { layout } }) => {
+                  inputHeight.current = layout.height;
+                  if (!collapsed && !sized.current) slideTo(autoHeight());
+                }}
+              >
+                <CommandTextInput />
+              </View>
               <ScrollView
                 ref={scroll}
-                style={{ flex: 1 }}
+                style={{ flex: 1, minHeight: 0 }}
                 keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator
                 nestedScrollEnabled
@@ -270,7 +365,7 @@ export const VoiceTranscriptBubble = ({
                   // Growth follows the reply until the user takes over with the
                   // handle; after that their chosen height wins.
                   if (!collapsed && !sized.current && Number.isFinite(content))
-                    slideTo(clampHeight(content));
+                    slideTo(clampHeight(content + inputHeight.current));
                   if (follow.current)
                     scroll.current?.scrollToEnd({ animated: true });
                 }}
@@ -279,6 +374,12 @@ export const VoiceTranscriptBubble = ({
                     scroll.current?.scrollToEnd({ animated: false });
                 }}
               >
+                {hasTasks && projectId !== "app" ? (
+                  <Suspense fallback={null}>
+                    <TaskStatusBar projectId={projectId} embedded />
+                  </Suspense>
+                ) : null}
+                <CommandResults />
                 {inline?.toolActivity ? (
                   <PText
                     accessibilityLiveRegion="polite"
@@ -288,32 +389,36 @@ export const VoiceTranscriptBubble = ({
                   </PText>
                 ) : null}
                 {inline?.files?.length ? (
-                  <Suspense fallback={null}>
-                    <FileActivity
-                      projectId={inline.projectId}
-                      files={inline.files}
-                      className="pb-2"
-                    />
-                  </Suspense>
+                  <CommandFileActivity
+                    projectId={inline.projectId}
+                    files={inline.files}
+                  />
                 ) : null}
-                {state.transcript.length === 0 && !state.error ? (
+                {state.transcript.length === 0 &&
+                !commands.transcript.length &&
+                !commands.input &&
+                !commands.result &&
+                !commands.busy &&
+                !state.error ? (
                   <PText className="pb-2">
                     {state.connection === "connecting"
                       ? state.mode === "hold"
                         ? "Getting ready. Keep holding, or release to cancel."
                         : "Getting ready. Tap the microphone to cancel."
-                      : "Your words and the Codaloud’s reply appear here as you speak."}
+                      : formatVoiceInstructions(quickEdit)}
                   </PText>
                 ) : null}
-                {formatVoiceTranscript(state.transcript).map((segment) => (
+                {formatVoiceTranscript([
+                  ...state.transcript,
+                  ...commands.transcript,
+                ]).map((segment) => (
                   <Animated.View
                     key={segment.id}
+                    testID="voice-transcript-segment"
                     entering={FadeIn.duration(180).reduceMotion(
                       ReduceMotion.System,
                     )}
-                    layout={LinearTransition.duration(120).reduceMotion(
-                      ReduceMotion.System,
-                    )}
+                    style={{ flexShrink: 0 }}
                     className="mb-3"
                   >
                     <PText
@@ -334,6 +439,25 @@ export const VoiceTranscriptBubble = ({
                   <PText selectable className="pb-2 text-destructive">
                     {state.error}
                   </PText>
+                ) : null}
+                {commands.error ? (
+                  <PText
+                    selectable
+                    accessibilityRole="alert"
+                    className="pb-2 text-destructive"
+                  >
+                    {commands.error}
+                  </PText>
+                ) : null}
+                {commands.busy ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel command"
+                    onPress={() => commandCenter.clear()}
+                    className="min-h-11 items-center justify-center rounded-full bg-muted"
+                  >
+                    <PText>Cancel command</PText>
+                  </Pressable>
                 ) : null}
                 {state.transcriptWarning ? (
                   <PText

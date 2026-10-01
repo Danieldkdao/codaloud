@@ -4,16 +4,29 @@ import {
   appendTerminalCommand,
   appendTerminalOutput,
 } from "../lib/terminal-output";
-import { getTerminalDeviceId, terminalApi } from "./terminal-client";
-import { syncProjectWorkspace, type SyncResult } from "./sync-workspace";
+import {
+  getTerminalDeviceId,
+  TerminalAccessError,
+  terminalApi,
+  type TerminalAccessRequirement,
+} from "./terminal-client";
+import {
+  ensureProjectSandbox,
+  syncProjectWorkspace,
+  type SyncResult,
+} from "./sync-workspace";
+import { subscribeWorkspaceChanges } from "@/services/local-workspace/change-events";
+import type { WorkspaceManifest } from "../lib/sync-plan";
 
 export type TerminalSnapshot = {
-  status: "closed" | "connecting" | "ready" | "error";
+  status: "closed" | "connecting" | "ready" | "blocked" | "error";
+  access: TerminalAccessRequirement | null;
   output: string;
   clearGeneration: number;
   error: string | null;
   syncGeneration: number;
   syncMessage: string | null;
+  syncing: boolean;
   downloadedPaths: string[];
   deletedPaths: string[];
 };
@@ -22,6 +35,13 @@ const messageSchema = z.object({
   data: z.unknown().optional(),
 });
 type CommandResult = { exitCode: number; output: string };
+const manifestsMatch = (left: WorkspaceManifest, right: WorkspaceManifest) => {
+  const paths = Object.keys(left);
+  return (
+    paths.length === Object.keys(right).length &&
+    paths.every((path) => left[path] === right[path])
+  );
+};
 
 export class ProjectTerminalSession {
   private socket: WebSocket | null = null;
@@ -37,7 +57,17 @@ export class ProjectTerminalSession {
   private panels = 0;
   private activeCommands = 0;
   private closeWhenIdle = false;
-  private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private localSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private remoteCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private remoteCheckInFlight: Promise<void> | null = null;
+  private remoteMaybeChanged = false;
+  private remoteChangeVersion = 0;
+  private remoteManifest: WorkspaceManifest | null = null;
+  private remoteSandboxId: string | null = null;
+  private allowedPaths: readonly string[] = [];
+  private releaseWorkspaceChanges: (() => void) | null = null;
+  private syncInFlight: Promise<SyncResult> | null = null;
+  private inputQueue = Promise.resolve();
   private pendingRun: {
     marker: string;
     resolve: () => void;
@@ -46,11 +76,13 @@ export class ProjectTerminalSession {
   } | null = null;
   private snapshot: TerminalSnapshot = {
     status: "closed",
+    access: null,
     output: "",
     clearGeneration: 0,
     error: null,
     syncGeneration: 0,
     syncMessage: null,
+    syncing: false,
     downloadedPaths: [],
     deletedPaths: [],
   };
@@ -68,11 +100,22 @@ export class ProjectTerminalSession {
     };
   };
   retainPanel() {
+    if (this.panels === 0 && (this.snapshot.access || this.snapshot.error))
+      this.update({ status: "closed", access: null, error: null });
+    if (this.panels === 0)
+      this.releaseWorkspaceChanges = subscribeWorkspaceChanges(
+        this.projectId,
+        () => this.scheduleLocalChangeSync(),
+      );
     this.panels++;
     this.closeWhenIdle = false;
     return () => {
       this.panels = Math.max(0, this.panels - 1);
-      if (this.panels === 0) this.disconnect();
+      if (this.panels === 0) {
+        this.releaseWorkspaceChanges?.();
+        this.releaseWorkspaceChanges = null;
+        this.disconnect();
+      }
     };
   }
   private update(patch: Partial<TerminalSnapshot>) {
@@ -116,50 +159,172 @@ export class ProjectTerminalSession {
     this.appendRawOutput(this.pendingRaw);
     this.pendingRaw = "";
   }
-  private scheduleSync() {
-    if (this.syncTimer) clearTimeout(this.syncTimer);
-    this.syncTimer = setTimeout(() => {
-      void this.sync().catch(() => {});
+  private failPending(error: Error) {
+    if (this.pendingRun) {
+      this.flushPendingRaw();
+      const pending = this.pendingRun;
+      this.pendingRun = null;
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    for (const command of this.commands.values()) command.reject(error);
+    this.commands.clear();
+  }
+  private scheduleRemoteCheck() {
+    if (!this.remoteMaybeChanged) return;
+    if (this.remoteCheckTimer) clearTimeout(this.remoteCheckTimer);
+    this.remoteCheckTimer = setTimeout(() => {
+      this.remoteCheckTimer = null;
+      void this.checkRemoteChanges().catch(() => {});
     }, 3500);
   }
-  async sync() {
-    const result = await syncProjectWorkspace(this.projectId);
-    const problems = [...new Set([...result.conflicts, ...result.failures])];
-    const visible = problems
-      .slice(0, 3)
-      .map((path) =>
-        result.failureReasons?.[path]
-          ? `${path} (${result.failureReasons[path]})`
-          : path,
-      );
-    this.update({
-      syncGeneration:
-        this.snapshot.syncGeneration +
-        (result.downloaded + result.localDeleted > 0 ? 1 : 0),
-      downloadedPaths: result.downloadedPaths,
-      deletedPaths: result.localDeletedPaths,
-      syncMessage: problems.length
-        ? String(problems.length) +
-          " files need attention: " +
-          visible.join(", ") +
-          (problems.length > 3 ? `, and ${problems.length - 3} more` : "")
-        : "Synced " +
-          String(result.uploaded + result.downloaded + result.deleted) +
-          " file changes.",
+  private checkRemoteChanges(): Promise<void> {
+    if (this.remoteCheckInFlight) return this.remoteCheckInFlight;
+    const check = (async () => {
+      const checkedVersion = this.remoteChangeVersion;
+      const sandboxId = this.remoteSandboxId;
+      const baseline = this.remoteManifest;
+      if (!sandboxId || !baseline) {
+        await this.sync();
+      } else {
+        const deviceId = await getTerminalDeviceId();
+        const current = await terminalApi.manifest(
+          this.projectId,
+          deviceId,
+          sandboxId,
+          this.allowedPaths,
+          baseline,
+        );
+        if (!manifestsMatch(current, baseline)) await this.sync();
+      }
+      // A Run command may still write later; its completion marker checks again.
+      this.remoteMaybeChanged =
+        this.pendingRun !== null || this.remoteChangeVersion !== checkedVersion;
+      if (this.remoteChangeVersion !== checkedVersion)
+        this.scheduleRemoteCheck();
+    })();
+    this.remoteCheckInFlight = check.finally(() => {
+      this.remoteCheckInFlight = null;
     });
-    return result;
+    return this.remoteCheckInFlight;
+  }
+  private scheduleLocalChangeSync() {
+    if (this.snapshot.status !== "ready") return;
+    this.update({
+      syncing: true,
+      syncMessage: "Device files changed. Syncing them to the terminal…",
+    });
+    if (this.localSyncTimer) clearTimeout(this.localSyncTimer);
+    this.localSyncTimer = setTimeout(() => {
+      this.localSyncTimer = null;
+      const previous = this.syncInFlight;
+      if (previous)
+        void previous
+          .then(
+            () => this.sync(),
+            () => this.sync(),
+          )
+          .catch(() => {});
+      else void this.sync().catch(() => {});
+    }, 600);
+  }
+  sync(): Promise<SyncResult> {
+    if (this.syncInFlight) return this.syncInFlight;
+    this.update({ syncing: true, syncMessage: "Syncing project files…" });
+    const run = (async () => {
+      try {
+        let lastProgressAt = 0;
+        let lastPhase = "";
+        const result = await syncProjectWorkspace(
+          this.projectId,
+          (syncMessage) => {
+            const phase = syncMessage.split(" ")[0];
+            if (phase === lastPhase && Date.now() - lastProgressAt < 100)
+              return;
+            lastProgressAt = Date.now();
+            lastPhase = phase;
+            this.update({ syncMessage });
+          },
+        );
+        this.remoteSandboxId = result.sandboxId;
+        this.remoteManifest = result.remoteManifest;
+        this.allowedPaths = result.allowedPaths;
+        // The server has accepted this project under the current billing state.
+        // Clear an older plan/credit denial so an approved agent command can connect.
+        const accessRestored = this.snapshot.status === "blocked";
+        const problems = [
+          ...new Set([...result.conflicts, ...result.failures]),
+        ];
+        const visible = problems
+          .slice(0, 3)
+          .map((path) =>
+            result.failureReasons?.[path]
+              ? `${path} (${result.failureReasons[path]})`
+              : path,
+          );
+        this.update({
+          ...(accessRestored
+            ? { status: "closed" as const, access: null, error: null }
+            : {}),
+          syncGeneration:
+            this.snapshot.syncGeneration +
+            (result.downloaded + result.localDeleted > 0 ? 1 : 0),
+          downloadedPaths: result.downloadedPaths,
+          deletedPaths: result.localDeletedPaths,
+          syncMessage: problems.length
+            ? String(problems.length) +
+              " files need attention: " +
+              visible.join(", ") +
+              (problems.length > 3 ? `, and ${problems.length - 3} more` : "")
+            : result.uploaded + result.downloaded + result.deleted > 0
+              ? [
+                  result.uploaded
+                    ? `Uploaded ${result.uploaded}${result.uploadedPaths?.length ? `: ${result.uploadedPaths.slice(0, 2).join(", ")}` : ""}`
+                    : "",
+                  result.downloaded
+                    ? `Downloaded ${result.downloaded}${result.downloadedPaths.length ? `: ${result.downloadedPaths.slice(0, 2).join(", ")}` : ""}`
+                    : "",
+                  result.deleted ? `Removed ${result.deleted}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ") + "."
+              : "All project files are up to date.",
+          syncing: false,
+        });
+        return result;
+      } catch (error) {
+        this.update({
+          syncing: false,
+          syncMessage:
+            error instanceof Error
+              ? `Sync failed: ${error.message}`
+              : "Sync failed. Try again.",
+        });
+        throw error;
+      }
+    })();
+    this.syncInFlight = run.finally(() => {
+      this.syncInFlight = null;
+    });
+    return this.syncInFlight;
   }
   connect(prepared?: SyncResult) {
     if (this.connecting) return this.connecting;
+    if (this.snapshot.status === "blocked" || this.snapshot.status === "error")
+      return Promise.reject(
+        new Error(this.snapshot.error ?? "Terminal unavailable."),
+      );
     if (this.socket?.readyState === WebSocket.OPEN) return Promise.resolve();
-    this.update({ status: "connecting", error: null });
+    this.update({ status: "connecting", access: null, error: null });
     this.connecting = (async () => {
-      const synced = prepared ?? (await this.sync());
+      const sandboxId =
+        prepared?.sandboxId ?? (await ensureProjectSandbox(this.projectId));
+      this.remoteSandboxId = sandboxId;
       const deviceId = await getTerminalDeviceId();
       const { ticket, url } = await terminalApi.ticket(
         this.projectId,
         deviceId,
-        synced.sandboxId,
+        sandboxId,
       );
       await new Promise<void>((resolve, reject) => {
         const socket = new WebSocket(
@@ -170,7 +335,8 @@ export class ProjectTerminalSession {
           try {
             const message = messageSchema.parse(JSON.parse(String(event.data)));
             if (message.type === "ready") {
-              this.update({ status: "ready" });
+              this.update({ status: "ready", access: null, error: null });
+              if (!prepared) void this.sync().catch(() => {});
               resolve();
             } else if (
               message.type === "data" &&
@@ -194,8 +360,10 @@ export class ProjectTerminalSession {
                 this.pendingRun = null;
                 clearTimeout(pending.timer);
                 pending.resolve();
+                this.remoteMaybeChanged = true;
+                this.remoteChangeVersion++;
               }
-              this.scheduleSync();
+              this.scheduleRemoteCheck();
             } else if (message.type === "commandResult") {
               const result = z
                 .object({
@@ -208,7 +376,22 @@ export class ProjectTerminalSession {
                 .get(result.id)
                 ?.resolve({ exitCode: result.exitCode, output: result.output });
               this.commands.delete(result.id);
-              this.scheduleSync();
+              this.remoteMaybeChanged = true;
+              this.remoteChangeVersion++;
+              this.scheduleRemoteCheck();
+            } else if (message.type === "billing") {
+              const denial = z
+                .object({
+                  reason: z.enum(["plan", "credits"]),
+                  message: z.string().min(1).max(500),
+                })
+                .parse(message.data);
+              this.update({
+                status: "blocked",
+                access: denial.reason,
+                error: denial.message,
+              });
+              reject(new TerminalAccessError(denial.message, denial.reason));
             } else if (message.type === "error") {
               this.update({
                 status: "error",
@@ -226,26 +409,23 @@ export class ProjectTerminalSession {
         socket.onerror = () =>
           reject(new Error("Unable to reach the terminal gateway."));
         socket.onclose = () => {
-          if (this.pendingRun) {
-            this.flushPendingRaw();
-            const pending = this.pendingRun;
-            this.pendingRun = null;
-            clearTimeout(pending.timer);
-            pending.reject(new Error("Terminal disconnected."));
-          }
+          if (this.socket && this.socket !== socket) return;
+          this.failPending(new Error("Terminal disconnected."));
           if (this.socket === socket) this.socket = null;
-          if (this.snapshot.status !== "error")
+          if (
+            this.snapshot.status !== "error" &&
+            this.snapshot.status !== "blocked"
+          )
             this.update({ status: "closed" });
-          for (const command of this.commands.values())
-            command.reject(new Error("Terminal disconnected."));
-          this.commands.clear();
           reject(new Error("Terminal disconnected."));
         };
       });
     })()
       .catch((error: unknown) => {
         this.update({
-          status: "error",
+          status: error instanceof TerminalAccessError ? "blocked" : "error",
+          access:
+            error instanceof TerminalAccessError ? error.requirement : null,
           error:
             error instanceof Error ? error.message : "Terminal unavailable.",
         });
@@ -262,17 +442,33 @@ export class ProjectTerminalSession {
       });
     return this.connecting;
   }
-  async sendInput(
-    data: string,
-    prepared?: SyncResult,
-    visibleCommand?: string,
-  ) {
-    await this.connect(prepared);
-    this.socket?.send(JSON.stringify({ type: "input", data }));
-    if (visibleCommand)
-      this.update({
-        output: appendTerminalCommand(this.snapshot.output, visibleCommand),
-      });
+  retry() {
+    this.failPending(new Error("Terminal disconnected."));
+    const previousSocket = this.socket;
+    this.socket = null;
+    previousSocket?.close();
+    this.update({ status: "closed", access: null, error: null });
+    return this.connect();
+  }
+  sendInput(data: string, prepared?: SyncResult, visibleCommand?: string) {
+    const write = this.inputQueue.then(async () => {
+      await this.connect(prepared);
+      this.socket?.send(JSON.stringify({ type: "input", data }));
+      if (data.includes("\n")) {
+        this.remoteMaybeChanged = true;
+        this.remoteChangeVersion++;
+        this.scheduleRemoteCheck();
+      }
+      if (visibleCommand)
+        this.update({
+          output: appendTerminalCommand(this.snapshot.output, visibleCommand),
+        });
+    });
+    this.inputQueue = write.then(
+      () => {},
+      () => {},
+    );
+    return write;
   }
   private clearRun(marker: string) {
     const pending = this.pendingRun;
@@ -367,11 +563,16 @@ export class ProjectTerminalSession {
       return;
     }
     this.closeWhenIdle = false;
-    if (this.syncTimer) clearTimeout(this.syncTimer);
-    this.syncTimer = null;
+    const hasPendingSync =
+      this.localSyncTimer !== null || this.remoteCheckTimer !== null;
+    if (this.localSyncTimer) clearTimeout(this.localSyncTimer);
+    if (this.remoteCheckTimer) clearTimeout(this.remoteCheckTimer);
+    this.localSyncTimer = null;
+    this.remoteCheckTimer = null;
     this.socket?.close();
     this.socket = null;
     this.update({ status: "closed" });
+    if (hasPendingSync) void this.sync().catch(() => {});
   }
   clear() {
     this.rawOutput = "";

@@ -600,7 +600,7 @@ export const formatWorkspaceTab = (tab: ProjectWorkspaceTab) => {
     case "agent":
       return {
         label: "Agent log",
-        icon: { family: "Ionicons", name: "sparkles-outline" },
+        icon: { family: "Feather", name: "list" },
       } as const;
     default:
       throw new Error(`Unsupported workspace tab: ${tab satisfies never}`);

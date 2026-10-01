@@ -1,6 +1,6 @@
 import { AgentWorkspaceBridge } from "@/features/agent/hooks/use-agent-workspace";
-import { WorkspaceVoiceProvider } from "@/features/voice/hooks/workspace-voice-provider";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, CardStyleInterpolators } from "expo-router/js-stack";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { useThemeColor } from "@/hooks/use-theme";
 import { Keyboard, View } from "react-native";
@@ -34,11 +34,7 @@ const WorkspaceScreen = ({
       </View>
     </ProjectWorkspaceDockHeightProvider>
   );
-  return showDock ? (
-    <WorkspaceVoiceProvider>{content}</WorkspaceVoiceProvider>
-  ) : (
-    content
-  );
+  return content;
 };
 
 const screenLayout: NonNullable<
@@ -62,11 +58,15 @@ const ProjectLayout = () => {
               <ProjectFileSaveRegistryProvider projectId={projectId}>
                 <AgentWorkspaceBridge />
                 <ProjectWorkspaceFileSearchProvider key={projectId}>
+                  {/* Slide supporting routes over the mounted editor; native
+                      presentation stalled while the terminal was active. */}
                   <Stack
                     key={projectId}
+                    detachInactiveScreens={false}
                     screenOptions={{
                       headerShown: false,
-                      contentStyle: { backgroundColor: background },
+                      freezeOnBlur: false,
+                      cardStyle: { backgroundColor: background },
                     }}
                     screenLayout={screenLayout}
                   >
@@ -74,18 +74,31 @@ const ProjectLayout = () => {
                     <Stack.Screen name="code" />
                     <Stack.Screen
                       name="git"
-                      options={{ presentation: "modal" }}
+                      options={{
+                        presentation: "transparentModal",
+                        cardStyleInterpolator:
+                          CardStyleInterpolators.forVerticalIOS,
+                        gestureDirection: "vertical",
+                        detachPreviousScreen: false,
+                      }}
                     />
                     <Stack.Screen
                       name="agent"
                       options={{
-                        presentation: "modal",
+                        presentation: "transparentModal",
+                        cardStyleInterpolator:
+                          CardStyleInterpolators.forVerticalIOS,
+                        gestureDirection: "vertical",
+                        detachPreviousScreen: false,
                         title: "Agent",
                         headerShown: true,
-                        headerBackVisible: false,
-                        headerStyle: { backgroundColor: background },
+                        headerLeft: () => null,
                         headerTintColor: foreground,
-                        headerShadowVisible: false,
+                        headerStyle: {
+                          backgroundColor: background,
+                          shadowOpacity: 0,
+                          elevation: 0,
+                        },
                         headerTitleStyle: {
                           fontFamily: "Fraunces_500Medium",
                           fontSize: 22,
@@ -108,7 +121,13 @@ const ProjectLayout = () => {
                     />
                     <Stack.Screen
                       name="files"
-                      options={{ presentation: "modal" }}
+                      options={{
+                        presentation: "transparentModal",
+                        cardStyleInterpolator:
+                          CardStyleInterpolators.forVerticalIOS,
+                        gestureDirection: "vertical",
+                        detachPreviousScreen: false,
+                      }}
                     />
                   </Stack>
                 </ProjectWorkspaceFileSearchProvider>

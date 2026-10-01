@@ -12,6 +12,7 @@ import { EditorBottomBar } from "@/features/editor/components/editor-bottom-bar"
 const mocks = vi.hoisted(() => ({
   layouts: new Map<string, (event: unknown) => void>(),
   keyboardVisible: false,
+  dockRenders: 0,
 }));
 vi.mock("react-native", () => ({
   useWindowDimensions: () => ({ width: 390, height: 844 }),
@@ -26,6 +27,7 @@ vi.mock("react-native", () => ({
     testID?: string;
     style?: object;
   }) => {
+    if (testID === "project-workspace-dock") mocks.dockRenders++;
     if (onLayout) mocks.layouts.set(testID ?? "controls", onLayout);
     return createElement("div", { "data-testid": testID, style }, children);
   },
@@ -113,6 +115,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.layouts.clear();
   mocks.keyboardVisible = false;
+  mocks.dockRenders = 0;
   container = document.createElement("div");
   root = createRoot(container);
   act(() =>
@@ -123,6 +126,32 @@ beforeEach(() => {
       </ProjectWorkspaceDockHeightProvider>,
     ),
   );
+});
+
+it("does not rerender the measured dock when its reported height is published", () => {
+  const renders = mocks.dockRenders;
+  act(() =>
+    mocks.layouts.get("project-workspace-dock")?.({
+      nativeEvent: { layout: { height: 118.25 } },
+    }),
+  );
+  expect(mocks.dockRenders).toBe(renders);
+});
+
+it("ignores fractional dock measurements that only move by one point", () => {
+  const bar = container.querySelector(
+    '[data-testid="editor-bottom-bar"]',
+  ) as HTMLElement;
+  const measure = (height: number) =>
+    act(() =>
+      mocks.layouts.get("project-workspace-dock")?.({
+        nativeEvent: { layout: { height } },
+      }),
+    );
+  measure(118.25);
+  expect(bar.style.bottom).toBe("126px");
+  measure(118.9);
+  expect(bar.style.bottom).toBe("126px");
 });
 afterEach(() => act(() => root.unmount()));
 

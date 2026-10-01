@@ -1,11 +1,11 @@
 import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
 import {
-  Stack,
   useGlobalSearchParams,
   useLocalSearchParams,
   usePathname,
   useRouter,
 } from "expo-router";
+import { Stack } from "expo-router/js-stack";
 import { Keyboard, Pressable } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -32,7 +32,7 @@ const GitLayout = () => {
       <ProjectSearchOverlayProvider bottomAligned>
         <Stack
           screenOptions={{
-            headerBackVisible: false,
+            headerLeft: () => null,
             headerStyle: { backgroundColor: background },
             headerTintColor: foreground,
             headerShadowVisible: false,
@@ -40,7 +40,7 @@ const GitLayout = () => {
               fontFamily: "Fraunces_500Medium",
               fontSize: 22,
             },
-            contentStyle: { backgroundColor: background },
+            cardStyle: { backgroundColor: background },
             headerRight: () => (
               <Button
                 variant="ghost"

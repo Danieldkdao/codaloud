@@ -1,4 +1,9 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { inlineSession } from "../inline-session";
 import {
   encodeVoicePayload,
@@ -9,6 +14,19 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   list: vi.fn(),
   analyze: vi.fn(),
+  aiDisabledPaths: "",
+  inlineModel: "openai/gpt-5.4-mini",
+}));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  editorPreferencesStore: {
+    load: async () => {},
+    getSnapshot: () => ({
+      preferences: {
+        aiDisabledPaths: mocks.aiDisabledPaths,
+        inlineModel: mocks.inlineModel,
+      },
+    }),
+  },
 }));
 vi.mock("@/features/projects/actions/code-intelligence-actions", () => ({
   readProjectCodeIntelligence: mocks.analyze,
@@ -18,7 +36,11 @@ vi.mock("@/features/projects/actions/file-actions", () => ({
   readProjectFilesAction: mocks.list,
 }));
 afterEach(() => inlineSession.cancel());
-const begin = async () => {
+beforeEach(() => {
+  mocks.aiDisabledPaths = "";
+  mocks.inlineModel = "openai/gpt-5.4-mini";
+});
+const begin = async (mode?: "agent") => {
   const unregister = inlineSession.register("p", {
     capture: async () => ({
       projectId: "p",
@@ -37,8 +59,85 @@ const begin = async () => {
     preview: () => {},
     apply: async () => true,
   });
-  return { request: await inlineSession.begin("p"), unregister };
+  return { request: await inlineSession.begin("p", mode), unregister };
 };
+
+it("supplies the exact whole-file save hash with every agent read excerpt", async () => {
+  const { request, unregister } = await begin("agent");
+  try {
+    mocks.analyze.mockResolvedValue({ diagnostics: [] });
+    const result = await readVoiceWorkspace("p", {
+      id: request.id,
+      name: "readFile",
+      args: { path: "a.ts", offset: 8, length: 6 },
+    });
+    expect(result).toMatchObject({
+      content: "needle",
+      contentHash: createHash("sha256")
+        .update("unsaved needle", "utf8")
+        .digest("hex"),
+    });
+    expect(mocks.read).not.toHaveBeenCalled();
+  } finally {
+    unregister();
+  }
+});
+
+it.each(["\n", "\r\n"])(
+  "uses voice read hashes to save native files with %j endings and rejects subsequent user changes",
+  async (newline) => {
+    const root = mkdtempSync(join(tmpdir(), "codaloud-voice-save-"));
+    const projectId = "00000000-0000-4000-8000-000000000099";
+    const call = (operation: string, args: object = {}) =>
+      JSON.parse(
+        execFileSync(
+          resolve("modules/local-workspace/build-host/workspace-cli"),
+          [root],
+          {
+            input: JSON.stringify({ projectId, operation, args }),
+            encoding: "utf8",
+          },
+        ),
+      );
+    try {
+      expect(call("initialize").ok).toBe(true);
+      const path = join(root, projectId, "demo.ts");
+      const original = `export const greeting = 'Olá 👋';${newline}`;
+      writeFileSync(path, original);
+      mocks.read.mockImplementation(
+        async () => call("read-file", { path: "demo.ts" }).data,
+      );
+      mocks.analyze.mockResolvedValue({ diagnostics: [] });
+      const request = await inlineSession.begin(projectId, "agent");
+      const read = (await readVoiceWorkspace(projectId, {
+        id: request.id,
+        name: "readFile",
+        args: { path: "demo.ts", length: 1200 },
+      })) as { content: string; contentHash?: string };
+      expect(read.content).toBe(original);
+      const changed = original + `export const count: number = 42;${newline}`;
+      const result = call("save-file", {
+        path: "demo.ts",
+        content: changed,
+        expectedContentHash: read.contentHash ?? "0".repeat(64),
+      });
+      expect(result).toMatchObject({ ok: true });
+      expect(readFileSync(path, "utf8")).toBe(changed);
+      writeFileSync(path, changed + `// user edit${newline}`);
+      expect(
+        call("save-file", {
+          path: "demo.ts",
+          content: "stale overwrite",
+          expectedContentHash: result.data.contentHash,
+        }),
+      ).toMatchObject({ ok: false, code: "FILE_CHANGED" });
+      expect(readFileSync(path, "utf8")).toContain("// user edit");
+    } finally {
+      mocks.read.mockReset();
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 it("reads frozen unsaved contents and never exposes mutation tools", async () => {
   const { request, unregister } = await begin();
   mocks.analyze.mockResolvedValue({
@@ -97,24 +196,44 @@ it("limits draft voice reads to the open draft buffer", async () => {
   const scope = "draft:123";
   const unregister = inlineSession.register(scope, {
     capture: async () => ({
-      projectId: scope, branch: "", openFiles: [],
+      projectId: scope,
+      branch: "",
+      openFiles: [],
       activeFile: {
-        path: "idea.py", documentKey: "draft-document", revision: 1,
-        content: "print('draft')", from: 0, to: 0, focused: false,
+        path: "idea.py",
+        documentKey: "draft-document",
+        revision: 1,
+        content: "print('draft')",
+        from: 0,
+        to: 0,
+        focused: false,
       },
     }),
-    preview: () => {}, apply: async () => true,
+    preview: () => {},
+    apply: async () => true,
   });
   const request = await inlineSession.begin(scope, "quick-edit");
-  expect(await readVoiceWorkspace(scope, {
-    id: request.id, name: "readFile", args: { path: "idea.py", length: 100 },
-  })).toMatchObject({ content: "print('draft')", source: "editor" });
-  await expect(readVoiceWorkspace(scope, {
-    id: request.id, name: "readFile", args: { path: "other.py" },
-  })).rejects.toThrow(/draft/i);
-  await expect(readVoiceWorkspace(scope, {
-    id: request.id, name: "listFiles", args: { path: "" },
-  })).rejects.toThrow(/draft/i);
+  expect(
+    await readVoiceWorkspace(scope, {
+      id: request.id,
+      name: "readFile",
+      args: { path: "idea.py", length: 100 },
+    }),
+  ).toMatchObject({ content: "print('draft')", source: "editor" });
+  await expect(
+    readVoiceWorkspace(scope, {
+      id: request.id,
+      name: "readFile",
+      args: { path: "other.py" },
+    }),
+  ).rejects.toThrow(/draft/i);
+  await expect(
+    readVoiceWorkspace(scope, {
+      id: request.id,
+      name: "listFiles",
+      args: { path: "" },
+    }),
+  ).rejects.toThrow(/draft/i);
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.list).not.toHaveBeenCalled();
   unregister();
@@ -246,4 +365,54 @@ it("uses editor LF offsets when capturing a CRLF file for an exact replacement",
     selected: "Math.random",
     after: "\nlast",
   });
+});
+it("does not send a protected open file or return protected search matches", async () => {
+  const { request, unregister } = await begin();
+  mocks.aiDisabledPaths = "a.ts\n.env*";
+  expect(() => getVoiceContext(request)).toThrow(/disabled/i);
+  await expect(
+    readVoiceWorkspace("p", {
+      id: request.id,
+      name: "readFile",
+      args: { path: "a.ts" },
+    }),
+  ).rejects.toThrow(/disabled/i);
+  expect(mocks.read).not.toHaveBeenCalled();
+  mocks.list.mockResolvedValue({
+    files: [{ path: "a.ts" }, { path: "safe.ts" }],
+    nextCursor: null,
+  });
+  const result = await readVoiceWorkspace("p", {
+    id: request.id,
+    name: "searchFiles",
+    args: { search: "safe", scope: "title", path: "", pageSize: 10 },
+  });
+  expect(result).toMatchObject({ files: [{ path: "safe.ts" }] });
+  unregister();
+});
+it("captures the device-selected inline model with the voice request", async () => {
+  const { request, unregister } = await begin();
+  mocks.inlineModel = "anthropic/claude-haiku-4.5";
+  expect(getVoiceContext(request).inlineModel).toBe(
+    "anthropic/claude-haiku-4.5",
+  );
+  unregister();
+});
+
+it("returns a bounded, marked receipt for oversized completed action output", () => {
+  const result = {
+    ok: true,
+    text: '😀"'.repeat(10000),
+    revision: "a".repeat(64),
+    changedFiles: Array.from({ length: 50 }, (_, i) => `src/${i}.ts`),
+    truncated: false,
+  };
+  const encoded = encodeVoicePayload(result);
+  expect(new TextEncoder().encode(encoded).length).toBeLessThanOrEqual(12000);
+  expect(JSON.parse(encoded)).toMatchObject({
+    ok: true,
+    revision: result.revision,
+    truncated: true,
+  });
+  expect(result.text.length).toBe(30000);
 });

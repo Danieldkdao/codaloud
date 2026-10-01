@@ -131,7 +131,7 @@ static std::string filename(const Json &args, const std::string &key) {
   return name;
 }
 
-static void atomicSave(const fs::path &path, const std::string &content) {
+void atomicSave(const fs::path &path, const std::string &content) {
   auto pattern = (path.parent_path() / ".codaloud-save-XXXXXX").string();
   std::vector<char> name(pattern.begin(), pattern.end());
   name.push_back('\0');
@@ -141,7 +141,10 @@ static void atomicSave(const fs::path &path, const std::string &content) {
                          "Unable to create a temporary save file.");
   bool openDescriptor = true;
   try {
-    fs::permissions(name.data(), fs::status(path).permissions());
+    fs::permissions(name.data(),
+                    fs::exists(path)
+                        ? fs::status(path).permissions()
+                        : fs::perms::owner_read | fs::perms::owner_write);
     size_t offset = 0;
     while (offset < content.size()) {
       const auto count =
@@ -175,6 +178,8 @@ static void atomicSave(const fs::path &path, const std::string &content) {
 
 Json fileOperation(const fs::path &root, const std::string &operation,
                    const Json &args) {
+  if (operation == "sync-manifest")
+    return syncManifest(root, args);
   if (operation == "list-files") {
     const auto path = checkedPath(root, args.value("path", ""), true);
     requireDirectory(path);
@@ -256,6 +261,13 @@ Json fileOperation(const fs::path &root, const std::string &operation,
           "The selected file or folder changed. Refresh and try again.");
     const auto previous = entry(root, original);
     if (operation == "delete-file") {
+      if (args.contains("expectedContentHash")) {
+        if (kind != "file" ||
+            sha256(readText(original)) !=
+                args.at("expectedContentHash").get<std::string>())
+          throw WorkspaceError("FILE_CHANGED",
+                               "This file changed since it was opened.");
+      }
       fs::remove_all(original);
       return previous;
     }

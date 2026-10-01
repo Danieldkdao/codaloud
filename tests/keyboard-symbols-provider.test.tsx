@@ -11,7 +11,10 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { KeyboardSymbolsProvider } from "@/components/keyboard-symbols-provider";
-import { KeyboardSymbolsContext } from "@/hooks/use-keyboard-symbols";
+import {
+  KeyboardSymbolsContext,
+  KeyboardSymbolsAccessoryHeightContext,
+} from "@/hooks/use-keyboard-symbols";
 
 const device = vi.hoisted(() => ({
   OS: "ios",
@@ -72,9 +75,11 @@ vi.mock("@/components/keyboard-symbols", () => ({
     createElement("button", { onClick: () => onInsert("|") }, "|"),
 }));
 let host: NonNullable<ContextType<typeof KeyboardSymbolsContext>>;
+let accessoryHeight = 0;
 // Capture the actual context so the host is exercised independently of native input mocks.
 const Probe = () => {
   host = use(KeyboardSymbolsContext)!;
+  accessoryHeight = use(KeyboardSymbolsAccessoryHeightContext);
   return null;
 };
 let root: Root;
@@ -100,15 +105,18 @@ beforeEach(() => {
 afterEach(() => act(() => root.unmount()));
 it("switches the native accessory target and ignores a late blur from the previous field", () => {
   render();
+  expect(accessoryHeight).toBe(0);
   const first = vi.fn();
   const second = vi.fn();
   act(() => host.activate({ id: "first", insert: first }));
   act(() => host.activate({ id: "second", insert: second }));
+  expect(accessoryHeight).toBe(48);
   act(() => host.deactivate("first"));
   act(() => container.querySelector("button")!.click());
   expect(first).not.toHaveBeenCalled();
   expect(second).toHaveBeenCalledWith("|");
   act(() => host.deactivate("second"));
+  expect(accessoryHeight).toBe(0);
   act(() => container.querySelector("button")?.click());
   expect(second).toHaveBeenCalledTimes(1);
 });

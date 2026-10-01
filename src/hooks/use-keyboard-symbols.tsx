@@ -12,6 +12,9 @@ import type { TextInput, TextInputProps } from "react-native";
 type KeyboardSymbolTarget = { id: string; insert: (symbol: string) => void };
 export const KeyboardSymbolsInsetContext = createContext(0);
 export const useKeyboardSymbolsInset = () => use(KeyboardSymbolsInsetContext);
+export const KeyboardSymbolsAccessoryHeightContext = createContext(0);
+export const useKeyboardSymbolsAccessoryHeight = () =>
+  use(KeyboardSymbolsAccessoryHeightContext);
 export const KeyboardSymbolsContext = createContext<{
   activate: (target: KeyboardSymbolTarget) => void;
   deactivate: (id: string) => void;

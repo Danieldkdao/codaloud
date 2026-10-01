@@ -137,7 +137,7 @@ export const MarkdownText = memo(
       <EnrichedMarkdownText
         markdown={markdown}
         markdownStyle={markdownStyle}
-        containerStyle={{ width: "100%", flexShrink: 1 }}
+        containerStyle={{ width: "100%", flexShrink: 0 }}
         flavor="github"
         selectable
         allowFontScaling

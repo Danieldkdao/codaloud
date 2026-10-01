@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import Module from "node:module";
 import WelcomeScreen from "@/app/(auth)/index";
 
@@ -9,11 +9,22 @@ const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
   replace: vi.fn(),
   signIn: vi.fn(),
+  appleSignIn: vi.fn(),
+  appleAvailable: vi.fn(),
 }));
 
 vi.mock("react-native", () => ({
+  Platform: { OS: "ios" },
   View: ({ children }: { children: ReactNode }) =>
     createElement("div", null, children),
+}));
+vi.mock("expo-apple-authentication", () => ({
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+  isAvailableAsync: mocks.appleAvailable,
+  signInAsync: mocks.appleSignIn,
+}));
+vi.mock("expo-crypto", () => ({
+  randomUUID: () => "00000000-0000-4000-8000-000000000001",
 }));
 vi.mock("expo-router", () => ({
   Stack: { Screen: () => null },
@@ -25,11 +36,18 @@ vi.mock("@/components/ui/button", () => ({
     children,
     disabled,
     onPress,
+    accessibilityLabel,
   }: {
     children: ReactNode;
     disabled?: boolean;
     onPress?: () => void;
-  }) => createElement("button", { disabled, onClick: onPress }, children),
+    accessibilityLabel?: string;
+  }) =>
+    createElement(
+      "button",
+      { disabled, onClick: onPress, "aria-label": accessibilityLabel },
+      children,
+    ),
 }));
 vi.mock("@/components/ui/icon", () => ({
   Icon: ({ name }: { name: string }) =>
@@ -44,10 +62,18 @@ vi.mock("@/components/ui/text", () => ({
 vi.mock("@/features/auth/components/google-icon", () => ({
   GoogleIcon: () => createElement("span", { "data-icon": "google-color" }),
 }));
+vi.mock("@/features/auth/components/apple-sign-in-logo", () => ({
+  AppleSignInLogo: () => createElement("span", { "data-icon": "apple" }),
+}));
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { signIn: { social: mocks.signIn } },
 }));
 vi.mock("@/lib/utils", () => ({ alert: mocks.alert }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.appleAvailable.mockResolvedValue(true);
+});
 
 it("offers Continue actions for GitHub, Google, and Apple", async () => {
   (
@@ -70,12 +96,18 @@ it("offers Continue actions for GitHub, Google, and Apple", async () => {
       root.render(createElement(WelcomeScreen));
     });
     expect(container.textContent).toContain("Your voice. Your code.");
+    const buttons = Array.from(container.querySelectorAll("button"));
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Continue with GitHub",
+      "Continue with Google",
+      "Continue with Apple",
+    ]);
     expect(container.textContent).toContain("Continue with GitHub");
     expect(container.textContent).toContain("Continue with Google");
     expect(container.textContent).toContain("Continue with Apple");
     expect(container.textContent).not.toContain("Coming soon");
-    expect(container.querySelectorAll("button")).toHaveLength(3);
-    expect(container.querySelectorAll("button")[2]?.disabled).toBe(false);
+    expect(buttons).toHaveLength(3);
+    expect(buttons[2]?.disabled).toBe(false);
     expect(
       container.querySelector('[data-icon="google-color"]'),
     ).not.toBeNull();
@@ -127,6 +159,73 @@ it("shows an alert when social authentication fails", async () => {
     await act(async () => {
       root.unmount();
     });
+    assetLoader.mockRestore();
+  }
+});
+
+it("signs in with Apple's native identity token and first-time name", async () => {
+  mocks.appleSignIn.mockResolvedValue({
+    identityToken: "apple-id-token",
+    fullName: { givenName: "Jane", familyName: "Doe" },
+  });
+  mocks.signIn.mockResolvedValue({ data: {}, error: null });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const loader = Module as unknown as {
+    _load: (name: string, ...args: unknown[]) => unknown;
+  };
+  const originalLoad = loader._load;
+  const assetLoader = vi
+    .spyOn(loader, "_load")
+    .mockImplementation((name, ...args) =>
+      name.startsWith("@/assets/") ? 1 : originalLoad(name, ...args),
+    );
+  try {
+    await act(async () => root.render(createElement(WelcomeScreen)));
+    await act(async () =>
+      container.querySelectorAll<HTMLButtonElement>("button")[2]?.click(),
+    );
+    expect(mocks.appleSignIn).toHaveBeenCalledWith({
+      nonce: "00000000-0000-4000-8000-000000000001",
+      requestedScopes: [0, 1],
+    });
+    expect(mocks.signIn).toHaveBeenCalledWith({
+      provider: "apple",
+      idToken: {
+        token: "apple-id-token",
+        nonce: "00000000-0000-4000-8000-000000000001",
+        user: { name: { firstName: "Jane", lastName: "Doe" } },
+      },
+    });
+    expect(mocks.replace).toHaveBeenCalledWith("/");
+  } finally {
+    await act(async () => root.unmount());
+    assetLoader.mockRestore();
+  }
+});
+
+it("does not show an error when native Apple sign-in is cancelled", async () => {
+  mocks.appleSignIn.mockRejectedValue({ code: "ERR_REQUEST_CANCELED" });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const loader = Module as unknown as {
+    _load: (name: string, ...args: unknown[]) => unknown;
+  };
+  const originalLoad = loader._load;
+  const assetLoader = vi
+    .spyOn(loader, "_load")
+    .mockImplementation((name, ...args) =>
+      name.startsWith("@/assets/") ? 1 : originalLoad(name, ...args),
+    );
+  try {
+    await act(async () => root.render(createElement(WelcomeScreen)));
+    await act(async () =>
+      container.querySelectorAll<HTMLButtonElement>("button")[2]?.click(),
+    );
+    expect(mocks.signIn).not.toHaveBeenCalled();
+    expect(mocks.alert).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
     assetLoader.mockRestore();
   }
 });

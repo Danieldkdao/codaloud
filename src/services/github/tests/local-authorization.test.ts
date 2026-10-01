@@ -15,6 +15,13 @@ beforeEach(async () => {
   vi.stubEnv("GITHUB_CLIENT_SECRET", "server-secret");
   vi.stubEnv("GOOGLE_CLIENT_ID", "google-client-id");
   vi.stubEnv("GOOGLE_CLIENT_SECRET", "google-client-secret");
+  vi.stubEnv("APPLE_CLIENT_ID", "apple-client-id");
+  vi.stubEnv("APPLE_TEAM_ID", "apple-team-id");
+  vi.stubEnv("APPLE_KEY_ID", "apple-key-id");
+  vi.stubEnv("APPLE_PRIVATE_KEY", "test-private-key");
+  vi.stubEnv("APPLE_APP_BUNDLE_IDENTIFIER", "com.example.codaloud");
+  vi.stubEnv("REVENUECAT_SECRET_API_KEY", "test-secret-key");
+  vi.stubEnv("REVENUECAT_WEBHOOK_AUTH_TOKEN", "test-webhook-token");
   vi.stubEnv("BETTER_AUTH_URL", "https://codaloud.test");
   vi.stubEnv("TRIGGER_SECRET_KEY", "trigger-secret");
   vi.stubEnv("DAYTONA_API_KEY", "daytona-key");

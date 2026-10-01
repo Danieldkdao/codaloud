@@ -10,6 +10,7 @@
     "ios": {
       "icon": "./assets/codaloud-icon.png",
       "bundleIdentifier": "com.codaloud.development",
+      "usesAppleSignIn": true,
       "bitcode": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -44,6 +45,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-apple-authentication",
       [
         "@livekit/react-native-expo-plugin",
         {

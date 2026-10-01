@@ -1,0 +1,32 @@
+diff --git a/lib/adapters/http.js b/lib/adapters/http.js
+--- a/lib/adapters/http.js
++++ b/lib/adapters/http.js
+@@ -64,8 +64,10 @@
+ 
+ // Symbols used to bind a single 'error' listener to a pooled socket and track
+ // the request currently owning that socket across keep-alive reuse (issue #10780).
+-const kAxiosSocketListener = Symbol('axios.http.socketListener');
+-const kAxiosCurrentReq = Symbol('axios.http.currentReq');
++// API bundles can reload Axios while sharing Node's keep-alive sockets.
++// Share ownership markers so each socket keeps one listener across evaluations.
++const kAxiosSocketListener = Symbol.for('axios.http.socketListener');
++const kAxiosCurrentReq = Symbol.for('axios.http.currentReq');
+ 
+ // A shared listener avoids retaining an adapter context for the lifetime of a
+ // pooled socket. EventEmitter invokes listeners with `this` set to the emitter.
+diff --git a/dist/node/axios.cjs b/dist/node/axios.cjs
+--- a/dist/node/axios.cjs
++++ b/dist/node/axios.cjs
+@@ -3831,8 +3831,10 @@
+ 
+ // Symbols used to bind a single 'error' listener to a pooled socket and track
+ // the request currently owning that socket across keep-alive reuse (issue #10780).
+-const kAxiosSocketListener = Symbol('axios.http.socketListener');
+-const kAxiosCurrentReq = Symbol('axios.http.currentReq');
++// API bundles can reload Axios while sharing Node's keep-alive sockets.
++// Share ownership markers so each socket keeps one listener across evaluations.
++const kAxiosSocketListener = Symbol.for('axios.http.socketListener');
++const kAxiosCurrentReq = Symbol.for('axios.http.currentReq');
+ 
+ // A shared listener avoids retaining an adapter context for the lifetime of a
+ // pooled socket. EventEmitter invokes listeners with `this` set to the emitter.

@@ -34,9 +34,13 @@ allowBuilds:
   unrs-resolver: false
 
 patchedDependencies:
+  # Reuse unchanged API modules; verify memory and reloads in expo-api-memory.test.ts.
+  "@expo/cli@57.0.25": patches/expo-cli-57-0-25.patch
+  # Share TLS socket ownership across Expo API evaluations; see http-lifecycle.test.ts.
+  axios@1.20.0: patches/axios-1-20-0.patch
   # Guard realtime completion/cancellation races; recheck stream-lifecycle.test.ts on upgrades.
-  '@trigger.dev/core@4.6.3': patches/@trigger.dev__core@4.6.3.patch
-  # Keep an explicit Enter key in the native terminal accessory on iOS and Android.
+  "@trigger.dev/core@4.6.3": patches/@trigger.dev__core@4.6.3.patch
+  # Keep the terminal accessory Enter key and distinct iOS keyboard Return behavior.
   expo-libghostty@0.8.1: patches/expo-libghostty-0-8-1.patch
   # Add file extensions to the ESM build so Metro resolves its relative imports.
   jsonc-parser@3.3.1: patches/jsonc-parser@3.3.1.patch

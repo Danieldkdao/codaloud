@@ -28,6 +28,7 @@ vi.mock("@/hooks/use-theme", () => ({
   useThemeColor: (name: string) =>
     ({
       background: "#ffffff",
+      card: "#eeeeee",
       foreground: "#222222",
       primary: "#336644",
       secondary: "#eeeeee",
@@ -85,7 +86,7 @@ it("replays raw PTY output and forwards native input and grid size", async () =>
   expect(mocks.resize).toHaveBeenCalledWith(80, 24);
   expect(mocks.props?.fontSize).toBe(16);
   expect(mocks.props?.theme).toMatchObject({
-    background: "#ffffff",
+    background: "#f3f3f3",
     foreground: "#222222",
     cursorColor: "#336644",
     selectionBackground: "#eeeeee",

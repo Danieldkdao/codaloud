@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { TerminalView, type TerminalViewRef } from "expo-libghostty";
 import { useThemeColor } from "@/hooks/use-theme";
 import type { ProjectTerminalSession } from "../actions/terminal-session";
+import { terminalCardBackground } from "../lib/colors";
 
 export const TerminalSurface = ({
   session,
@@ -13,7 +14,9 @@ export const TerminalSurface = ({
   const terminal = useRef<TerminalViewRef>(null);
   const lastSize = useRef("");
   // The parent scopes editor palette variables around this native view.
-  const background = useThemeColor("background") as string;
+  const panelBackground = useThemeColor("background") as string;
+  const card = useThemeColor("card") as string;
+  const background = terminalCardBackground(card, panelBackground);
   const foreground = useThemeColor("foreground") as string;
   const primary = useThemeColor("primary") as string;
   const secondary = useThemeColor("secondary") as string;

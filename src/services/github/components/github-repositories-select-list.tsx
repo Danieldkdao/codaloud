@@ -60,7 +60,7 @@ export const GitHubRepositoriesSelectList = ({
   return (
     <View
       className={cn(
-        "max-h-80 min-h-24 shrink overflow-hidden rounded-xl border border-border bg-background",
+        "h-80 max-h-80 min-h-24 shrink overflow-hidden rounded-xl border border-border bg-background",
         className,
         selectedRepository && "h-auto min-h-0 shrink-0",
       )}
@@ -90,7 +90,7 @@ export const GitHubRepositoriesSelectList = ({
         />
       ) : (
         <>
-          <View className="p-3">
+          <View className="shrink-0 p-3">
             <SearchInput
               initialSearch={search}
               onValueChange={setSearch}
@@ -100,9 +100,8 @@ export const GitHubRepositoriesSelectList = ({
           </View>
           <ScrollFadeFlatList<GitHubRepository>
             key={search.trim().toLowerCase()}
-            // Size to the rows while allowing the form's bounded picker to shrink.
-            containerStyle={{ flex: 0, flexShrink: 1, minHeight: 96 }}
-            className="min-h-24 shrink overflow-hidden"
+            containerStyle={{ flex: 1, minHeight: 0 }}
+            className="min-h-0 flex-1 overflow-hidden"
             accessibilityLabel="GitHub repositories"
             data={repositories}
             keyExtractor={(repository) => String(repository.id)}

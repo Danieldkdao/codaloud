@@ -11,6 +11,7 @@ import {
 import { requireLocalProject } from "../local/access";
 import { executeWorkspace } from "@/services/local-workspace/execute";
 import type { createTypeScriptAnalyzer } from "@/services/typescript/analysis";
+import { warnAnalyzerFailure } from "@/features/code-intelligence/parsers/analyzer-diagnostics-log";
 
 // Bound compiler memory to the active workspace. The analyzer itself retains
 // only the active file's graph and serializes requests against that graph.
@@ -59,7 +60,8 @@ export const readProjectCodeIntelligence = async (
       };
     }
     return await session.analyzer.analyze(input);
-  } catch {
+  } catch (error) {
+    warnAnalyzerFailure("TypeScript analysis unavailable", error);
     return null;
   }
 };

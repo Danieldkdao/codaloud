@@ -30,6 +30,80 @@ it("offers completions from real types without fetching a compiler", async () =>
 const diagnosticCodes = (result: Awaited<ReturnType<typeof analyzeTypeScript>>) =>
   "diagnostics" in result ? result.diagnostics.map((item) => item.code) : [];
 
+it("reports errors when missing module lookup paths outnumber actual dependencies", async () => {
+  const imports = Array.from({ length: 100 }, (_, index) =>
+    `import type { Item as Item${index} } from "missing-package-${index}";`,
+  ).join("\n");
+  const analyzer = createTypeScriptAnalyzer(async () => null);
+  try {
+    const result = await analyzer.analyze({
+      path: "src/app/screens/main.ts",
+      content: `${imports}\nconst answer: number = "wrong";`,
+    });
+    expect(diagnosticCodes(result)).toContain("TS2322");
+    expect(diagnosticCodes(result)).toContain("TS2307");
+  } finally {
+    await analyzer.dispose();
+  }
+});
+
+it("bounds dependency reads during warm diagnostic revalidation", async () => {
+  let active = 0;
+  let peak = 0;
+  const analyzer = createTypeScriptAnalyzer(async (path) => {
+    peak = Math.max(peak, ++active);
+    await Promise.resolve();
+    active--;
+    return /^src\/value\d+\.ts$/.test(path) ? "export const value = 42;" : null;
+  });
+  const input = {
+    path: "src/main.ts",
+    content: Array.from({ length: 12 }, (_, index) =>
+      `import { value as value${index} } from "./value${index}";`,
+    ).join("\n") + '\nconst answer: number = "wrong";',
+  };
+  try {
+    await analyzer.analyze(input);
+    peak = 0;
+    expect(diagnosticCodes(await analyzer.analyze(input))).toContain("TS2322");
+    expect(peak).toBeLessThanOrEqual(8);
+  } finally {
+    await analyzer.dispose();
+  }
+});
+
+it("drains an in-flight dependency batch before rejecting a failed analysis", async () => {
+  let revalidating = false;
+  let blockedReadStarted = false;
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const analyzer = createTypeScriptAnalyzer(async (path) => {
+    if (revalidating && path === "src/tsconfig.json") throw new Error("Read failed");
+    if (revalidating && path === "tsconfig.json") {
+      blockedReadStarted = true;
+      await blocked;
+    }
+    return path === "src/value.ts" ? "export const value = 42;" : null;
+  });
+  const input = { path: "src/main.ts", content: 'import { value } from "./value"; export const answer = value;' };
+  try {
+    await analyzer.analyze(input);
+    revalidating = true;
+    let settled = false;
+    const result = analyzer.analyze(input);
+    void result.catch(() => { settled = true; });
+    await vi.waitFor(() => expect(blockedReadStarted).toBe(true));
+    expect(settled).toBe(false);
+    release();
+    await expect(result).rejects.toThrow("Read failed");
+    revalidating = false;
+    expect("diagnostics" in await analyzer.analyze(input)).toBe(true);
+  } finally {
+    release();
+    await analyzer.dispose();
+  }
+});
+
 it("updates diagnostics and completions across edits in one analysis session", async () => {
   const analyzer = createTypeScriptAnalyzer(async () => null);
   try {

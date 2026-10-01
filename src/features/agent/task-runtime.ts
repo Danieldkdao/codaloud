@@ -1,5 +1,7 @@
 import { randomUUID } from "expo-crypto";
+import { BillingRequiredError } from "@/features/billing/client-error";
 import { getDeviceId } from "@/lib/device-id";
+import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
 import Storage from "expo-sqlite/kv-store";
 import { z } from "zod";
 import {
@@ -382,6 +384,7 @@ export const agentTasks = {
           "Five tasks are already running. Wait for one to finish.",
         );
       await flushAgentWorkspace(projectId);
+      await editorPreferencesStore.load();
       const revision = await readWorkspaceRevision(projectId);
       const deviceId = await getDeviceId();
       if (owner !== userId || !active)
@@ -393,6 +396,7 @@ export const agentTasks = {
         revision,
         instruction,
         title,
+        agentModel: editorPreferencesStore.getSnapshot().preferences.agentModel,
       });
       const record: AgentTaskRecord = {
         request: input,
@@ -433,6 +437,18 @@ export const agentTasks = {
         resume(record);
         return { id: accepted.id, accepted: true };
       } catch (error) {
+        if (error instanceof BillingRequiredError) {
+          update(record, {
+            event: {
+              ...record.event,
+              status: "failed",
+              logs: [...record.event.logs, error.message],
+            },
+            connectionError: undefined,
+          });
+          await persist();
+          throw error;
+        }
         update(record, {
           connectionError: "Couldn’t confirm acceptance yet. Reconnecting…",
         });

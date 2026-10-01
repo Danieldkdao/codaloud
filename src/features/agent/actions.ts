@@ -1,4 +1,5 @@
 import { authClient } from "@/lib/auth/auth-client";
+import { BillingRequiredError } from "@/features/billing/client-error";
 import { getBaseURL } from "@/lib/auth/utils";
 import { fetch } from "expo/fetch";
 import { z } from "zod";
@@ -32,6 +33,7 @@ const request = async (
     );
     // PATCH 409 means this authenticated run has already advanced past the
     // command. A replayed durable receipt needs no retry or connection warning.
+    if (response.status === 402) throw new BillingRequiredError();
     if (!response.ok && !(method === "PATCH" && response.status === 409))
       throw new Error(
         response.status === 401

@@ -24,7 +24,16 @@ vi.mock("@trigger.dev/sdk", () => ({
         : mocks.wait(...args),
   },
 }));
-vi.mock("@/services/ai/server", () => ({ openrouter: { chat: mocks.model } }));
+vi.mock("@/services/ai/server", () => ({ meteredChatModel: mocks.model }));
+vi.mock("@/features/billing/server/billing-service", () => ({
+  requireAvailableCredits: vi.fn().mockResolvedValue({ monthlyCredits: 50 }),
+  chargeCredits: vi.fn().mockResolvedValue({ monthlyCredits: 48 }),
+  InsufficientCreditsError: class extends Error {},
+}));
+import {
+  InsufficientCreditsError,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
 vi.mock("@/services/firecrawl/tools", () => ({
   searchWeb: mocks.search,
   scrapePage: vi.fn(),
@@ -49,6 +58,85 @@ beforeEach(() => {
     ok: true,
     output: { ok: true, text: "Ready", revision: "a".repeat(64) },
   });
+});
+it("marks a credit failure during a background task for the client", async () => {
+  vi.mocked(requireAvailableCredits).mockRejectedValueOnce(
+    new InsufficientCreditsError(),
+  );
+  await expect(
+    run(
+      { instruction: "Create a file", revision: "a".repeat(64), userId: "owner" },
+      { signal: new AbortController().signal },
+    ),
+  ).rejects.toThrow();
+  expect(mocks.metadata.get("billingError")).toBe(true);
+});
+it("offers file mutations and terminal inspection to an approved task model", async () => {
+  mocks.wait.mockResolvedValue({
+    ok: true,
+    output: { ok: true, text: '{"status":"closed","output":"build failed"}' },
+  });
+  let step = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          if (step++ === 0) {
+            controller.enqueue({
+              type: "tool-call",
+              toolCallId: "terminal-read",
+              toolName: "readTerminalOutput",
+              input: "{}",
+            });
+            controller.enqueue({
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: "tool_calls" },
+              usage,
+            });
+          } else {
+            controller.enqueue({ type: "text-start", id: "summary" });
+            controller.enqueue({
+              type: "text-delta",
+              id: "summary",
+              delta: "Inspected the build output.",
+            });
+            controller.enqueue({ type: "text-end", id: "summary" });
+            controller.enqueue({
+              type: "finish",
+              finishReason: { unified: "stop", raw: "stop" },
+              usage,
+            });
+          }
+          controller.close();
+        },
+      }),
+    }),
+  });
+  mocks.model.mockReturnValue(model);
+
+  await expect(
+    run(
+      {
+        instruction: "Inspect build output and fix the file",
+        revision: "a".repeat(64),
+      },
+      { signal: new AbortController().signal },
+    ),
+  ).resolves.toEqual({ summary: "Inspected the build output." });
+
+  const offered = model.doStreamCalls[0]?.tools?.map((entry) => entry.name);
+  expect(offered).toEqual(
+    expect.arrayContaining([
+      "readTerminalOutput",
+      "runTerminalCommand",
+      "readFile",
+      "editFile",
+      "saveFile",
+      "createFile",
+    ]),
+  );
+  expect(mocks.metadata.has("command")).toBe(false);
 });
 it("waits for the device's task turn before asking the model to plan", async () => {
   mocks.begin.mockResolvedValue({

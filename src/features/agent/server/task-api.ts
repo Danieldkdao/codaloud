@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/helpers";
+import {
+  InsufficientCreditsError,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
 import { tasks, runs, wait, idempotencyKeys } from "@/services/trigger/server";
 import {
   agentTaskRequestSchema,
@@ -8,6 +12,7 @@ import {
   agentToolResultSchema,
 } from "../schemas";
 import type { workspaceTask } from "@/trigger/workspace-task";
+import { billingRequiredMessage } from "@/features/billing/client-error";
 
 const reply = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -24,13 +29,18 @@ export const handleAgentRequest = async (request: Request) => {
       const input = agentTaskRequestSchema.safeParse(await readBody(request));
       if (!input.success)
         return reply({ message: "Invalid task request." }, 400);
+      const billing = await requireAvailableCredits(userId, 2);
+      const selectedModel =
+        billing.tier === "free"
+          ? agentTaskRequestSchema.shape.agentModel.parse(undefined)
+          : input.data.agentModel;
       const key = await idempotencyKeys.create(
         `${userId}:${input.data.deviceId}:${input.data.requestId}`,
         { scope: "global" },
       );
       const run = await tasks.trigger<typeof workspaceTask>(
         "workspace-task",
-        { ...input.data, userId },
+        { ...input.data, agentModel: selectedModel, userId },
         {
           idempotencyKey: key,
           idempotencyKeyTTL: "24h",
@@ -132,7 +142,9 @@ export const handleAgentRequest = async (request: Request) => {
                   update.status === "COMPLETED"
                     ? update.output?.summary
                     : terminal
-                      ? "The task failed. Review any completed steps before trying again."
+                      ? update.metadata?.billingError === true
+                        ? billingRequiredMessage
+                        : "The task failed. Review any completed steps before trying again."
                       : update.metadata?.summary,
               });
               controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
@@ -160,7 +172,15 @@ export const handleAgentRequest = async (request: Request) => {
         "X-Accel-Buffering": "no",
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError)
+      return reply(
+        {
+          message: "You need more credits before starting a task.",
+          action: "billing",
+        },
+        402,
+      );
     return reply(
       {
         message: "Tasks are unavailable. Check the task service and try again.",

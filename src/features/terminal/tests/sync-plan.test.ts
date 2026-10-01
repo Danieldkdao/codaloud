@@ -70,4 +70,25 @@ describe("workspace sync planning", () => {
     ])
       expect(isSyncablePath(path)).toBe(false);
   });
+  it("includes only selected excluded folders when large syncing is enabled", () => {
+    expect(
+      isSyncablePath("node_modules/pkg/index.d.ts", ["node_modules"]),
+    ).toBe(true);
+    expect(
+      isSyncablePath("packages/app/node_modules/pkg/index.d.ts", [
+        "node_modules",
+      ]),
+    ).toBe(true);
+    expect(isSyncablePath(".git/config", ["node_modules"])).toBe(false);
+    expect(isSyncablePath("../secret", ["node_modules", ".git"])).toBe(false);
+    expect(
+      planWorkspaceSync({}, { "node_modules/pkg/index.d.ts": "hash" }, {}, [
+        "node_modules",
+      ]).download,
+    ).toEqual(["node_modules/pkg/index.d.ts"]);
+  });
+  it("never syncs Git metadata even when selected", () => {
+    expect(isSyncablePath(".git/config", [".git"])).toBe(false);
+    expect(isSyncablePath("packages/app/.git/HEAD", [".git"])).toBe(false);
+  });
 });

@@ -1,9 +1,11 @@
 import { fetch } from "expo/fetch";
+import { randomUUID } from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { authClient } from "@/lib/auth/auth-client";
 import { getBaseURL } from "@/lib/auth/utils";
 import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
 import { voiceAudioSession } from "@/services/livekit/voice-track";
+import { BillingRequiredError } from "@/features/billing/client-error";
 import type { ExplanationSpeech } from "./explanation-speech";
 import { createExplanationSpeech } from "./explanation-speech";
 
@@ -22,11 +24,18 @@ export const synthesizeSpeech = async (text: string) => {
     {
       method: "POST",
       credentials: "omit",
-      headers: { "Content-Type": "application/json", Cookie: cookie ?? "" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie ?? "",
+        "X-Request-Id": randomUUID(),
+      },
       body: JSON.stringify({ text, voiceId }),
     },
   );
-  if (!response.ok) throw new Error("Couldn’t synthesize this sentence.");
+  if (!response.ok)
+    throw response.status === 402
+      ? new BillingRequiredError()
+      : new Error("Couldn’t synthesize this sentence.");
   file.write(await response.bytes());
   return file.uri;
 };

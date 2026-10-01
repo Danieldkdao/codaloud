@@ -7,6 +7,7 @@ import {
 } from "react";
 import { View, useWindowDimensions, type KeyboardMetrics } from "react-native";
 import { useKeyboardSymbolsInset } from "@/hooks/use-keyboard-symbols";
+import { useCommandBubbleAnchor } from "@/features/voice/hooks/use-command-bubble-layout";
 import Animated, {
   LinearTransition,
   ReduceMotion,
@@ -17,11 +18,13 @@ export const EditorBottomBar = ({
   frame,
   dockHeight,
   onHeight,
+  commandScope,
 }: {
   children: ReactNode;
   frame?: KeyboardMetrics;
   dockHeight: number;
   onHeight: (height: number) => void;
+  commandScope?: string;
 }) => {
   const viewport = useRef<View>(null);
   const symbolInset = useKeyboardSymbolsInset();
@@ -29,6 +32,7 @@ export const EditorBottomBar = ({
   currentFrame.current = frame;
   const [keyboardInset, setKeyboardInset] = useState(0);
   const { width, height } = useWindowDimensions();
+  const anchor = useCommandBubbleAnchor(commandScope);
   const measure = useCallback(() => {
     if (!frame) {
       setKeyboardInset(0);
@@ -50,6 +54,8 @@ export const EditorBottomBar = ({
     >
       {/* Never animate ancestor opacity: UIKit can permanently drop its glass effect. */}
       <Animated.View
+        ref={anchor.ref}
+        collapsable={false}
         testID="editor-bottom-bar"
         layout={LinearTransition.duration(220).reduceMotion(
           ReduceMotion.System,
@@ -60,7 +66,10 @@ export const EditorBottomBar = ({
             (frame ? keyboardInset + symbolInset : dockHeight) +
             (frame ? 16 : 8),
         }}
-        onLayout={({ nativeEvent }) => onHeight(nativeEvent.layout.height)}
+        onLayout={({ nativeEvent }) => {
+          onHeight(nativeEvent.layout.height);
+          anchor.onLayout();
+        }}
       >
         {children}
       </Animated.View>

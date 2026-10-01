@@ -4,11 +4,15 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   streamSpeech: vi.fn(),
   getCurrentUser: vi.fn(),
+  credits: vi.fn(),
+  charge: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/helpers", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/services/elevenlabs/server", () => ({ streamSpeech: mocks.streamSpeech }));
 vi.mock("@/data/env/server", () => ({ serverEnv: {} }));
+vi.mock("@/features/billing/server/billing-service", () => ({ requireAvailableCredits: mocks.credits, chargeCredits: mocks.charge, InsufficientCreditsError: class extends Error {} }));
+import { InsufficientCreditsError } from "@/features/billing/server/billing-service";
 
 const load = async () =>
   (await import("@/features/editor/server/explanation-speech-api")).handleExplanationSpeechRequest;
@@ -45,6 +49,13 @@ const readHeader = (bytes: Uint8Array) => {
 beforeEach(() => {
   mocks.getCurrentUser.mockReset().mockResolvedValue({ userId: "user-one" });
   mocks.streamSpeech.mockReset().mockResolvedValue(stream([]));
+  mocks.credits.mockReset().mockResolvedValue({ monthlyCredits: 50 });
+  mocks.charge.mockReset().mockResolvedValue({ monthlyCredits: 49 });
+});
+it("rejects speech without credits before synthesis", async () => {
+  mocks.credits.mockRejectedValue(new InsufficientCreditsError());
+  expect((await (await load())(post({ text: "Hello", voiceId: "v1" }))).status).toBe(402);
+  expect(mocks.streamSpeech).not.toHaveBeenCalled();
 });
 
 it("requires a signed-in user", async () => {
@@ -82,6 +93,7 @@ it("returns playable WAV audio carrying the synthesized samples", async () => {
   });
   // The sample bytes must survive the header exactly.
   expect([...bytes.slice(44)]).toEqual([...pcm]);
+  expect(mocks.charge).toHaveBeenCalledWith("user-one", expect.stringMatching(/^speech:/), 1, "Read aloud · 6 characters");
 });
 
 it("asks the provider for the requested voice and text", async () => {
@@ -95,6 +107,7 @@ it("asks the provider for the requested voice and text", async () => {
 it("fails cleanly when the provider returns no audio", async () => {
   const response = await (await load())(post({ text: "Hello.", voiceId: "v" }));
   expect(response.status).toBe(502);
+  expect(mocks.charge).not.toHaveBeenCalled();
 });
 
 it("fails cleanly when synthesis throws", async () => {

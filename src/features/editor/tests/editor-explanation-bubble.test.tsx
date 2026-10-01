@@ -147,3 +147,22 @@ it("keeps close available while loading and streams Markdown into a bounded scro
     vi.unstubAllGlobals();
   }
 });
+it("shows a read-aloud credit failure beside the explanation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(EditorExplanationBubble, {
+      state: { status: "ready", text: "Explanation.", highlight: null },
+      maxHeight: 240,
+      onClose: vi.fn(),
+      speaking: false,
+      speechError: "You need more credits. Upgrade or add credits.",
+      onToggleReadAloud: vi.fn(),
+    })));
+    expect(container.textContent).toMatch(/credits.*(upgrade|add)/i);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});

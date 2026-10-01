@@ -1,6 +1,13 @@
 import { getCurrentUser } from "@/lib/auth/helpers";
+import { randomUUID } from "node:crypto";
 import { streamSpeech } from "@/services/elevenlabs/server";
 import { explanationSpeechRequestSchema } from "../explanation-schemas";
+import {
+  InsufficientCreditsError,
+  chargeCredits,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
+import { creditsForSpeech } from "@/features/billing/credit-cost";
 
 const failure = "Couldn’t prepare the audio for this explanation.";
 const reject = (message: string, status: number) =>
@@ -52,6 +59,8 @@ export const handleExplanationSpeechRequest = async (request: Request) => {
     }
     const input = explanationSpeechRequestSchema.safeParse(body);
     if (!input.success) return reject("Invalid speech request.", 400);
+    const amount = creditsForSpeech(input.data.text.length);
+    await requireAvailableCredits(userId, amount);
     if (request.signal.aborted) return reject("Request cancelled.", 499);
     const stream = await streamSpeech(input.data.voiceId, {
       text: input.data.text,
@@ -68,13 +77,25 @@ export const handleExplanationSpeechRequest = async (request: Request) => {
       pcm.set(chunk, offset);
       offset += chunk.byteLength;
     }
+    const requestId = request.headers.get("X-Request-Id");
+    await chargeCredits(
+      userId,
+      `speech:${requestId && /^[a-f0-9-]{36}$/i.test(requestId) ? requestId : randomUUID()}`,
+      amount,
+      `Read aloud · ${input.data.text.length} characters`,
+    );
     return new Response(toWav(pcm, 24000), {
       headers: {
         "Content-Type": "audio/wav",
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError)
+      return reject(
+        "You need more credits to hear this explanation. Open Billing to upgrade or add credits.",
+        402,
+      );
     return reject(failure, 503);
   }
 };

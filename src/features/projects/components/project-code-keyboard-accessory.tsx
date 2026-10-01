@@ -23,6 +23,7 @@ import { enterGlassSurface, exitGlassSurface } from "@/lib/glass-animations";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { KeyboardSymbols } from "@/components/keyboard-symbols";
+import { useCommandBubbleAnchor } from "@/features/voice/hooks/use-command-bubble-layout";
 
 import type {
   EditorCommand,
@@ -43,6 +44,7 @@ type ProjectCodeKeyboardAccessoryProps = {
   onHeight?: (height: number) => void;
   onDismissKeyboard: () => void;
   symbolsOnly?: boolean;
+  commandScope?: string;
 };
 
 const transition = LinearTransition.duration(280).reduceMotion(
@@ -81,6 +83,7 @@ export const ProjectCodeKeyboardAccessory = ({
   onHeight,
   onDismissKeyboard,
   symbolsOnly = false,
+  commandScope,
 }: ProjectCodeKeyboardAccessoryProps) => {
   const viewport = useRef<View>(null);
   const latestFrame = useRef(frame);
@@ -88,6 +91,7 @@ export const ProjectCodeKeyboardAccessory = ({
   const [bottom, setBottom] = useState(0);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const anchor = useCommandBubbleAnchor(commandScope, Boolean(frame));
   const measure = useCallback(() => {
     if (!frame) return;
     // Android may already have resized the native viewport, while iOS normally
@@ -106,13 +110,18 @@ export const ProjectCodeKeyboardAccessory = ({
       collapsable={false}
       pointerEvents="box-none"
       onLayout={measure}
-      style={{ position: "absolute", inset: 0, zIndex: 20 }}
+      style={{ position: "absolute", inset: 0, zIndex: 30, elevation: 30 }}
     >
       {frame ? (
         <Animated.View
+          ref={anchor.ref}
+          collapsable={false}
           layout={transition}
           testID="editor-keyboard-strip"
-          onLayout={(event) => onHeight?.(event.nativeEvent.layout.height)}
+          onLayout={(event) => {
+            onHeight?.(event.nativeEvent.layout.height);
+            anchor.onLayout();
+          }}
           style={{
             position: "absolute",
             left: 8 + insets.left,
@@ -175,7 +184,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           accessibilityRole="button"
                           accessibilityLabel="Move cursor left"
                           onPress={() => onCommand?.("cursor-left")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="Feather"
@@ -189,7 +198,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           accessibilityRole="button"
                           accessibilityLabel="Move cursor right"
                           onPress={() => onCommand?.("cursor-right")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="Feather"
@@ -203,7 +212,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           accessibilityRole="button"
                           accessibilityLabel="Move cursor up"
                           onPress={() => onCommand?.("cursor-up")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="Feather"
@@ -217,7 +226,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           accessibilityRole="button"
                           accessibilityLabel="Move cursor down"
                           onPress={() => onCommand?.("cursor-down")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="Feather"
@@ -238,7 +247,7 @@ export const ProjectCodeKeyboardAccessory = ({
                             disabled: fold === "unavailable",
                           }}
                           onPress={() => onCommand?.("fold")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50 disabled:opacity-40"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50 disabled:opacity-40"
                         >
                           <Icon
                             family="MaterialCommunityIcons"
@@ -252,7 +261,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           accessibilityRole="button"
                           accessibilityLabel="Copy current line"
                           onPress={() => onCommand?.("copy-line")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="Feather"
@@ -266,7 +275,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           accessibilityRole="button"
                           accessibilityLabel="Delete current line"
                           onPress={() => onCommand?.("delete-line")}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="Feather"
@@ -282,7 +291,7 @@ export const ProjectCodeKeyboardAccessory = ({
                           onPress={() => onCommand?.("comment")}
                           disabled={!canComment}
                           accessibilityState={{ disabled: !canComment }}
-                          className="h-11 w-11 items-center justify-center rounded-full bg-secondary active:opacity-50"
+                          className="h-11 w-11 items-center justify-center rounded-full active:opacity-50"
                         >
                           <Icon
                             family="MaterialCommunityIcons"

@@ -1,4 +1,5 @@
 import { toSpeechSentences } from "./lib/formatters";
+import { BillingRequiredError } from "@/features/billing/client-error";
 
 export type ExplanationSpeechOptions = {
   /** Mirrors the "Spoken responses" preference used by the voice agent. */
@@ -49,6 +50,7 @@ export const createExplanationSpeech = (options: ExplanationSpeechOptions) => {
         // from the feature being broken, which is exactly what it looks like.
         options.onError?.(error, sentence);
         if (run !== generation) return;
+        if (error instanceof BillingRequiredError) throw error;
       }
     }
   };

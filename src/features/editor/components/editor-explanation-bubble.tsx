@@ -48,6 +48,7 @@ export const EditorExplanationBubble = ({
   maxHeight,
   onClose,
   speaking,
+  speechError = null,
   onToggleReadAloud,
 }: {
   state: EditorExplanationState;
@@ -55,6 +56,7 @@ export const EditorExplanationBubble = ({
   onClose: () => void;
   /** Whether the explanation is currently being read aloud. */
   speaking: boolean;
+  speechError?: string | null;
   onToggleReadAloud: () => void;
 }) => {
   const busy = state.status === "loading" || state.status === "streaming";
@@ -127,6 +129,11 @@ export const EditorExplanationBubble = ({
           {state.error ? (
             <PText accessibilityRole="alert" className="text-destructive">
               {state.error}
+            </PText>
+          ) : null}
+          {speechError ? (
+            <PText accessibilityRole="alert" className="text-destructive">
+              {speechError}
             </PText>
           ) : null}
         </ScrollView>

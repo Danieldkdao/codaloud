@@ -1,0 +1,502 @@
+{
+  "fileCount": 50000,
+  "totalBytes": 204800000,
+  "cold": {
+    "bytesHashed": 204800000,
+    "durationMs": 1390,
+    "hashed": 50000,
+    "reused": 0,
+    "bridgeBytes": 4284113,
+    "processMs": 1425.7,
+    "peakRssMiB": 62.34
+  },
+  "warm": {
+    "bytesHashed": 0,
+    "durationMs": 319,
+    "hashed": 0,
+    "reused": 50000,
+    "bridgeBytes": 4284104,
+    "processMs": 359.4,
+    "peakRssMiB": 51.53
+  },
+  "edited": {
+    "bytesHashed": 4096,
+    "durationMs": 463,
+    "hashed": 1,
+    "reused": 49999,
+    "bridgeBytes": 4284107,
+    "processMs": 500.4,
+    "peakRssMiB": 62.27
+  },
+  "note": "Optimized native host build on this Mac; includes process/JSON overhead separately. This is not a network download benchmark.",
+  "simulator": {
+    "coldNativeScan": {
+      "files": 50174,
+      "bytesHashed": 872102300,
+      "durationMs": 9631
+    },
+    "warmNativeScan": {
+      "hashed": 0,
+      "reused": 50174,
+      "bytesHashed": 0,
+      "durationMs": 1773
+    },
+    "warmSyncBeforeConditionalManifest": {
+      "durationMs": 8904,
+      "setupMs": 1403,
+      "localScanMs": 2115,
+      "remoteScanMs": 7229,
+      "uploaded": 0,
+      "downloaded": 0,
+      "conflicts": 0,
+      "failures": 0
+    },
+    "warmSyncAfterConditionalManifestAndNativeQueueFix": {
+      "durationMs": 4099,
+      "setupMs": 1735,
+      "localScanMs": 1837,
+      "remoteScanMs": 2075,
+      "remoteDiagnostics": {
+        "fingerprintMs": 71,
+        "networkMs": 2004,
+        "unchanged": true,
+        "serverMs": 748,
+        "serverHashed": 0,
+        "serverReused": 50174
+      },
+      "uploaded": 0,
+      "downloaded": 0,
+      "deleted": 0,
+      "conflicts": 0,
+      "failures": 0
+    },
+    "debugMemoryBeforeAllocationFix": {
+      "peakRssMiB": 790.38,
+      "initialRssMiB": 285.62,
+      "finalRssMiB": 739.89,
+      "sampleSeconds": 51,
+      "samples": [
+        {
+          "second": 0,
+          "rssMiB": 285.62
+        },
+        {
+          "second": 1,
+          "rssMiB": 285.67
+        },
+        {
+          "second": 2,
+          "rssMiB": 285.67
+        },
+        {
+          "second": 3,
+          "rssMiB": 285.67
+        },
+        {
+          "second": 4,
+          "rssMiB": 285.39
+        },
+        {
+          "second": 5,
+          "rssMiB": 285.64
+        },
+        {
+          "second": 6,
+          "rssMiB": 354.59
+        },
+        {
+          "second": 7,
+          "rssMiB": 354.64
+        },
+        {
+          "second": 8,
+          "rssMiB": 760.66
+        },
+        {
+          "second": 9,
+          "rssMiB": 705.92
+        },
+        {
+          "second": 10,
+          "rssMiB": 790.27
+        },
+        {
+          "second": 11,
+          "rssMiB": 790.3
+        },
+        {
+          "second": 12,
+          "rssMiB": 790.38
+        },
+        {
+          "second": 13,
+          "rssMiB": 784.88
+        },
+        {
+          "second": 14,
+          "rssMiB": 784.92
+        },
+        {
+          "second": 15,
+          "rssMiB": 784.89
+        },
+        {
+          "second": 16,
+          "rssMiB": 784.92
+        },
+        {
+          "second": 17,
+          "rssMiB": 669.03
+        },
+        {
+          "second": 18,
+          "rssMiB": 669.06
+        },
+        {
+          "second": 19,
+          "rssMiB": 669.08
+        },
+        {
+          "second": 20,
+          "rssMiB": 669.09
+        },
+        {
+          "second": 21,
+          "rssMiB": 641.64
+        },
+        {
+          "second": 22,
+          "rssMiB": 641.67
+        },
+        {
+          "second": 23,
+          "rssMiB": 641.72
+        },
+        {
+          "second": 24,
+          "rssMiB": 616.56
+        },
+        {
+          "second": 25,
+          "rssMiB": 588.69
+        },
+        {
+          "second": 26,
+          "rssMiB": 588.72
+        },
+        {
+          "second": 27,
+          "rssMiB": 588.83
+        },
+        {
+          "second": 28,
+          "rssMiB": 588.86
+        },
+        {
+          "second": 29,
+          "rssMiB": 590.67
+        },
+        {
+          "second": 30,
+          "rssMiB": 594.36
+        },
+        {
+          "second": 31,
+          "rssMiB": 581.72
+        },
+        {
+          "second": 32,
+          "rssMiB": 565.38
+        },
+        {
+          "second": 33,
+          "rssMiB": 559.06
+        },
+        {
+          "second": 34,
+          "rssMiB": 765.86
+        },
+        {
+          "second": 35,
+          "rssMiB": 765.92
+        },
+        {
+          "second": 36,
+          "rssMiB": 756.25
+        },
+        {
+          "second": 37,
+          "rssMiB": 744.08
+        },
+        {
+          "second": 38,
+          "rssMiB": 742.56
+        },
+        {
+          "second": 39,
+          "rssMiB": 742.5
+        },
+        {
+          "second": 40,
+          "rssMiB": 742.53
+        },
+        {
+          "second": 41,
+          "rssMiB": 742.55
+        },
+        {
+          "second": 42,
+          "rssMiB": 739.61
+        },
+        {
+          "second": 43,
+          "rssMiB": 739.66
+        },
+        {
+          "second": 44,
+          "rssMiB": 739.73
+        },
+        {
+          "second": 45,
+          "rssMiB": 739.77
+        },
+        {
+          "second": 46,
+          "rssMiB": 739.84
+        },
+        {
+          "second": 47,
+          "rssMiB": 739.89
+        },
+        {
+          "second": 48,
+          "rssMiB": 739.92
+        },
+        {
+          "second": 49,
+          "rssMiB": 739.89
+        },
+        {
+          "second": 50,
+          "rssMiB": 739.89
+        }
+      ]
+    },
+    "debugMemoryAfterAllocationFix": {
+      "peakRssMiB": 692.48,
+      "initialRssMiB": 175.41,
+      "finalRssMiB": 203.67,
+      "sampleSeconds": 36,
+      "samples": [
+        {
+          "second": 0,
+          "rssMiB": 175.41
+        },
+        {
+          "second": 1,
+          "rssMiB": 175.47
+        },
+        {
+          "second": 2,
+          "rssMiB": 176.56
+        },
+        {
+          "second": 3,
+          "rssMiB": 175.27
+        },
+        {
+          "second": 4,
+          "rssMiB": 175.16
+        },
+        {
+          "second": 5,
+          "rssMiB": 264.8
+        },
+        {
+          "second": 6,
+          "rssMiB": 271.58
+        },
+        {
+          "second": 7,
+          "rssMiB": 355.84
+        },
+        {
+          "second": 8,
+          "rssMiB": 338.83
+        },
+        {
+          "second": 9,
+          "rssMiB": 354.89
+        },
+        {
+          "second": 10,
+          "rssMiB": 692.48
+        },
+        {
+          "second": 11,
+          "rssMiB": 648.8
+        },
+        {
+          "second": 12,
+          "rssMiB": 466.88
+        },
+        {
+          "second": 13,
+          "rssMiB": 198.52
+        },
+        {
+          "second": 14,
+          "rssMiB": 197.17
+        },
+        {
+          "second": 15,
+          "rssMiB": 200.55
+        },
+        {
+          "second": 16,
+          "rssMiB": 200.69
+        },
+        {
+          "second": 17,
+          "rssMiB": 201.38
+        },
+        {
+          "second": 18,
+          "rssMiB": 201.44
+        },
+        {
+          "second": 19,
+          "rssMiB": 201.47
+        },
+        {
+          "second": 20,
+          "rssMiB": 201.66
+        },
+        {
+          "second": 21,
+          "rssMiB": 201.72
+        },
+        {
+          "second": 22,
+          "rssMiB": 202.7
+        },
+        {
+          "second": 23,
+          "rssMiB": 202.73
+        },
+        {
+          "second": 24,
+          "rssMiB": 202.81
+        },
+        {
+          "second": 25,
+          "rssMiB": 202.86
+        },
+        {
+          "second": 26,
+          "rssMiB": 202.89
+        },
+        {
+          "second": 27,
+          "rssMiB": 202.94
+        },
+        {
+          "second": 28,
+          "rssMiB": 203.19
+        },
+        {
+          "second": 29,
+          "rssMiB": 203.23
+        },
+        {
+          "second": 30,
+          "rssMiB": 203.28
+        },
+        {
+          "second": 31,
+          "rssMiB": 203.45
+        },
+        {
+          "second": 32,
+          "rssMiB": 203.5
+        },
+        {
+          "second": 33,
+          "rssMiB": 203.53
+        },
+        {
+          "second": 34,
+          "rssMiB": 203.62
+        },
+        {
+          "second": 35,
+          "rssMiB": 203.67
+        }
+      ]
+    },
+    "hermesDiagnostics": {
+      "beforeAllocatedDuringSyncMiB": 513.85,
+      "afterAllocatedDuringSyncMiB": 234.57,
+      "afterUsedHeapMiB": 101.16,
+      "afterReservedHeapMiB": 124.0,
+      "afterExternalMiB": 23.57,
+      "note": "Temporary guarded Hermes instrumentation was removed after measuring. AllocatedDuringSync is cumulative allocation churn, not retained memory. RSS includes debug runtime, native libraries and reclaimable pages and excludes WebView child processes; these sessions had different starting memory and are not a controlled peak-RSS comparison."
+    },
+    "releaseVerification": {
+      "build": "succeeded",
+      "runtimeMemory": "not measured",
+      "reason": "RevenueCat prevents Release launch with the configured development test API key. Production credentials were not changed; the working Debug build was restored."
+    },
+    "changedMobileSync": {
+      "fixtureFiles": 192,
+      "fixtureBytes": 786432,
+      "allDeviceBytesVerified": true,
+      "durationMs": 10306,
+      "setupMs": 1903,
+      "localScanMs": 1691,
+      "remoteScanMs": 3438,
+      "remoteDiagnostics": {
+        "fingerprintMs": 105,
+        "networkMs": 3333,
+        "unchanged": false,
+        "serverMs": 742,
+        "serverHashed": 192,
+        "serverReused": 50174
+      },
+      "uploaded": 0,
+      "downloaded": 192,
+      "deleted": 0,
+      "conflicts": 0,
+      "failures": 0
+    }
+  },
+  "beforeAllocationOptimizations": {
+    "cold": {
+      "bytesHashed": 204800000,
+      "durationMs": 1397,
+      "hashed": 50000,
+      "reused": 0,
+      "bridgeBytes": 4284113,
+      "processMs": 1662.2,
+      "peakRssMiB": 86.16
+    },
+    "warm": {
+      "bytesHashed": 0,
+      "durationMs": 411,
+      "hashed": 0,
+      "reused": 50000,
+      "bridgeBytes": 4284104,
+      "processMs": 470.9,
+      "peakRssMiB": 114.61
+    },
+    "edited": {
+      "bytesHashed": 4096,
+      "durationMs": 400,
+      "hashed": 1,
+      "reused": 49999,
+      "bridgeBytes": 4284107,
+      "processMs": 454,
+      "peakRssMiB": 111.58
+    }
+  }
+}

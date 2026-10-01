@@ -13,6 +13,15 @@ import { workspaceTools, type WorkspaceToolName } from "./workspace-tools";
 import type { AgentCommandSchema, AgentToolResultSchema } from "../schemas";
 import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
 import { collectFileDiagnostics } from "../lib/file-diagnostics";
+import { editorPreferencesStore } from "@/features/settings/hooks/use-editor-preferences";
+import {
+  parsePathRules,
+  pathRulesAreValid,
+} from "@/features/settings/lib/path-rules";
+import {
+  assertWorkspaceToolAllowed,
+  filterWorkspaceToolResult,
+} from "../lib/workspace-access-policy";
 
 export const readWorkspaceRevision = async (projectId: string) =>
   z
@@ -28,10 +37,13 @@ const invoke = async (
   switch (name) {
     case "readTerminalOutput": {
       workspaceTools.readTerminalOutput.schema.parse(args);
-      const { projectTerminalSession } = await import("@/features/terminal/actions/terminal-session");
+      const { projectTerminalSession } =
+        await import("@/features/terminal/actions/terminal-session");
       const terminal = projectTerminalSession(projectId).getSnapshot();
       return {
         status: terminal.status,
+        access: terminal.access,
+        connectionMessage: terminal.error,
         output: terminal.output.slice(-8000),
         truncated: terminal.output.length > 8000,
         syncMessage: terminal.syncMessage,
@@ -39,14 +51,21 @@ const invoke = async (
     }
     case "runTerminalCommand": {
       const input = workspaceTools.runTerminalCommand.schema.parse(args);
-      const { projectTerminalSession } = await import("@/features/terminal/actions/terminal-session");
+      const { projectTerminalSession } =
+        await import("@/features/terminal/actions/terminal-session");
       const terminal = projectTerminalSession(projectId);
       const wasOpen = terminal.getSnapshot().status === "ready";
       try {
         const before = await terminal.sync();
         if (before.conflicts.length || before.failures.length)
-          throw new Error("Resolve workspace sync conflicts before running a terminal command.");
-        const result = await terminal.runCommand(input.command, input.timeout, before);
+          throw new Error(
+            "Resolve workspace sync conflicts before running a terminal command.",
+          );
+        const result = await terminal.runCommand(
+          input.command,
+          input.timeout,
+          before,
+        );
         const sync = await terminal.sync();
         return {
           ...result,
@@ -284,8 +303,21 @@ export const executeDeviceTool = async (
   const name = command.name as WorkspaceToolName;
   const definition = workspaceTools[name];
   definition.schema.parse(command.args);
+  await editorPreferencesStore.load();
+  const disabledText =
+    editorPreferencesStore.getSnapshot().preferences.aiDisabledPaths;
+  if (!pathRulesAreValid(disabledText))
+    throw new Error(
+      "Invalid Disabled Files / Folders list. Fix it in Editor Settings before using AI tools.",
+    );
+  const disabledPaths = parsePathRules(disabledText);
+  assertWorkspaceToolAllowed(name, command.args, disabledPaths);
   const execute = async () => {
-    const result = await invoke(projectId, name, command.args);
+    const result = filterWorkspaceToolResult(
+      name,
+      await invoke(projectId, name, command.args),
+      disabledPaths,
+    );
     if (
       result === null ||
       result === undefined ||
@@ -301,16 +333,19 @@ export const executeDeviceTool = async (
       );
     return result;
   };
-  const completed = name === "runTerminalCommand"
-    ? await (async () => {
-        if (await readWorkspaceRevision(projectId) !== command.revision)
-          throw new Error("The workspace changed. Read it again before running a command.");
-        const result = await execute();
-        return { result, revision: await readWorkspaceRevision(projectId) };
-      })()
-    : definition.mutation
-      ? await withWorkspaceRevision(projectId, command.revision, execute)
-      : { result: await execute(), revision: command.revision };
+  const completed =
+    name === "runTerminalCommand"
+      ? await (async () => {
+          if ((await readWorkspaceRevision(projectId)) !== command.revision)
+            throw new Error(
+              "The workspace changed. Read it again before running a command.",
+            );
+          const result = await execute();
+          return { result, revision: await readWorkspaceRevision(projectId) };
+        })()
+      : definition.mutation
+        ? await withWorkspaceRevision(projectId, command.revision, execute)
+        : { result: await execute(), revision: command.revision };
   const { result } = completed;
   const text = JSON.stringify(result);
   const changedFiles: string[] = [];
@@ -329,8 +364,11 @@ export const executeDeviceTool = async (
     if (path.success) changedFiles.push(path.data);
   }
   if (
-    name === "runTerminalCommand" && result && typeof result === "object" &&
-    "changedFiles" in result && Array.isArray(result.changedFiles)
+    name === "runTerminalCommand" &&
+    result &&
+    typeof result === "object" &&
+    "changedFiles" in result &&
+    Array.isArray(result.changedFiles)
   ) {
     for (const value of result.changedFiles) {
       const path = projectFilePathSchema.safeParse(value);

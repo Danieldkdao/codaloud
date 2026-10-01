@@ -11,21 +11,43 @@ const mocks = vi.hoisted(() => ({
   register: vi.fn(),
   outputAudio: vi.fn(),
   updateVoice: vi.fn(),
+  charge: vi.fn(),
+  ttsOn: vi.fn(),
+  sessionOn: vi.fn(),
+  workspace: vi.fn(),
+  rpc: vi.fn(),
 }));
+vi.mock("@/features/billing/server/billing-service", () => ({
+  chargeCredits: mocks.charge,
+  InsufficientCreditsError: class extends Error {},
+}));
+import { InsufficientCreditsError } from "@/features/billing/server/billing-service";
 vi.mock("@/data/env/server", () => ({
   serverEnv: { DEEPGRAM_API_KEY: "test", ELEVENLABS_API_KEY: "test" },
 }));
-vi.mock("../voice-llm", () => ({ VoiceLanguageModel: class {} }));
+vi.mock("../voice-llm", () => ({
+  VoiceLanguageModel: class {
+    constructor(_id: string, _plan: unknown, workspace: unknown) {
+      mocks.workspace(workspace);
+    }
+  },
+}));
 vi.mock("@livekit/agents-plugin-deepgram", () => ({ STT: class {} }));
 vi.mock("@livekit/agents-plugin-elevenlabs", () => ({
   TTS: class {
     updateOptions = mocks.updateVoice;
+    on = mocks.ttsOn;
   },
 }));
 vi.mock("@livekit/agents", () => ({
   defineAgent: (definition: unknown) => definition,
   voice: {
-    AgentSessionEventTypes: { Error: "error", Close: "close" },
+    AgentSessionEventTypes: {
+      Error: "error",
+      Close: "close",
+      AgentStateChanged: "agent-state",
+      UserStateChanged: "user-state",
+    },
     Agent: { create: (options: unknown) => options },
     StopResponse: class extends Error {},
     AgentSession: class {
@@ -34,7 +56,7 @@ vi.mock("@livekit/agents", () => ({
       }
       input = { setAudioEnabled: mocks.audio };
       output = { setAudioEnabled: mocks.outputAudio };
-      on = vi.fn();
+      on = mocks.sessionOn;
       start = mocks.start;
       close = mocks.close;
     },
@@ -52,6 +74,7 @@ const context = () =>
       localParticipant: {
         registerRpcMethod: mocks.register,
         setAttributes: mocks.attributes,
+        performRpc: mocks.rpc,
       },
     },
     connect: vi.fn().mockResolvedValue(undefined),
@@ -68,6 +91,54 @@ beforeEach(() => {
   mocks.close.mockResolvedValue(undefined);
   mocks.attributes.mockResolvedValue(undefined);
   mocks.wait.mockResolvedValue({ identity: "owner" });
+  mocks.charge.mockResolvedValue({ monthlyCredits: 50 });
+  mocks.rpc.mockResolvedValue(JSON.stringify({ id: "turn-one" }));
+});
+it("does not replace an active tool request when a late speaking event arrives", async () => {
+  let currentId = "";
+  let sequence = 0;
+  mocks.rpc.mockImplementation(async ({ method, payload }) => {
+    if (method === "codaloud.voice.context") {
+      currentId = `turn-${++sequence}`;
+      return JSON.stringify({ id: currentId });
+    }
+    if (JSON.parse(payload).id !== currentId)
+      throw new Error("Request cancelled or workspace changed.");
+    return JSON.stringify({ ok: true });
+  });
+  await agent.entry(context());
+  const workspace = mocks.workspace.mock.calls[0][0];
+  const first = await workspace.context();
+  for (const [event, handler] of mocks.sessionOn.mock.calls) {
+    if (event === "user-state") handler({ newState: "speaking" });
+  }
+  await expect(
+    workspace.rpc("codaloud.voice.read", {
+      id: first.id,
+      name: "readFile",
+      args: { path: "src/lib/utils.ts" },
+    }),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    workspace.rpc("codaloud.voice.action", {
+      id: first.id,
+      name: "editFile",
+      args: { path: "src/lib/utils.ts" },
+    }),
+  ).resolves.toEqual({ ok: true });
+  expect(
+    mocks.rpc.mock.calls.filter(
+      ([call]) => call.method === "codaloud.voice.context",
+    ),
+  ).toHaveLength(1);
+  expect(JSON.parse(mocks.rpc.mock.calls.at(-1)![0].payload).id).toBe(first.id);
+  await workspace.context();
+  expect(
+    mocks.rpc.mock.calls.filter(
+      ([call]) => call.method === "codaloud.voice.context",
+    ),
+  ).toHaveLength(2);
+  await cleanup();
 });
 it("starts muted with an audio output that can be enabled without reconnecting", async () => {
   const ctx = context();
@@ -161,4 +232,47 @@ it("ends an abandoned dispatch when the owner never joins", async () => {
   expect(mocks.shutdown).toHaveBeenCalledWith("Voice participant did not join");
   await cleanup();
   expect(vi.getTimerCount()).toBe(0);
+});
+it("charges each started connected minute and synthesized speech", async () => {
+  await agent.entry(context());
+  await Promise.resolve();
+  expect(mocks.charge).toHaveBeenCalledWith(
+    "owner",
+    "voice-minute:job:0",
+    3,
+    "Voice connection · minute 1",
+  );
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(mocks.charge).toHaveBeenCalledWith(
+    "owner",
+    "voice-minute:job:1",
+    3,
+    "Voice connection · minute 2",
+  );
+  await cleanup();
+});
+it("marks exhausted voice-minute credits as a billing error for the phone", async () => {
+  mocks.charge.mockRejectedValueOnce(new InsufficientCreditsError());
+  await agent.entry(context());
+  await vi.waitFor(() =>
+    expect(mocks.attributes).toHaveBeenCalledWith({
+      "codaloud.voice.error": "credits",
+    }),
+  );
+  await cleanup();
+});
+it("marks exhausted speech credits as a billing error for the phone", async () => {
+  await agent.entry(context());
+  await Promise.resolve();
+  mocks.charge.mockRejectedValueOnce(new InsufficientCreditsError());
+  const onMetrics = mocks.ttsOn.mock.calls.find(
+    ([name]) => name === "metrics_collected",
+  )![1];
+  onMetrics({ cancelled: false, charactersCount: 150 });
+  await vi.waitFor(() =>
+    expect(mocks.attributes).toHaveBeenCalledWith({
+      "codaloud.voice.error": "credits",
+    }),
+  );
+  await cleanup();
 });

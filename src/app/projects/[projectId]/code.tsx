@@ -63,6 +63,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { isProjectImagePath } from "@/features/projects/lib/image-files";
 import { ProjectImagePreviewContent } from "@/features/projects/components/project-image-preview-content";
 import { getCodeFileType } from "@/features/code-intelligence/file-type";
+import { registerCommandTerminal } from "@/features/voice/command-navigation";
 
 // The sheet reads the drafts table, so it stays out of the editor's first graph.
 const DraftInsertSheet = lazy(async () => ({
@@ -72,10 +73,6 @@ const DraftInsertSheet = lazy(async () => ({
 const TerminalPanel = lazy(async () => ({
   default: (await import("@/features/terminal/components/terminal-panel"))
     .TerminalPanel,
-}));
-const InlineVoiceControls = lazy(async () => ({
-  default: (await import("@/features/voice/components/inline-voice-controls"))
-    .InlineVoiceControls,
 }));
 const CodeScreen = () => {
   const conversation = useContext(WorkspaceVoiceContext);
@@ -208,15 +205,20 @@ const CodeScreen = () => {
   );
   const [insertOpen, setInsertOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  useEffect(
+    () => registerCommandTerminal(projectId, setTerminalOpen),
+    [projectId],
+  );
   const [terminalHeight, setTerminalHeight] = useState(260);
   const refreshAfterTerminalSync = useCallback(
     (changes: { downloaded: string[]; deleted: string[] }) => {
-      for (const path of changes.deleted)
-        current.current.files.removeFiles(path);
+      const downloaded = new Set(changes.downloaded);
+      const deleted = new Set(changes.deleted);
+      const openPaths = [...current.current.files.openFilePaths];
+      for (const path of openPaths)
+        if (deleted.has(path)) current.current.files.removeFiles(path);
       void (async () => {
-        for (const path of changes.downloaded) {
-          // Let the query receive the sandbox bytes before creating a new editor
-          // document version; otherwise the cached pre-sync text would win.
+        for (const path of openPaths.filter((path) => downloaded.has(path))) {
           await queryClient.refetchQueries({
             queryKey: ["projects", "file", projectId, path],
             type: "active",
@@ -604,6 +606,7 @@ const CodeScreen = () => {
       </View>
       {textPath && (explanation.state || searchOpen || !keyboardFrame) ? (
         <EditorBottomBar
+          commandScope={`/projects/${projectId}/code`}
           frame={explanation.state || searchOpen ? keyboardFrame : undefined}
           dockHeight={dockHeight}
           onHeight={setBadgeHeight}
@@ -620,6 +623,7 @@ const CodeScreen = () => {
               <EditorExplanationBubble
                 state={explanation.state}
                 speaking={explanation.speaking}
+                speechError={explanation.speechError}
                 onToggleReadAloud={explanation.toggleReadAloud}
                 maxHeight={Math.min(
                   360,
@@ -668,18 +672,11 @@ const CodeScreen = () => {
       {showKeyboardAccessory ? (
         <ProjectCodeKeyboardAccessory
           status={toolbar}
-          voiceActive={Boolean(conversation?.visible)}
+          commandScope={`/projects/${projectId}/code`}
           onHeight={setVoiceAccessoryHeight}
           voice={
             conversation ? (
-              <VoiceMicrophone conversation={conversation} compact />
-            ) : null
-          }
-          feedback={
-            conversation ? (
-              <Suspense fallback={null}>
-                <InlineVoiceControls conversation={conversation} />
-              </Suspense>
+              <VoiceMicrophone conversation={conversation} compact launcher />
             ) : null
           }
           frame={keyboardFrame}

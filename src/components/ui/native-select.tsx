@@ -8,6 +8,7 @@ export type NativeSelectProps = {
   icon?: ReactNode;
   /** Custom visual content; the native menu still owns the tap target. */
   trigger?: ReactNode;
+  disabled?: boolean;
   sections: readonly {
     label: string;
     value: string;
@@ -33,6 +34,7 @@ export const NativeSelect = ({
   icon,
   trigger,
   sections,
+  disabled = false,
 }: NativeSelectProps) => {
   return (
     <MenuView
@@ -87,6 +89,7 @@ export const NativeSelect = ({
         icon={icon}
         trigger={trigger}
         sections={sections}
+        disabled={disabled}
       />
     </MenuView>
   );

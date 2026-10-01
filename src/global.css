@@ -20,6 +20,9 @@
   --navigation-shadow: rgb(27 45 35 / 0.14);
   /* Match the system menu's primary text rather than the app's tinted foreground. */
   --native-menu-foreground: #000000;
+  /* Apple requires black or white artwork and a contrasting button. */
+  --apple-sign-in-background: #000000;
+  --apple-sign-in-foreground: #ffffff;
   --background: oklch(0.9643 0.0111 89.7224);
   --foreground: oklch(0.2836 0.0144 157.9253);
   --card: oklch(0.9967 0.0054 95.0974);
@@ -71,6 +74,8 @@
   --success-border: oklch(0.46 0.065 157);
   --navigation-shadow: rgb(0 0 0 / 0.3);
   --native-menu-foreground: #ffffff;
+  --apple-sign-in-background: #ffffff;
+  --apple-sign-in-foreground: #000000;
   --background: oklch(0.2836 0.0144 157.9253);
   --foreground: oklch(0.9643 0.0111 89.7224);
   --card: oklch(0.3163 0.0193 157.1933);
@@ -123,6 +128,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-success-border: var(--success-border);
   --color-background: var(--background);
+  --color-apple-sign-in-background: var(--apple-sign-in-background);
+  --color-apple-sign-in-foreground: var(--apple-sign-in-foreground);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);

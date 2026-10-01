@@ -2,9 +2,11 @@ import { lazy, Suspense, useSyncExternalStore } from "react";
 import { Pressable, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { PText } from "@/components/ui/text";
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { microphoneTrack } from "@/services/livekit/voice-track";
 import type { VoiceConversation } from "../hooks/use-voice-conversation";
 import { inlineSession } from "../inline-session";
+import { commandCenter } from "../command-center";
 
 const VoiceFrequencyBars = lazy(() => import("./voice-frequency-bars"));
 
@@ -13,6 +15,7 @@ export const InlineVoiceControls = ({
 }: {
   conversation: VoiceConversation;
 }) => {
+  const { preferences } = useEditorPreferences();
   const track = useSyncExternalStore(
     microphoneTrack.subscribe,
     microphoneTrack.getSnapshot,
@@ -22,13 +25,18 @@ export const InlineVoiceControls = ({
     inlineSession.getSnapshot,
   );
   const { state } = conversation;
+  const commands = useSyncExternalStore(
+    commandCenter.subscribe,
+    commandCenter.getSnapshot,
+  );
   const waiting =
     request?.status === "generating" || request?.status === "applying";
   const recording = state.listening || state.connection === "connecting";
   const transcript =
     request?.transcript ||
     state.transcript.findLast((segment) => segment.role === "user")?.text;
-  const error = request?.error || state.error || state.transcriptWarning;
+  const error =
+    commands.error || request?.error || state.error || state.transcriptWarning;
   const quietWaveform = (
     <View
       accessibilityLabel="Microphone idle"
@@ -43,68 +51,95 @@ export const InlineVoiceControls = ({
     </View>
   );
   return (
-    <View
-      testID="inline-voice-controls"
-      className="flex-row items-center px-1 py-2"
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          recording ? "Stop recording and send edit" : "Speak another edit"
-        }
-        accessibilityState={{ disabled: waiting }}
-        disabled={waiting}
-        onPress={recording ? conversation.pause : conversation.startInline}
-        className="size-11 items-center justify-center rounded-full active:opacity-60 disabled:opacity-40"
+    <View>
+      <View
+        testID="inline-voice-controls"
+        className="flex-row items-center px-1 py-2"
       >
-        <Icon
-          family="Feather"
-          name={recording ? "square" : "mic"}
-          size={22}
-          className="text-foreground"
-        />
-      </Pressable>
-      <View className="min-w-0 flex-1 px-2">
-        {track && state.listening ? (
-          <Suspense fallback={quietWaveform}>
-            <VoiceFrequencyBars track={track} />
-          </Suspense>
-        ) : (
-          quietWaveform
-        )}
-        <PText
-          numberOfLines={2}
-          ellipsizeMode="tail"
-          className="text-foreground"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Type an edit"
+          onPress={() =>
+            commandCenter.open(
+              conversation.projectId ?? request?.projectId ?? "app",
+              "quick-edit",
+            )
+          }
+          className="size-11 items-center justify-center rounded-full active:opacity-60"
         >
-          {transcript ||
-            (state.connection === "connecting"
-              ? "Connecting…"
-              : "Tap to speak or describe your edit…")}
-        </PText>
-        {error ? (
-          <PText
-            accessibilityRole="alert"
-            numberOfLines={2}
-            className="text-destructive"
+          <Icon
+            family="Ionicons"
+            name="sparkles-outline"
+            size={22}
+            className="text-primary"
+          />
+        </Pressable>
+        {!preferences.textMode ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              recording ? "Stop recording and send edit" : "Speak another edit"
+            }
+            accessibilityState={{ disabled: waiting }}
+            disabled={waiting}
+            onPress={recording ? conversation.pause : conversation.startInline}
+            className="size-11 items-center justify-center rounded-full active:opacity-60 disabled:opacity-40"
           >
-            {error}
-          </PText>
+            <Icon
+              family="Feather"
+              name={recording ? "square" : "mic"}
+              size={22}
+              className="text-foreground"
+            />
+          </Pressable>
         ) : null}
+        <View className="min-w-0 flex-1 px-2">
+          {track && state.listening ? (
+            <Suspense fallback={quietWaveform}>
+              <VoiceFrequencyBars track={track} />
+            </Suspense>
+          ) : preferences.textMode ? null : (
+            quietWaveform
+          )}
+          <PText
+            numberOfLines={2}
+            ellipsizeMode="tail"
+            className="text-foreground"
+          >
+            {transcript ||
+              (state.connection === "connecting"
+                ? "Connecting…"
+                : preferences.textMode
+                  ? "Describe your edit…"
+                  : "Tap to speak or describe your edit…")}
+          </PText>
+          {error ? (
+            <PText
+              accessibilityRole="alert"
+              numberOfLines={2}
+              className="text-destructive"
+            >
+              {error}
+            </PText>
+          ) : null}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close inline voice edit"
+          onPress={() => {
+            commandCenter.clear();
+            conversation.stop();
+          }}
+          className="size-11 items-center justify-center rounded-full active:opacity-60"
+        >
+          <Icon
+            family="Feather"
+            name="x"
+            size={22}
+            className="text-muted-foreground"
+          />
+        </Pressable>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close inline voice edit"
-        onPress={conversation.stop}
-        className="size-11 items-center justify-center rounded-full active:opacity-60"
-      >
-        <Icon
-          family="Feather"
-          name="x"
-          size={22}
-          className="text-muted-foreground"
-        />
-      </Pressable>
     </View>
   );
 };

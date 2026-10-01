@@ -13,5 +13,5 @@ export default defineConfig({
   dirs: ["./src/trigger"],
   runtime: "node",
   maxDuration: 600,
-  retries: { enabledInDev: false, default: { maxAttempts: 1 } },
+  retries: { enabledInDev: true, default: { maxAttempts: 1 } },
 });

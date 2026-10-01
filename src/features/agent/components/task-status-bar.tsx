@@ -18,7 +18,13 @@ import { cn } from "@/lib/utils";
 import { useAgentTasks } from "../hooks/use-agent-tasks";
 import { formatTaskCounts } from "../lib/formatters";
 
-export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
+export const TaskStatusBar = ({
+  projectId,
+  embedded = false,
+}: {
+  projectId: string;
+  embedded?: boolean;
+}) => {
   const tasks = useAgentTasks().filter(
     (task) => task.request.projectId === projectId && !task.reviewed,
   );
@@ -31,6 +37,43 @@ export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
   );
   const failed = tasks.some((task) => task.event.status === "failed");
 
+  const content = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="View agent tasks"
+      onPress={() =>
+        router.navigate({
+          pathname: "/projects/[projectId]/agent",
+          params: { projectId },
+        })
+      }
+      className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:opacity-60"
+    >
+      {working ? (
+        <ActivityIndicator color={primary} />
+      ) : (
+        <Icon
+          family="Feather"
+          name={failed ? "alert-circle" : "check-circle"}
+          size={20}
+          className={cn(
+            "text-success-foreground",
+            failed && "text-destructive",
+          )}
+        />
+      )}
+      <PText className="flex-1 text-foreground font-medium">
+        {formatTaskCounts(tasks)}
+      </PText>
+      <Icon
+        family="Feather"
+        name="chevron-up"
+        size={18}
+        className="text-muted-foreground"
+      />
+    </Pressable>
+  );
+  if (embedded) return content;
   return (
     <Animated.View
       entering={enterGlassSurface}
@@ -46,40 +89,7 @@ export const TaskStatusBar = ({ projectId }: { projectId: string }) => {
         <Animated.View
           entering={FadeIn.duration(240).reduceMotion(ReduceMotion.System)}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="View agent tasks"
-            onPress={() =>
-              router.navigate({
-                pathname: "/projects/[projectId]/agent",
-                params: { projectId },
-              })
-            }
-            className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:opacity-60"
-          >
-            {working ? (
-              <ActivityIndicator color={primary} />
-            ) : (
-              <Icon
-                family="Feather"
-                name={failed ? "alert-circle" : "check-circle"}
-                size={20}
-                className={cn(
-                  "text-success-foreground",
-                  failed && "text-destructive",
-                )}
-              />
-            )}
-            <PText className="flex-1 text-foreground font-medium">
-              {formatTaskCounts(tasks)}
-            </PText>
-            <Icon
-              family="Feather"
-              name="chevron-up"
-              size={18}
-              className="text-muted-foreground"
-            />
-          </Pressable>
+          {content}
         </Animated.View>
       </GlassSurface>
     </Animated.View>

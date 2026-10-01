@@ -50,14 +50,16 @@ export const GitHubConnection = ({
         </Button>
       </View>
       {!isConnected && (
-        <PText>
+        <PText className="text-lg">
           Connect to import and publish repositories. GitHub grants read and
           write access to public and private repositories.
         </PText>
       )}
       {status &&
         (!isConnected || isPending || isChecking || connectionError) && (
-          <PText accessibilityLiveRegion="polite">{status}</PText>
+          <PText accessibilityLiveRegion="polite" className="text-lg">
+            {status}
+          </PText>
         )}
     </View>
   );

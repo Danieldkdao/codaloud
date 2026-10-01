@@ -5,6 +5,6 @@ export const GoogleIcon = () => (
     source={{ default: require("@/assets/google-g-logo.png") }}
     accessible={false}
     contentFit="contain"
-    style={{ width: 20, height: 20.4 }}
+    style={{ width: 22, height: 22.4 }}
   />
 );

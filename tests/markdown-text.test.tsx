@@ -22,6 +22,17 @@ vi.mock("react-native-enriched-markdown", () => ({
 }));
 import { MarkdownText } from "@/components/markdown-text";
 
+it("preserves intrinsic text height inside a constrained transcript viewport", () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const root = createRoot(document.createElement("div"));
+  try {
+    act(() => root.render(<MarkdownText text={"Long reply\n\n".repeat(30)} />));
+    expect(mocks.props.containerStyle.flexShrink).toBe(0);
+  } finally {
+    act(() => root.unmount());
+  }
+});
+
 it("repairs streaming emphasis, preserves finished source, and follows theme colors", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const root = createRoot(document.createElement("div"));

@@ -5,6 +5,7 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { createVoiceController } from "../voice-controller";
+import { useEditorPreferences } from "@/features/settings/hooks/use-editor-preferences";
 import { inlineSession } from "../inline-session";
 
 export const useVoiceConversation = (
@@ -12,7 +13,10 @@ export const useVoiceConversation = (
   scopeKey: string,
   projectId?: string,
   draftOnly = false,
+  dynamicScope = false,
 ) => {
+  const { preferences } = useEditorPreferences();
+  const voiceEnabled = enabled && !preferences.textMode;
   const project = useRef(projectId);
   const draft = useRef(draftOnly);
   const requestedMode = useRef<"quick-edit" | undefined>(undefined);
@@ -40,7 +44,13 @@ export const useVoiceConversation = (
           signal,
           events,
           project.current
-            ? { projectId: project.current, ...(draft.current ? { draftOnly: true } : {}) }
+            ? {
+                projectId: project.current,
+                ...(draft.current ? { draftOnly: true } : {}),
+                ...(dynamicScope
+                  ? { getProjectId: () => project.current ?? "app" }
+                  : {}),
+              }
             : undefined,
         );
       },
@@ -93,14 +103,14 @@ export const useVoiceConversation = (
     void controller.pause();
   };
   useEffect(() => {
-    if (!enabled) {
+    if (!voiceEnabled) {
       setPressed(false);
       void controller.stop();
     }
     return () => {
       void controller.stop();
     };
-  }, [controller, enabled, scopeKey]);
+  }, [controller, voiceEnabled, scopeKey]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
       // iOS becomes inactive while presenting the microphone permission prompt.
@@ -149,6 +159,11 @@ export const useVoiceConversation = (
   };
 
   return {
+    projectId,
+    showInline: () => {
+      requestedMode.current = "quick-edit";
+      setOpen(true);
+    },
     state:
       inline &&
       inline.projectId === projectId &&
@@ -161,13 +176,13 @@ export const useVoiceConversation = (
     stop,
     pause,
     startInline: () => {
-      if (!enabled) return;
+      if (!voiceEnabled) return;
       requestedMode.current = "quick-edit";
       setOpen(true);
       void controller.start("hands-free");
     },
     startHandsFree: () => {
-      if (enabled) {
+      if (voiceEnabled) {
         requestedMode.current = draft.current ? "quick-edit" : undefined;
         setOpen(true);
         void controller.start("hands-free");
@@ -180,7 +195,8 @@ export const useVoiceConversation = (
       suppressTap.current = false;
     },
     onLongPress: () => {
-      if (!enabled || controller.getSnapshot().mode === "hands-free") return;
+      if (!voiceEnabled || controller.getSnapshot().mode === "hands-free")
+        return;
       held.current = true;
       suppressTap.current = true;
       previousTap.current = 0;
@@ -201,7 +217,7 @@ export const useVoiceConversation = (
       void controller.release(true);
     },
     onPress: () => {
-      if (!enabled || suppressTap.current) return;
+      if (!voiceEnabled || suppressTap.current) return;
       if (controller.getSnapshot().mode === "hands-free") {
         pause();
         return;

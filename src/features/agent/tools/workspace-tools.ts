@@ -37,15 +37,27 @@ const empty = z.strictObject({});
 // Definitions stay platform-neutral. Native actions are imported only by the phone.
 export const workspaceTools = {
   readTerminalOutput: {
-    description: "Read the most recent visible output from this project's terminal, including command errors and sync status. Output is bounded and may be truncated.",
+    description:
+      "Read this project's recent visible terminal output, connection status, access denial or error, and sync status. Output is bounded and may be truncated. An empty output means no terminal output is retained in this app session.",
     schema: z.strictObject({}),
     mutation: false,
   },
   runTerminalCommand: {
-    description: "Run a command in this project's Daytona execution sandbox, show its output in the same terminal panel, then sync file changes back to the device. Use a bounded command and inspect the exit code. Commands can install dependencies or change files.",
+    description:
+      "Run a command in this project's Daytona execution sandbox, show its output in the same terminal panel, then sync file changes back to the device. Use a bounded command and inspect the exit code. Commands can install dependencies or change files.",
     schema: z.strictObject({
-      command: z.string().min(1).max(2000).describe("Shell command to run in the project workspace."),
-      timeout: z.number().int().min(1).max(120).default(60).describe("Maximum execution time in seconds."),
+      command: z
+        .string()
+        .min(1)
+        .max(2000)
+        .describe("Shell command to run in the project workspace."),
+      timeout: z
+        .number()
+        .int()
+        .min(1)
+        .max(120)
+        .default(60)
+        .describe("Maximum execution time in seconds."),
     }),
     mutation: true,
   },

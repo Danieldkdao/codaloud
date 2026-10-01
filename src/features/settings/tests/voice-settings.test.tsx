@@ -119,7 +119,11 @@ it.each([false, true])(
     expect(container.querySelectorAll('[role="radio"]')).toHaveLength(5);
     const selected = preferences.getSnapshot().preferences.voiceId;
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('[role="switch"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>(
+          '[role="switch"][aria-label="Spoken responses"]',
+        )!
+        .click();
     });
     expect(container.querySelectorAll('[role="radio"]')).toHaveLength(0);
     expect(preferences.getSnapshot().preferences).toMatchObject({
@@ -127,7 +131,11 @@ it.each([false, true])(
       voiceId: selected,
     });
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('[role="switch"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>(
+          '[role="switch"][aria-label="Spoken responses"]',
+        )!
+        .click();
     });
     expect(container.querySelectorAll('[role="radio"]')).toHaveLength(5);
   },

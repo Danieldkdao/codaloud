@@ -1,6 +1,8 @@
 import { fetch } from "expo/fetch";
+import { randomUUID } from "expo-crypto";
 import { authClient } from "@/lib/auth/auth-client";
 import { getBaseURL } from "@/lib/auth/utils";
+import { BillingRequiredError } from "@/features/billing/client-error";
 import {
   explanationEventSchema,
   type ExplanationRequestSchema,
@@ -23,7 +25,11 @@ export const streamEditorExplanation = async (
       method: "POST",
       credentials: "omit",
       signal,
-      headers: { "Content-Type": "application/json", Cookie: cookie ?? "" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie ?? "",
+        "X-Request-Id": randomUUID(),
+      },
       body: JSON.stringify(input),
     },
   );
@@ -32,7 +38,9 @@ export const streamEditorExplanation = async (
     throw new Error(
       response.status === 401
         ? "Sign in to explain code."
-        : "Couldn’t connect to the explanation service. Please try again.",
+        : response.status === 402
+          ? new BillingRequiredError().message
+          : "Couldn’t connect to the explanation service. Please try again.",
     );
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -40,10 +48,15 @@ export const streamEditorExplanation = async (
   let readerCancellation: Promise<void> | null = null;
   const cancelReader = () => {
     if (streamCompleted || readerCancellation) return readerCancellation;
-    readerCancellation = reader.cancel().then(() => undefined).catch(() => {});
+    readerCancellation = reader
+      .cancel()
+      .then(() => undefined)
+      .catch(() => {});
     return readerCancellation;
   };
-  const abort = () => { void cancelReader(); };
+  const abort = () => {
+    void cancelReader();
+  };
   signal.addEventListener("abort", abort, { once: true });
   let buffer = "";
   let text = "";
@@ -72,7 +85,8 @@ export const streamEditorExplanation = async (
           receivedDone = true;
           continue;
         }
-        if (receivedDone) throw new Error("The explanation stream was interrupted.");
+        if (receivedDone)
+          throw new Error("The explanation stream was interrupted.");
         text += event.text;
         if (text.length > 16000)
           throw new Error("Explanation response too large.");

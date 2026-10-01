@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
+import {
+  agentModelIds,
+  defaultAgentModel,
+} from "@/features/billing/model-catalog";
 export const fileActivityStatuses = [
   "reading",
   "read",
@@ -22,6 +26,7 @@ export const agentTaskStatuses = [
 ] as const;
 export type AgentTaskStatus = (typeof agentTaskStatuses)[number];
 export const agentTaskRequestSchema = z.strictObject({
+  agentModel: z.enum(agentModelIds).default(defaultAgentModel),
   requestId: z.uuid(),
   projectId: z.uuid(),
   deviceId: z.uuid(),

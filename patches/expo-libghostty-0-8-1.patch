@@ -28,14 +28,20 @@ diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputBarKey.swift
 diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift b/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift
 --- a/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift
 +++ b/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+InputAccessory.swift
-@@ -28,6 +28,9 @@
+@@ -28,6 +28,15 @@
              case .esc:
                  let mods = stickyModifiers.consumeForNextKey()
                  sendSyntheticKey(usage: 0x29, additionalMods: mods)
 +
 +            case .enter:
-+                _ = handleStickyTextInput("\n")
- 
++                if inputHandler.hasMarkedText {
++                    inputHandler.unmarkText()
++                }
++                _ = stickyModifiers.consumeForNextKey()
++                // Ctrl-V quotes Return in interactive shells, adding a line
++                // without executing the command being composed.
++                surface?.sendText("\u{16}\n")
+
              case .tab:
                  let mods = stickyModifiers.consumeForNextKey()
 diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryView.swift b/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryView.swift
@@ -44,13 +50,13 @@ diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryVie
 @@ -176,6 +176,9 @@
              case .tab:
                  makeTrackedKeyButton(title: "Tab", systemImage: "arrow.right.to.line", key: .tab)
- 
+
 +            case .enter:
 +                makeTrackedKeyButton(title: "Enter", key: .enter)
 +
              case .arrowLeft:
                  makeTrackedKeyButton(title: "Left", systemImage: "arrowtriangle.left.fill", key: .arrowLeft)
- 
+
 @@ -228,7 +231,7 @@
              systemImage: String,
              modifier: TerminalStickyModifierState.Modifier
@@ -76,7 +82,7 @@ diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryVie
 @@ -327,7 +334,7 @@
          private let handler: () -> Void
          private let lockIndicator = UIView()
- 
+
 -        init(size: CGFloat, handler: @escaping () -> Void) {
 +        init(size: CGFloat, width: CGFloat, handler: @escaping () -> Void) {
              self.size = size
@@ -84,18 +90,18 @@ diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/TerminalInputAccessoryVie
              super.init(frame: .zero)
 @@ -344,7 +351,7 @@
              imageView?.contentMode = .scaleAspectFit
- 
+
              NSLayoutConstraint.activate([
 -                widthAnchor.constraint(equalToConstant: size),
 +                widthAnchor.constraint(equalToConstant: width),
                  heightAnchor.constraint(equalToConstant: size),
              ])
- 
+
 diff --git a/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt b/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt
 --- a/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt
 +++ b/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.kt
 @@ -50,6 +50,7 @@
- 
+
      addKey("⎋") { onKey?.invoke(KeyEvent.KEYCODE_ESCAPE) }
      addKey("⇥") { onKey?.invoke(KeyEvent.KEYCODE_TAB) }
 +    addKey("Enter", widthDp = 52f) { onKey?.invoke(KeyEvent.KEYCODE_ENTER) }
@@ -105,7 +111,7 @@ diff --git a/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.
 @@ -104,7 +105,7 @@
      altButton.setActivation(alt != Activation.INACTIVE, alt == Activation.LOCKED)
    }
- 
+
 -  private fun addKey(label: String, onTap: () -> Unit): KeyButton {
 +  private fun addKey(label: String, widthDp: Float = BUTTON_SIZE_DP, onTap: () -> Unit): KeyButton {
      val key = KeyButton(context)
@@ -120,3 +126,62 @@ diff --git a/android/src/main/java/expo/modules/libghostty/TerminalAccessoryBar.
      params.marginEnd = dp(ITEM_SPACING_DP)
      row.addView(key, params)
      return key
+diff --git a/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+UITextInput.swift b/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+UITextInput.swift
+index f2fc42e..0e2ff95 100644
+--- a/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+UITextInput.swift
++++ b/ios/vendor/GhosttyTerminal/Platform/UIKit/UITerminalView+UITextInput.swift
+@@ -45,6 +45,17 @@
+             set {}
+         }
+ 
++        open var returnKeyType: UIReturnKeyType {
++            get { .send }
++            set {}
++        }
++
++        @available(iOS 17.0, *)
++        open var inlinePredictionType: UITextInlinePredictionType {
++            get { .no }
++            set {}
++        }
++
+         // MARK: - UIKeyInput
+ 
+         open func insertText(_ text: String) {
+@@ -57,6 +68,8 @@
+                 return
+             }
+ 
++            if sendSoftwareKeyboardReturn(text) { return }
++
+             #if !targetEnvironment(macCatalyst)
+                 if inputHandler.hasMarkedText {
+                     inputHandler.insertText(text)
+@@ -72,6 +85,19 @@
+             inputHandler.insertText(text)
+         }
+ 
++        private func sendSoftwareKeyboardReturn(_ text: String) -> Bool {
++            guard text == "\n" || text == "\r" else { return false }
++            #if !targetEnvironment(macCatalyst)
++                if inputHandler.hasMarkedText { inputHandler.unmarkText() }
++                _ = stickyModifiers.consumeForNextKey()
++                if case let .inMemory(session) = configuration.backend {
++                    session.sendInput(Data([0x0A]))
++                    return true
++                }
++            #endif
++            return surface?.sendText("\r") ?? false
++        }
++
+         open func deleteBackward() {
+             if inputHandler.deleteBackwardInMarkedText() {
+                 TerminalDebugLog.log(.input, "deleteBackward handled by marked text")
+@@ -222,6 +248,7 @@
+         }
+ 
+         open func replace(_: UITextRange, withText text: String) {
++            if sendSoftwareKeyboardReturn(text) { return }
+             #if !targetEnvironment(macCatalyst)
+                 if inputHandler.hasMarkedText {
+                     inputHandler.insertText(text)

@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const native = vi.hoisted(() => ({ execute: vi.fn() }));
 vi.mock("../../../../modules/local-workspace", () => ({ default: native }));
 import { executeWorkspace } from "../execute";
+import { subscribeWorkspaceChanges } from "../change-events";
 
 const id = "00000000-0000-4000-8000-000000000001";
 beforeEach(() => { native.execute.mockReset().mockResolvedValue(JSON.stringify({ ok: true, data: true })); });
@@ -9,6 +10,20 @@ beforeEach(() => { native.execute.mockReset().mockResolvedValue(JSON.stringify({
 it("serializes the operation-specific arguments across the native boundary", async () => {
   await executeWorkspace(id, "save-file", { path: "a.ts", content: "new", expectedContentHash: "a".repeat(64) });
   expect(JSON.parse(native.execute.mock.calls[0][0])).toEqual({ projectId: id, operation: "save-file", args: { path: "a.ts", content: "new", expectedContentHash: "a".repeat(64) } });
+});
+
+it("notifies open workspace views after a successful file mutation", async () => {
+  const changed = vi.fn();
+  const release = subscribeWorkspaceChanges(id, changed);
+  await executeWorkspace(id, "read-file", { path: "a.ts" });
+  expect(changed).not.toHaveBeenCalled();
+  await executeWorkspace(id, "save-file", {
+    path: "a.ts",
+    content: "new",
+    expectedContentHash: "a".repeat(64),
+  });
+  expect(changed).toHaveBeenCalledOnce();
+  release();
 });
 
 it("validates project IDs and native failures at runtime", async () => {

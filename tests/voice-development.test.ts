@@ -24,7 +24,10 @@ beforeEach(() => {
   worker = child();
   gateway = child();
   expo = child();
-  mocks.spawn.mockReturnValueOnce(worker).mockReturnValueOnce(gateway).mockReturnValueOnce(expo);
+  mocks.spawn
+    .mockReturnValueOnce(worker)
+    .mockReturnValueOnce(gateway)
+    .mockReturnValueOnce(expo);
 });
 afterEach(() => {
   stop?.();
@@ -44,7 +47,7 @@ it("starts the named worker with its env and TypeScript loader alongside Expo", 
       "--import",
       "tsx",
       "src/services/livekit/voice-worker.ts",
-      "start",
+      "dev",
     ],
     expect.objectContaining({ stdio: ["ignore", "inherit", "inherit"] }),
   );
@@ -62,23 +65,17 @@ it("starts the named worker with its env and TypeScript loader alongside Expo", 
   );
 });
 
-it.each([
-  ["ios", "run:ios", "--device"],
-  ["android", "run:android"],
-])(
-  "starts the voice worker through the actual pnpm %s entry point",
+it.each([["android", "run:android"]])(
+  "forwards the native %s command from the tunnel launcher",
   (platform, ...args) => {
-    const prefix = "node scripts/dev-with-voice.mjs ";
-    expect(scripts[platform]).toBe(prefix + args.join(" "));
-    // Drive the launcher with the arguments supplied by the package script.
-    stop = startVoiceDevelopment(
-      exit,
-      scripts[platform].slice(prefix.length).split(" "),
+    expect(scripts[platform]).toBe(
+      `node --env-file=.env scripts/dev-with-tunnel.mjs --${platform}`,
     );
+    stop = startVoiceDevelopment(exit, args);
     expect(mocks.spawn).toHaveBeenNthCalledWith(
       1,
       process.execPath,
-      expect.arrayContaining(["src/services/livekit/voice-worker.ts", "start"]),
+      expect.arrayContaining(["src/services/livekit/voice-worker.ts", "dev"]),
       expect.any(Object),
     );
     expect(mocks.spawn).toHaveBeenNthCalledWith(
@@ -111,6 +108,56 @@ it("forwards iOS device and build flags to Expo without passing them to the work
     "--no-build-cache",
   ]);
   expect(mocks.spawn.mock.calls[0][1]).not.toContain("--device");
+});
+
+it("starts and stops the installed Trigger.dev CLI with the iOS services", () => {
+  const trigger = child();
+  mocks.spawn
+    .mockReset()
+    .mockReturnValueOnce(worker)
+    .mockReturnValueOnce(gateway)
+    .mockReturnValueOnce(trigger)
+    .mockReturnValueOnce(expo);
+  stop = startVoiceDevelopment(exit, [
+    "--trigger-dev",
+    "run:ios",
+    "--device",
+    "Test iPhone",
+  ]);
+  expect(mocks.spawn).toHaveBeenNthCalledWith(
+    3,
+    process.execPath,
+    [expect.stringMatching(/trigger\.dev\/dist\/esm\/index\.js$/), "dev"],
+    expect.objectContaining({ stdio: "inherit" }),
+  );
+  expect(mocks.spawn.mock.calls[3][1]).toEqual([
+    expect.stringMatching(/expo\/bin\/cli$/),
+    "run:ios",
+    "--device",
+    "Test iPhone",
+  ]);
+  stop();
+  expect(trigger.kill).toHaveBeenCalledWith("SIGTERM");
+  trigger.emit("exit", 0);
+});
+
+it("stops the iOS services when Trigger.dev exits unexpectedly", () => {
+  const trigger = child();
+  mocks.spawn
+    .mockReset()
+    .mockReturnValueOnce(worker)
+    .mockReturnValueOnce(gateway)
+    .mockReturnValueOnce(trigger)
+    .mockReturnValueOnce(expo);
+  stop = startVoiceDevelopment(exit, ["--trigger-dev", "run:ios"]);
+  trigger.emit("exit", 1);
+  expect(worker.kill).toHaveBeenCalledWith("SIGTERM");
+  expect(gateway.kill).toHaveBeenCalledWith("SIGTERM");
+  expect(expo.kill).toHaveBeenCalledWith("SIGTERM");
+  worker.emit("exit", 0);
+  gateway.emit("exit", 0);
+  expo.emit("exit", 0);
+  expect(exit).toHaveBeenCalledExactlyOnceWith(1);
 });
 
 it("stops its worker when the native build fails", () => {
@@ -176,4 +223,15 @@ it("bounds shutdown even when a child does not respond", async () => {
   expect(gateway.kill).toHaveBeenCalledWith("SIGKILL");
   expect(expo.kill).toHaveBeenCalledWith("SIGKILL");
   expect(exit).toHaveBeenCalledOnce();
+});
+
+it("accepts an explicit start command without treating start as a project directory", () => {
+  stop = startVoiceDevelopment(exit, ["start", "--port", "8081"]);
+  expect(mocks.spawn.mock.calls[2][1]).toEqual([
+    expect.stringMatching(/expo\/bin\/cli$/),
+    "start",
+    "-c",
+    "--port",
+    "8081",
+  ]);
 });

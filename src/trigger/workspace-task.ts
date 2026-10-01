@@ -8,9 +8,18 @@ import {
   workspaceTools,
   type WorkspaceToolName,
 } from "@/features/agent/tools/workspace-tools";
-import { voiceModel } from "@/features/voice/constants";
+import {
+  chargeCredits,
+  InsufficientCreditsError,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
+import { billingRequiredMessage } from "@/features/billing/client-error";
+import {
+  modelCostUsd,
+  reportedModelCostUsd,
+} from "@/features/billing/credit-cost";
 import { workspaceInstructions } from "@/services/ai/prompts";
-import { openrouter } from "@/services/ai/server";
+import { meteredChatModel } from "@/services/ai/server";
 import { scrapePage, searchWeb } from "@/services/firecrawl/tools";
 import { metadata, schemaTask, wait } from "@trigger.dev/sdk";
 import {
@@ -29,6 +38,39 @@ export const workspaceTask = schemaTask({
   retry: { maxAttempts: 1 },
   queue: { name: "workspace-tasks", concurrencyLimit: 1 },
   run: async (payload, { signal }) => {
+    const startedAt = Date.now();
+    let waitedMs = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let reportedCostUsd = 0;
+    let modelCredits = 0;
+    let webCredits = 0;
+    let stepNumber = 0;
+    const taskCreditLimit = 50;
+    const logs: string[] = [];
+    const log = async (text: string) => {
+      logs.push(text.slice(0, 300));
+      metadata.set("logs", logs.slice(-64));
+      await metadata.flush();
+    };
+    const billed = async <T>(operation: () => Promise<T>): Promise<T> => {
+      try {
+        return await operation();
+      } catch (error) {
+        if (error instanceof InsufficientCreditsError) {
+          metadata.set("billingError", true);
+          await log(billingRequiredMessage);
+        }
+        throw error;
+      }
+    };
+    const checkpoint = async () => {
+      if (modelCredits + webCredits >= taskCreditLimit)
+        throw new Error(
+          "Task credit limit reached. Review the completed steps.",
+        );
+      await billed(() => requireAvailableCredits(payload.userId));
+    };
     let revision = payload.revision;
     let calls = 0;
     let queued = Promise.resolve();
@@ -42,6 +84,7 @@ export const workspaceTask = schemaTask({
         if (failed) throw failure;
         try {
           signal.throwIfAborted();
+          await checkpoint();
           if (++calls > 24) throw new Error("Task tool limit reached.");
           return await operation();
         } catch (error) {
@@ -57,12 +100,6 @@ export const workspaceTask = schemaTask({
         () => {},
       );
       return result;
-    };
-    const logs: string[] = [];
-    const log = async (text: string) => {
-      logs.push(text.slice(0, 300));
-      metadata.set("logs", logs.slice(-64));
-      await metadata.flush();
     };
     const tools: ToolSet = {};
     for (const [name, definition] of Object.entries(workspaceTools)) {
@@ -87,7 +124,9 @@ export const workspaceTask = schemaTask({
                 revision,
               });
               await metadata.flush();
+              const waitStarted = Date.now();
               const completed = await wait.forToken(token.id);
+              waitedMs += Date.now() - waitStarted;
               if (!completed.ok)
                 throw new Error(
                   "The device did not finish the action in time. Reopen the app and review the workspace.",
@@ -141,6 +180,15 @@ export const workspaceTask = schemaTask({
         execute(async () => {
           await log("Searching the web");
           const result = await searchWeb(query);
+          await billed(() =>
+            chargeCredits(
+              payload.userId,
+              `agent:${payload.requestId}:web:${calls}`,
+              2,
+              "Web search",
+            ),
+          );
+          webCredits += 2;
           await log("Web search completed");
           return result;
         }),
@@ -160,6 +208,15 @@ export const workspaceTask = schemaTask({
         execute(async () => {
           await log("Reading a web page");
           const result = await scrapePage(url);
+          await billed(() =>
+            chargeCredits(
+              payload.userId,
+              `agent:${payload.requestId}:web:${calls}`,
+              1,
+              "Web page scrape",
+            ),
+          );
+          webCredits++;
           await log("Page read completed");
           return result;
         }),
@@ -178,7 +235,9 @@ export const workspaceTask = schemaTask({
         revision,
       });
       await metadata.flush();
+      const waitStarted = Date.now();
       const started = await wait.forToken(startToken.id);
+      waitedMs += Date.now() - waitStarted;
       if (!started.ok)
         throw new Error(
           "The task could not start. Reopen the app and try again.",
@@ -196,8 +255,9 @@ export const workspaceTask = schemaTask({
       await metadata.flush();
     }
     await log("Working on your request");
+    await billed(() => requireAvailableCredits(payload.userId, 2));
     const response = streamText({
-      model: openrouter.chat(voiceModel, { parallelToolCalls: false }),
+      model: meteredChatModel(payload.agentModel, { parallelToolCalls: false }),
       system: workspaceInstructions,
       prompt: payload.instruction,
       tools,
@@ -231,6 +291,42 @@ export const workspaceTask = schemaTask({
       maxRetries: 0,
       providerOptions: { openrouter: { reasoning: { enabled: false } } },
       abortSignal: signal,
+      onStepFinish: async ({ usage, providerMetadata }) => {
+        inputTokens += usage.inputTokens ?? 0;
+        outputTokens += usage.outputTokens ?? 0;
+        reportedCostUsd +=
+          reportedModelCostUsd(providerMetadata) ??
+          modelCostUsd(payload.agentModel, usage) * 1.2;
+        if (calls === 0) return;
+        const activeSeconds =
+          Math.max(0, Date.now() - startedAt - waitedMs) / 1000;
+        const cost =
+          modelCostUsd(payload.agentModel, {
+            inputTokens,
+            outputTokens,
+            costUsd: reportedCostUsd,
+          }) +
+          activeSeconds * 0.0000338 +
+          0.000025;
+        const due = Math.max(2, Math.ceil(cost / 0.008));
+        if (due + webCredits > taskCreditLimit)
+          throw new Error(
+            "Task credit limit reached. Review the completed steps.",
+          );
+        const additional = due - modelCredits;
+        if (additional > 0) {
+          await billed(() =>
+            chargeCredits(
+              payload.userId,
+              `agent:${payload.requestId}:model:${stepNumber}`,
+              additional,
+              `Agent task · model and compute checkpoint ${stepNumber + 1}`,
+            ),
+          );
+          modelCredits = due;
+        }
+        stepNumber++;
+      },
     });
     let summary = "";
     try {

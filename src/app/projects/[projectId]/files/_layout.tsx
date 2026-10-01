@@ -1,4 +1,5 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack } from "expo-router/js-stack";
 import { Keyboard } from "react-native";
 import { KeyboardAwareView } from "@/components/ui/keyboard-aware-view";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ const FilesLayout = () => {
       <Stack
         screenOptions={{
           title: "Files",
-          headerBackVisible: false,
+          headerLeft: () => null,
           headerStyle: { backgroundColor: background },
           headerTintColor: foreground,
           headerShadowVisible: false,
@@ -26,7 +27,7 @@ const FilesLayout = () => {
             fontFamily: "Fraunces_500Medium",
             fontSize: 22,
           },
-          contentStyle: { backgroundColor: background },
+          cardStyle: { backgroundColor: background },
           headerRight: () => (
             <Button
               variant="ghost"
@@ -46,7 +47,7 @@ const FilesLayout = () => {
         <Stack.Screen name="index" />
         <Stack.Screen name="preview" />
       </Stack>
-      <ProjectFilesToolbar />
+      <ProjectFilesToolbar commandScope={`/projects/${projectId}/files`} />
     </KeyboardAwareView>
   );
 };

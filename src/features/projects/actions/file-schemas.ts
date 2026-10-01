@@ -174,7 +174,9 @@ export type UpdateProjectFileResponseSchema = z.infer<
   typeof updateProjectFileResponseSchema
 >;
 
-export const deleteProjectFileSchema = createProjectFileSchema;
+export const deleteProjectFileSchema = createProjectFileSchema.extend({
+  expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+});
 export type DeleteProjectFileSchema = z.infer<typeof deleteProjectFileSchema>;
 
 export const deleteProjectFileResponseSchema = createProjectFileResponseSchema;

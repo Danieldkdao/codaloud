@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const require = createRequire(import.meta.url);
 
@@ -12,11 +12,14 @@ const require = createRequire(import.meta.url);
  * @param {string[]} [expoArgs]
  */
 export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
+  const withTrigger = expoArgs[0] === "--trigger-dev";
+  const appArgs = withTrigger ? expoArgs.slice(1) : expoArgs;
   // Native run commands already start Metro after building/installing the app.
   // Forward them directly rather than treating them as `expo start` arguments.
-  const nativeBuild =
-    expoArgs[0] === "run:ios" || expoArgs[0] === "run:android";
-  const commandArgs = nativeBuild ? expoArgs : ["start", "-c", ...expoArgs];
+  const nativeBuild = appArgs[0] === "run:ios" || appArgs[0] === "run:android";
+  const commandArgs = nativeBuild
+    ? appArgs
+    : ["start", "-c", ...(appArgs[0] === "start" ? appArgs.slice(1) : appArgs)];
   const children = new Set();
   let stopping = false;
   let finished = false;
@@ -77,7 +80,7 @@ export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
     }
   };
   console.info(
-    "[dev] Starting Expo, voice, and the terminal gateway.",
+    `[dev] Starting Expo, voice, the terminal gateway${withTrigger ? ", and Trigger.dev" : ""}.`,
   );
   start(
     "Voice worker",
@@ -86,16 +89,37 @@ export const startVoiceDevelopment = (exit = process.exit, expoArgs = []) => {
       "--import",
       "tsx",
       "src/services/livekit/voice-worker.ts",
-      "start",
+      // Agents 1.9 prewarms job children in start mode. If a warm child exits,
+      // its stale queue entry can yield ERR_IPC_CHANNEL_CLOSED at dispatch.
+      "dev",
     ],
     ["ignore", "inherit", "inherit"],
   );
   if (!stopping)
     start(
       "Terminal gateway",
-      ["--env-file=.env", "--import", "tsx", "src/services/daytona/terminal-gateway.ts"],
+      [
+        "--env-file=.env",
+        "--import",
+        "tsx",
+        "src/services/daytona/terminal-gateway.ts",
+      ],
       ["ignore", "inherit", "inherit"],
     );
+  if (!stopping && withTrigger) {
+    try {
+      const triggerPackagePath = require.resolve("trigger.dev/package.json");
+      const triggerPackage = require(triggerPackagePath);
+      const triggerCli = resolve(
+        dirname(triggerPackagePath),
+        triggerPackage.bin.trigger,
+      );
+      start("Trigger.dev", [triggerCli, "dev"], "inherit");
+    } catch {
+      console.error("[dev] Could not find the installed Trigger.dev CLI.");
+      stop(1);
+    }
+  }
   if (!stopping)
     start("Expo", [require.resolve("expo/bin/cli"), ...commandArgs], "inherit");
   return () => stop();

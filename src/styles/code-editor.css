@@ -188,7 +188,7 @@ body {
 }
 .code-editor-host .cm-inline-diagnostic {
   padding-left: 20px;
-  font-family: EditorUI, sans-serif;
+  font-family: var(--editor-font-regular, EditorMono), ui-monospace, monospace;
   font-size: var(--editor-font-size, 16px);
   white-space: normal;
   overflow-wrap: anywhere;

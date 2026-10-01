@@ -1,16 +1,36 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { getCurrentUser } from "@/lib/auth/helpers";
 import { serverEnv } from "@/data/env/server";
+import { tasks, idempotencyKeys } from "@/services/trigger/server";
+import type { deleteProjectSandboxTask } from "@/trigger/delete-project-sandbox";
+import {
+  maxSelectedSyncFileBytes,
+  syncDownloadBatchFiles,
+  maxSyncDownloadHeaderBytes,
+  terminalMutationActions,
+} from "../constants";
+import { isReservedSyncRule } from "../lib/sync-plan";
+import { parsePathRules } from "@/features/settings/lib/path-rules";
+import { encodeSyncDownload } from "../lib/sync-download";
 import { issueTerminalTicket } from "./ticket";
+import {
+  chargeCredits,
+  InsufficientCreditsError,
+  readBillingStatus,
+} from "@/features/billing/server/billing-service";
 import {
   checkedSandbox,
   deleteSandboxFile,
   downloadSandboxFile,
+  downloadSandboxFiles,
   ensureSandbox,
-  readSandboxManifest,
+  readSandboxManifestSnapshot,
   readSandboxFileHash,
   sandboxWorkspaceRoot,
   uploadSandboxFile,
+  findOwnedSandbox,
+  SandboxOwnershipError,
 } from "./sandbox";
 
 const ownerSchema = z.strictObject({
@@ -19,8 +39,18 @@ const ownerSchema = z.strictObject({
   sandboxId: z.string().min(1).max(200).nullable(),
 });
 const mutationSchema = ownerSchema.extend({
-  action: z.enum(["ensure", "manifest", "delete", "ticket"]),
+  action: z.enum(terminalMutationActions),
   path: z.string().optional(),
+  paths: z
+    .array(z.string().min(1).max(4096))
+    .min(1)
+    .max(syncDownloadBatchFiles)
+    .optional(),
+  allowedPaths: z.array(z.string().min(1).max(128)).max(30).optional(),
+  knownHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   expectedHash: z
     .string()
     .regex(/^[a-f0-9]{64}$/)
@@ -41,9 +71,61 @@ export const handleTerminalRequest = async (request: Request) => {
   try {
     const { userId } = await getCurrentUser(request.headers);
     if (!userId) return reply({ message: "Sign in to use the terminal." }, 401);
+    if (request.method === "DELETE") {
+      const raw = await request.text();
+      if (raw.length > 2048) return reply({ message: "Invalid request." }, 400);
+      const input = ownerSchema.parse(JSON.parse(raw));
+      if (!input.sandboxId) return reply({ message: "Invalid sandbox." }, 400);
+      const owner = {
+        userId,
+        projectId: input.projectId,
+        deviceId: input.deviceId,
+      };
+      const sandbox = await findOwnedSandbox(input.sandboxId, owner);
+      if (!sandbox) return reply({ accepted: true });
+      const key = await idempotencyKeys.create(
+        `sandbox-cleanup:${userId}:${input.deviceId}:${input.projectId}:${input.sandboxId}`,
+        { scope: "global" },
+      );
+      await tasks.trigger<typeof deleteProjectSandboxTask>(
+        "delete-project-sandbox",
+        { ...owner, sandboxId: input.sandboxId },
+        { idempotencyKey: key, idempotencyKeyTTL: "24h" },
+      );
+      return reply({ accepted: true }, 202);
+    }
+    const billing = await readBillingStatus(userId);
+    if (billing.tier === "free")
+      return reply(
+        {
+          message: "A paid plan or active trial is required for the sandbox.",
+          action: "billing",
+          reason: "plan",
+        },
+        402,
+      );
+    if (billing.monthlyCredits + billing.purchasedCredits < 1)
+      return reply(
+        {
+          message: "Add credits to continue using the sandbox.",
+          action: "billing",
+          reason: "credits",
+        },
+        402,
+      );
+    const chargeStart = async (
+      sandbox: { id: string },
+      previousVersion: string,
+    ) => {
+      const id = createHash("sha256")
+        .update(`${sandbox.id}:${previousVersion}`)
+        .digest("hex");
+      await chargeCredits(userId, `sandbox-start:${id}`, 2, "Sandbox start");
+    };
     if (request.method === "POST") {
       const raw = await request.text();
-      if (raw.length > 4096) return reply({ message: "Invalid request." }, 400);
+      if (raw.length > maxSyncDownloadHeaderBytes)
+        return reply({ message: "Invalid request." }, 400);
       const input = mutationSchema.parse(JSON.parse(raw));
       const owner = {
         userId,
@@ -51,16 +133,46 @@ export const handleTerminalRequest = async (request: Request) => {
         projectId: input.projectId,
       };
       if (input.action === "ensure") {
-        const sandbox = await ensureSandbox(owner, input.sandboxId);
+        const sandbox = await ensureSandbox(
+          owner,
+          input.sandboxId,
+          chargeStart,
+        );
         await sandboxWorkspaceRoot(sandbox);
         return reply({ sandboxId: sandbox.id });
       }
       if (!input.sandboxId)
         return reply({ message: "Start the sandbox first." }, 400);
-      const sandbox = await checkedSandbox(input.sandboxId, owner);
+      const sandbox = await checkedSandbox(input.sandboxId, owner, chargeStart);
       const root = await sandboxWorkspaceRoot(sandbox);
-      if (input.action === "manifest")
-        return reply({ manifest: await readSandboxManifest(sandbox, root) });
+      if (input.action === "download") {
+        if (!input.paths)
+          return reply({ message: "Missing download paths." }, 400);
+        const files = await downloadSandboxFiles(sandbox, root, input.paths);
+        return new Response(encodeSyncDownload(files), {
+          headers: {
+            "Cache-Control": "no-store",
+            "Content-Type": "application/octet-stream",
+          },
+        });
+      }
+      if (input.action === "manifest") {
+        const allowedPaths = input.allowedPaths ?? [];
+        if (
+          JSON.stringify(parsePathRules(allowedPaths.join("\n"))) !==
+            JSON.stringify(allowedPaths) ||
+          allowedPaths.some(isReservedSyncRule)
+        )
+          return reply({ message: "Invalid selected sync paths." }, 400);
+        return reply(
+          await readSandboxManifestSnapshot(
+            sandbox,
+            root,
+            allowedPaths,
+            input.knownHash,
+          ),
+        );
+      }
       if (input.action === "delete") {
         if (!input.path) return reply({ message: "Missing path." }, 400);
         if (input.expectedHash === undefined)
@@ -87,7 +199,11 @@ export const handleTerminalRequest = async (request: Request) => {
     });
     if (!input.sandboxId)
       return reply({ message: "Start the sandbox first." }, 400);
-    const sandbox = await checkedSandbox(input.sandboxId, { userId, ...input });
+    const sandbox = await checkedSandbox(
+      input.sandboxId,
+      { userId, ...input },
+      chargeStart,
+    );
     const root = await sandboxWorkspaceRoot(sandbox);
     const path = url.searchParams.get("path");
     if (!path) return reply({ message: "Missing path." }, 400);
@@ -101,10 +217,12 @@ export const handleTerminalRequest = async (request: Request) => {
       });
     }
     if (request.method === "PUT") {
-      if (Number(request.headers.get("content-length")) > 32 * 1024 * 1024)
+      if (
+        Number(request.headers.get("content-length")) > maxSelectedSyncFileBytes
+      )
         return reply({ message: "File exceeds the sync limit." }, 413);
       const bytes = new Uint8Array(await request.arrayBuffer());
-      if (bytes.byteLength > 32 * 1024 * 1024)
+      if (bytes.byteLength > maxSelectedSyncFileBytes)
         return reply({ message: "File exceeds the sync limit." }, 413);
       const expectedHash = url.searchParams.get("expectedHash");
       const current = await readSandboxFileHash(sandbox, root, path);
@@ -115,6 +233,17 @@ export const handleTerminalRequest = async (request: Request) => {
     }
     return reply({ message: "Method not allowed." }, 405);
   } catch (error) {
+    if (error instanceof SandboxOwnershipError)
+      return reply({ message: error.message }, 403);
+    if (error instanceof InsufficientCreditsError)
+      return reply(
+        {
+          message: "Add credits to continue using the sandbox.",
+          action: "billing",
+          reason: "credits",
+        },
+        402,
+      );
     return reply(
       {
         message:
@@ -122,7 +251,11 @@ export const handleTerminalRequest = async (request: Request) => {
             ? error.message
             : "Terminal service unavailable.",
       },
-      400,
+      request.method === "DELETE" &&
+        !(error instanceof z.ZodError) &&
+        !(error instanceof SyntaxError)
+        ? 500
+        : 400,
     );
   }
 };

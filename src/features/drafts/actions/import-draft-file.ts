@@ -24,12 +24,14 @@ export const importDraftFileAction = async (): Promise<DraftMutationResult | nul
     if (picked.canceled) return null;
     const selected = picked.result;
     const filename = draftFilenameSchema.parse(selected.name);
-    const size = selected.size ?? 0;
-    if (size > MAX_IMPORT_FILE_BYTES)
-      throw new Error("This file is too large to import as a draft.");
     const source = new File(selected.uri);
     if (!source.exists)
       throw new Error("The chosen file is no longer available on this device.");
+    const size = source.size;
+    if (size === null || !Number.isFinite(size))
+      throw new Error("The chosen file size is unavailable.");
+    if (size > MAX_IMPORT_FILE_BYTES)
+      throw new Error("This file is too large to import as a draft.");
 
     const isBinary =
       isProjectImagePath(filename) ||

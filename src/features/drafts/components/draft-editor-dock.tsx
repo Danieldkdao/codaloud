@@ -10,7 +10,6 @@ import {
   formatCodeDiagnostic,
   formatCodeDiagnosticCount,
 } from "@/features/projects/lib/formatters";
-import { InlineVoiceControls } from "@/features/voice/components/inline-voice-controls";
 import { VoiceMicrophone } from "@/features/voice/components/voice-microphone";
 import type { VoiceConversation } from "@/features/voice/hooks/use-voice-conversation";
 import { cn } from "@/lib/utils";
@@ -22,7 +21,6 @@ export type DraftEditorDockProps = {
   onProblems?: () => void;
   onCopyToProject: () => void;
   conversation?: VoiceConversation;
-  showVoiceFeedback?: boolean;
 };
 
 export const DraftEditorDock = ({
@@ -31,18 +29,12 @@ export const DraftEditorDock = ({
   onProblems,
   onCopyToProject,
   conversation,
-  showVoiceFeedback = true,
 }: DraftEditorDockProps) => (
   <View
     pointerEvents={disabled ? "none" : "auto"}
     accessibilityState={{ disabled }}
     className={cn("w-full gap-2 px-4 py-3", disabled && "opacity-50")}
   >
-    {conversation?.visible && showVoiceFeedback ? (
-      <GlassSurface borderRadius={24}>
-        <InlineVoiceControls conversation={conversation} />
-      </GlassSurface>
-    ) : null}
     <View className="w-full flex-row items-center justify-center gap-2">
       {analysis && analysis.status !== "unsupported" ? (
         <GlassSurface borderRadius={24}>
@@ -94,8 +86,13 @@ export const DraftEditorDock = ({
           </Pressable>
         </GlassSurface>
       ) : null}
-      {conversation && !conversation.visible ? (
-        <VoiceMicrophone conversation={conversation} compact liquidGlass />
+      {conversation ? (
+        <VoiceMicrophone
+          conversation={conversation}
+          compact
+          liquidGlass
+          launcher
+        />
       ) : null}
       <GlassSurface borderRadius={24}>
         <Pressable

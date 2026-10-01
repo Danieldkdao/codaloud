@@ -43,6 +43,7 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
     // Stop narrating before the bubble leaves, so speech never outlives it.
     explanationSpeech().stop();
     setSpeaking(false);
+    setSpeechError(null);
     setState(null);
   }, [capture]);
   useEffect(() => close(), [options.documentKey, options.enabled, close]);
@@ -136,6 +137,12 @@ export const useEditorExplanation = (options: ExplanationOptions) => {
     setSpeaking(true);
     try {
       await speech.speak(text);
+    } catch (error) {
+      setSpeechError(
+        error instanceof Error
+          ? error.message
+          : "Couldn’t read this explanation aloud. Please try again.",
+      );
     } finally {
       setSpeaking(false);
     }

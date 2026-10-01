@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import { serverEnv } from "@/data/env/server";
@@ -7,6 +8,28 @@ import {
   sandboxWorkspaceRoot,
 } from "@/features/terminal/server/sandbox";
 import { verifyTerminalTicket } from "@/features/terminal/server/ticket";
+import {
+  chargeCredits,
+  InsufficientCreditsError,
+  readBillingStatus,
+} from "@/features/billing/server/billing-service";
+import { billingRequiredMessage } from "@/features/billing/client-error";
+import { createProjectPty } from "./project-pty";
+import { retainTerminalHeartbeat } from "./terminal-heartbeat";
+
+class PaidAccessEndedError extends Error {}
+
+const billingDenial = (error: unknown) => {
+  if (error instanceof InsufficientCreditsError)
+    return { reason: "credits", message: billingRequiredMessage };
+  if (error instanceof PaidAccessEndedError)
+    return {
+      reason: "plan",
+      message:
+        "Your paid plan ended. Open Settings → Plan and credits to renew.",
+    };
+  return null;
+};
 
 const messageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("input"), data: z.string().max(65536) }),
@@ -63,38 +86,84 @@ sockets.on("connection", (ws) => {
   const key = `${owner.userId}:${owner.deviceId}:${owner.projectId}`;
   connections.get(key)?.close(4000, "A newer terminal connection opened.");
   connections.set(key, ws);
+  retainTerminalHeartbeat(ws);
   let closed = false;
   let inputQueue = Promise.resolve();
+  let meterTimer: ReturnType<typeof setInterval> | undefined;
   const write = (type: string, data?: unknown) => {
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type, data }));
   };
   void (async () => {
-    const sandbox = await checkedSandbox(owner.sandboxId, owner);
+    const sandbox = await checkedSandbox(
+      owner.sandboxId,
+      owner,
+      async (started, previousVersion) => {
+        const billing = await readBillingStatus(owner.userId);
+        if (billing.tier === "free") throw new PaidAccessEndedError();
+        const digest = createHash("sha256")
+          .update(`${started.id}:${previousVersion}`)
+          .digest("hex");
+        await chargeCredits(
+          owner.userId,
+          `sandbox-start:${digest}`,
+          2,
+          "Sandbox start",
+        );
+      },
+    );
     const root = await sandboxWorkspaceRoot(sandbox);
     if (closed) return;
-    const id = `codaloud-${owner.projectId}`;
     const decoder = new TextDecoder();
     const onData = (bytes: Uint8Array) =>
       write("data", decoder.decode(bytes, { stream: true }));
-    let pty;
-    try {
-      pty = await sandbox.process.connectPty(id, { onData });
-    } catch {
-      pty = await sandbox.process.createPty({
-        id,
-        cwd: root,
-        cols: 80,
-        rows: 24,
-        envs: { TERM: "xterm-256color", LANG: "C.UTF-8" },
-        onData,
-      });
-    }
+    const session = await createProjectPty(sandbox.process, root, onData);
+    const pty = session.handle;
     if (closed) {
-      await pty.disconnect();
+      await session.close();
       return;
     }
-    write("ready", { sandboxId: sandbox.id, sessionId: id });
+    const chargeActiveBlock = async () => {
+      const billing = await readBillingStatus(owner.userId);
+      if (billing.tier === "free") throw new PaidAccessEndedError();
+      const block = Math.floor(Date.now() / 180_000);
+      const digest = createHash("sha256")
+        .update(`${sandbox.id}:${block}`)
+        .digest("hex");
+      await chargeCredits(
+        owner.userId,
+        `sandbox-active:${digest}`,
+        1,
+        "Sandbox compute · 3 minutes",
+      );
+    };
+    try {
+      await chargeActiveBlock();
+    } catch (error) {
+      await session.close();
+      const denial = billingDenial(error);
+      write(
+        denial ? "billing" : "error",
+        denial ?? "Terminal billing check failed. Please try again.",
+      );
+      ws.close(4003);
+      return;
+    }
+    if (closed) {
+      await session.close();
+      return;
+    }
+    meterTimer = setInterval(() => {
+      void chargeActiveBlock().catch((error) => {
+        const denial = billingDenial(error);
+        write(
+          denial ? "billing" : "error",
+          denial ?? "Terminal billing check failed. Please try again.",
+        );
+        ws.close(4003);
+      });
+    }, 180_000);
+    write("ready", { sandboxId: sandbox.id, sessionId: session.id });
     ws.on("message", (raw) => {
       try {
         const input = messageSchema.parse(JSON.parse(raw.toString()));
@@ -133,15 +202,25 @@ sockets.on("connection", (ws) => {
       }
     });
     ws.once("close", () => {
-      void pty.disconnect();
+      clearInterval(meterTimer);
+      void session
+        .close()
+        .then(async () => {
+          if (!connections.has(key)) await sandbox.stop();
+        })
+        .catch(() => undefined);
     });
     void pty.wait().then(
       (result) => write("exit", result.exitCode),
       () => write("error", "The terminal session ended."),
     );
-  })().catch(() => {
-    write("error", "Unable to connect to the sandbox terminal.");
-    ws.close(1011);
+  })().catch((error) => {
+    const denial = billingDenial(error);
+    write(
+      denial ? "billing" : "error",
+      denial ?? "Unable to connect to the sandbox terminal.",
+    );
+    ws.close(denial ? 4003 : 1011);
   });
   ws.once("close", () => {
     closed = true;

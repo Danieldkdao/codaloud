@@ -1,3 +1,5 @@
+import { pathMatchesRule } from "@/features/settings/lib/path-rules";
+
 export type WorkspaceManifest = Record<string, string>;
 
 export type WorkspaceSyncPlan = {
@@ -9,7 +11,6 @@ export type WorkspaceSyncPlan = {
 };
 
 const excluded = new Set([
-  ".git",
   ".expo",
   ".next",
   "node_modules",
@@ -21,7 +22,17 @@ const excluded = new Set([
   "__pycache__",
 ]);
 
-export const isSyncablePath = (path: string) =>
+export const isReservedSyncRule = (rule: string) =>
+  rule
+    .split("/")
+    .some(
+      (segment) =>
+        segment.toLowerCase() === ".git" ||
+        (segment.endsWith("*") &&
+          ".git".startsWith(segment.slice(0, -1).toLowerCase())),
+    );
+
+export const isSafeWorkspacePath = (path: string) =>
   path.length > 0 &&
   path.length <= 4096 &&
   !path.startsWith("/") &&
@@ -30,19 +41,28 @@ export const isSyncablePath = (path: string) =>
   path
     .split("/")
     .every((segment) =>
-      Boolean(
-        segment &&
-        segment !== "." &&
-        segment !== ".." &&
-        !excluded.has(segment),
-      ),
+      Boolean(segment && segment !== "." && segment !== ".."),
     );
+
+export const isSyncablePath = (
+  path: string,
+  allowedPaths: readonly string[] = [],
+) => {
+  if (!isSafeWorkspacePath(path)) return false;
+  const segments = path.split("/");
+  return (
+    !segments.some((segment) => segment.toLowerCase() === ".git") &&
+    (!segments.some((segment) => excluded.has(segment)) ||
+      pathMatchesRule(path, allowedPaths))
+  );
+};
 
 /** The phone is canonical; concurrent edits remain untouched until resolved. */
 export const planWorkspaceSync = (
   local: WorkspaceManifest,
   remote: WorkspaceManifest,
   baseline: WorkspaceManifest,
+  allowedPaths: readonly string[] = [],
 ): WorkspaceSyncPlan => {
   const result: WorkspaceSyncPlan = {
     upload: [],
@@ -57,11 +77,11 @@ export const planWorkspaceSync = (
     ...Object.keys(baseline),
   ]);
   for (const path of [...paths].sort()) {
-    if (!isSyncablePath(path)) continue;
     const device = local[path];
     const sandbox = remote[path];
     const previous = baseline[path];
     if (device === sandbox) continue;
+    if (!isSyncablePath(path, allowedPaths)) continue;
     const localChanged = device !== previous;
     const remoteChanged = sandbox !== previous;
     if (localChanged && remoteChanged) result.conflicts.push(path);

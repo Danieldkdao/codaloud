@@ -4,6 +4,10 @@ import { serverEnv } from "@/data/env/server";
 import { createVoiceAccessToken, livekit } from "@/services/livekit/server";
 import { voiceAgentName } from "../constants";
 import { voiceSessionRequestSchema } from "../schemas";
+import {
+  InsufficientCreditsError,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
 
 const respond = (body: unknown, status: number) =>
   Response.json(body, {
@@ -58,6 +62,7 @@ export const handleVoiceSessionRequest = async (request: Request) => {
     }
     const input = voiceSessionRequestSchema.safeParse(body);
     if (!input.success) return respond({ message: "Invalid voice mode." }, 400);
+    await requireAvailableCredits(userId);
     const roomName = `${prefix}${randomUUID()}`;
     await livekit.room.createRoom({
       name: roomName,
@@ -83,7 +88,15 @@ export const handleVoiceSessionRequest = async (request: Request) => {
       },
       200,
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError)
+      return respond(
+        {
+          message: "You need more credits before starting voice.",
+          action: "billing",
+        },
+        402,
+      );
     if (allocatedRoom)
       await livekit.room.deleteRoom(allocatedRoom).catch(() => undefined);
     return respond({ message: "Voice is unavailable. Please try again." }, 503);

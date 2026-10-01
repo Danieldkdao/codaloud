@@ -1,0 +1,36 @@
+diff --git a/build/src/start/server/metro/MetroBundlerDevServer.js b/build/src/start/server/metro/MetroBundlerDevServer.js
+--- a/build/src/start/server/metro/MetroBundlerDevServer.js
++++ b/build/src/start/server/metro/MetroBundlerDevServer.js
+@@ -1327,7 +1327,8 @@
+         return route;
+     }
+     async ssrImportApiRoute(filePath, { platform }) {
+-        // TODO: Cache the evaluated function.
++        // Reuse unchanged API modules to avoid retaining a bundle and source map per request.
++        // Bundle identity changes when Metro invalidates the route after an edit.
+         try {
+             const apiRoute = await this.bundleApiRoute(filePath, {
+                 platform
+@@ -1335,7 +1336,12 @@
+             if (!(apiRoute == null ? void 0 : apiRoute.src)) {
+                 return null;
+             }
+-            return (0, _getStaticRenderFunctions.evalMetroNoHandling)(this.projectRoot, apiRoute.src, apiRoute.filename, apiRoute.map);
++            if (this.evaluatedApiRoutes.has(apiRoute)) {
++                return this.evaluatedApiRoutes.get(apiRoute);
++            }
++            const exports = (0, _getStaticRenderFunctions.evalMetroNoHandling)(this.projectRoot, apiRoute.src, apiRoute.filename, apiRoute.map);
++            this.evaluatedApiRoutes.set(apiRoute, exports);
++            return exports;
+         } catch (error) {
+             // Format any errors that were thrown in the global scope of the evaluation.
+             if (error instanceof Error) {
+@@ -1744,7 +1750,7 @@
+             }
+             return (0, _getStaticRenderFunctions.evalMetroAndWrapFunctions)(this.projectRoot, res.src, res.filename, res.map, specificOptions.isExporting ?? this.instanceMetroOptions.isExporting);
+         }, this.rscRenderer = null, this.onReloadRscEvent = null, // API Routes
+-        this.pendingRouteOperations = new Map();
++        this.pendingRouteOperations = new Map(), this.evaluatedApiRoutes = new WeakMap();
+     }
+ }
+ function getBuildID(buildNumber) {

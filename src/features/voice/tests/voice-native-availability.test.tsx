@@ -8,6 +8,9 @@ const native = vi.hoisted(() => ({
   modules: {} as Record<string, unknown>,
   sdkImports: vi.fn(),
 }));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  useEditorPreferences: () => ({ preferences: { textMode: false } }),
+}));
 vi.mock("react-native", () => ({
   NativeModules: native.modules,
   Platform: { OS: "ios" },

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   stop: vi.fn(),
 }));
 vi.mock("expo/fetch", () => ({ fetch: mocks.fetch }));
+vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000001" }));
 // Narration is a client concern; these tests cover streaming and lifecycle.
 vi.mock("../explanation-speech-client", () => ({
   explanationSpeech: () => ({ speak: mocks.speak, stop: mocks.stop }),
@@ -200,6 +201,16 @@ it("stays silent until the user asks to read it aloud", async () => {
   await act(async () => context.bridge.toggleReadAloud());
   expect(mocks.speak).toHaveBeenCalledWith("It parses JSON.");
   expect(context.bridge.speaking).toBe(false);
+});
+it("shows a billing failure when reading an explanation aloud exhausts credits", async () => {
+  mocks.fetch.mockResolvedValue(
+    new Response('{"type":"delta","text":"Explanation."}\n{"type":"done"}\n'),
+  );
+  const context = await mount();
+  await act(async () => context.bridge.start());
+  mocks.speak.mockRejectedValueOnce(new Error("You need more credits. Upgrade or add credits."));
+  await act(async () => context.bridge.toggleReadAloud());
+  expect(context.bridge.speechError).toMatch(/credits.*(upgrade|add)/i);
 });
 
 it("stops reading aloud on a second press and when the bubble closes", async () => {

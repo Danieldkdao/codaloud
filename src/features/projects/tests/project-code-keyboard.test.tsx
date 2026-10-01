@@ -283,6 +283,15 @@ it("shows a glass strip flush with the keyboard, follows frame changes, and hide
   );
   expect(container.querySelector("button")).toBeNull();
 });
+it("keeps editor tools above the terminal while the editor keyboard is open", () => {
+  act(() => root.render(createElement(Probe)));
+  show(544);
+  const strip = container.querySelector<HTMLElement>(
+    '[data-testid="editor-keyboard-strip"]',
+  )!;
+  const overlay = strip.parentElement as HTMLElement;
+  expect(Number(overlay.style.zIndex)).toBeGreaterThan(20);
+});
 it("does not add a second keyboard offset when Android has already resized the viewport", () => {
   state.bottom = 544;
   act(() => root.render(createElement(Probe)));

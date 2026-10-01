@@ -177,6 +177,31 @@ describe("useDraftSave", () => {
     expect(current.message).toBeNull();
   });
 
+  it("writes a newer queued edit after the in-flight write fails and the editor closes", async () => {
+    await render();
+    create.mockImplementationOnce(() => deferred().then(() => ({
+      error: true,
+      message: "database is locked",
+    })));
+    act(() => current.save({ filename: null, content: "older" }));
+    act(() => current.schedule({ filename: null, content: "newer" }, 0));
+    unmount();
+    await run(() => write());
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenLastCalledWith({ filename: null, content: "newer" });
+  });
+
+  it("reports an invalid intermediate filename and accepts the corrected name", async () => {
+    await render();
+    await run(() => current.schedule({ filename: "/", content: "body" }, 0));
+    expect(current.state).toBe("error");
+    expect(current.message).toMatch(/name|slash/i);
+    expect(create).not.toHaveBeenCalled();
+    await run(() => current.saveNow({ filename: "note.md", content: "body" }));
+    expect(create).toHaveBeenCalledWith({ filename: "note.md", content: "body" });
+    expect(current.state).toBe("saved");
+  });
+
   it("keeps an existing draft untouched when its saved row disappears", async () => {
     await render("00000000-0000-4000-8000-0000000000z9");
     update.mockImplementationOnce(async () => ({

@@ -51,6 +51,10 @@ vi.mock("react-native-enriched-markdown", () => ({
 // expo/fetch is consumed from TypeScript source, which the Node test resolver
 // cannot follow. Other suites stub it the same way.
 vi.mock("expo/fetch", () => ({ fetch: vi.fn() }));
+vi.mock("expo-router/js-stack", async () => ({
+  Stack: (await import("expo-router")).Stack,
+  CardStyleInterpolators: { forVerticalIOS: vi.fn() },
+}));
 
 vi.mock("react-native-reanimated", () => {
   const transition = {
@@ -393,10 +397,10 @@ afterEach(() => {
 
 it("presents Files, Git, and Agent as modals without reading an unselected file", () => {
   expect(stackOptions).toMatchObject({ headerShown: false });
-  expect(screenOptions.get("files")?.presentation).toBe("modal");
-  expect(screenOptions.get("git")?.presentation).toBe("modal");
+  expect(screenOptions.get("files")?.presentation).toBe("transparentModal");
+  expect(screenOptions.get("git")?.presentation).toBe("transparentModal");
   expect(screenOptions.get("agent")).toMatchObject({
-    presentation: "modal",
+    presentation: "transparentModal",
     headerShown: true,
   });
   expect(mocks.readContent).not.toHaveBeenCalled();

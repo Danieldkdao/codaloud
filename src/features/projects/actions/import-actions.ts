@@ -1,4 +1,5 @@
 import type { ProjectImportItem } from "../lib/file-imports";
+import { notifyWorkspaceChanged } from "@/services/local-workspace/change-events";
 import {
   importProjectFilesSchema,
   importedProjectFilesSchema,
@@ -11,7 +12,9 @@ import {
  * Reading it structurally keeps this module off the native bridge import, which
  * only the file operations themselves need.
  */
-const failure = (error: unknown): ImportProjectFilesResult & { error: true } => ({
+const failure = (
+  error: unknown,
+): ImportProjectFilesResult & { error: true } => ({
   error: true,
   message:
     error instanceof Error
@@ -33,6 +36,7 @@ export const importProjectFilesAction = async (
   unsafeInput: ImportProjectFilesInput,
   signal?: AbortSignal,
 ): Promise<ImportProjectFilesResult> => {
+  let importedPaths: string[] = [];
   try {
     const input = importProjectFilesSchema.parse(unsafeInput);
     // Device lookup and folder listing both cross into the native bridge, so the
@@ -82,15 +86,20 @@ export const importProjectFilesAction = async (
       overwrite: input.mode === "replace",
       signal,
     });
+    importedPaths = copied.imported;
+    if (importedPaths.length > 0) notifyWorkspaceChanged(project.id);
     if (copied.imported.length === 0)
       return {
         error: true,
         code: copied.canceled ? "CANCELLED" : "IMPORT_FAILED",
         message:
-          copied.failed[0]?.reason ?? "Unable to copy these files into the project.",
+          copied.failed[0]?.reason ??
+          "Unable to copy these files into the project.",
+        imported: [],
       };
 
-    const listedPaths = new Set(await readLocalFilePaths(project.id, signal));
+    // Verify landed files even if cancellation stopped the remaining copies.
+    const listedPaths = new Set(await readLocalFilePaths(project.id));
     const missing = copied.imported.filter((path) => !listedPaths.has(path));
     if (missing.length > 0)
       return {
@@ -99,6 +108,17 @@ export const importProjectFilesAction = async (
         message: `The project could not read ${missing.length} uploaded file${
           missing.length === 1 ? "" : "s"
         }. Refresh Files and try again.`,
+        imported: copied.imported,
+      };
+
+    if (copied.canceled || copied.failed.length > 0)
+      return {
+        error: true,
+        code: copied.canceled ? "CANCELLED" : "IMPORT_PARTIAL",
+        message: copied.canceled
+          ? `Upload cancelled after ${copied.imported.length} of ${plan.write.length} files copied.`
+          : `Uploaded ${copied.imported.length} of ${plan.write.length} files. Failed: ${copied.failed.map((item) => `${item.path} (${item.reason})`).join(", ")}.`,
+        imported: copied.imported,
       };
 
     return {
@@ -109,10 +129,10 @@ export const importProjectFilesAction = async (
       data: importedProjectFilesSchema.parse({
         imported: copied.imported,
         replaced: plan.replaced,
-        skipped: [...plan.skipped, ...copied.failed.map((item) => item.path)],
+        skipped: plan.skipped,
       }),
     };
   } catch (error) {
-    return failure(error);
+    return { ...failure(error), imported: importedPaths };
   }
 };

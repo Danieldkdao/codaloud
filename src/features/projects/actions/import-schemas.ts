@@ -65,5 +65,6 @@ export type ImportProjectFilesResult =
       message: string;
       code?: string;
       conflicts?: string[];
+      imported?: string[];
     }
   | { error: false; message: string; data: ImportedProjectFilesSchema };

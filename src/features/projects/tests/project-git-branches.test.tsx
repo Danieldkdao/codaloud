@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+vi.mock("@/lib/auth/auth-client", () => ({ authClient: { useSession: () => ({ data: { user: { id: "test-user" } } }) } }));
+vi.mock("@/features/billing/hooks/use-billing-status", () => ({ useBillingStatus: () => ({ data: { tier: "tier_1" } }) }));
 vi.mock("react-native-screens", () => ({ ScreenStack: ({ children }: { children?: ReactNode }) => children, ScreenStackItem: ({ children }: { children?: ReactNode }) => children }));
 vi.mock("@/features/agent/components/task-status-bar", () => ({ TaskStatusBar: () => createElement("div", { "data-testid": "task-status-bar" }) }));
 vi.mock("@/features/agent/components/implementation-plan-review", () => ({ ImplementationPlanReview: () => null }));
@@ -1511,58 +1513,126 @@ it("publishes an untracked local branch through the existing remote without crea
 vi.mock("@/components/keyboard-symbols-provider", () => ({ KeyboardSymbolsProvider: ({ children }: { children: import("react").ReactNode }) => children }));
 
 it("confirms local branch deletion, keeps the active branch protected, and preserves remote branches", async () => {
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
-  expect(container.querySelector<HTMLButtonElement>('[aria-label="Delete local branch main"]')?.disabled).toBe(true);
-  expect(container.querySelector('[aria-label="Delete local branch remote-only"]')).toBeNull();
-  click("Delete local branch feature/live"); await act(async () => {});
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!
+      .click(),
+  );
+  expect(
+    container.querySelector<HTMLButtonElement>(
+      '[aria-label="Delete local branch main"]',
+    )?.disabled,
+  ).toBe(true);
+  expect(
+    container.querySelector('[aria-label="Delete local branch remote-only"]'),
+  ).toBeNull();
+  click("Delete local branch feature/live");
+  await act(async () => {});
   expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
   await confirmAlert("Delete branch");
-  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledExactlyOnceWith({ branchName: "feature/live" });
+  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledExactlyOnceWith({
+    branchName: "feature/live",
+  });
   expect(live.gitCheckout.mutateAsync).not.toHaveBeenCalled();
-  expect(workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0]).toBeLessThan(live.gitDeleteBranch.mutateAsync.mock.invocationCallOrder[0]);
+  expect(
+    workspaceFiles.flushPendingSaves.mock.invocationCallOrder[0],
+  ).toBeLessThan(live.gitDeleteBranch.mutateAsync.mock.invocationCallOrder[0]);
 });
 it("cancels deletion and reports native errors without hiding the branch", async () => {
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
-  click("Delete local branch feature/live"); await act(async () => {}); await confirmAlert("Cancel");
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!
+      .click(),
+  );
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Cancel");
   expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
-  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new Error("Merge this branch first."));
-  click("Delete local branch feature/live"); await act(async () => {}); await confirmAlert("Delete branch");
-  expect(workspaceFiles.alert).toHaveBeenLastCalledWith("Git operation failed", "Merge this branch first.");
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(
+    new Error("Merge this branch first."),
+  );
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Delete branch");
+  expect(workspaceFiles.alert).toHaveBeenLastCalledWith(
+    "Git operation failed",
+    "Merge this branch first.",
+  );
   expect(container.querySelector('[aria-label="feature/live"]')).not.toBeNull();
 });
 it("does not delete after the confirmation's project has changed", async () => {
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
-  click("Delete local branch feature/live"); await act(async () => {});
-  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
-  live.projectId = "33333333-3333-4333-8333-333333333333"; act(() => root.render(<Workspace />));
-  await act(async () => buttons.find((button: { text: string }) => button.text === "Delete branch").onPress());
-  expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
-});
-it.each(["Cancel", "Delete anyway"])("offers explicit deletion for unmerged history and handles %s", async (choice) => {
-  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"));
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!
+      .click(),
+  );
   click("Delete local branch feature/live");
   await act(async () => {});
-  await confirmAlert("Delete branch");
-  expect(workspaceFiles.alert.mock.calls.at(-1)![0]).toBe("Delete branch anyway?");
-  expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("commits");
-  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
-  await confirmAlert(choice);
-  expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(choice === "Cancel" ? 1 : 2);
-  if (choice === "Delete anyway") {
-    expect(live.gitDeleteBranch.mutateAsync).toHaveBeenLastCalledWith({ branchName: "feature/live", force: true });
-  }
-});
-it("does not force-delete if the project changes while the second confirmation is open", async () => {
-  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"));
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!.click());
-  click("Delete local branch feature/live");
-  await act(async () => {});
-  await confirmAlert("Delete branch");
   const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
-  expect(buttons?.some((button: { text: string }) => button.text === "Delete anyway")).toBe(true);
   live.projectId = "33333333-3333-4333-8333-333333333333";
   act(() => root.render(<Workspace />));
-  await act(async () => buttons.find((button: { text: string }) => button.text === "Delete anyway").onPress());
+  await act(async () =>
+    buttons
+      .find((button: { text: string }) => button.text === "Delete branch")
+      .onPress(),
+  );
+  expect(live.gitDeleteBranch.mutateAsync).not.toHaveBeenCalled();
+});
+it.each(["Cancel", "Delete anyway"])(
+  "offers explicit deletion for unmerged history and handles %s",
+  async (choice) => {
+    live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(
+      new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"),
+    );
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!
+        .click(),
+    );
+    click("Delete local branch feature/live");
+    await act(async () => {});
+    await confirmAlert("Delete branch");
+    expect(workspaceFiles.alert.mock.calls.at(-1)![0]).toBe(
+      "Delete branch anyway?",
+    );
+    expect(workspaceFiles.alert.mock.calls.at(-1)![1]).toContain("commits");
+    expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
+    await confirmAlert(choice);
+    expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(
+      choice === "Cancel" ? 1 : 2,
+    );
+    if (choice === "Delete anyway") {
+      expect(live.gitDeleteBranch.mutateAsync).toHaveBeenLastCalledWith({
+        branchName: "feature/live",
+        force: true,
+      });
+    }
+  },
+);
+it("does not force-delete if the project changes while the second confirmation is open", async () => {
+  live.gitDeleteBranch.mutateAsync.mockRejectedValueOnce(
+    new ProjectGitError("Unmerged commits", "UNMERGED_BRANCH"),
+  );
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label^="Branch:"]')!
+      .click(),
+  );
+  click("Delete local branch feature/live");
+  await act(async () => {});
+  await confirmAlert("Delete branch");
+  const buttons = workspaceFiles.alert.mock.calls.at(-1)![2];
+  expect(
+    buttons?.some(
+      (button: { text: string }) => button.text === "Delete anyway",
+    ),
+  ).toBe(true);
+  live.projectId = "33333333-3333-4333-8333-333333333333";
+  act(() => root.render(<Workspace />));
+  await act(async () =>
+    buttons
+      .find((button: { text: string }) => button.text === "Delete anyway")
+      .onPress(),
+  );
   expect(live.gitDeleteBranch.mutateAsync).toHaveBeenCalledTimes(1);
 });

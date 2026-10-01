@@ -1,0 +1,40 @@
+{
+  "measuredAt": "2026-10-01T05:19:50.135Z",
+  "fixture": {
+    "files": 640,
+    "bytes": 2621440
+  },
+  "coldMs": 219.41012499999988,
+  "warmMs": 131.34424999999987,
+  "downloadMs": 847.7386249999997,
+  "batches": 10,
+  "peakRequests": 3,
+  "transferredBytes": 2644420,
+  "manifestMetrics": [
+    {
+      "hashed": 640,
+      "reused": 0,
+      "bytesHashed": 2621440,
+      "durationMs": 22
+    },
+    {
+      "hashed": 0,
+      "reused": 640,
+      "bytesHashed": 0,
+      "durationMs": 12
+    },
+    {
+      "hashed": 1,
+      "reused": 639,
+      "bytesHashed": 4096,
+      "durationMs": 11
+    }
+  ],
+  "memory": {
+    "baselineRssMiB": 105.375,
+    "peakRssMiB": 122.890625,
+    "peakHeapMiB": 35.495750427246094,
+    "peakExternalMiB": 12.301013946533203
+  },
+  "note": "Direct Daytona requests; excludes mobile filesystem and development tunnel. Fixture is deleted in finally."
+}

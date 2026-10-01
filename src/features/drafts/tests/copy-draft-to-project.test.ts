@@ -116,7 +116,10 @@ const createHarness = (files: Record<string, string> = {}) => {
       });
     }
     if (operation === "delete-file") {
-      stored.delete(resolve(args.parentPath as string, args.name as string));
+      const path = resolve(args.parentPath as string, args.name as string);
+      if (args.expectedContentHash && sha256Hex(stored.get(path) ?? "") !== args.expectedContentHash)
+        return Promise.reject(new LocalWorkspaceError("FILE_CHANGED", "This file changed since it was opened."));
+      stored.delete(path);
       return Promise.resolve(entry(args.name as string, resolve(args.parentPath as string, args.name as string)));
     }
     return Promise.reject(new LocalWorkspaceError("UNKNOWN_OPERATION", "Unknown local workspace operation."));
@@ -263,8 +266,24 @@ describe("copyDraftToProjectAction", () => {
     expect(doubles.execute).toHaveBeenCalledWith(
       projectId,
       "delete-file",
-      { parentPath: "", name: "helper.ts", kind: "file" },
+      { parentPath: "", name: "helper.ts", kind: "file", expectedContentHash: sha256Hex("") },
     );
+  });
+
+  it("keeps another writer's content when the new file changes before rollback", async () => {
+    const harness = setup();
+    doubles.execute.mockImplementation(async (id, operation, args) => {
+      if (operation === "save-file") {
+        harness.stored.set("helper.ts", "another writer");
+        throw new LocalWorkspaceError("FILE_CHANGED", "This file changed since it was opened.");
+      }
+      return harness.handler(id, operation, args);
+    });
+    await expect(copyDraftToProjectAction(input())).resolves.toMatchObject({
+      error: true,
+      code: "FILE_CHANGED",
+    });
+    expect(harness.stored.get("helper.ts")).toBe("another writer");
   });
 
   it("reports a draft that is no longer on the device", async () => {

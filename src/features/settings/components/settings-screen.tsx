@@ -1,13 +1,11 @@
 import { AppWrapper } from "@/components/app-wrapper";
 import { Icon } from "@/components/ui/icon";
 import { HeadingText, PText } from "@/components/ui/text";
-import { useThemeColor } from "@/hooks/use-theme";
 import { GitHubConnection } from "@/services/github/components/github-connection";
 import { authClient } from "@/lib/auth/auth-client";
 import Constants from "expo-constants";
-import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Pressable, Switch, View } from "react-native";
+import { useRouter, type Href } from "expo-router";
+import { Pressable, View } from "react-native";
 import { formatAppVersion } from "../lib/formatters";
 import { AppearanceSelector } from "./appearance-selector";
 import { AccountDangerZone } from "./account-danger-zone";
@@ -18,10 +16,6 @@ import { UserProfile } from "./user-profile";
 export const SettingsScreen = () => {
   const router = useRouter();
   const session = authClient.useSession();
-  const [voiceHints, setVoiceHints] = useState(true);
-  const [taskNotifications, setTaskNotifications] = useState(false);
-  const primary = useThemeColor("primary");
-  const border = useThemeColor("border");
 
   return (
     <AppWrapper tabBarShown>
@@ -46,7 +40,7 @@ export const SettingsScreen = () => {
         </SettingsSection>
 
         <SettingsSection title="Preferences">
-          <SettingsRow
+          {/*<SettingsRow
             label="Voice hints"
             icon={{ family: "Feather", name: "mic" }}
           >
@@ -69,7 +63,7 @@ export const SettingsScreen = () => {
               trackColor={{ false: border, true: primary }}
               ios_backgroundColor={border}
             />
-          </SettingsRow>
+          </SettingsRow>*/}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Editor Settings"
@@ -94,6 +88,36 @@ export const SettingsScreen = () => {
         <LinkedAccounts />
 
         <SettingsSection
+          title="Billing"
+          description="Plan, credits, and payment details."
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Manage or cancel subscription"
+            onPress={() =>
+              router.push({
+                pathname: "/billing",
+                params: { tab: "subscription" },
+              } as Href)
+            }
+          >
+            <SettingsRow
+              label="Manage or cancel subscription"
+              icon={{ family: "Feather", name: "credit-card" }}
+              last
+            >
+              <Icon
+                family="Feather"
+                name="chevron-right"
+                size={18}
+                className="text-muted-foreground"
+                accessible={false}
+              />
+            </SettingsRow>
+          </Pressable>
+        </SettingsSection>
+
+        <SettingsSection
           title="Connections"
           description="Connect services for repository imports and publishing."
         >
@@ -102,7 +126,8 @@ export const SettingsScreen = () => {
           </View>
         </SettingsSection>
 
-        <SettingsSection title="About & legal">
+        {/* Legal destinations return when their policies are ready. */}
+        {/* <SettingsSection title="About & legal">
           <Pressable
             disabled
             accessibilityRole="button"
@@ -142,9 +167,14 @@ export const SettingsScreen = () => {
               />
             </SettingsRow>
           </Pressable>
-        </SettingsSection>
+        </SettingsSection> */}
 
-        <AccountDangerZone />
+        {session.data?.user && (
+          <AccountDangerZone
+            userId={session.data.user.id}
+            email={session.data.user.email}
+          />
+        )}
 
         <View className="items-center gap-1 pb-2">
           <HeadingText className="text-xl text-muted-foreground">

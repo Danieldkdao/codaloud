@@ -23,8 +23,6 @@ export const KeyboardKey = ({
     onPress={onPress}
     className="h-12 w-11 items-center justify-center active:opacity-50 disabled:opacity-40"
   >
-    <View className="h-9 w-9 items-center justify-center rounded-full bg-secondary">
-      {children}
-    </View>
+    {children}
   </Pressable>
 );

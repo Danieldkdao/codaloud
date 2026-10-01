@@ -19,7 +19,11 @@ const AgentScreen = () => {
       style={{ flex: 1 }}
     >
       <ProjectAgentActivityList key={projectId} tasks={tasks} search={query} />
-      <ProjectAgentSearch query={query} onQueryChange={setQuery} />
+      <ProjectAgentSearch
+        query={query}
+        onQueryChange={setQuery}
+        commandScope={`/projects/${projectId}/agent`}
+      />
     </KeyboardAwareView>
   );
 };

@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
-import { DataStreamErrorReason } from "livekit-client";
+import { DataStreamErrorReason, RpcError } from "livekit-client";
+import { executeCommandAction } from "@/features/voice/command-actions";
 import { inlineSession } from "@/features/voice/inline-session";
 import { connectNativeVoice } from "../voice-native";
 import { createVoiceController } from "@/features/voice/voice-controller";
 import { voiceAudioSession } from "../voice-track";
 import { agentTasks } from "@/features/agent/task-runtime";
 import { agentPlans } from "@/features/agent/plan-runtime";
+vi.mock("@/features/voice/command-actions", () => ({
+  executeCommandAction: vi.fn(),
+}));
 vi.mock("@/features/agent/plan-runtime", () => ({
   agentPlans: {
     propose: vi
@@ -23,8 +27,14 @@ vi.mock("@/features/agent/task-runtime", () => ({
 }));
 vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
   editorPreferencesStore: {
+    load: async () => {},
     getSnapshot: () => ({
-      preferences: { speechEnabled: true, voiceId: "JBFqnCBsd6RMkjVDRZzb" },
+      preferences: {
+        speechEnabled: true,
+        voiceId: "JBFqnCBsd6RMkjVDRZzb",
+        aiDisabledPaths: "",
+        inlineModel: "openai/gpt-5.4-mini",
+      },
     }),
     subscribe: () => () => {},
   },
@@ -65,7 +75,8 @@ vi.mock("@/features/voice/actions", () => ({
   createVoiceSession: mocks.create,
   deleteVoiceSession: mocks.remove,
 }));
-vi.mock("livekit-client", () => ({
+vi.mock("livekit-client", async (importOriginal) => ({
+  RpcError: (await importOriginal<typeof import("livekit-client")>()).RpcError,
   DataStreamErrorReason: {
     AlreadyOpened: 0,
     AbnormalEnd: 1,
@@ -182,6 +193,33 @@ it("authorizes the agent before publishing and mutes before committing", async (
   await connection.close();
   expect(mocks.stopAudio).toHaveBeenCalledOnce();
   expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("room");
+});
+it("returns the actual workspace conflict across RPC instead of a generic application error", async () => {
+  const connection = await connectNativeVoice(
+    "hold",
+    new AbortController().signal,
+    events(),
+    { projectId: "project" },
+  );
+  try {
+    vi.mocked(executeCommandAction).mockRejectedValueOnce(
+      Object.assign(new Error("File changed. Read it again before editing."), {
+        code: "FILE_CHANGED",
+      }),
+    );
+    const handler = mocks.register.mock.calls.find(
+      ([name]) => name === "codaloud.voice.action",
+    )![1];
+    const error = await handler({
+      callerIdentity: "agent",
+      payload: JSON.stringify({ id: "turn", name: "editFile", args: {} }),
+    }).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(RpcError);
+    expect(error.message).toContain("File changed");
+    expect(JSON.parse(error.data)).toEqual({ code: "FILE_CHANGED" });
+  } finally {
+    await connection.close();
+  }
 });
 it("presents the authorized agent's plan without starting a task", async () => {
   const connection = await connectNativeVoice(
@@ -825,6 +863,16 @@ it("delivers provider failure to the visible conversation while preserving its t
       listening: false,
       error: "Failed to generate response. Please try again.",
     }),
+  );
+  await controller.stop();
+});
+it("identifies a voice credit failure as a billing problem", async () => {
+  const controller = createVoiceController(connectNativeVoice);
+  await controller.start("hands-free");
+  mocks.agentError = "credits";
+  for (const listener of mocks.listeners.get("attributes") ?? []) listener();
+  await vi.waitFor(() =>
+    expect(controller.getSnapshot().error).toMatch(/credits.*(upgrade|add)/i),
   );
   await controller.stop();
 });

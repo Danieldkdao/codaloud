@@ -3,6 +3,7 @@ import { streamEditorExplanation } from "../explanation-actions";
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("expo/fetch", () => ({ fetch: mocks.fetch }));
+vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000001" }));
 vi.mock("@/lib/auth/auth-client", () => ({
   authClient: { getCookie: async () => "session" },
 }));

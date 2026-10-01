@@ -9,10 +9,26 @@ const mocks = vi.hoisted(() => ({
   terminalRun: vi.fn(),
   terminalSync: vi.fn(),
   terminalDisconnect: vi.fn(),
+  terminalSnapshot: {
+    status: "closed",
+    output: "last command output",
+    syncMessage: "Synced",
+    access: null as "plan" | "credits" | null,
+    error: null as string | null,
+  },
+  aiDisabledPaths: "",
+}));
+vi.mock("@/features/settings/hooks/use-editor-preferences", () => ({
+  editorPreferencesStore: {
+    load: async () => {},
+    getSnapshot: () => ({
+      preferences: { aiDisabledPaths: mocks.aiDisabledPaths },
+    }),
+  },
 }));
 vi.mock("@/features/terminal/actions/terminal-session", () => ({
   projectTerminalSession: () => ({
-    getSnapshot: () => ({ status: "closed", output: "last command output", syncMessage: "Synced" }),
+    getSnapshot: () => mocks.terminalSnapshot,
     runCommand: mocks.terminalRun,
     sync: mocks.terminalSync,
     disconnect: mocks.terminalDisconnect,
@@ -41,10 +57,71 @@ import { createDeviceExecutor } from "../device-executor";
 import { executeWorkspace } from "@/services/local-workspace/execute";
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.terminalSnapshot.status = "closed";
+  mocks.terminalSnapshot.output = "last command output";
+  mocks.terminalSnapshot.syncMessage = "Synced";
+  mocks.terminalSnapshot.access = null;
+  mocks.terminalSnapshot.error = null;
+  mocks.aiDisabledPaths = "";
   mocks.read.mockResolvedValue({ content: "Old", path: "readme.md", size: 3 });
   mocks.guard.mockImplementation(async (_id, _revision, action) => {
     const result = await action();
     throw new Error("Missing native revision");
+  });
+});
+it("refuses a protected file and AI terminal commands before invoking native tools", async () => {
+  mocks.aiDisabledPaths = ".env*\nnode_modules";
+  await expect(
+    executeDeviceTool("project", {
+      id: "private-read",
+      tokenId: "token",
+      name: "readFile",
+      args: { path: ".env.local" },
+      revision: "a".repeat(64),
+    }),
+  ).rejects.toThrow(/disabled/i);
+  await expect(
+    executeDeviceTool("project", {
+      id: "private-shell",
+      tokenId: "token",
+      name: "runTerminalCommand",
+      args: { command: "cat .env.local" },
+      revision: "a".repeat(64),
+    }),
+  ).rejects.toThrow(/disabled/i);
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.terminalRun).not.toHaveBeenCalled();
+});
+it("fails closed when the disabled-path list contains an invalid rule", async () => {
+  mocks.aiDisabledPaths = ".env*\n../invalid";
+  await expect(
+    executeDeviceTool("project", {
+      id: "invalid-protection",
+      tokenId: "token",
+      name: "readFile",
+      args: { path: "src/index.ts" },
+      revision: "a".repeat(64),
+    }),
+  ).rejects.toThrow(/invalid/i);
+  expect(mocks.read).not.toHaveBeenCalled();
+});
+it("reports the access reason when terminal output is unavailable", async () => {
+  mocks.terminalSnapshot.status = "blocked";
+  mocks.terminalSnapshot.output = "";
+  mocks.terminalSnapshot.access = "plan";
+  mocks.terminalSnapshot.error = "A paid plan is required for the terminal.";
+  const result = await executeDeviceTool("project", {
+    id: "read-terminal-denied",
+    tokenId: "token",
+    name: "readTerminalOutput",
+    args: {},
+    revision: "a".repeat(64),
+  });
+  expect(JSON.parse(result.text)).toMatchObject({
+    status: "blocked",
+    output: "",
+    access: "plan",
+    connectionMessage: "A paid plan is required for the terminal.",
   });
 });
 it("includes full-file diagnostics in a valid bounded read result without changing its hash", async () => {
@@ -84,24 +161,35 @@ it("includes full-file diagnostics in a valid bounded read result without changi
 it("lets the agent inspect terminal logs and run a bounded command with sync feedback", async () => {
   mocks.terminalRun.mockResolvedValue({ exitCode: 0, output: "installed" });
   mocks.terminalSync.mockResolvedValue({
-    conflicts: [], failures: [], downloadedPaths: ["package-lock.json"],
+    conflicts: [],
+    failures: [],
+    downloadedPaths: ["package-lock.json"],
     localDeletedPaths: [],
   });
   vi.mocked(executeWorkspace).mockResolvedValue("a".repeat(64));
   mocks.guard.mockImplementation(async (_id, revision, action) => ({
-    result: await action(), revision,
+    result: await action(),
+    revision,
   }));
   const read = await executeDeviceTool("project", {
-    id: "read-terminal", tokenId: "token", name: "readTerminalOutput",
-    args: {}, revision: "a".repeat(64),
+    id: "read-terminal",
+    tokenId: "token",
+    name: "readTerminalOutput",
+    args: {},
+    revision: "a".repeat(64),
   });
   expect(JSON.parse(read.text).output).toBe("last command output");
   const run = await executeDeviceTool("project", {
-    id: "run-terminal", tokenId: "token", name: "runTerminalCommand",
-    args: { command: "npm install left-pad", timeout: 30 }, revision: "a".repeat(64),
+    id: "run-terminal",
+    tokenId: "token",
+    name: "runTerminalCommand",
+    args: { command: "npm install left-pad", timeout: 30 },
+    revision: "a".repeat(64),
   });
   expect(mocks.terminalRun).toHaveBeenCalledWith(
-    "npm install left-pad", 30, expect.objectContaining({ conflicts: [] }),
+    "npm install left-pad",
+    30,
+    expect.objectContaining({ conflicts: [] }),
   );
   expect(mocks.terminalSync).toHaveBeenCalledTimes(2);
   expect(mocks.terminalSync.mock.invocationCallOrder[0]).toBeLessThan(
@@ -110,15 +198,24 @@ it("lets the agent inspect terminal logs and run a bounded command with sync fee
   expect(mocks.terminalDisconnect).toHaveBeenCalledOnce();
   expect(mocks.guard).not.toHaveBeenCalled();
   expect(executeWorkspace).toHaveBeenCalledWith("project", "git/revision");
-  expect(JSON.parse(run.text)).toMatchObject({ exitCode: 0, output: "installed", conflicts: [] });
+  expect(JSON.parse(run.text)).toMatchObject({
+    exitCode: 0,
+    output: "installed",
+    conflicts: [],
+  });
   expect(run.changedFiles).toEqual(["package-lock.json"]);
 });
 it("does not run an agent terminal command against a changed workspace", async () => {
   vi.mocked(executeWorkspace).mockResolvedValue("b".repeat(64));
-  await expect(executeDeviceTool("project", {
-    id: "stale-command", tokenId: "token", name: "runTerminalCommand",
-    args: { command: "npm test", timeout: 30 }, revision: "a".repeat(64),
-  })).rejects.toThrow(/workspace changed/i);
+  await expect(
+    executeDeviceTool("project", {
+      id: "stale-command",
+      tokenId: "token",
+      name: "runTerminalCommand",
+      args: { command: "npm test", timeout: 30 },
+      revision: "a".repeat(64),
+    }),
+  ).rejects.toThrow(/workspace changed/i);
   expect(mocks.terminalRun).not.toHaveBeenCalled();
 });
 it("preserves a missing-folder result through execution and durable receipt replay", async () => {

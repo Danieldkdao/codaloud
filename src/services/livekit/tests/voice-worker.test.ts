@@ -25,3 +25,10 @@ it("keeps the worker health server off Metro's port after CLI start resolves pro
   expect(resolved.port).toBeGreaterThan(0);
   expect(resolved.agentName).toBe("codaloud-voice");
 });
+
+it("uses on-demand job children in local dev mode so a dead warm child cannot receive a dispatch", () => {
+  const production = new ServerOptions({ ...configured, production: true });
+  const development = new ServerOptions({ ...configured, production: false });
+  expect(production.numIdleProcesses).toBeGreaterThan(0);
+  expect(development.numIdleProcesses).toBe(0);
+});

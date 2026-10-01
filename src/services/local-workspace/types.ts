@@ -40,6 +40,7 @@ export type WorkspaceArguments = {
   clone: { url: string } & WithAccessToken;
   "list-files": { path: string };
   "read-file": { path: string };
+  "sync-manifest": { allowedPaths: string[] };
   "save-file": SaveProjectFileContentSchema;
   "create-file": CreateProjectFileSchema;
   "rename-file": UpdateProjectFileSchema;

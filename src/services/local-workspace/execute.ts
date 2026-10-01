@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { WorkspaceCommand } from "./types";
 import LocalWorkspace from "../../../modules/local-workspace";
+import { notifyWorkspaceChanged } from "./change-events";
 
 export class LocalWorkspaceError extends Error {
   constructor(
@@ -55,7 +56,7 @@ export const executeWorkspace = async (
   ...[operation, args]: WorkspaceCommand
 ): Promise<unknown> => {
   const id = z.uuid().parse(projectId).toLowerCase();
-  return executeNativeRequest(
+  const result = await executeNativeRequest(
     JSON.stringify({
       projectId: id,
       operation,
@@ -69,6 +70,30 @@ export const executeWorkspace = async (
       if (guard) guard.result = revision;
     },
   );
+  if (
+    operation === "save-file" ||
+    operation === "create-file" ||
+    operation === "rename-file" ||
+    operation === "delete-file" ||
+    operation === "git/checkout" ||
+    operation === "git/discard" ||
+    operation === "git/undo" ||
+    operation === "git/revert" ||
+    operation === "git/stash-apply" ||
+    operation === "git/stash-save" ||
+    operation === "git/pull"
+  ) {
+    let paths: string[] | undefined;
+    if (operation === "save-file") paths = [args.path];
+    else if (operation === "create-file" || operation === "delete-file")
+      paths = [args.parentPath ? `${args.parentPath}/${args.name}` : args.name];
+    else if (operation === "rename-file") {
+      const prefix = args.parentPath ? `${args.parentPath}/` : "";
+      paths = [prefix + args.previousName, prefix + args.name];
+    }
+    notifyWorkspaceChanged(id, paths);
+  }
+  return result;
 };
 
 const executeNativeRequest = async (

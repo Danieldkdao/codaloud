@@ -15,6 +15,11 @@ import type {
   ScriptElementKind,
 } from "typescript";
 import { normalizeCodeDiagnostics } from "@/features/code-intelligence/diagnostics";
+import { yieldToEvents } from "@/lib/yield-to-events";
+
+const maxDependencyFiles = 4096;
+const maxResolutionPaths = 32768;
+const dependencyReadConcurrency = 8;
 
 const formatSeverity = (category: DiagnosticCategory) => {
   switch (category) {
@@ -74,6 +79,7 @@ const createTypeScriptSession = (
   const pending = new Set<string>();
   let target = "";
   let bytes = 0;
+  let dependencyFiles = 0;
   let revision = 0;
   let dependencyValidationTime = 0;
   let invalidatedResolutions = false;
@@ -93,6 +99,7 @@ const createTypeScriptSession = (
     }
     pending.clear();
     bytes = 0;
+    dependencyFiles = 0;
     target = "";
     invalidatedResolutions = true;
     revision++;
@@ -105,12 +112,20 @@ const createTypeScriptSession = (
   };
   const update = (path: string, content: string | null) => {
     if (files.has(path) && files.get(path) === content) return;
-    bytes += (content?.length ?? 0) - (files.get(path)?.length ?? 0);
-    if (bytes > 64 * 1024 * 1024)
+    const previous = files.get(path);
+    const nextBytes = bytes + (content?.length ?? 0) - (previous?.length ?? 0);
+    const nextDependencies =
+      dependencyFiles + Number(content !== null) - Number(previous != null);
+    if (nextBytes > 64 * 1024 * 1024)
       throw new Error("This file exceeds the on-device analysis memory limit.");
-    if (!files.has(path) && files.size >= 4096)
+    if (nextDependencies > maxDependencyFiles)
       throw new Error(
         "This file needs more dependencies than the on-device analysis limit.",
+      );
+    // Missing resolution candidates consume cache space, not dependency slots.
+    if (!files.has(path) && files.size >= maxResolutionPaths)
+      throw new Error(
+        "This file needs too many module lookup paths for local analysis.",
       );
     // Newly available/deleted modules and changed package metadata invalidate
     // TypeScript's resolution cache even when the importing text is unchanged.
@@ -120,8 +135,30 @@ const createTypeScriptSession = (
     )
       invalidatedResolutions = true;
     files.set(path, content);
+    bytes = nextBytes;
+    dependencyFiles = nextDependencies;
     versions.set(path, ++revision);
     snapshots.delete(path);
+  };
+  const loadFiles = async (paths: string[]) => {
+    let yieldedAt = Date.now();
+    for (
+      let offset = 0;
+      offset < paths.length;
+      offset += dependencyReadConcurrency
+    ) {
+      const results = await Promise.allSettled(
+        paths.slice(offset, offset + dependencyReadConcurrency).map(async (path) => {
+          update(path, await readFile(path.slice("/workspace/".length)));
+        }),
+      );
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      if (Date.now() - yieldedAt >= 8) {
+        await yieldToEvents();
+        yieldedAt = Date.now();
+      }
+    }
   };
   const read = (path: string): string | undefined => {
     const key = normalize(path);
@@ -177,13 +214,7 @@ const createTypeScriptSession = (
     ) {
       // Every dependency is a round trip through the native boundary; reading
       // them one at a time is what put device diagnostics past their budget.
-      await Promise.all(
-        [...files.keys()]
-          .filter((path) => path !== target)
-          .map(async (path) => {
-            update(path, await readFile(path.slice("/workspace/".length)));
-          }),
-      );
+      await loadFiles([...files.keys()].filter((path) => path !== target));
       directories.clear();
       dependencyValidationTime = Date.now();
     }
@@ -370,9 +401,9 @@ const createTypeScriptSession = (
         if (input.position === undefined) dependencyValidationTime = Date.now();
         return result;
       }
-      if (files.size + pending.size > 4096)
+      if (files.size + pending.size > maxResolutionPaths)
         throw new Error(
-          "This file needs more dependencies than the on-device analysis limit.",
+          "This file needs too many module lookup paths for local analysis.",
         );
       for (const path of pendingDirectories) {
         if (directories.size >= 512)
@@ -388,9 +419,7 @@ const createTypeScriptSession = (
         revision++;
         invalidatedResolutions = true;
       }
-      for (const path of pending) {
-        update(path, await readFile(path.slice("/workspace/".length)));
-      }
+      await loadFiles([...pending]);
     }
     throw new Error(
       "The local dependency graph could not be resolved within the analysis limit.",

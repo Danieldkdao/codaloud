@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { projectFilePathSchema } from "@/features/projects/actions/file-schemas";
 import { projectFileSearchQuerySchema } from "@/features/projects/actions/file-search-schemas";
+import { inlineModelIds } from "@/features/billing/model-catalog";
 import {
   defaultEditorPreferences,
   voicePresets,
@@ -49,6 +50,7 @@ export type VoiceControlSchema = z.infer<typeof voiceControlSchema>;
 export const voiceRequestModes = ["agent", "quick-edit"] as const;
 export type VoiceRequestMode = (typeof voiceRequestModes)[number];
 export const voiceContextSchema = z.object({
+  inlineModel: z.enum(inlineModelIds).optional(),
   id: z.string().min(1).max(256),
   projectId: z.string().min(1).max(256),
   branch: z.string().max(1024),

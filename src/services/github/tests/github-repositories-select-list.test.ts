@@ -155,7 +155,8 @@ vi.mock("react-native-svg", () => {
   return { default: Node, Defs: Node, LinearGradient: Node, Stop: Node, Rect: Node };
 });
 vi.mock("@react-native-masked-view/masked-view", () => ({
-  default: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
+  default: ({ children, style }: { children?: ReactNode; style?: unknown }) =>
+    createElement("div", { "data-scroll-mask-style": JSON.stringify(style) }, children),
 }));
 vi.mock("@/services/github/hooks/use-github-connected", () => ({
   useGitHubConnected: () => ({
@@ -334,6 +335,19 @@ describe("new-project screen scrolling", () => {
 });
 
 describe("GitHub repositories list", () => {
+  it("fills the bounded picker with the same viewport for the mask and repository list", () => {
+    const container = document.createElement("div");
+    container.innerHTML = renderList();
+    const mask = container.querySelector("[data-scroll-mask-style]")!;
+    const style = JSON.parse(mask.getAttribute("data-scroll-mask-style")!);
+    const flattenedStyle = Object.assign({}, ...style.flat(Infinity));
+
+    expect(mask.parentElement?.classList.contains("h-80")).toBe(true);
+    expect(flattenedStyle).toMatchObject({ flex: 1, minHeight: 0 });
+    expect(mocks.listProps.className.split(" ")).toContain("flex-1");
+    expect(mocks.listProps.className.split(" ")).toContain("min-h-0");
+  });
+
   it("renders repositories from every loaded page with visibility and optional descriptions", () => {
     const html = renderList();
     expect(html).toContain("owner/private-repo");

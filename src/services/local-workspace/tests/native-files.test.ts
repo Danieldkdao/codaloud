@@ -40,6 +40,16 @@ it("refuses stale saves without losing the current file", () => {
   expect(readFileSync(join(root, projectId, "file.txt"), "utf8")).toBe("newer");
 });
 
+it("deletes a rollback file only while it still has the expected contents", () => {
+  const path = join(root, projectId, "rollback.txt");
+  writeFileSync(path, "another writer");
+  expect(call("delete-file", { parentPath: "", name: "rollback.txt", kind: "file", expectedContentHash: hash("") }))
+    .toMatchObject({ ok: false, code: "FILE_CHANGED" });
+  expect(readFileSync(path, "utf8")).toBe("another writer");
+  writeFileSync(path, "");
+  expect(call("delete-file", { parentPath: "", name: "rollback.txt", kind: "file", expectedContentHash: hash("") }).ok).toBe(true);
+});
+
 it("identifies a missing folder when listing or creating a nested file", () => {
   expect(call("list-files", { path: "tests" })).toMatchObject({
     ok: false,

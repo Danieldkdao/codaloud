@@ -96,14 +96,14 @@ afterEach(() => act(() => root.unmount()));
 
 it("places search above an overlaid iOS keyboard and restores the workspace dock", () => {
   render();
-  expect(bottom()).toBe("308px");
+  expect(bottom()).toBe("316px");
   render(false);
   expect(bottom()).toBe("80px");
 });
 it("does not count the Android resized viewport's keyboard height twice", () => {
   layout.height = 400;
   render();
-  expect(bottom()).toBe("8px");
+  expect(bottom()).toBe("16px");
 });
 it("ignores a measurement that arrives after the keyboard has closed", () => {
   layout.delayed = true;
@@ -124,5 +124,5 @@ it("keeps search above the Android symbol row", () => {
   act(() => root.render(createElement(KeyboardSymbolsInsetContext, { value: 48 }, createElement(EditorBottomBar, {
     frame, dockHeight: 72, onHeight: vi.fn(), children: "Find",
   }))));
-  expect(bottom()).toBe("356px");
+  expect(bottom()).toBe("364px");
 });

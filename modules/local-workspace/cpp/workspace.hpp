@@ -18,6 +18,8 @@ fs::path checkedPath(const fs::path &root, const std::string &relative,
 std::string readText(const fs::path &path);
 std::string sha256(const std::string &value);
 std::string sha256File(const fs::path &path);
+void atomicSave(const fs::path &path, const std::string &content);
+Json syncManifest(const fs::path &root, const Json &args);
 std::string timestamp(std::time_t time = std::time(nullptr));
 Json fileOperation(const fs::path &root, const std::string &operation,
                    const Json &args);

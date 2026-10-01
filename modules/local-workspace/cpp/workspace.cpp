@@ -159,7 +159,8 @@ std::string execute(const std::string &base, const std::string &request) {
                  ? gitOperation(root, operation, args)
                  : fileOperation(root, operation, args);
     }
-    Json response = {{"ok", true}, {"data", data}};
+    Json response = {{"ok", true}};
+    response["data"] = std::move(data);
     if (input.contains("expectedRevision"))
       response["revision"] = gitOperation(root, "git/revision", Json::object());
     return response.dump();

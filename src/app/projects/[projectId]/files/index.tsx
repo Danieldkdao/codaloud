@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { projectDirectoryPathSchema } from "@/features/projects/actions/file-schemas";
 import { ActivityIndicator, Alert, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { HeadingText, PText } from "@/components/ui/text";
@@ -20,13 +21,24 @@ import { getDirectoryFiles } from "@/features/projects/lib/files";
 import { isProjectImagePath } from "@/features/projects/lib/image-files";
 
 const FilesScreen = () => {
-  const { projectId } = useLocalSearchParams<{ projectId: string }>();
+  const { projectId, path: requestedPath } = useLocalSearchParams<{
+    projectId: string;
+    path?: string;
+  }>();
   const router = useRouter();
   const currentFile = useProjectWorkspaceCurrentFile();
   const fileSearch = useProjectWorkspaceFileSearch();
   const workspace = useProjectWorkspaceBranch();
   const saves = useProjectFileSaveRegistry();
   const { currentDirectory, setCurrentDirectory } = fileSearch;
+  useEffect(() => {
+    if (requestedPath === undefined) return;
+    const parsed = projectDirectoryPathSchema.safeParse(requestedPath);
+    if (parsed.success) {
+      setCurrentDirectory(parsed.data);
+      fileSearch.setQuery("");
+    }
+  }, [requestedPath]);
   const { query, creation, update, deletion } = useProjectFiles(
     projectId,
     currentDirectory,

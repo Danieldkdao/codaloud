@@ -12,6 +12,8 @@ afterEach(() => {
 
 it("derives the local API URL when no public auth URL is configured", async () => {
   vi.stubEnv("EXPO_PUBLIC_BETTER_AUTH_URL", "");
+  vi.stubEnv("EXPO_PUBLIC_REVENUECAT_IOS_API_KEY", "test-ios-key");
+  vi.stubEnv("EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY", "test-android-key");
   vi.stubGlobal("__DEV__", true);
 
   const { getBaseURL } = await import("@/lib/auth/utils");

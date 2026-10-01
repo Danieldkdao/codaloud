@@ -1,4 +1,8 @@
 import type { EditorPreferences } from "./types";
+import {
+  defaultAgentModel,
+  defaultInlineModel,
+} from "@/features/billing/model-catalog";
 
 export const editorThemes = [
   "Codaloud",
@@ -18,7 +22,15 @@ export const editorFonts = [
   "IBM Plex Mono",
 ] as const;
 export const defaultEditorPreferences: EditorPreferences = {
+  inlineModel: defaultInlineModel,
+  agentModel: defaultAgentModel,
+  allowLargeSync: false,
+  syncAllowedPaths:
+    "node_modules\n__pycache__\n.expo\n.next\ndist\nbuild\ncoverage\n.venv\nvenv",
+  aiDisabledPaths:
+    ".env*\nnode_modules\n__pycache__\n.git\n.expo\n.next\ndist\nbuild\ncoverage\n.venv\nvenv",
   speechEnabled: true,
+  textMode: false,
   voiceId: "JBFqnCBsd6RMkjVDRZzb",
   theme: "Codaloud",
   font: "JetBrains Mono",

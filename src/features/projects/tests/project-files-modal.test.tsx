@@ -37,6 +37,18 @@ vi.mock("expo-router", () => ({
     { Screen: () => null },
   ),
 }));
+vi.mock("expo-router/js-stack", () => ({
+  Stack: Object.assign(
+    ({
+      children,
+      screenOptions,
+    }: {
+      children: ReactNode;
+      screenOptions: { headerRight: () => ReactNode };
+    }) => createElement("div", null, screenOptions.headerRight(), children),
+    { Screen: () => null },
+  ),
+}));
 vi.mock("react-native", async () => {
   const View = ({
     children,
@@ -227,7 +239,9 @@ vi.mock("@/features/projects/hooks/use-project-file-upload", () => ({
 vi.mock("@/features/projects/hooks/use-import-project-files", () => ({
   useImportProjectFiles: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
-vi.mock("@/hooks/use-success-feedback", () => ({ useSuccessFeedback: () => vi.fn() }));
+vi.mock("@/hooks/use-success-feedback", () => ({
+  useSuccessFeedback: () => vi.fn(),
+}));
 
 let container: HTMLDivElement;
 let root: Root;

@@ -4,6 +4,7 @@ import {
   createExplanationSpeech,
   type ExplanationSpeechOptions,
 } from "@/features/editor/explanation-speech";
+import { BillingRequiredError } from "@/features/billing/client-error";
 import {
   toSpeakableText,
   toSpeechSentences,
@@ -127,6 +128,16 @@ describe("explanation speech", () => {
     expect(played[0]).toBe("Working one..wav");
     speech.stop();
     await running;
+  });
+
+  it("stops queued speech when the next sentence needs more credits", async () => {
+    const { options, played } = options_();
+    const speech = createExplanationSpeech({
+      ...options,
+      synthesize: async () => { throw new BillingRequiredError(); },
+    });
+    await expect(speech.speak("First sentence. Second sentence.")).rejects.toThrow(/credits/i);
+    expect(played).toHaveLength(0);
   });
 
   it("caps very long chunks so a wall of text still starts speaking", async () => {

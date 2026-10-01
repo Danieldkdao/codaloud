@@ -17,14 +17,19 @@ import {
   ProjectActionButtonsLeft,
   ProjectActionButtonsRight,
 } from "@/features/projects/components/project-action-buttons";
-import { useProjectWorkspaceDockHeight } from "@/features/projects/hooks/use-project-workspace-dock-height";
+import { useProjectWorkspaceDockHeightSetter } from "@/features/projects/hooks/use-project-workspace-dock-height";
 import { useProjectWorkspaceBranch } from "@/features/projects/hooks/use-project-workspace-branch";
 import { ProjectBranchMenu } from "./project-branch-menu";
+import { useCommandBubbleAnchor } from "@/features/voice/hooks/use-command-bubble-layout";
 
 export const ProjectWorkspaceDock = (props: { tab?: "code" | "git" } = {}) => {
   const conversation = useContext(WorkspaceVoiceContext);
   return conversation ? (
-    <WorkspaceDock {...props} conversation={conversation} />
+    <WorkspaceDock
+      {...props}
+      conversation={conversation}
+      commandBubbleManaged
+    />
   ) : (
     <StandaloneDock {...props} />
   );
@@ -42,12 +47,15 @@ const StandaloneDock = (props: { tab?: "code" | "git" }) => {
 const WorkspaceDock = ({
   tab,
   conversation,
+  commandBubbleManaged = false,
 }: {
   tab?: "code" | "git";
   conversation: VoiceConversation;
+  commandBubbleManaged?: boolean;
 }) => {
   const keyboardFrame = useKeyboardFrame();
-  const { setDockHeight } = useProjectWorkspaceDockHeight();
+  const setDockHeight = useProjectWorkspaceDockHeightSetter();
+  const lastDockHeight = useRef(0);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const branchIndicatorRef = useRef<View>(null);
@@ -66,19 +74,29 @@ const WorkspaceDock = ({
   const actionGap = activeTab === "code" ? 8 : 0;
   const branchSelection = useProjectWorkspaceBranch();
   const isGit = activeTab === "git";
+  const anchor = useCommandBubbleAnchor(
+    `/projects/${branchSelection.projectId}/${activeTab}`,
+  );
   useEffect(() => {
     setBranchPickerOpen(false);
   }, [branchSelection.projectId, activeTab]);
 
   return (
     <View
+      ref={anchor.ref}
       testID="project-workspace-dock"
       collapsable={false}
       onLayout={(event) => {
+        anchor.onLayout();
         // Reserve the whole stack, including live tasks and the transcript, so
         // the editor's animated accessory row always sits above visible content.
-        const height = event.nativeEvent.layout.height;
-        if (height > 0) setDockHeight(height);
+        const height = Math.round(event.nativeEvent.layout.height);
+        // Native layout can report tiny fractional changes after the editor
+        // responds to this measurement. Ignore those feedback-only updates.
+        if (height > 0 && Math.abs(height - lastDockHeight.current) >= 2) {
+          lastDockHeight.current = height;
+          setDockHeight(height);
+        }
       }}
       style={{
         position: "absolute",
@@ -95,8 +113,12 @@ const WorkspaceDock = ({
           display: activeTab === "code" && keyboardFrame ? "none" : "flex",
         }}
       >
-        {!isGit && <TaskStatusBar projectId={branchSelection.projectId} />}
-        <VoiceTranscriptBubble conversation={conversation} />
+        {!commandBubbleManaged && !isGit && (
+          <TaskStatusBar projectId={branchSelection.projectId} />
+        )}
+        {!commandBubbleManaged && (
+          <VoiceTranscriptBubble conversation={conversation} />
+        )}
       </View>
       {!isGit && (
         <ImplementationPlanReview
@@ -160,7 +182,9 @@ const WorkspaceDock = ({
                     onBranchPickerOpenChange={setBranchPickerOpen}
                   />
                 </View>
-                {!isGit && <VoiceMicrophone conversation={conversation} />}
+                {!isGit && (
+                  <VoiceMicrophone conversation={conversation} launcher />
+                )}
                 <View
                   style={{
                     flex: 1,

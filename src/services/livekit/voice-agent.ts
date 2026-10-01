@@ -11,6 +11,11 @@ import { voiceInstructions } from "@/services/ai/prompts";
 import { voicePreferencesSchema, voiceModes } from "@/features/voice/schemas";
 import { createVoiceControlHandler } from "./voice-controls";
 import { VoiceLanguageModel } from "./voice-llm";
+import {
+  chargeCredits,
+  InsufficientCreditsError,
+} from "@/features/billing/server/billing-service";
+import { creditsForSpeech } from "@/features/billing/credit-cost";
 
 const voiceDispatchSchema = voicePreferencesSchema.extend({
   participantIdentity: z.string().min(1),
@@ -27,14 +32,49 @@ export default defineAgent({
           destinationIdentity: metadata.participantIdentity,
           method,
           payload: JSON.stringify(payload),
+          responseTimeout:
+            method === "codaloud.voice.action" ? 180_000 : 15_000,
         }),
       );
-    let turnContext: Promise<unknown> | undefined;
+    let speechEnabled = metadata.speechEnabled;
+    let spokenCharacters = 0;
+    let chargedSpeechCredits = 0;
+    let usageQueue = Promise.resolve();
+    let creditFailure = false;
+    const endForBilling = async (error: unknown) => {
+      if (error instanceof InsufficientCreditsError) {
+        creditFailure = true;
+        await ctx.room.localParticipant
+          ?.setAttributes({ "codaloud.voice.error": "credits" })
+          .catch(() => {});
+      }
+      ctx.shutdown("Voice credits exhausted or billing unavailable");
+    };
+    const meter = (operation: () => Promise<unknown>) => {
+      usageQueue = usageQueue.then(operation).then(() => {}, endForBilling);
+    };
     const tts = new elevenlabs.TTS({
       apiKey: serverEnv.ELEVENLABS_API_KEY,
       voiceId: metadata.voiceId,
       model: "eleven_flash_v2_5",
       encoding: "pcm_22050",
+    });
+    tts.on("metrics_collected", (metrics) => {
+      if (!speechEnabled || metrics.cancelled || metrics.charactersCount <= 0)
+        return;
+      spokenCharacters += metrics.charactersCount;
+      const due = creditsForSpeech(spokenCharacters);
+      while (chargedSpeechCredits < due) {
+        const unit = chargedSpeechCredits++;
+        meter(() =>
+          chargeCredits(
+            metadata.participantIdentity,
+            `voice-tts:${ctx.job.id}:${unit}`,
+            1,
+            "Voice speech · 150 characters",
+          ),
+        );
+      }
     });
     const session = new voice.AgentSession({
       stt: new deepgram.STT({
@@ -64,13 +104,11 @@ export default defineAgent({
           }
         },
         {
-          context: () => {
-            const captured = turnContext ?? rpc("codaloud.voice.context", {});
-            turnContext = undefined;
-            return captured;
-          },
+          // One capture per model turn; late speech events must not replace it.
+          context: () => rpc("codaloud.voice.context", {}),
           rpc,
         },
+        metadata.participantIdentity,
       ),
       tts,
       // Local Silero VAD is the Agents 1.9 default. No paid turn detector is used.
@@ -111,25 +149,21 @@ export default defineAgent({
     };
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, announce);
     session.on(voice.AgentSessionEventTypes.UserStateChanged, announce);
-    session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
-      // Capture at speech onset, before endpointing or model inference can yield
-      // to a tab/focus change. A manually started turn already owns its snapshot.
-      if (event.newState === "speaking" && !turnContext) {
-        turnContext = rpc("codaloud.voice.context", {});
-        void turnContext.catch(() => {});
-      }
-    });
     const timer = setTimeout(
       () => ctx.shutdown("Voice session time limit"),
       voiceSessionDurationMs,
     );
     let joinTimer: ReturnType<typeof setTimeout> | undefined;
+    let minuteTimer: ReturnType<typeof setInterval> | undefined;
     ctx.addShutdownCallback(async () => {
       clearTimeout(timer);
       clearTimeout(joinTimer);
+      clearInterval(minuteTimer);
+      await usageQueue;
       await session.close();
     });
     session.on(voice.AgentSessionEventTypes.Error, () => {
+      if (creditFailure) return;
       void ctx.room.localParticipant
         ?.setAttributes({ "codaloud.voice.error": "unavailable" })
         .catch(() => {})
@@ -167,14 +201,9 @@ export default defineAgent({
       session,
       metadata.participantIdentity,
     );
-    ctx.room.localParticipant!.registerRpcMethod(voiceControlMethod, (data) => {
-      if (
-        data.callerIdentity === metadata.participantIdentity &&
-        ["start", "hands-free"].includes(JSON.parse(data.payload).action)
-      )
-        turnContext = undefined;
-      return handleControl(data.callerIdentity, data.payload);
-    });
+    ctx.room.localParticipant!.registerRpcMethod(voiceControlMethod, (data) =>
+      handleControl(data.callerIdentity, data.payload),
+    );
     ctx.room.localParticipant!.registerRpcMethod(
       "codaloud.voice.preferences",
       async (data) => {
@@ -186,6 +215,7 @@ export default defineAgent({
         const preferences = voicePreferencesSchema.parse(
           JSON.parse(data.payload),
         );
+        speechEnabled = preferences.speechEnabled;
         session.output.setAudioEnabled(preferences.speechEnabled);
         tts.updateOptions({ voiceId: preferences.voiceId });
         return "ok";
@@ -224,7 +254,27 @@ export default defineAgent({
     );
     void ctx
       .waitForParticipant(metadata.participantIdentity)
-      .then(() => clearTimeout(joinTimer))
-      .catch(() => ctx.shutdown("Voice participant unavailable"));
+      .then(async () => {
+        clearTimeout(joinTimer);
+        let minute = 0;
+        const chargeMinute = async () => {
+          await chargeCredits(
+            metadata.participantIdentity,
+            `voice-minute:${ctx.job.id}:${minute}`,
+            3,
+            `Voice connection · minute ${minute + 1}`,
+          );
+          minute++;
+        };
+        await chargeMinute();
+        minuteTimer = setInterval(() => {
+          meter(chargeMinute);
+        }, 60_000);
+      })
+      .catch(async (error) => {
+        if (error instanceof InsufficientCreditsError)
+          await endForBilling(error);
+        else ctx.shutdown("Voice participant unavailable");
+      });
   },
 });

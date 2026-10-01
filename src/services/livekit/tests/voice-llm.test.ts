@@ -1,6 +1,16 @@
 import { expect, it, vi } from "vitest";
 import { initializeLogger, llm } from "@livekit/agents";
 import { VoiceLanguageModel } from "../voice-llm";
+vi.mock("@/features/billing/server/billing-service", () => ({
+  chargeCredits: vi.fn(),
+  requireAvailableCredits: vi.fn(),
+  InsufficientCreditsError: class extends Error {},
+}));
+import {
+  chargeCredits,
+  InsufficientCreditsError,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
 const mocks = vi.hoisted(() => ({
   reply: vi.fn(),
   edit: vi.fn(),
@@ -14,6 +24,94 @@ vi.mock("@/services/ai/inline-intent", () => ({
   classifyInlineIntent: mocks.classify,
 }));
 initializeLogger({ pretty: false, level: "silent" });
+it("reports exhausted credits to the inline editor instead of failing the voice provider", async () => {
+  vi.mocked(requireAvailableCredits).mockRejectedValueOnce(
+    new InsufficientCreditsError(),
+  );
+  const rpc = vi.fn(async () => ({ ok: true }));
+  const chat = new llm.ChatContext();
+  chat.addMessage({ role: "user", content: "Edit this function" });
+  const stream = new VoiceLanguageModel("room", undefined, {
+    context: async () => ({
+      id: "inline",
+      projectId: "p",
+      branch: "main",
+      mode: "quick-edit",
+      openFiles: [],
+      openFilesTruncated: false,
+      activeFile: {
+        path: "a.ts", documentKey: "doc", revision: 1,
+        from: 0, to: 0, before: "", selected: "", after: "",
+        selectionTruncated: false,
+      },
+    }),
+    rpc,
+  }, "owner").chat({ chatCtx: chat });
+  for await (const _ of stream) { /* drain */ }
+  expect(rpc).toHaveBeenCalledWith("codaloud.voice.suggestion", {
+    id: "inline",
+    type: "error",
+    message: expect.stringMatching(/credits.*(upgrade|add)/i),
+  });
+  stream.close();
+});
+it("reports a credit charge rejected after generating an inline edit", async () => {
+  mocks.classify.mockResolvedValueOnce("edit");
+  vi.mocked(chargeCredits).mockRejectedValueOnce(new InsufficientCreditsError());
+  mocks.edit.mockImplementationOnce(
+    async (_messages, _instruction, id, send, _signal, _target, onComplete) => {
+      await send({ id, type: "start" });
+      await onComplete({ inputTokens: 100, outputTokens: 100 });
+    },
+  );
+  const rpc = vi.fn(async () => ({ ok: true }));
+  const chat = new llm.ChatContext();
+  chat.addMessage({ role: "user", content: "Edit this function" });
+  const stream = new VoiceLanguageModel("room", undefined, {
+    context: async () => ({
+      id: "inline", projectId: "p", branch: "main", mode: "quick-edit",
+      openFiles: [], openFilesTruncated: false,
+      activeFile: {
+        path: "a.ts", documentKey: "doc", revision: 1,
+        from: 0, to: 0, before: "", selected: "", after: "",
+        selectionTruncated: false,
+      },
+    }),
+    rpc,
+  }, "owner").chat({ chatCtx: chat });
+  for await (const _ of stream) { /* drain */ }
+  expect(rpc).toHaveBeenLastCalledWith("codaloud.voice.suggestion", {
+    id: "inline", type: "error",
+    message: expect.stringMatching(/credits.*(upgrade|add)/i),
+  });
+  stream.close();
+});
+it("reports a credit charge rejected after a conversational voice reply", async () => {
+  vi.mocked(chargeCredits).mockRejectedValueOnce(new InsufficientCreditsError());
+  mocks.reply.mockImplementationOnce(
+    (_messages, _id, _signal, _tools, _context, onComplete) =>
+      (async function* () {
+        await onComplete("openai/gpt-5.4-mini", { inputTokens: 100, outputTokens: 100 });
+        yield "Answer";
+      })(),
+  );
+  const rpc = vi.fn(async () => ({ ok: true }));
+  const chat = new llm.ChatContext();
+  chat.addMessage({ role: "user", content: "Explain this" });
+  const stream = new VoiceLanguageModel("room", undefined, {
+    context: async () => ({
+      id: "answer", projectId: "p", branch: "main", mode: "agent",
+      openFiles: [], openFilesTruncated: false, activeFile: null,
+    }),
+    rpc,
+  }, "owner").chat({ chatCtx: chat });
+  for await (const _ of stream) { /* drain */ }
+  expect(rpc).toHaveBeenLastCalledWith("codaloud.voice.suggestion", {
+    id: "answer", type: "error",
+    message: expect.stringMatching(/credits.*(upgrade|add)/i),
+  });
+  stream.close();
+});
 it("generates an inline edit directly without asking the conversation model to call a tool", async () => {
   mocks.reply.mockClear();
   mocks.edit.mockImplementation(async (_messages, _instruction, id, send) => {
@@ -56,6 +154,8 @@ it("generates an inline edit directly without asking the conversation model to c
     expect.any(Function),
     expect.any(AbortSignal),
     { source: "", offset: 0, caret: 0 },
+    undefined,
+    "openai/gpt-5.4-mini",
   );
   expect(rpc).toHaveBeenLastCalledWith("codaloud.voice.suggestion", {
     id: "inline",
@@ -205,6 +305,8 @@ it("adapts a committed text conversation to LiveKit response chunks", async () =
     [{ role: "user", content: "Hi" }],
     "room",
     expect.any(AbortSignal),
+    undefined,
+    undefined,
     undefined,
   );
   stream.close();

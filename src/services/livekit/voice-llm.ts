@@ -10,6 +10,14 @@ import {
 } from "@/services/ai/inline-voice-tools";
 import { classifyInlineIntent } from "@/services/ai/inline-intent";
 import { voiceContextSchema } from "@/features/voice/schemas";
+import { creditsForModelUsage } from "@/features/billing/credit-cost";
+import { defaultInlineModel } from "@/features/billing/model-catalog";
+import { billingRequiredMessage } from "@/features/billing/client-error";
+import {
+  chargeCredits,
+  InsufficientCreditsError,
+  requireAvailableCredits,
+} from "@/features/billing/server/billing-service";
 
 export class VoiceLanguageModel extends llm.LLM {
   constructor(
@@ -24,6 +32,7 @@ export class VoiceLanguageModel extends llm.LLM {
       context: () => Promise<unknown>;
       rpc: (method: string, payload: unknown) => Promise<unknown>;
     },
+    private readonly userId?: string,
   ) {
     super();
   }
@@ -97,6 +106,7 @@ export class VoiceLanguageModel extends llm.LLM {
             },
           }
         : undefined,
+      this.userId,
     );
   };
 }
@@ -111,6 +121,7 @@ class VoiceLanguageModelStream extends llm.LLMStream {
       context: () => Promise<unknown>;
       rpc: (method: string, payload: unknown) => Promise<unknown>;
     },
+    private readonly userId?: string,
   ) {
     super(model, options);
   }
@@ -129,18 +140,31 @@ class VoiceLanguageModelStream extends llm.LLMStream {
     const context = this.workspace
       ? voiceContextSchema.parse(await this.workspace.context())
       : undefined;
-    const tools =
-      context && this.workspace
-        ? {
-            ...(context.projectId.startsWith("draft:") ? {} : this.tools),
-            ...createInlineVoiceTools(context, async (method, payload) => {
-              if (this.abortController.signal.aborted)
-                throw new Error("Request cancelled.");
-              return this.workspace!.rpc(method, payload);
-            }),
-          }
-        : this.tools;
     try {
+      const billing = this.userId
+        ? await requireAvailableCredits(
+            this.userId,
+            context?.mode === "quick-edit" ? 2 : 1,
+          )
+        : null;
+      const inlineModel =
+        billing?.tier === "free"
+          ? defaultInlineModel
+          : (context?.inlineModel ?? defaultInlineModel);
+      const tools =
+        context && this.workspace
+          ? {
+              ...createInlineVoiceTools(context, async (method, payload) => {
+                if (this.abortController.signal.aborted)
+                  throw new Error("Request cancelled.");
+                return this.workspace!.rpc(method, payload);
+              }),
+              ...(context.projectId === "app" ||
+              context.projectId.startsWith("draft:")
+                ? {}
+                : this.tools),
+            }
+          : this.tools;
       if (context?.mode === "quick-edit" && this.workspace) {
         const instruction = messages.findLast(
           (message) => message.role === "user",
@@ -169,6 +193,17 @@ class VoiceLanguageModelStream extends llm.LLMStream {
             instruction,
             this.workspace.rpc,
             this.abortController.signal,
+            this.userId
+              ? async (usage) => {
+                  await chargeCredits(
+                    this.userId!,
+                    `voice-edit:${id}`,
+                    creditsForModelUsage(inlineModel, usage, 2),
+                    "Inline edit suggestion",
+                  );
+                }
+              : undefined,
+            inlineModel,
           );
           if (!this.abortController.signal.aborted)
             this.queue.put({
@@ -188,12 +223,33 @@ class VoiceLanguageModelStream extends llm.LLMStream {
             this.abortController.signal,
             tools,
             context,
+            this.userId
+              ? async (model, usage) => {
+                  await chargeCredits(
+                    this.userId!,
+                    `voice-reply:${id}`,
+                    creditsForModelUsage(model, usage, 1),
+                    "Voice AI reply",
+                  );
+                }
+              : undefined,
           )
         : createVoiceReply(
             messages,
             this.sessionId,
             this.abortController.signal,
             tools,
+            undefined,
+            this.userId
+              ? async (model, usage) => {
+                  await chargeCredits(
+                    this.userId!,
+                    `voice-reply:${id}`,
+                    creditsForModelUsage(model, usage, 1),
+                    "Voice AI reply",
+                  );
+                }
+              : undefined,
           );
       for await (const content of reply) {
         if (this.abortController.signal.aborted) break;
@@ -205,14 +261,17 @@ class VoiceLanguageModelStream extends llm.LLMStream {
           type: "answer",
         }).catch(() => {});
     } catch (error) {
+      const creditError = error instanceof InsufficientCreditsError;
+      const message = creditError
+        ? billingRequiredMessage
+        : context?.mode === "quick-edit" && error instanceof Error
+          ? error.message.slice(0, 1000)
+          : "Response interrupted. Cancel and try again.";
       const reported = context
         ? await this.workspace!.rpc("codaloud.voice.suggestion", {
             id: context.id,
             type: "error",
-            message:
-              context.mode === "quick-edit" && error instanceof Error
-                ? error.message.slice(0, 1000)
-                : "Response interrupted. Cancel and try again.",
+            message,
           }).then(
             () => true,
             () => false,
@@ -220,7 +279,7 @@ class VoiceLanguageModelStream extends llm.LLMStream {
         : false;
       if (
         reported &&
-        context?.mode === "quick-edit" &&
+        (context?.mode === "quick-edit" || creditError) &&
         !this.abortController.signal.aborted
       ) {
         // The inline request already holds the precise failure. Completing the
@@ -229,7 +288,9 @@ class VoiceLanguageModelStream extends llm.LLMStream {
           id,
           delta: {
             role: "assistant",
-            content: "I couldn’t finish that edit. Please try again.",
+            content: creditError
+              ? billingRequiredMessage
+              : "I couldn’t finish that edit. Please try again.",
           },
         });
         return;

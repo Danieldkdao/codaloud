@@ -9,10 +9,19 @@ import { voiceAgentName, voiceControlMethod } from "@/features/voice/constants";
 import type { ConnectVoice, VoiceConnection } from "@/features/voice/types";
 import { AudioSession } from "@livekit/react-native";
 import { mediaDevices } from "@livekit/react-native-webrtc";
-import { Room, RoomEvent, Track, type RemoteParticipant } from "livekit-client";
+import {
+  Room,
+  RoomEvent,
+  RpcError,
+  Track,
+  type RemoteParticipant,
+  type RpcInvocationData,
+} from "livekit-client";
 import { z } from "zod";
 import { inlineSession } from "@/features/voice/inline-session";
+import { executeCommandAction } from "@/features/voice/command-actions";
 import { inlineEventSchema } from "@/features/voice/schemas";
+import { billingRequiredMessage } from "@/features/billing/client-error";
 import {
   encodeVoicePayload,
   getVoiceContext,
@@ -26,6 +35,33 @@ import {
 } from "./voice-transcripts";
 
 configureVoiceAudio();
+
+const withWorkspaceRpcErrors =
+  (handler: (data: RpcInvocationData) => Promise<string>) =>
+  async (data: RpcInvocationData) => {
+    try {
+      return await handler(data);
+    } catch (error) {
+      if (error instanceof RpcError) throw error;
+      const code =
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        typeof error.code === "string"
+          ? error.code
+          : "WORKSPACE_ERROR";
+      // LiveKit replaces ordinary exceptions with an opaque application error.
+      throw new RpcError(
+        2000,
+        error instanceof z.ZodError
+          ? "Invalid voice tool arguments. Check the tool schema and try again."
+          : error instanceof Error
+            ? error.message
+            : "Workspace request failed.",
+        JSON.stringify({ code }),
+      );
+    }
+  };
 
 // Permission prompts and native audio setup cannot be aborted halfway through.
 // Keep a single native audio owner, including teardown, across mounted screens.
@@ -82,6 +118,7 @@ export const connectNativeVoice: ConnectVoice = (
     const disconnect = () =>
       (disconnecting ??= room.disconnect().catch(() => {}));
     let controls = Promise.resolve();
+    const projectScope = () => options?.getProjectId?.() ?? options?.projectId;
     const request = new AbortController();
     const abort = () => {
       request.abort();
@@ -124,8 +161,13 @@ export const connectNativeVoice: ConnectVoice = (
         if (participant.attributes["codaloud.voice.ready"] === "true")
           agentIdentity = participant.identity;
         if (participant.identity !== agentIdentity) continue;
-        if (participant.attributes["codaloud.voice.error"])
-          events.onError("Failed to generate response. Please try again.");
+        const failure = participant.attributes["codaloud.voice.error"];
+        if (failure)
+          events.onError(
+            failure === "credits"
+              ? billingRequiredMessage
+              : "Failed to generate response. Please try again.",
+          );
         const state = participant.attributes["lk.agent.state"];
         if (
           state === "listening" ||
@@ -169,39 +211,58 @@ export const connectNativeVoice: ConnectVoice = (
           data.payload.length > 12000
         )
           throw new Error("Workspace unavailable.");
-        return options.projectId;
+        return options.getProjectId
+          ? (inlineSession.getSnapshot()?.projectId ?? projectScope()!)
+          : options.projectId;
       };
       let beginning: Promise<unknown> | undefined;
-      room.registerRpcMethod("codaloud.voice.context", async (data) => {
-        const projectId = authorizeWorkspace(data);
-        if (beginning) await beginning;
-        const current = inlineSession.getSnapshot();
-        if (
-          turnClaimed ||
-          !current ||
-          current.projectId !== projectId ||
-          ["answered", "accepted", "error"].includes(current.status)
-        ) {
-          beginning ??= inlineSession.begin(
-            projectId,
-            options?.draftOnly ? "quick-edit" : undefined,
-          ).finally(() => {
-            beginning = undefined;
-          });
-          await beginning;
-        }
-        const request = inlineSession.getSnapshot();
-        if (!request || request.status !== "listening")
-          throw new Error("Finish or cancel the current suggestion first.");
-        ownedRequestId = request.id;
-        turnClaimed = true;
-        return encodeVoicePayload(getVoiceContext(request));
-      });
-      room.registerRpcMethod("codaloud.voice.read", async (data) =>
-        encodeVoicePayload(
-          await readVoiceWorkspace(
-            authorizeWorkspace(data),
-            JSON.parse(data.payload),
+      room.registerRpcMethod(
+        "codaloud.voice.context",
+        withWorkspaceRpcErrors(async (data) => {
+          authorizeWorkspace(data);
+          const projectId = projectScope()!;
+          if (beginning) await beginning;
+          const current = inlineSession.getSnapshot();
+          if (
+            turnClaimed ||
+            !current ||
+            current.projectId !== projectId ||
+            ["answered", "accepted", "error"].includes(current.status)
+          ) {
+            beginning ??= inlineSession
+              .begin(projectId, options?.draftOnly ? "quick-edit" : undefined)
+              .finally(() => {
+                beginning = undefined;
+              });
+            await beginning;
+          }
+          const request = inlineSession.getSnapshot();
+          if (!request || request.status !== "listening")
+            throw new Error("Finish or cancel the current suggestion first.");
+          ownedRequestId = request.id;
+          turnClaimed = true;
+          return encodeVoicePayload(getVoiceContext(request));
+        }),
+      );
+      room.registerRpcMethod(
+        "codaloud.voice.read",
+        withWorkspaceRpcErrors(async (data) =>
+          encodeVoicePayload(
+            await readVoiceWorkspace(
+              authorizeWorkspace(data),
+              JSON.parse(data.payload),
+            ),
+          ),
+        ),
+      );
+      room.registerRpcMethod(
+        "codaloud.voice.action",
+        withWorkspaceRpcErrors(async (data) =>
+          encodeVoicePayload(
+            await executeCommandAction(
+              authorizeWorkspace(data),
+              JSON.parse(data.payload),
+            ),
           ),
         ),
       );
@@ -226,7 +287,7 @@ export const connectNativeVoice: ConnectVoice = (
         return JSON.stringify({ ok: true });
       });
       room.registerRpcMethod("codaloud.plan.propose", async (data) => {
-        authorizeWorkspace(data);
+        const projectId = authorizeWorkspace(data);
         if (options?.draftOnly)
           throw new Error("Draft voice can edit only the open draft.");
         if (
@@ -247,13 +308,13 @@ export const connectNativeVoice: ConnectVoice = (
         const request = inlineSession.getSnapshot();
         if (
           request?.id !== input.requestId ||
-          request.projectId !== options.projectId ||
+          request.projectId !== projectId ||
           request.status !== "listening"
         )
           throw new Error("Request cancelled or already completed.");
         return JSON.stringify(
           await agentPlans.propose(
-            options.projectId,
+            projectId,
             input.instruction,
             `${roomName}:${input.id}`,
             input.title,
@@ -390,7 +451,7 @@ export const connectNativeVoice: ConnectVoice = (
       const announceTasks = () => {
         for (const record of agentTasks.getSnapshot()) {
           if (
-            record.request.projectId !== options?.projectId ||
+            record.request.projectId !== projectScope() ||
             existing.has(record.event.id) ||
             announced.has(record.event.id) ||
             !["completed", "failed"].includes(record.event.status) ||
@@ -433,7 +494,7 @@ export const connectNativeVoice: ConnectVoice = (
               snapshot?.status !== "listening"
             )
               await inlineSession.begin(
-                options.projectId,
+                projectScope()!,
                 options.draftOnly ? "quick-edit" : undefined,
               );
             // Leave ownedRequestId and turnClaimed alone while a turn is in

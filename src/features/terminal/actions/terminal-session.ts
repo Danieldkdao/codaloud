@@ -1,5 +1,6 @@
 import { randomUUID } from "expo-crypto";
 import { z } from "zod";
+import { terminalDenialReasons } from "../constants";
 import {
   appendTerminalCommand,
   appendTerminalOutput,
@@ -382,7 +383,7 @@ export class ProjectTerminalSession {
             } else if (message.type === "billing") {
               const denial = z
                 .object({
-                  reason: z.enum(["plan", "credits"]),
+                  reason: z.enum(terminalDenialReasons),
                   message: z.string().min(1).max(500),
                 })
                 .parse(message.data);

@@ -83,7 +83,21 @@ vi.mock("@/features/projects/local/access", () => ({
   }),
 }));
 vi.mock("@/features/projects/local/file-paths", () => ({
-  readLocalFilePaths: async () => [...mocks.local.keys()],
+  readLocalFilePaths: async (
+    _projectId: string,
+    _directory: unknown,
+    options?: { visitDirectory?: (path: string) => boolean },
+  ) =>
+    [...mocks.local.keys()].filter((path) => {
+      const parts = path.split("/");
+      return parts
+        .slice(0, -1)
+        .every(
+          (_, index) =>
+            options?.visitDirectory?.(parts.slice(0, index + 1).join("/")) !==
+            false,
+        );
+    }),
 }));
 vi.mock("@/features/projects/lib/workspace-paths", () => ({
   projectWorkspaceDirectory: () => "root",
@@ -183,6 +197,18 @@ beforeEach(() => {
   mocks.download.mockImplementation(async (_project, _device, _sandbox, path) =>
     mocks.remote.get(path),
   );
+});
+
+it("syncs an explicitly selected file through excluded ancestor directories on older binaries", async () => {
+  mocks.allowLargeSync = true;
+  mocks.syncAllowedPaths = "node_modules/pkg/file.js";
+  mocks.local.set("node_modules/pkg/file.js", bytes("selected"));
+  mocks.local.set("node_modules/pkg/other.js", bytes("excluded"));
+  mocks.local.set("node_modules/other/file.js", bytes("excluded"));
+  mocks.local.set(".git/config", bytes("reserved"));
+  const result = await syncProjectWorkspace("selected-nested-file");
+  expect(result.uploadedPaths).toEqual(["node_modules/pkg/file.js"]);
+  expect([...mocks.remote.keys()]).toEqual(["node_modules/pkg/file.js"]);
 });
 it("rejects a device edit during hashing before publishing cache hints or transfers", async () => {
   const project = "project-hash-race";

@@ -1,6 +1,9 @@
 import { hashWorkspaceManifest } from "../lib/manifest-hash";
 import { decodeSyncDownload } from "../lib/sync-download";
-import { terminalRequestTimeoutMs } from "../constants";
+import {
+  terminalRequestTimeoutMs,
+  type TerminalDenialReason,
+} from "../constants";
 import { fetch } from "expo/fetch";
 import { z } from "zod";
 import { getDeviceId } from "@/lib/device-id";
@@ -22,7 +25,7 @@ export type ManifestDiagnostics = {
   serverReused?: number;
 };
 
-export type TerminalAccessRequirement = "plan" | "credits" | "billing";
+export type TerminalAccessRequirement = TerminalDenialReason | "billing";
 
 export class TerminalAccessError extends Error {
   readonly name = "TerminalAccessError";

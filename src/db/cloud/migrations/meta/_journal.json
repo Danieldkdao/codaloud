@@ -15,6 +15,13 @@
       "when": 1790709906874,
       "tag": "0001_real_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790910099392,
+      "tag": "0002_credit-topups",
+      "breakpoints": true
     }
   ]
 }

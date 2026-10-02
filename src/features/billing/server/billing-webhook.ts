@@ -2,7 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { serverEnv } from "@/data/env/server";
 import { creditsForTopup } from "../constants";
-import { grantVerifiedTopup, readBillingStatus } from "./billing-service";
+import {
+  grantVerifiedTopup,
+  readBillingStatus,
+  refundVerifiedTopup,
+  transferPurchasedCredits,
+} from "./billing-service";
 
 const webhookSchema = z.object({
   event: z.object({
@@ -10,10 +15,13 @@ const webhookSchema = z.object({
     type: z.string().min(1),
     app_user_id: z.uuid().optional().nullable(),
     product_id: z.string().optional().nullable(),
+    transaction_id: z.string().min(1).max(255).optional().nullable(),
+    store: z.string().min(1).max(100).optional().nullable(),
     transferred_from: z.array(z.string().max(255)).max(100).optional(),
     transferred_to: z.array(z.string().max(255)).max(100).optional(),
   }),
 });
+export type WebhookSchema = z.infer<typeof webhookSchema>;
 
 const authorized = (provided: string | null, expected: string | undefined) => {
   if (!provided || !expected) return false;
@@ -48,15 +56,40 @@ export const handleBillingWebhook = async (request: Request) => {
       );
       if (users.size === 0)
         return Response.json({ message: "Invalid customer" }, { status: 400 });
+      const sources = [...new Set(event.transferred_from ?? [])].filter(
+        (id) => z.uuid().safeParse(id).success,
+      );
+      const destinations = [...new Set(event.transferred_to ?? [])].filter(
+        (id) => z.uuid().safeParse(id).success,
+      );
+      const receiving = destinations.filter((id) => !sources.includes(id));
+      const candidates = receiving.length ? receiving : destinations;
+      if (candidates.length !== 1)
+        throw new Error("Transfer destination is unavailable or ambiguous");
+      const destination = candidates[0];
       for (const userId of users) await readBillingStatus(userId);
+      await transferPurchasedCredits(
+        event.id,
+        sources.filter((id) => id !== destination),
+        destination,
+      );
       return Response.json({ received: true });
     }
     if (!event.app_user_id)
       return Response.json({ message: "Invalid customer" }, { status: 400 });
-    if (event.type === "NON_RENEWING_PURCHASE" && event.product_id) {
-      const credits = creditsForTopup(event.product_id);
-      if (credits)
-        await grantVerifiedTopup(event.app_user_id, event.id, credits);
+    const credits = event.product_id ? creditsForTopup(event.product_id) : null;
+    if (
+      credits &&
+      (event.type === "NON_RENEWING_PURCHASE" || event.type === "CANCELLATION")
+    ) {
+      if (!event.store || !event.transaction_id)
+        return Response.json({ message: "Invalid purchase" }, { status: 400 });
+      const purchaseKey = JSON.stringify([event.store, event.transaction_id]);
+      const update =
+        event.type === "NON_RENEWING_PURCHASE"
+          ? grantVerifiedTopup
+          : refundVerifiedTopup;
+      await update(event.app_user_id, event.id, credits, purchaseKey);
     } else if (
       [
         "INITIAL_PURCHASE",

@@ -1,3 +1,6 @@
+export const billingPeriods = ["monthly", "yearly"] as const;
+export type BillingPeriod = (typeof billingPeriods)[number];
+
 export const creditsForTopup = (productId: string): number | null => {
   switch (productId) {
     case "codaloud.credits.100":

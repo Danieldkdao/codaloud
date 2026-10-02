@@ -24,6 +24,7 @@ import {
 } from "@/features/projects/lib/workspace-paths";
 import {
   isSyncablePath,
+  isSafeWorkspacePath,
   isReservedSyncRule,
   planWorkspaceSync,
   type WorkspaceManifest,
@@ -266,7 +267,11 @@ const hashLocalFiles = async (
   await loadHashCache(projectId);
   const paths = (
     await readLocalFilePaths(projectId, undefined, {
-      visitDirectory: (path) => isSyncablePath(path, allowedPaths),
+      visitDirectory: (path) =>
+        isSyncablePath(path, allowedPaths) ||
+        (isSafeWorkspacePath(path) &&
+          !isReservedSyncRule(path) &&
+          allowedPaths.some((rule) => rule.startsWith(`${path}/`))),
       maxEntries: maxSyncedFiles * 2,
       scanTimeoutMs: 60_000,
     })

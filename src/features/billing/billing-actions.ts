@@ -1,9 +1,11 @@
 import { authClient } from "@/lib/auth/auth-client";
 import { fetchBase } from "@/lib/utils";
 import { z } from "zod";
+import { billingTiers } from "@/db/cloud/shared";
+import { billingPeriods } from "./constants";
 
 const billingStatusSchema = z.object({
-  tier: z.enum(["free", "tier_1", "tier_2"]),
+  tier: z.enum(billingTiers),
   monthlyCredits: z.number().int().nonnegative(),
   purchasedCredits: z.number().int().nonnegative(),
   monthlyAllowance: z.number().int().positive(),
@@ -15,7 +17,7 @@ const billingStatusSchema = z.object({
   paidThrough: z.string().nullable(),
   managementUrl: z.string().nullable(),
   willRenew: z.boolean(),
-  billingPeriod: z.enum(["monthly", "yearly"]).nullable(),
+  billingPeriod: z.enum(billingPeriods).nullable(),
   history: z.array(
     z.object({
       id: z.string(),

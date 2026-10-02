@@ -99,6 +99,33 @@ it("streams selected large files and detects deletions without returning file co
   expect(call(["large.bin"]).data.manifest).toEqual({});
 });
 
+it.each(["link", "link/child.txt"])(
+  "omits selected symlinks without preventing unrelated files from syncing: %s",
+  (rule) => {
+    const outside = join(base, "outside");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "child.txt"), "private");
+    writeFileSync(join(root, "safe.txt"), "safe");
+    symlinkSync(outside, join(root, "link"));
+    expect(call([rule])).toMatchObject({
+      ok: true,
+      data: { manifest: { "safe.txt": hash("safe") } },
+    });
+    expect(call([rule]).data.manifest).toEqual({ "safe.txt": hash("safe") });
+  },
+);
+
+it.each([
+  "../outside",
+  "/outside",
+  "a/../outside",
+  "a//b",
+  ".git/config",
+  "a\\b",
+])("still rejects unsafe selected paths: %s", (rule) =>
+  expect(call([rule]).ok).toBe(false),
+);
+
 it("treats malformed individual cache entries as misses", () => {
   writeFileSync(join(root, "a.txt"), "hello");
   writeFileSync(

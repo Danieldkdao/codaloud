@@ -1,5 +1,6 @@
 import { serverEnv } from "@/data/env/server";
 import type { BillingTier } from "./billing-rules";
+import type { BillingPeriod } from "./constants";
 
 type Subscription = {
   tier: Exclude<BillingTier, "free">;
@@ -8,7 +9,7 @@ type Subscription = {
   expiresAt: string;
   managementUrl: string | null;
   willRenew: boolean;
-  billingPeriod: "monthly" | "yearly";
+  billingPeriod: BillingPeriod;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

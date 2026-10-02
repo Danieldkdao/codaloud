@@ -1,11 +1,13 @@
 import { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import {
   BillingAccountTable,
   CreditEntryTable,
+  CreditTopupTable,
   UserTable,
 } from "@/db/cloud/schema";
 
@@ -31,14 +33,14 @@ const previous = "00000000-0000-4000-8000-000000000001";
 const next = "00000000-0000-4000-8000-000000000002";
 const third = "00000000-0000-4000-8000-000000000003";
 const purchase = JSON.stringify(["APP_STORE", "purchase-1"]);
-const balance = async (userId: string) => {
-  const [account] = await database
+const balance = async (userId: string, billingDatabase = database) => {
+  const [existingBillingAccount] = await billingDatabase
     .select()
     .from(BillingAccountTable)
     .where(eq(BillingAccountTable.userId, userId));
   return {
-    monthly: account.monthlyCredits,
-    purchased: account.purchasedCredits,
+    monthly: existingBillingAccount.monthlyCredits,
+    purchased: existingBillingAccount.purchasedCredits,
   };
 };
 
@@ -75,12 +77,14 @@ it("moves only purchased balances and records balanced transfer entries once", a
   );
   expect(await balance(previous)).toEqual({ monthly: 50, purchased: 0 });
   expect(await balance(next)).toEqual({ monthly: 50, purchased: 300 });
-  const entries = await database
+  const existingTransferCreditEntries = await database
     .select()
     .from(CreditEntryTable)
     .where(eq(CreditEntryTable.kind, "transfer"));
   expect(
-    entries.map((entry) => entry.purchasedDelta).sort((a, b) => a - b),
+    existingTransferCreditEntries
+      .map((entry) => entry.purchasedDelta)
+      .sort((a, b) => a - b),
   ).toEqual([-100, 100]);
   await grantVerifiedTopup(
     previous,
@@ -120,9 +124,15 @@ it("deduplicates purchase events by store transaction across account IDs", async
     grantVerifiedTopup(previous, "evt-1", 100, purchase),
     grantVerifiedTopup(next, "evt-duplicate", 100, purchase),
   ]);
-  const accounts = await database.select().from(BillingAccountTable);
+  const existingBillingAccounts = await database
+    .select()
+    .from(BillingAccountTable);
   expect(
-    accounts.reduce((total, account) => total + account.purchasedCredits, 0),
+    existingBillingAccounts.reduce(
+      (total, existingBillingAccount) =>
+        total + existingBillingAccount.purchasedCredits,
+      0,
+    ),
   ).toBe(100);
 });
 
@@ -138,12 +148,12 @@ it("removes a refunded grant once without altering monthly credits", async () =>
   await refundVerifiedTopup(previous, "refund-duplicate", 100, purchase);
   await grantVerifiedTopup(previous, "purchase-retry", 100, purchase);
   expect(await balance(previous)).toEqual({ monthly: 50, purchased: 200 });
-  const entries = await database
+  const existingRefundCreditEntries = await database
     .select()
     .from(CreditEntryTable)
     .where(eq(CreditEntryTable.kind, "refund"));
-  expect(entries).toHaveLength(1);
-  expect(entries[0].purchasedDelta).toBe(-100);
+  expect(existingRefundCreditEntries).toHaveLength(1);
+  expect(existingRefundCreditEntries[0].purchasedDelta).toBe(-100);
 });
 
 it("refunds the current owner after successive transfers even with the original user ID", async () => {
@@ -191,6 +201,88 @@ it("does not grant a legacy event twice when it acquires transaction metadata", 
   await grantVerifiedTopup(previous, "legacy", 100, purchase);
   await refundVerifiedTopup(previous, "refund-1", 100, purchase);
   expect((await balance(previous)).purchased).toBe(0);
+});
+
+it("imports an installed legacy grant and preserves its event ID and current owner on purchase replay", async () => {
+  const legacyPg = new PGlite();
+  const legacyDatabase = drizzle(legacyPg);
+  const legacyEventId = "evt:legacy_0002";
+  const migrations = readMigrationFiles({
+    migrationsFolder: "src/db/cloud/migrations",
+  });
+  try {
+    for (const migration of migrations.slice(0, 2))
+      await legacyPg.exec(migration.sql.join("\n"));
+    await legacyDatabase.insert(UserTable).values(
+      [previous, next].map((id) => ({
+        id,
+        name: "Legacy user",
+        email: `${id}@test.invalid`,
+      })),
+    );
+    const anchor = new Date("2026-09-01T00:00:00.000Z");
+    await legacyDatabase.insert(BillingAccountTable).values({
+      userId: previous,
+      accountAnchor: anchor,
+      cycleAnchor: anchor,
+      purchasedCredits: 20,
+    });
+    await legacyDatabase.insert(CreditEntryTable).values({
+      userId: previous,
+      key: `revenuecat:${legacyEventId}`,
+      kind: "topup",
+      purchasedDelta: 100,
+      description: "100 purchased credits",
+    });
+
+    await legacyPg.exec(migrations[2].sql.join("\n"));
+    const [existingLegacyTopup] = await legacyDatabase
+      .select()
+      .from(CreditTopupTable);
+    expect(existingLegacyTopup).toMatchObject({
+      key: `legacy:${legacyEventId}`,
+      eventId: legacyEventId,
+      userId: previous,
+      credits: 100,
+      refundedAt: null,
+    });
+    expect(await balance(previous, legacyDatabase)).toEqual({
+      monthly: 50,
+      purchased: 20,
+    });
+
+    mocks.db = legacyDatabase;
+    await transferPurchasedCredits("legacy-transfer", [previous], next);
+    await grantVerifiedTopup(previous, legacyEventId, 100, purchase);
+    await grantVerifiedTopup(previous, legacyEventId, 100, purchase);
+    const existingReplayedTopups = await legacyDatabase
+      .select()
+      .from(CreditTopupTable);
+    expect(existingReplayedTopups).toHaveLength(1);
+    expect(existingReplayedTopups[0]).toMatchObject({
+      key: purchase,
+      eventId: legacyEventId,
+      userId: next,
+      credits: 100,
+      refundedAt: null,
+    });
+    expect(await balance(previous, legacyDatabase)).toEqual({
+      monthly: 50,
+      purchased: 0,
+    });
+    expect(await balance(next, legacyDatabase)).toEqual({
+      monthly: 50,
+      purchased: 20,
+    });
+    await refundVerifiedTopup(previous, "legacy-refund", 100, purchase);
+    expect(await balance(next, legacyDatabase)).toEqual({
+      monthly: 50,
+      purchased: 0,
+    });
+  } finally {
+    mocks.db = database;
+    await legacyPg.close();
+  }
 });
 
 it("reconciles a legacy purchase replay after a refund and transfer", async () => {

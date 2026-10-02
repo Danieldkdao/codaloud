@@ -1,8 +1,9 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "@/db/cloud/db";
 import {
   BillingAccountTable,
   CreditEntryTable,
+  CreditTopupTable,
   UserTable,
 } from "@/db/cloud/schema";
 import {
@@ -319,17 +320,63 @@ export const grantVerifiedTopup = async (
   userId: string,
   eventId: string,
   credits: number,
+  purchaseKey = `legacy:${eventId}`,
 ) => {
   if (!Number.isSafeInteger(credits) || credits <= 0)
     throw new Error("Invalid top-up");
   await db.transaction(async (tx) => {
+    await lockTopups(tx);
+    const existingTopups = await tx
+      .select()
+      .from(CreditTopupTable)
+      .where(
+        or(
+          eq(CreditTopupTable.key, purchaseKey),
+          eq(CreditTopupTable.eventId, eventId),
+        ),
+      );
+    const existingPurchase = existingTopups.find(
+      (topup) => topup.key === purchaseKey,
+    );
+    const existingEvent = existingTopups.find(
+      (topup) => topup.eventId === eventId,
+    );
+    if (
+      existingEvent?.key === `legacy:${eventId}` &&
+      existingEvent.key !== purchaseKey
+    ) {
+      if (existingPurchase?.refundedAt) {
+        if (!existingEvent.refundedAt)
+          await reverseTopupCredits(tx, existingEvent, `reconcile:${eventId}`);
+        await tx
+          .delete(CreditTopupTable)
+          .where(eq(CreditTopupTable.key, purchaseKey));
+      }
+      await tx
+        .update(CreditTopupTable)
+        .set({
+          key: purchaseKey,
+          refundedAt: existingPurchase?.refundedAt ?? existingEvent.refundedAt,
+        })
+        .where(eq(CreditTopupTable.key, existingEvent.key));
+      return;
+    }
+    if (existingPurchase || existingEvent) {
+      return;
+    }
     const row = await lockedAccount(tx, userId);
     const before = toState(row);
     const key = `revenuecat:${eventId}`;
     const [existingEntry] = await tx
-      .select({ id: CreditEntryTable.id })
+      .select({ userId: CreditEntryTable.userId })
       .from(CreditEntryTable)
       .where(eq(CreditEntryTable.key, key));
+    await tx.insert(CreditTopupTable).values({
+      key: purchaseKey,
+      eventId,
+      userId: existingEntry?.userId ?? userId,
+      credits,
+    });
     if (existingEntry) return;
     const after = {
       ...before,
@@ -345,5 +392,119 @@ export const grantVerifiedTopup = async (
       after,
       `${credits} purchased credits`,
     );
+  });
+};
+
+const lockTopups = async (tx: DbTransaction) => {
+  // Serialize purchase ownership changes before locking individual balances.
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext('codaloud-credit-topups'))`,
+  );
+};
+
+const reverseTopupCredits = async (
+  tx: DbTransaction,
+  topup: typeof CreditTopupTable.$inferSelect,
+  eventId: string,
+) => {
+  const before = toState(await lockedAccount(tx, topup.userId));
+  const after = {
+    ...before,
+    purchasedCredits: Math.max(0, before.purchasedCredits - topup.credits),
+  };
+  await saveState(tx, topup.userId, after);
+  await tx.insert(CreditEntryTable).values({
+    userId: topup.userId,
+    key: `revenuecat:refund:${eventId}`,
+    kind: "refund",
+    purchasedDelta: after.purchasedCredits - before.purchasedCredits,
+    description: `${topup.credits} purchased credits refunded`,
+  });
+};
+
+export const transferPurchasedCredits = async (
+  eventId: string,
+  fromUserIds: readonly string[],
+  toUserId: string,
+) => {
+  const sources = [...new Set(fromUserIds)].filter((id) => id !== toUserId);
+  await db.transaction(async (tx) => {
+    await lockTopups(tx);
+    const key = `revenuecat:transfer:${eventId}`;
+    const [existingTransfer] = await tx
+      .select({ id: CreditEntryTable.id })
+      .from(CreditEntryTable)
+      .where(eq(CreditEntryTable.key, key));
+    if (existingTransfer) return;
+    const accounts = new Map<string, CreditState>();
+    for (const userId of [...sources, toUserId].sort())
+      accounts.set(userId, toState(await lockedAccount(tx, userId)));
+    let credits = 0;
+    for (const userId of sources) {
+      const before = accounts.get(userId)!;
+      credits += before.purchasedCredits;
+      const after = { ...before, purchasedCredits: 0 };
+      await saveState(tx, userId, after);
+      await addEntry(
+        tx,
+        userId,
+        `${key}:${userId}`,
+        "transfer",
+        before,
+        after,
+        "Purchased credits transferred to another account",
+      );
+    }
+    const before = accounts.get(toUserId)!;
+    await saveState(tx, toUserId, {
+      ...before,
+      purchasedCredits: before.purchasedCredits + credits,
+    });
+    if (sources.length)
+      await tx
+        .update(CreditTopupTable)
+        .set({ userId: toUserId })
+        .where(inArray(CreditTopupTable.userId, sources));
+    // Keep a retry marker even when all purchased credits were already spent.
+    await tx.insert(CreditEntryTable).values({
+      userId: toUserId,
+      key,
+      kind: "transfer",
+      purchasedDelta: credits,
+      description: "Purchased credits received from another account",
+    });
+  });
+};
+
+export const refundVerifiedTopup = async (
+  userId: string,
+  eventId: string,
+  credits: number,
+  purchaseKey: string,
+) => {
+  if (!Number.isSafeInteger(credits) || credits <= 0)
+    throw new Error("Invalid top-up");
+  await db.transaction(async (tx) => {
+    await lockTopups(tx);
+    const [existingTopup] = await tx
+      .select()
+      .from(CreditTopupTable)
+      .where(eq(CreditTopupTable.key, purchaseKey));
+    if (existingTopup?.refundedAt) return;
+    const ownerId = existingTopup?.userId ?? userId;
+    const refundedAt = new Date();
+    if (!existingTopup) {
+      // Remember early refunds so a later purchase webhook cannot grant credits.
+      await lockedAccount(tx, ownerId);
+      await tx
+        .insert(CreditTopupTable)
+        .values({ key: purchaseKey, userId: ownerId, credits, refundedAt });
+      return;
+    }
+    await reverseTopupCredits(tx, existingTopup, eventId);
+    await tx
+      .update(CreditTopupTable)
+      .set({ refundedAt })
+      .where(eq(CreditTopupTable.key, purchaseKey));
   });
 };

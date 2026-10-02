@@ -1,3 +1,6 @@
+export const terminalDenialReasons = ["plan", "credits"] as const;
+export type TerminalDenialReason = (typeof terminalDenialReasons)[number];
+
 export const maxSyncedFiles = 100_000;
 export const maxSyncFileBytes = 32 * 1024 * 1024;
 export const maxSelectedSyncFileBytes = 128 * 1024 * 1024;

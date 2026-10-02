@@ -1,4 +1,5 @@
-export type BillingTier = "free" | "tier_1" | "tier_2";
+import type { BillingTier } from "@/db/cloud/shared";
+export type { BillingTier } from "@/db/cloud/shared";
 
 export type CreditState = {
   tier: BillingTier;

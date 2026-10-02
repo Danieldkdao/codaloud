@@ -535,6 +535,9 @@ importers:
         specifier: ^4.5.4
         version: 4.5.4
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.8
+        version: 0.5.8
       '@tailwindcss/postcss':
         specifier: ^4.3.3
         version: 4.3.3
@@ -10068,8 +10071,7 @@ snapshots:
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.63.4
 
-  '@electric-sql/pglite@0.5.8':
-    optional: true
+  '@electric-sql/pglite@0.5.8': {}
 
   '@elevenlabs/elevenlabs-js@2.68.0(bufferutil@4.1.0)':
     dependencies:

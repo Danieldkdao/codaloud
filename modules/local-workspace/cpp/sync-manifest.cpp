@@ -13,10 +13,20 @@ Json syncManifest(const fs::path &root, const Json &args) {
   if (rules.size() > 30)
     throw WorkspaceError("INVALID_PATH", "Too many selected sync paths.");
   for (const auto &rule : rules) {
-    if (rule.size() > 128 || rule.find('\0') != std::string::npos ||
+    if (rule.empty() || rule.size() > 128 || rule.front() == '/' ||
+        rule.back() == '/' || rule.find('\0') != std::string::npos ||
         rule.find('\\') != std::string::npos)
       throw WorkspaceError("INVALID_PATH", "Invalid selected sync path.");
-    checkedPath(root, rule);
+    // Rules select scan entries; symlinks are omitted by the scanner below.
+    std::istringstream parts(rule);
+    std::string part;
+    while (std::getline(parts, part, '/')) {
+      auto lower = part;
+      std::transform(lower.begin(), lower.end(), lower.begin(),
+                     [](unsigned char c) { return std::tolower(c); });
+      if (part.empty() || part == "." || part == ".." || lower == ".git")
+        throw WorkspaceError("INVALID_PATH", "Invalid selected sync path.");
+    }
     const auto star = rule.find('*');
     if (star != std::string::npos &&
         (star != rule.size() - 1 || star < 2 ||

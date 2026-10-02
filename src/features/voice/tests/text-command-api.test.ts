@@ -102,3 +102,46 @@ it("forces a final answer when the client reaches its tool step budget", async (
   expect(response.status).toBe(200);
   expect(mocks.generate.mock.calls[0][0].toolChoice).toBe("none");
 });
+
+it.each(["length", "content-filter", "error", "other"])(
+  "does not charge for an incomplete command with finish reason %s",
+  async (finishReason) => {
+    mocks.generate.mockResolvedValueOnce({
+      text: "Partial response",
+      toolCalls: [],
+      responseMessages: [],
+      usage: { inputTokens: 10, outputTokens: 2000 },
+      finalStep: { providerMetadata: {} },
+      finishReason,
+    });
+    const response = await handleTextCommand(
+      request({
+        context,
+        requestId: "00000000-0000-4000-8000-000000000001",
+        messages: [{ role: "user", content: "List files" }],
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(mocks.charge).not.toHaveBeenCalled();
+  },
+);
+
+it("does not charge for a response that cannot be delivered to the client", async () => {
+  mocks.generate.mockResolvedValueOnce({
+    text: "x".repeat(16001),
+    toolCalls: [],
+    responseMessages: [],
+    usage: {},
+    finalStep: { providerMetadata: {} },
+    finishReason: "tool-calls",
+  });
+  const response = await handleTextCommand(
+    request({
+      context,
+      requestId: "00000000-0000-4000-8000-000000000001",
+      messages: [{ role: "user", content: "List files" }],
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect(mocks.charge).not.toHaveBeenCalled();
+});

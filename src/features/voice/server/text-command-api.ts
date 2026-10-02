@@ -117,21 +117,20 @@ export const handleTextCommand = async (request: Request) => {
       abortSignal: controller.signal,
       providerOptions: { openrouter: { reasoning: { enabled: false } } },
     });
-    await charge(voiceModel, {
-      ...result.usage,
-      costUsd: reportedModelCostUsd(result.finalStep.providerMetadata),
-    });
     if (!["stop", "tool-calls"].includes(result.finishReason))
       throw new Error(
         "The command response was incomplete. Try a smaller request.",
       );
-    return reply(
-      textCommandResponseSchema.parse({
-        text: result.text,
-        messages: result.responseMessages,
-        toolCalls: result.toolCalls,
-      }),
-    );
+    const response = textCommandResponseSchema.parse({
+      text: result.text,
+      messages: result.responseMessages,
+      toolCalls: result.toolCalls,
+    });
+    await charge(voiceModel, {
+      ...result.usage,
+      costUsd: reportedModelCostUsd(result.finalStep.providerMetadata),
+    });
+    return reply(response);
   } catch (error) {
     if (error instanceof InsufficientCreditsError)
       return reply(
